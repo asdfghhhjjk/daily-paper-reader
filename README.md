@@ -106,8 +106,7 @@
 - ✅ `gist`
 
 ### 3) 🍴 Fork 本仓库
-
-- Fork 到自己的 GitHub 账号下 [![Fork daily-paper-reader](https://img.shields.io/badge/Fork-daily--paper--reader-238636?style=flat-square&logo=github)](https://github.com/ziwenhahaha/daily-paper-reader/fork)
+- Fork 到自己的 GitHub 账号下 <a href="https://github.com/ziwenhahaha/daily-paper-reader/fork"><img src="https://img.shields.io/badge/Fork%20on-GitHub-24292f?style=flat&logo=github" alt="Fork on GitHub" height="20" align="absmiddle" /></a>
 - 建议仓库名保持 `daily-paper-reader` 不变
 
 ### 4) ▶️ 开启 GitHub Actions
