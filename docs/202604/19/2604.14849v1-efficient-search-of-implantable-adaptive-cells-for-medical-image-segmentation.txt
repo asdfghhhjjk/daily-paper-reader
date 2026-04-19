@@ -1,0 +1,1012 @@
+Title: Efficient Search of Implantable Adaptive Cells for Medical Image Segmentation
+
+URL Source: https://arxiv.org/pdf/2604.14849v1
+
+Published Time: Fri, 17 Apr 2026 00:49:16 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Highlights 
+
+## Efficient Search of Implantable Adaptive Cells for Medical Image Segmentation 
+
+Emil Benedykciuk, Marcin Denkowski, Grzegorz M. Wójcik 
+
+• Adaptive skip-module search for medical image segmentation is accelerated. 
+
+• IAC search cost is reduced using JS-based early operation pruning. 
+
+• Patient-level segmentation accuracy is preserved across four public medical datasets. 
+
+• The method remains effective across multiple 2-D U-Net backbones and 2-D nnU-Net. 
+
+• Wall-clock search time is reduced for practical model adaptation. 
+
+> arXiv:2604.14849v1 [cs.CV] 16 Apr 2026
+
+# Efficient Search of Implantable Adaptive Cells for Medical Image Segmentation 
+
+## Emil Benedykciuk a,∗, Marcin Denkowski a,∗ and Grzegorz M. Wójcik a
+
+> a
+
+Institute of Computer Science and Mathematics, Maria Curie Sklodowska University, Akademicka 9, Lublin, 20-033, , Poland 
+
+A R T I C L E I N F O 
+
+Keywords :Medical Image Segmentation Biomedical Image Processing Implantable Adaptive Cells (IAC) Neural Architecture Search (NAS) nnU-Net 
+
+A B S T R A C T 
+
+Purpose: Adaptive skip modules can improve medical image segmentation, but searching for them remains computationally expensive. Implantable Adaptive Cells (IACs) are small neural architecture search (NAS) modules inserted into U-Net skip connections, reducing the search space relative to full-network NAS for medical segmentation, yet the original IAC framework still requires a 200-epoch differentiable search for each backbone and dataset. 
+
+Methods: We analyze the temporal behavior of operations and edges inside IAC cells during differentiable search on public medical image segmentation benchmarks. We observe that operations selected in the final discrete cell usually appear among the strongest candidates early in training and that the corresponding architecture parameters stabilize well before the final epoch. Based on this behavior, we introduce a Jensen–Shannon-divergence-based stability criterion that monitors per-edge operation-importance distributions and progressively prunes low-importance operations during search. The resulting accelerated framework is termed IAC-LTH. 
+
+Results: On four public medical image segmentation benchmarks (ACDC, BraTS, KiTS, AMOS), multiple 2-D U-Net backbones, and a 2-D nnU-Net pipeline, IAC-LTH finds IAC cells whose patient-level segmentation performance matches or, in some settings, slightly exceeds that of cells obtained by the original full-length search, while reducing the NAS search budget in wall-clock time by factors between 3.7× and 16× across datasets and backbones. The effect is consistent across architectures, public benchmarks, and both non-augmented and augmented training settings, while preserving the gains of IAC-equipped U-Nets over strong attention-based and dense skip baselines. 
+
+Conclusion: Competitive IAC architectures can be identified from early-stabilizing operations without running the full search, making adaptive skip-module design more practical for medical image segmentation under realistic computational constraints. 
+
+## 1. Introduction 
+
+Deep convolutional neural networks are now the stan-dard tool for medical image segmentation, supporting ap-plications such as cardiac function assessment, brain tumor delineation and multi-organ abdominal analysis Azad et al. (2024); Isensee et al. (2024); Yu et al. (2021). For biomedical image processing workflows, high accuracy alone is not suf-ficient: segmentation models must also be stable, computa-tionally manageable and adaptable to new datasets, scanners and protocols. Training or redesigning large architectures from scratch is expensive and often impractical in resource-constrained clinical and research environments. Neural Architecture Search (NAS) offers a way to au-tomate architecture design, but in medical segmentation its practical adoption is often limited by search cost. Differen-tiable NAS (DNAS) is attractive because it relaxes discrete architecture choices into continuous parameters trained by gradient descent, reducing cost relative to black-box search Liu et al. (2019b); Xu et al. (2020). DNAS has therefore been adapted to segmentation, including medical-image-specific variants Benedykciuk et al. (2025); Weng et al. (2019); He et al. (2021); Peng et al. (2022); Lee et al. (2024); Yang et al. (2023); Qian et al. (2022). 
+
+> ∗
+
+Corresponding author  
+
+> emil.benedykciuk@mail.umcs.pl
+
+(E. Benedykciuk);  
+
+> marcin.denkowski@mail.umcs.pl
+
+(M. Denkowski) 
+
+> ORCID
+
+(s): 0000-0002-1542-6747 (E. Benedykciuk);  
+
+> 0000-0002-2491-091X
+
+(M. Denkowski); 0000-0002-4678-9874 (G.M. Wójcik) 
+
+In previous work, Implantable Adaptive Cells (IACs) were proposed as a NAS-based plug-in module for pre-trained U-Nets Benedykciuk et al. (2025). Instead of search-ing the entire encoder-decoder topology, IAC searches only over small directed-acyclic-graph (DAG) cells inserted into the skip connections. The backbone U-Net is trained first and then frozen; NAS is applied to the skip modules, and finally the selected cells are fine-tuned while the backbone remains fixed Benedykciuk et al. (2025). This “retrofit” strategy significantly reduces search cost compared with full-network NAS and yields consistent Dice gains over plain U-Nets, attention-based skips and dense skip variants across several medical benchmarks. Despite this efficiency, the original IAC framework still runs a full differentiable search for 200 epochs per dataset and backbone. Early ablations hinted that competitive cells can appear much earlier, but the search protocol remained conservative and did not exploit these observations. To address this practical bottleneck, we examine whether the search can be shortened once the operation choices inside an IAC cell have effectively stabilized. This viewpoint is related to the Lottery Ticket Hypothesis (LTH), which sug-gests that strong subnetworks can emerge early during opti-mization Frankle and Carbin (2019). In our setting, the key question is not sparse training in general, but whether early-stabilizing operations inside skip modules can be identified reliably enough to reduce search cost without weakening medical segmentation performance. 
+
+: Preprint submitted to Elsevier Page 1 of 19 Efficient Search of IACs for Medical Image Segmentation 
+
+This paper investigates operation and edge stabilization inside IAC cells and asks whether early “winning” oper-ations can be used to shorten the search while preserving segmentation performance. To answer this, we first perform a detailed analysis of the temporal dynamics of IAC search on four public medical segmentation benchmarks (ACDC, BraTS, KiTS, AMOS) and multiple 2-D U-Net backbones. We track operation and edge weights over time, quantify how fast the architecture stabilizes, and measure when the final winning operations first appear among the top can-didates. Building on these insights, we propose a Jensen– Shannon (JS) divergence-based stability criterion that allows us to prune low-importance operations and edges on-the-fly, focusing training on early winners and reducing search time by factors of up to an order of magnitude, without materially changing Dice. Figure 1 sketches the workflow of the proposed method. Our main contributions are as follows: 
+
+• An efficient search strategy for adaptive skip mod-ules in medical image segmentation. We show across four public datasets and several 2-D U-Net backbones that IAC search can be shortened while preserving the segmentation gains of implantable skip modules. 
+
+• Operation-level analysis of IAC search dynamics. 
+
+By representing genotypes as operation-edge impor-tance vectors and comparing them over epochs, we show that most final winning operations appear among the top candidates very early and that the continuous architecture parameters converge rapidly. 
+
+• A JS-divergence-based stability test for differen-tiable search. We monitor the Jensen–Shannon diver-gence between operation-importance distributions on each edge across epochs. Small divergence indicates that an edge has stabilized, providing a principled criterion for when it is safe to prune low-importance operations and avoid further exploration. 
+
+• An efficient search algorithm for IACs (IAC-LTH). 
+
+Building on the stability test, we define a progressive pruning scheme that removes operations falling be-low a dataset-adaptive importance threshold on stable edges, and ultimately prunes entire edges once they repeatedly fail to reach non-zero importance. Search stops when each node retains exactly two incoming edges with a single operation on each, after which the resulting cell is discretized and trained as in the orig-inal IAC pipeline. This reduces the effective search budget by factors between approximately 3.7× and 
+
+16× , while preserving the underlying optimization framework. 
+
+• Consistent patient-level segmentation performance at reduced search cost. Across ACDC, BraTS, KiTS and AMOS, the accelerated search yields IAC-equipped U-Nets whose Dice scores are on par with or slightly better than those obtained with the full 200-epoch IAC search, while the wall-clock search time is re-duced. The method also remains competitive with strong attention-gated and dense skip baselines under identical training protocols and extends to a 2-D nnU-Net pipeline, including augmented training. 
+
+• A resource-aware retrofit strategy for medical seg-mentation. Our analysis and algorithm show that reliable IAC cells can be discovered by focusing on early winning operations and monitoring JS-based stability, making adaptive skip-module search feasible in settings where full-length searches would otherwise be difficult to justify. Our implementation is publicly available at: 
+
+> https://gitlab.com/emil-benedykciuk/u-net-darts-tensorflow/ -/tree/lth-analysis
+
+.
+
+## 2. Related Work 
+
+2.1. NAS for Medical Image Segmentation and Skip Connections 
+
+Here we focus on works that are most relevant to our setting: medical image segmentation methods that search or redesign U-Net-like encoder-decoder architectures, espe-cially through skip-connection modules. Several methods search full encoder-decoder topologies or large building blocks. Auto-DeepLab Liu et al. (2019a) and FasterSeg Chen et al. (2020) optimize both backbone and decoder for semantic segmentation. For medical images, NAS-Unet Weng et al. (2019), DiNTS He et al. (2021), HyperSegNAS Peng et al. (2022) and related approaches Lee et al. (2024); Yang et al. (2023); Qian et al. (2022) apply DNAS or other NAS methods to find encoder-decoder designs and multi-scale fusion strategies. These methods can produce strong models, but the search spaces are relatively large and the associated computational cost can limit practi-cal use in biomedical segmentation studies. An alternative line of work restricts NAS to smaller plug-in modules. Instead of redesigning the entire network, the search focuses on blocks that can be inserted into a strong baseline. Implantable Adaptive Cells follow this strategy: small differentiable cells are searched only in U-Net skip connections, while the backbone is pre-trained and then frozen Benedykciuk et al. (2025). This retrofit paradigm significantly reduces search cost and yields consistent im-provements over plain, attention-based and dense skip con-nections on several medical datasets. The importance of carefully designed skip connections is further highlighted in the survey of Xu et al., who analyze their role and evolution in modern segmentation networks Xu et al. (2024). The present work builds directly on the IAC framework and addresses its main practical limitation: the original method still runs a full 200-epoch differentiable search per backbone and dataset. We analyze how quickly the IAC architecture stabilizes during search and propose a pruning scheme, termed IAC-LTH, that shortens the search by fac-tors between approximately 3.7× and 16× while preserving   
+
+> :Preprint submitted to Elsevier Page 2 of 19
+
+Efficient Search of IACs for Medical Image Segmentation in0 
+
+in1 
+
+0
+
+1
+
+(1) Search space (2) Step 1 - Parameter optimization         
+
+> (6) Step 5 - Up to one operation on each edge
+> in0 0in1
+> (0, 1)
+> (in1, 1)
+> 1
+> +
+> 0.5 0.3 0.2
+> ψψ
+> 0
+> in1
+> (in0, 1) ψ
+> Op2 Op1 Op4
+> 0.5 0.2 0.2
+> +Op1 φ
+> Op2 φ
+> Op3 φ
+> ψ
+> 1.0
+> 0.5
+> 0.0
+> Op4
+> φ
+> 1.0
+> 0.5
+> 0.0
+
+(3) Step 2 - Operation importance 
+
+> Op3
+> 0.1
+> φ
+
+(5) Step 4 - Operation pruning    
+
+> in0
+> in1
+> 0
+> 1
+> Operations
+> 1234
+> Edges
+> (in0, 0) (in1, 0) (in0, 1) (in1, 1) (0, 1)
+> Θ'
+> (a) if any ops outliers on edge
+> e.g. [(in0, 0), op1, op2], [(in1, 0), op3]
+> in0
+> in1
+> 0
+> 1
+> (b) if there are no ops outlier on edge
+> prune the least signi fi cant e.g. [(in1, 0), op3]
+> in0
+> in1
+> 0
+> 1
+
+Architecture search algorithm     
+
+> Operations
+> 1234
+> Edges
+> (in0, 0) (in1, 0) (in0, 1) (in1, 1) (0, 1)
+> Θ
+> Epoch (i - 1) Epoch (i)
+
+(4) Step 3 - Similarity metric   
+
+> Jensen-Shannon divergence
+> Epoch (i - 1) Epoch (i)
+> D
+> in0, 0
+> D
+> in1, 0
+> D
+> in0, 1
+> D
+> in1, 1
+> D
+> 0, 1
+> ε
+> ε
+> εε
+> ε
+> DJS
+> (0, 1) (in0, 0)
+
+... ... 
+
+> JS
+> JS
+> JS
+> JS
+> JS
+
+Figure 1: Overview of the proposed IAC search algorithm. (1) Search-space definition: each iteration starts from the current set of candidate operations on every edge. (2) Joint optimization: we update both the architecture parameters and the cell weights. (3) Operation influence: after every epoch we compute the influence score of each operation. (4) Stability test: we measure the Jensen–Shannon divergence between the influence vectors from the current and the previous epoch; if the change on an edge is below its edge-specific threshold, we move to pruning. (5) Edge-wise pruning: (5.a) if one or more operations are at least two standard deviations below the mean influence on that edge, we remove those outliers; (5.b) otherwise, we remove the single operation with the lowest influence score on that edge. (6) Convergence: we repeat steps 2-5 until each edge keeps exactly one operation, then select the two most influential incoming edges for every node. See Section 5 and Algorithm 1 for full details. 
+
+the segmentation gains of IACs on public medical bench-marks. 
+
+2.2. Early Stabilization, Pruning, and NAS 
+
+The Lottery Ticket Hypothesis Frankle and Carbin (2019); Liu et al. (2024) has motivated a large body of work on dis-covering sparse subnetworks that match the performance of dense models. Classical pipelines rely on iterative magnitude pruning and repeated train-prune-retrain cycles, which are effective but computationally demanding. One-shot pruning methods such as SNIP and GraSP compute saliency or gradient-flow scores at or near initialization and remove low-score weights in a single step Lee et al. (2019); Wang et al. (2020). Although attractive in terms of cost, these methods typically underperform data-driven pruning on difficult tasks. To reduce cost further, several works focus on early ticket detection. Early-Bird Tickets You et al. (2019) show that the pruning mask often stabilizes after a fraction of training epochs. By monitoring the Hamming distance be-tween successive masks and stopping dense training once the distance vanishes, the method saves up to several times the compute without loss in accuracy. Other studies report similar mask-stabilization phenomena in object detection and other domains Girish et al. (2021). These results suggest that the topology of a winning subnetwork emerges early and that later epochs mostly refine an already identified structure. NAS and LTH have also been combined more tightly. Su-perTickets You et al. (2022) integrate architecture search and pruning within a single supernet: connections and channels are ranked and pruned during search, producing compact subnetworks that match or surpass traditional NAS followed by post-hoc pruning. At the operation level, several works propose alternatives to naive magnitude-based ranking in DNAS. For example, Wang et al. measure the drop in val-idation accuracy when an operation is disabled Wang et al. (2021), and Xiang et al. employ zero-cost metrics to score individual operations, accelerating DARTS by up to tens of times Xiang et al. (2023). These methods treat operation selection itself as a structured lottery, where some operations can be removed early without harming final performance. Structured pruning generalizes LTH from unstructured weights to filters, channels and operations. Alabdulmohsin et al. proposed a generalized LTH that covers both unstructured and structured sparsity Alabdulmohsin et al. (2021), sup-porting the view that entire operations or paths may form the essential core of a model. Our work adopts this perspective in a medical segmentation setting: we investigate operations 
+
+: Preprint submitted to Elsevier Page 3 of 19 Efficient Search of IACs for Medical Image Segmentation 
+
+and edges inside an IAC cell and show that the operations that survive discretization typically emerge among the top candidates after only a small fraction of the search budget. 
+
+2.3. Stability Metrics and Divergence-Based Early Stopping 
+
+A central question in applying LTH ideas during NAS is how to decide when the architecture has effectively sta-bilized. Early-Bird Tickets rely on mask distance , the Ham-ming distance between binary pruning masks at successive checkpoints, and stop dense training once this distance be-comes zero You et al. (2019). Kim et al. introduced Early-Time, which monitors the Kullback–Leibler (KL) divergence between output distributions and terminates training when the divergence falls below a threshold Kim et al. (2022). Both metrics serve as proxies for the emergence of a stable subnetwork. Similar stability concepts appear in differentiable NAS. Shen et al. proposed the Early Pruning Indicator (EPI), which tracks changes in the architecture parameters of DARTS-like supernets and prunes operations once their selection probabilities stop moving significantly Shen et al. (2021). Zero-shot and training-free NAS can be viewed as extreme cases where stability is assumed at initialization and candidate operations are ranked using proxy scores Li et al. (2024a); Xiang et al. (2023). Information-theoretic measures, such as KL and JS di-vergence, are natural tools for quantifying stability of proba-bility distributions over operations or masks. KL divergence is asymmetric and unbounded, which complicates threshold selection, whereas JS divergence is symmetric and bounded. In this work we use per-edge JS divergence between succes-sive operation-importance distributions inside the IAC cell to detect when an edge has stabilized. Once JS divergence on an edge remains below a threshold for several checks, we prune low-importance operations and, eventually, en-tire edges. This implements an operation-level analogue of Early-Bird and EPI criteria directly inside the IAC search, tailored to the skip-only medical segmentation setting. 
+
+2.4. Positioning of This Work 
+
+In summary, prior work has shown that NAS can design strong segmentation architectures, that pruning-inspired ideas can reduce search cost, and that stability metrics enable early detection of reliable subnetworks. However, to the best of our knowledge, these ideas have not been systematically explored inside implantable cells and other retrofit NAS methods that modify skip connections of pre-trained U-Nets for medical image segmentation. Our contribution is to fill this gap from the perspective of practical biomedical image segmentation. We analyze operation-level stabilization inside IAC cells, quantify how quickly their architecture parameters stabilize across four medical datasets and multiple U-Net backbones, and intro-duce a JS-divergence-based stability test that drives on-the-fly pruning of operations and edges. This leads to an acceler-ated IAC search (IAC-LTH) that preserves or improves the segmentation gains of IACs while reducing search time in wall-clock terms by factors between approximately 3.7× and 
+
+16× .Compared to the original IAC framework Benedykciuk et al. (2025), this paper makes three main additions: (i) an operation-level analysis of IAC search dynamics, quantify-ing how quickly winning operations stabilize; (ii) a Jensen– Shannon-divergence stability criterion with a concrete prun-ing rule that progressively removes low-importance oper-ations and edges; and (iii) an extensive evaluation of the accelerated search both in a frozen U-Net backbone grid and inside the nnU-Net pipeline, showing preserved or improved segmentation performance at 3-16× lower search cost. 
+
+## 3. Baseline: Implantable Adaptive Cells and Skip-Only NAS 
+
+In this section we briefly summarize the original Im-plantable Adaptive Cell design and search procedure, which form the basis for our analysis and the proposed accelerated search. 
+
+3.1. IAC topology and placement 
+
+The IAC is a small module based on a directed acyclic graph 𝐺 = ( 𝑉 , 𝐸 ) that is inserted into the skip connections of a U-Net to improve feature fusion between the encoder and decoder Benedykciuk et al. (2025). The node set 𝑉 
+
+contains 𝑁 nodes, indexed from 0 to 𝑁 − 1 , and the edge set 𝐸 contains all directed candidate edges (𝑖, 𝑗 ) with 𝑖 < 𝑗 .The first two nodes 𝑣 0 and 𝑣 1 are input nodes: 𝑣 0 receives encoder features (skip tensor) and 𝑣 1 receives decoder fea-tures (upsampled tensor) at a given resolution level. Both inputs are first passed through 1 × 1 convolutions to match the internal channel dimension of the cell so that the same IAC genotype can be plugged into any U-Net configuration. The remaining nodes 𝑣 2, … , 𝑣 𝑁 −1 are intermediate com-putation nodes. The output of the cell is obtained by concate-nating the outputs of the last 𝑅 nodes, 
+
+𝑥 out = Concat( 𝑥 𝑁 −𝑅 , 𝑥 𝑁 −𝑅 +1 , … , 𝑥 𝑁 −1 ), (1) followed by a 1 × 1 convolution that maps the concatenated features to the number of channels expected by the U-Net decoder at that scale. At each scale of the U-Net, the original identity skip connection between encoder and decoder is replaced by such an IAC. The same discrete cell topology (genotype) is reused across all skip levels, but each instance has its own weights. 
+
+3.2. Edge transforms and PC-DARTS-style mixed operations 
+
+Each edge (𝑖, 𝑗 ) ∈ 𝐸 with 𝑖 < 𝑗 carries a mixed operation that transforms the feature tensor 𝑥 𝑖 at node 𝑣 𝑖 into a contribution to node 𝑣 𝑗 . The mixed operation is defined over a fixed set of candidate operations 𝑂 : identity, 3 × 3 
+
+max pooling, 3 × 3 average pooling, 3 × 3 /5 × 5 separable convolution, and 3 × 3 /5 × 5 dilated separable convolution.   
+
+> :Preprint submitted to Elsevier Page 4 of 19 Efficient Search of IACs for Medical Image Segmentation
+
+For each edge (𝑖, 𝑗 ) and operation 𝑜 ∈ 𝑂 we maintain an architecture parameter 𝛼 𝑜 𝑖,𝑗 . During search, these param-eters are transformed into operation probabilities using the softmax function: 
+
+𝜙 𝑜 𝑖,𝑗 = exp( 𝛼 𝑜 𝑖,𝑗 )
+
+∑𝑜 ′∈𝑂 exp( 𝛼 𝑜 ′ 
+
+> 𝑖,𝑗
+
+) . (2) The basic mixed operation on all channels would be 
+
+𝑓 𝑖,𝑗 (𝑥 𝑖 ) = ∑
+
+> 𝑜 ∈𝑂
+
+𝜙 𝑜 𝑖,𝑗 𝑜 (𝑥 𝑖 ). (3) To reduce memory and computation cost, the IAC search adopts the partial-channel connection mechanism from PC-DARTS Xu et al. (2020). Let 𝑀 𝑖,𝑗 be a binary channel mask that selects a fraction 1∕ 𝐾 of the channels in 𝑥 𝑖 . The masked channels are processed by the mixed operation, while the remaining channels are copied through unchanged: 
+
+𝑓 PC  
+
+> 𝑖,𝑗
+
+(𝑥 𝑖 ; 𝑀 𝑖,𝑗 ) = ∑
+
+> 𝑜 ∈𝑂
+
+(𝜙 𝑜 𝑖,𝑗 𝑜 (𝑀 𝑖,𝑗 ⊙𝑥 𝑖 ))+(1− 𝑀 𝑖,𝑗 )⊙𝑥 𝑖 , (4) where ⊙ denotes element-wise multiplication with broad-casting over spatial dimensions. Thus, only a subset of channels is transformed by candidate operations, while the rest provide a cheap bypass. Following Xu et al. (2020); Benedykciuk et al. (2025), we set 𝐾 = 4 .To stabilize the competition between incoming edges at each node, a second set of architecture parameters 𝛽 𝑖,𝑗 is introduced to control edge importance. For node 𝑗 the raw edge logits 𝛽 𝑖,𝑗 for all 𝑖 < 𝑗 are first transformed using a monotonic non-linearity and then normalized by softmax: ̂
+
+Ψ𝑖,𝑗 = exp ( tan( 𝛽 𝑖,𝑗 ) − max 𝑘<𝑗 tan( 𝛽 𝑘,𝑗 ))∑𝑘<𝑗 exp ( tan( 𝛽 𝑘,𝑗 ) − max 𝑘 ′<𝑗 tan( 𝛽 𝑘 ′,𝑗 )) . (5) The subtraction of the maximum ensures numerical stability. To prevent any single edge from dominating the opti-mization and to encourage sparse connectivity, Benedykciuk et al. (2025) further apply a capping scheme. If the largest normalized weight satisfies max 𝑖<𝑗 ̂ Ψ𝑖,𝑗 ≤ 0.5, we simply set 
+
+Ψ𝑖,𝑗 =̂ Ψ𝑖,𝑗 , if max 
+
+> 𝑖<𝑗
+
+̂ Ψ𝑖,𝑗 ≤ 0.5. (6) Otherwise, let 𝑖 ∗ = arg max 𝑖<𝑗 ̂ Ψ𝑖,𝑗 and denote the sum of the remaining weights by 
+
+𝑆 rest = ∑
+
+> 𝑘<𝑗 𝑘 ≠𝑖 ∗
+
+̂
+
+Ψ𝑘,𝑗 . (7) The capped edge weights are then defined as 
+
+Ψ𝑖,𝑗 =
+
+⎧⎪⎨⎪⎩
+
+0.5, if 𝑖 = 𝑖 ∗,
+
+0.5̂ Ψ𝑖,𝑗 
+
+𝑆 rest 
+
+, if 𝑖 ≠ 𝑖 ∗.
+
+(8) This projection ensures that at most one edge per node can carry more than half of the total incoming weight, dis-couraging degenerate single-edge solutions while preserving differentiability. Given the edge weights Ψ𝑖,𝑗 , the output of node 𝑗 is a weighted sum of all incoming partial-channel mixed opera-tions: 
+
+𝑥 PC  
+
+> 𝑗
+
+= ∑
+
+> 𝑖<𝑗
+
+Ψ𝑖,𝑗 𝑓 PC  
+
+> 𝑖,𝑗
+
+(𝑥 𝑖 ; 𝑀 𝑖,𝑗 ). (9) 
+
+3.3. Continuous relaxation and bilevel optimization 
+
+To enable differentiable optimization of the architectural parameters (𝛼, 𝛽 ) together with the cell weights 𝜔 , the IAC search adopts the standard continuous-relaxation paradigm. During search, all edges (𝑖, 𝑗 ) are active and contribute according to (4)-(9). Let 𝜔 𝑈 denote the weights of the frozen base U-Net and 𝜔 the weights of the IAC cell. The search objective can be written as a bilevel optimiza-tion problem: 
+
+min  
+
+> 𝛼,𝛽
+
+val 
+
+(𝜔 (𝛼, 𝛽, 𝜔 𝑈 ), 𝛼, 𝛽, 𝜔 𝑈 
+
+), (10) s.t. 𝜔 (𝛼, 𝛽, 𝜔 𝑈 ) = arg min  
+
+> 𝜔
+
+train (𝜔, 𝛼, 𝛽, 𝜔 𝑈 ),
+
+(11) where train and val are the training and validation losses, respectively. In practice, following Benedykciuk et al. (2025), a first-order alternating approximation is used for efficiency. Search is run for a fixed number of epochs. Within each epoch, we alternate between: (i) updating the cell weights 𝜔 by minimizing train on the training split, and (ii) updating the architecture parameters (𝛼, 𝛽 ) by minimizing val on the validation split. The U-Net backbone weights 𝜔 𝑈 remain frozen throughout the search. 
+
+3.4. Discretization and final training 
+
+After the continuous search process concludes, the archi-tecture parameters (𝛼, 𝛽 ) are discretized to obtain the final IAC genotype. On each edge (𝑖, 𝑗 ), the operation with the highest prob-ability 𝜙 𝑜 𝑖,𝑗 in (2) is selected: 
+
+𝑜 𝑖,𝑗 = arg max  
+
+> 𝑜 ∈𝑂
+
+𝜙 𝑜 𝑖,𝑗 . (12) Next, for each node 𝑗 we retain exactly two incoming edges with the largest edge weights Ψ𝑖,𝑗 as defined in (6)-(8), in order to limit the complexity of the discrete cell. The resulting sparse DAG defines the discrete IAC architecture. This discrete cell is then instantiated in the U-Net that was used during search: all skip connections are replaced by the discrete IAC, and the cell weights 𝜔 are trained (fine-tuned) while keeping the backbone weights 𝜔 𝑈 frozen. The training loss and optimizer follow the same configuration as in the baseline U-Net. This three-stage pipeline: (i) backbone pre-training, (ii) IAC search with frozen backbone, and (iii)   
+
+> :Preprint submitted to Elsevier Page 5 of 19 Efficient Search of IACs for Medical Image Segmentation
+
+final training of the discrete IAC, constitutes the baseline on top of which we perform our Lottery-Ticket-based analysis and define the accelerated search method IAC-LTH. 
+
+## 4. Analysis 
+
+In this section we analyze the evolution of the original IAC architecture during differentiable search. Building on the baseline search procedure described in Section 3, we treat the architecture parameters (𝛼, 𝛽 ) on each edge as a proxy for the importance of candidate operations and ask: 1. How quickly do the operations and edges that survive in the final discrete IAC emerge during search? 2. How different are the architectures immediately after warm-up, in the middle of the search, and at the end? We first summarize the experimental setting used for this analysis and then introduce the genotype representations and similarity measures that underpin the figures in this section. 
+
+4.1. Experimental setting for the analysis 
+
+The analysis is performed on four public medical seg-mentation datasets: ACDC Bernard et al. (2018), BraTS Menze et al. (2015); Bakas et al. (2017); Li et al. (2024b), KiTS Heller et al. (2023) and AMOS Ji et al. (2022). For each dataset we follow a patient-wise split into training (60%), validation (20%) and test (20%) sets. The training set is further divided once into train_search and val_search of equal size for the IAC search, following the original method Benedykciuk et al. (2025); this split is fixed for all experiments. The 
+
+train_search / val_search split described above is used for analyzing the original IAC search in this section; in the proposed IAC-LTH algorithm we instead optimize on the full training set without an internal search/validation split (Section 5). Unless otherwise stated, all experiments use a 2-D U-Net Ronneberger et al. (2015) as backbone with one of several encoders (VGG-16 Liu and Deng (2015), ResNet-50 He et al. (2016), MobileNetV3-Large Howard et al. (2019), EfficientNetV2-S/M Tan and Le (2021)). Input slices and segmentation masks are cropped to 128 × 128 pixels; each input channel corresponds to an imaging modality (e.g. T1, T1Gd, T2, FLAIR for BraTS) and each output chan-nel to a foreground class. Pre-processing (normalization, standardization) is identical for the baseline U-Nets and IAC-equipped models and follows the protocol described in Section 6.3. To isolate architectural effects and reduce randomness, we deliberately disable data augmentation during both IAC search and model training in this analysis. This choice stan-dardizes the comparison between reference U-Nets and IAC-enhanced models but may also make the baselines more prone to overfitting on small datasets. If IAC-equipped mod-els still achieve superior test Dice under these conditions, this provides strong evidence that the gains come from better architecture rather than from stochastic regularization. In the full nnU-Net setting with augmentation, the IAC and accelerated-search effects are evaluated separately in Section 6. During the warm-up and search phases, the IAC weights 
+
+𝜔 are optimized using SGD (learning rate 0.01 , no momen-tum, no weight decay), while the architecture parameters 
+
+(𝛼, 𝛽 ) are optimized with Adam (learning rate 0.001 ). Ran-dom seeds are fixed for all relevant TensorFlow and CUDA operations as far as supported. All experiments are imple-mented in Python 3.9 using TensorFlow 2.17 and run on an NVIDIA RTX 3090 Ti GPU. All configuration files and random seeds are provided in the accompanying repository. 
+
+4.2. Genotype representations and similarity measures 
+
+As described in Section 3.2, each edge (𝑖, 𝑗 ) in the IAC cell maintains architecture parameters 𝛼 𝑜 𝑖,𝑗 for every operation 𝑜 ∈ 𝑂 and an edge parameter 𝛽 𝑖,𝑗 . For analysis, we define the importance of operation 𝑜 on edge (𝑖, 𝑗 ) as 
+
+Θ𝑜 𝑖,𝑗 = 𝛼 𝑜 𝑖,𝑗 ⋅ 𝛽 𝑖,𝑗 , (13) that is, the product of the operation-specific and edge-specific logits. Collecting all Θ𝑜 𝑖,𝑗 into a single vector yields the continuous genotype at epoch 𝑒 ,
+
+𝚯 (𝑒 ) ∈ ℝ||| 𝑂 |, (14) where  is the set of candidate edges. For the IAC cell used here this results in a 98-dimensional vector (14 edges × 7operations). To study how architectures change over time, we con-sider several discrete views of the genotype: 
+
+• Final discrete genotype : after search, each edge keeps the operation with highest importance and each node keeps its two strongest incoming edges (as in Section 3.4). This discrete topology is encoded as a binary vector 𝐠 final with the same indexing as 𝚯 (𝑒 ).
+
+• Top-𝑘 discrete masks : at each epoch 𝑒 , we con-struct binary vectors 𝐠 (𝑒 )(𝑘 ) for 𝑘 ∈ {1 , 2, 3} where 
+
+𝐠 (𝑒 )(𝑘 )(𝑖, 𝑗, 𝑜 ) = 1 if operation 𝑜 is among the 𝑘 highest-scoring operations on edge (𝑖, 𝑗 ) according to Θ𝑜 𝑖,𝑗 and 
+
+0 otherwise. These representations are illustrated in Figure 2. We use two similarity measures: 
+
+Cosine similarity: For any two epochs 𝑒 1, 𝑒 2 we define 
+
+CosSim( 𝑒 1, 𝑒 2) = 𝚯 (𝑒 1) ⋅ 𝚯 (𝑒 2)
+
+‖‖‖𝚯 (𝑒 1)‖‖‖2
+
+‖‖‖𝚯 (𝑒 2)‖‖‖2
+
+. (15) This captures global alignment of operation importance over time. 
+
+Hamming similarity: For discrete vectors (final geno-type or top-𝑘 masks) we use Hamming similarity, 
+
+HamSim( 𝑒 1, 𝑒 2; 𝑘 ) = 1− 1
+
+||| 𝑂 |∑
+
+> 𝑖,𝑗,𝑜
+
+𝟙 [𝐠 (𝑒 1)(𝑘 ) (𝑖, 𝑗, 𝑜 ) ≠ 𝐠 (𝑒 2)(𝑘 ) (𝑖, 𝑗, 𝑜 )],             
+
+> :Preprint submitted to Elsevier Page 6 of 19 Efficient Search of IACs for Medical Image Segmentation
+> Figure 2: Example search-vector representations. (1) the full operation-importance vector (continuous values, 𝛼 ⋅𝛽 for each operation on each edge), (2) the discrete representation of the final architecture, (3) a discrete representation where each edge is assigned its top-1 operation at that stage, (4) one with the top-2 operations per edge, and (5) one with the top-3 operations per edge.
+> Figure 3: Evolution of the importance of operations during the search process (epochs). The importance of an operation on edge
+> (𝑖, 𝑗 )is defined as the product of the operation-specific logit 𝛼 𝑜 𝑖,𝑗 and the edge-specific logit 𝛽 𝑖,𝑗 .
+
+(16) where 𝟙 [⋅] is the indicator function. This measures the fraction of entries in the binary masks that agree between epochs. We analyze similarities across the entire search trajec-tory and at specific checkpoints: after warm-up (epoch 15) and at epochs 16, 20, 40, 80, 100, 150 and 200. 
+
+4.3. Qualitative evolution of operation importance 
+
+Figure 3 visualizes the evolution of operation importance over search epochs for a representative run. Each colored tra-jectory corresponds to the importance Θ𝑜 𝑖,𝑗 of one operation on one edge. Most final-winning operations become clearly dominant early in the search: their importance increases rapidly after the warm-up and then remains high and stable. In contrast, many other operations are quickly suppressed and never regain prominence. This confirms earlier performance-level observations from Benedykciuk et al. (2025): the main ar-chitectural variability is concentrated at the beginning of the search. 
+
+4.4. Similarity of architectures over search time 
+
+Based on the genotype representations in Figure 2, Fig-ure 4 shows similarity matrices between architectures sam-pled at different epochs. Rows correspond to different repre-sentations (full continuous vector, top-1/2/3 discrete vectors, final discrete genotype), and columns to source and target epochs. For the continuous genotypes (Full row), cosine simi-larity between different epochs grows quickly: the matrices   
+
+> :Preprint submitted to Elsevier Page 7 of 19
+
+Efficient Search of IACs for Medical Image Segmentation 
+
+Figure 4: Similarity matrices between IAC genotypes sampled at different epochs. Each matrix entry compares two epochs using either Hamming similarity (discrete rows) or cosine similarity (continuous rows) of the genotype vectors introduced in Figure 2. 
+
+Final – similarity to the discretized genotype used for deployment: every node keeps its two strongest incoming edges, and each edge keeps the single operation with the highest importance. Full – similarity to the complete continuous genotype, i.e. the full 98-D vector of 𝛼 ⋅ 𝛽 values. Top-1/Top-2/Top-3 – similarity computed after retaining, on every edge, only the 1, 2 or 3 operations with the largest 𝛼 ⋅ 𝛽 scores, as defined in Figure 2. Light cells mark high similarity (stable architecture), dark cells mark low similarity (architecture still evolving). 
+
+exhibit bright blocks after the first 40-60 epochs, indicating that 𝚯 (𝑒 ) changes only slightly afterwards. The discrete top-3 and top-2 representations stabilize somewhat later, while the top-1 and final discrete genotype show non-trivial changes almost until the end of the search. This is expected: small shifts in importance near decision boundaries can swap the top-1 candidate even when the underlying distribution is already stable. Figure 5 summarizes this behavior more compactly by plotting cosine similarity between 𝚯 (𝑒 ) and 𝚯 (𝐸 ) (final epoch) across epochs 𝑒 . Across all datasets and backbones, similarity rises steeply in the first 40-60 epochs and exceeds 
+
+: Preprint submitted to Elsevier Page 8 of 19 Efficient Search of IACs for Medical Image Segmentation      
+
+> Figure 5: Global convergence of architecture parameters. Cosine similarity between the current 𝛼 ⋅𝛽 vector and its final value is plotted over 200 epochs for four datasets (ACDC, AMOS, BraTS, KiTS). Each colored curve corresponds to one U-Net encoder variant (base, VGG-16, ResNet-50, MobileNetV3-Large, EfficientNetV2-S/M).
+
+0.95 around epoch 100, after which it asymptotically ap-proaches 1.0. Larger backbones (e.g. ResNet-50 on KiTS) converge slightly more slowly, but the qualitative pattern is consistent: the continuous architecture parameters effec-tively stabilize by mid-search. If we require full discrete alignment with the final archi-tecture, however, nearly the entire budget is needed. Figure 6 reports, for each dataset, the epoch at which the eventually selected operation or edge first satisfies four criteria: being in the top-3, top-2, top-1 on its edge, and forming the final set of incoming edges. Median epochs show that the final-winning operation typically enters the top-3 by approximately 45 epochs, reaches top-2 around 140 epochs, and achieves full top-1 and edge alignment only close to epochs 170-190. On more informative datasets such as BraTS, these thresholds are reached earlier. 
+
+4.5. Edge-wise difficulty and environment effects 
+
+Figure 7 breaks down the emergence of final-winning operations per edge . We observe a clear split between “easy” edges, where the correct operation becomes top-1 almost immediately after warm-up, and “hard” edges, which take much longer to settle. Intuitively, the more hard edges a cell has, the later its final discrete topology is fixed. Despite this variation, the correct operation is present in the top-3 on every edge by approximately epoch 70 across all datasets. This indicates that individual operations converge quickly and that later epochs are mainly used to refine how those operations are assembled into a coherent information flow through the DAG. This late-stage refinement depends not only on the IAC weights 𝜔 but also on the pre-trained backbone environment 𝜔 𝑈 : changes to the backbone or to the random initialization of 𝜔 can lead to different final architectures, consistent with observations from the Lottery Ticket Hypothesis in other settings. 
+
+4.6. Summary of analysis 
+
+The above results support three key observations: 
+
+• The IAC architecture evolves rapidly at the beginning of the search, but the continuous architecture param-eters stabilize much earlier (around 40-100 epochs) than the discrete top-1 decisions. 
+
+• Final-winning operations typically appear among the top-3 candidates on their edges very early in the search (within approximately 45 epochs) and remain in this small set until discretization. 
+
+• Every edge has identified its final operation among the top-3 by around epoch 70, even though selecting the exact top-1 and the final set of incoming edges may require most of the original budget. These findings suggest that the search space can be reduced aggressively once per-edge operation-importance distributions stabilize, without sacrificing the quality of the final cell. In the next section we turn these insights into a JS-divergence-based pruning scheme that accelerates IAC search by several times (up to an order of magnitude in wall-clock time) while preserving segmentation performance.   
+
+> :Preprint submitted to Elsevier Page 9 of 19
+
+Efficient Search of IACs for Medical Image Segmentation ACDC BraTS KiTS AMOS 
+
+Figure 6: When does the final genotype first emerge during search? For each dataset (ACDC, AMOS, BraTS, KiTS) we record, across all U-Net backbones, the epoch at which the operation (or edge) that ends up in the final discrete cell first meets four threshold levels: Top-3 – appears among the three highest-scoring operations on its edge; Top-2 – appears among the two highest; 
+
+Top-1 – becomes the single highest; Edges – the two winning incoming edges of every node are fixed. Each box-and-whisker plot summarizes the distribution of those epochs over all edges in the cell and all random seeds; medians are marked in orange. 
+
+Figure 7: Per-edge difficulty of convergence. For each dataset (ACDC, AMOS, BraTS, KiTS) we chart, for every edge of the IAC cell, the epoch at which the operation that ends up in the final discrete architecture first appears in the Top-3 (blue), Top-2 (orange) or Top-1 (green) set on that edge. Edges whose green bars emerge early are “easy” ones: the correct operation is evident right after the warm-up. Edges with late-rising green bars are “hard” ones: they delay the moment when the whole cell is frozen. Despite this variation, the correct operation is present on every edge by approximately 70 epochs in all datasets, confirming that individual operations converge quickly, while the subsequent assembly of edges and information flow is refined later to match the already learned backbone representations. : Preprint submitted to Elsevier Page 10 of 19 Efficient Search of IACs for Medical Image Segmentation 
+
+## 5. Proposed Approach 
+
+The analysis in Section 4 shows that operation impor-tances inside the IAC cell stabilize much earlier than the final discrete genotype and that the operations selected in the final discrete cell appear among the top candidates very early. We therefore propose an accelerated IAC search that exploits this behavior: we monitor per-edge operation-importance distributions over epochs using the Jensen–Shannon diver-gence and prune low-importance operations once these dis-tributions have stabilised. The backbone pre-training and final IAC training stages remain unchanged; only the search phase of the original IAC pipeline is modified. We refer to the resulting accelerated framework as IAC-LTH .Figure 1 provides a high-level overview, and Algo-rithm 1 gives pseudocode of the proposed search procedure. 
+
+5.1. Warm-up and joint optimization of (𝜔, 𝛼, 𝛽 )
+
+We keep the warm-up strategy of the baseline IAC framework with a small modification. For the first 𝜉 = 15 
+
+epochs we update only the IAC weights 𝜔 while keeping the architecture parameters (𝛼, 𝛽 ) fixed (initialized to constant values). This allows the candidate operations to adapt to the frozen backbone 𝜔 𝑈 before architecture selection begins, mitigating instabilities caused by simultaneous optimization of 𝜔 and (𝛼, 𝛽 ) against a fixed environment. After warm-up, each epoch of the search phase consists of standard training updates on the supernet: 
+
+min  
+
+> 𝜔,𝛼,𝛽
+
+train (𝜔, 𝛼, 𝛽, 𝜔 𝑈 ). (17) Unlike the original IAC search, which alternates between updating 𝜔 on a dedicated train_search subset and updating 
+
+(𝛼, 𝛽 ) on a separate val_search subset (Section 3.3), IAC-LTH uses a single-level optimization scheme inspired by SingleDARTS Hou et al. (2021): 𝜔 is updated by SGD and (𝛼, 𝛽 ) are updated by Adam on the same full training set , without an internal train_search /val_search split. This removes the inner validation loop and lets the IAC topology and its weights evolve jointly on all available training data. 
+
+5.2. Operation importance and per-edge distributions 
+
+For each edge (𝑖, 𝑗 ) and candidate operation 𝑜 ∈ 𝑂 we define the importance at epoch 𝑒 as 
+
+Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+= 𝛼 𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+⋅ 𝛽 (𝑒 ) 
+
+> 𝑖,𝑗
+
+, (18) consistent with the analysis in Section 4.2. Collecting all 
+
+Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+yields the continuous genotype vector 𝚯 (𝑒 ) used in Figures 2-5. To compare successive epochs on a per-edge basis we normalize Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+into a categorical distribution over opera-tions: 
+
+𝑝 (𝑒 ) 
+
+> 𝑖,𝑗
+
+(𝑜 ) = Θ𝑜, (𝑒 )
+
+> 𝑖,𝑗
+
+∑𝑜 ′∈𝑂 Θ𝑜 ′,(𝑒 ) 
+
+> 𝑖,𝑗
+
++ 𝜀 , (19) where 𝜀 is a small constant to avoid division by zero (if the denominator is zero, we treat 𝑝 (𝑒 ) 
+
+> 𝑖,𝑗
+
+as uniform). This distribution reflects the relative preference for each operation on edge (𝑖, 𝑗 ) at epoch 𝑒 .At the end of every epoch of the search phase we recom-pute Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+and 𝑝 (𝑒 ) 
+
+> 𝑖,𝑗
+
+for all edges; these values are then used for stability tests and pruning. 
+
+5.3. JS-divergence-based stability test 
+
+To detect when an edge has stabilized, we compare its operation-importance distributions between successive epochs using the Jensen–Shannon divergence. For edge (𝑖, 𝑗 )
+
+and epochs 𝑒 − 1 and 𝑒 we define 
+
+𝐷 JS 
+
+(𝑝 (𝑒 −1)  
+
+> 𝑖,𝑗
+
+‖𝑝 (𝑒 )
+
+> 𝑖,𝑗
+
+) = 12 𝐷 KL 
+
+(𝑝 (𝑒 −1)  
+
+> 𝑖,𝑗
+
+‖𝑚 𝑖,𝑗 
+
+)+ 12 𝐷 KL 
+
+(𝑝 (𝑒 ) 
+
+> 𝑖,𝑗
+
+‖𝑚 𝑖,𝑗 
+
+),
+
+(20) where 𝑚 𝑖,𝑗 = 12
+
+(𝑝 (𝑒 −1)  
+
+> 𝑖,𝑗
+
++ 𝑝 (𝑒 )
+
+> 𝑖,𝑗
+
+) and 𝐷 KL denotes Kullback– Leibler divergence. JS divergence is symmetric and bounded, which makes it convenient for threshold-based criteria. For each edge (𝑖, 𝑗 ) we maintain an individual JS thresh-old 𝜃 𝑖,𝑗 > 0 and a multiplicative factor 𝜅 > 1. At epoch 𝑒 we apply the following rule: 
+
+• If 𝐷 JS 
+
+(𝑝 (𝑒 −1)  
+
+> 𝑖,𝑗
+
+‖𝑝 (𝑒 )
+
+> 𝑖,𝑗
+
+) < 𝜃 𝑖,𝑗 , we regard edge (𝑖, 𝑗 ) as sta-ble and trigger pruning of low-importance operations on that edge. 
+
+• Otherwise we increase the threshold, 𝜃 𝑖,𝑗 ← 𝜅𝜃 𝑖,𝑗 ,making the stability criterion progressively easier to satisfy on edges whose distributions keep changing. This mechanism allows early pruning on “easy” edges, whose importance distributions quickly stabilize, while let-ting “hard” edges continue to evolve until their JS divergence has decreased sufficiently. 
+
+5.4. Pruning operations on stable edges 
+
+When edge (𝑖, 𝑗 ) passes the JS stability test at epoch 𝑒 , we prune low-importance operations according to the current importance Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+. We first compute the mean and standard deviation over operations on that edge: 
+
+𝜇 𝑖,𝑗 = 1
+
+|𝑂 |∑
+
+> 𝑜 ∈𝑂
+
+Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+, 𝜎 𝑖,𝑗 =
+
+√
+
+1
+
+|𝑂 |∑
+
+> 𝑜 ∈𝑂
+
+(Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+− 𝜇 𝑖,𝑗 
+
+)2.
+
+(21) We then apply a two-stage pruning rule: 1. Outlier pruning: prune all operations 𝑜 such that 
+
+Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+< 𝜇 𝑖,𝑗 − 2 𝜎 𝑖,𝑗 (strong negative outliers). 2. Fallback pruning: if no outliers are found, prune exactly one operation: the operation with the smallest importance Θ𝑜, (𝑒 ) 
+
+> 𝑖,𝑗
+
+on that edge. We ensure that at least one operation always remains active on each edge: if all operations on an edge would be re-moved, we retain the operation with the largest importance. In epochs where the JS condition is not met, no operation is pruned on that edge and only the threshold 𝜃 𝑖,𝑗 is updated.   
+
+> :Preprint submitted to Elsevier Page 11 of 19
+
+Efficient Search of IACs for Medical Image Segmentation 
+
+5.5. Edge pruning and early stopping 
+
+As operations are pruned, each edge (𝑖, 𝑗 ) eventually retains only a single active operation. At this point the mixed operation degenerates into a single operator. We continue the search until every edge in the IAC cell satisfies this condi-tion; this corresponds to full discretization at the operation level. In the final step we prune edges themselves to enforce the standard IAC connectivity pattern: for each node 𝑗 we keep only the two incoming edges with the largest edge weights Ψ𝑖,𝑗 (equivalently, the largest 𝛽 𝑖,𝑗 values) and remove all other incoming edges, as in the baseline discretization (Section 3.4). The resulting sparse DAG defines the final discrete IAC genotype. Once all edges have a single operation and each node has at most two incoming edges, the architecture is fully specified and further optimization of (𝛼, 𝛽 ) is unnecessary. We therefore terminate the search phase early (often after a fraction of the original 200-epoch budget) and pro-ceed directly to the final IAC training stage, reusing the discovered genotype and initializing the IAC weights 𝜔 
+
+from their values at the beginning of the search. During this stage the cell is trained at full capacity (all channels, without partial-channel masks), exactly as in the original IAC framework. 
+
+5.6. Algorithm 
+
+Algorithm 1 summarizes the proposed accelerated search. Compared to the baseline IAC search, the main additions are: (i) computation of per-edge operation-importance dis-tributions, (ii) JS-divergence-based stability tests, and (iii) progressive pruning of low-importance operations on stable edges and, in the final step, reduces incoming edges per node to the two most influential ones, matching the original IAC connectivity pattern; 
+
+Algorithm 1 Accelerated IAC Search (IAC-LTH)                        
+
+> Initialization Stopping criterion Warm-up Optimization Importance / JS Pruning
+> Require: Architecture parameters 𝛼, 𝛽 ; IAC weights 𝜔 ; frozen U-Net weights 𝜔 𝑈 ;warm-up epochs 𝜉 ; training set 𝐷 train (with 𝜁 steps per epoch); loss 𝐿 ; optimizers ̂𝜂 (for 𝜔 ) and ̂𝜄 (for 𝛼, 𝛽 ); initial per-edge thresholds 𝜃 𝑖,𝑗 ; threshold multiplier 𝜅 .
+
+1: Init: Build supernet 𝑆 with IAC cell, load 𝜔 𝑈 . Set 𝛼, 𝛽 ← const. Randomly initialize 𝜔 . Freeze all weights except {𝛼, 𝛽, 𝜔 }.
+
+2: Stop: Every IAC edge has exactly one active operation (one op per edge). 
+
+3: Warm-up: for 𝑒 = 1 to 𝜉 do 
+
+4: for 𝑧 = 1 to 𝜁 do 
+
+5: Sample a mini-batch from 𝐷 train and compute 𝐿 train = 𝐿 (𝑆 (𝐷 train )) .
+
+6: 𝜔 ← 𝜔 −̂𝜂 ∇ 𝜔 𝐿 train (𝜔, 𝛼, 𝛽, 𝜔 𝑈 ).
+
+7: while stopping criterion not met do 
+
+8: for 𝑧 = 1 to 𝜁 do 
+
+9: Sample a mini-batch and compute 𝐿 train = 𝐿 (𝑆 (𝐷 train )) .
+
+10: 𝜔 ← 𝜔 −̂𝜂 ∇ 𝜔 𝐿 train (𝜔, 𝛼, 𝛽, 𝜔 𝑈 ).
+
+11: (𝛼, 𝛽 ) ← (𝛼, 𝛽 ) − ̂𝜄 ∇ (𝛼,𝛽 )𝐿 train (𝜔, 𝛼, 𝛽, 𝜔 𝑈 ).
+
+12: for each edge (𝑖, 𝑗 ) ∈ 𝐸 do /* importance and JS */ 
+
+13: Compute Θ𝑜 𝑖,𝑗 = 𝛼 𝑜 𝑖,𝑗 ⋅ 𝛽 𝑖,𝑗 for all 𝑜 ∈ 𝑂 (current epoch). 
+
+14: Normalize to 𝑝 𝑖,𝑗 (𝑜 ) = Θ 𝑜 𝑖,𝑗      
+
+> /( ∑ 𝑜 ′Θ𝑜 ′
+> 𝑖,𝑗 +𝜀 ). Let 𝑝 ′
+> 𝑖,𝑗 be the distribution from the previous epoch (or uniform in the first epoch).
+
+15: Compute 𝑑 𝑖,𝑗 = 𝐷 JS  
+
+> (𝑝 ′
+> 𝑖,𝑗 ‖𝑝 𝑖,𝑗
+> ).
+
+16: for each edge (𝑖, 𝑗 ) ∈ 𝐸 do /* prune ops or adjust threshold */ 
+
+17: if 𝑑 𝑖,𝑗 < 𝜃 𝑖,𝑗 then 
+
+18: Compute 𝜇 𝑖,𝑗 and 𝜎 𝑖,𝑗 over {Θ 𝑜 𝑖,𝑗 }𝑜 ∈𝑂 .
+
+19: Prune all operations with Θ𝑜 𝑖,𝑗 < 𝜇 𝑖,𝑗 − 2 𝜎 𝑖,𝑗 .
+
+20: if no op was pruned then prune the op with minimal Θ𝑜 𝑖,𝑗 (ensuring at least one op remains). 
+
+21: else 𝜃 𝑖,𝑗 ← 𝜅 𝜃 𝑖,𝑗 .
+
+22: end while 
+
+23:         
+
+> Final edge reduction: For each node 𝑗 keep only the two incoming edges (𝑖, 𝑗 )
+> with the largest Ψ𝑖,𝑗 (equivalently, the largest 𝛽 𝑖,𝑗 ), dropping all other incoming edges.
+
+Hyperparameters for JS-based pruning: For all ex-periments, we initialize the JS thresholds 𝜃 𝑖,𝑗 to 1.0 and use the same initial value across all edges. Whenever an edge fails the stability test in a given epoch, we update its threshold according to 𝜃 𝑖,𝑗 ← 𝜅 𝜃 𝑖,𝑗 with 𝜅 = 2, which gradually relaxes the stability requirement for that edge. For numerical stability, we compute all JS divergences with a small constant 𝜀 = 10 −6 added to the smoothed probabili-ties. We do not impose any explicit upper or lower bounds on 
+
+𝜃 𝑖,𝑗 ; in practice, the combination of the 𝜇 𝑖,𝑗 − 2 𝜎 𝑖,𝑗 pruning rule and the finite number of pruning events keeps 𝜃 𝑖,𝑗 in a reasonable range. The values of 𝜃 𝑖,𝑗 , 𝜅 , and 𝜀 were chosen empirically based on preliminary experiments and then kept fixed for all datasets, backbones and experimental regimes, so the schedule should be regarded as a simple heuristic rather than a heavily tuned hyperparameter set. 
+
+: Preprint submitted to Elsevier Page 12 of 19 Efficient Search of IACs for Medical Image Segmentation 
+
+## 6. Experiments and Results 
+
+In this section we evaluate the proposed accelerated IAC search on the same segmentation benchmarks as the original IAC work and add experiments in the nnU-Net pipeline. Our goals are to verify that: (i) IACs found by the accelerated search match the segmentation quality of the original full IAC search across multiple U-Net backbones; (ii) the improvements over plain skip connections are sta-tistically significant at the patient level; and (iii) the LTH-inspired pruning strategy reduces the effective search budget by several times without sacrificing accuracy. Unless stated otherwise, the Dice similarity coefficient is reported on held-out test patients. 
+
+6.1. Datasets 
+
+We use four public medical image segmentation bench-marks: 
+
+• ACDC – short-axis cardiac cine MRI with left ven-tricular myocardium and cavity segmentation. 
+
+• AMOS – multi-organ abdominal CT with multiple soft-tissue structures. 
+
+• BraTS – multi-modal brain MRI with tumor sub-structures. 
+
+• KiTS – abdominal CT with kidney and tumor labels. For each dataset we follow a patient-level split into training, validation and test subsets with disjoint patients. The test sets contain 60, 72, 250, and 98 cases (patients) for ACDC, AMOS, BraTS and KiTS, respectively, shared across all backbones on a given dataset. All methods use the same 2-D slice protocol, reflecting a practically common setting for medical segmentation pipelines. We extract axial slices from each 3-D volume and apply a fixed 128 × 128 in-plane centered crop to reduce background and standardize the input size. For MRI (ACDC, BraTS) we perform per-modality 𝑧 -score normalization over non-zero voxels; for CT (AMOS, KiTS) we apply standard CT windowing followed by 𝑧 -score normalization. The same pre-processing is used for all backbones and skip variants. 
+
+6.2. Architectures and baselines 
+
+We consider two families of segmentation backbones. 
+
+Frozen U-Nets with different encoders (backbone grid): We reuse the six encoder variants from the original IAC study: a plain U-Net encoder plus several modern CNN backbones. For the backbone-grid experiments, we use a single random seed per (dataset, backbone) pair; the reported statistics are averages over backbones only. For each backbone we compare: 
+
+• Ref – reference U-Net with standard identity skip connections. 
+
+• Att – U-Net with Attention Gates. 
+
+• Nested – U-Net++-style dense skip connections. 
+
+• ResAtt – U-Net with residual attention blocks. 
+
+• IAC – original IAC obtained with a full 200-epoch differentiable search. 
+
+• IAC-LTH – the proposed accelerated IAC search (same search space and backbone, but with operation-level analysis, JS-based stability detection and on-the-fly pruning). 
+
+nnU-Net pipeline: We further integrate IACs into the standard 2-D nnU-Net framework and repeat the experi-ments both without and with data augmentation. All nnU-Net search runs were performed with three different random seeds per dataset and method (IAC and IAC-LTH), for both the non-augmented and augmented regimes, and we report averages over these runs: 
+
+• nnU-Net (Ref) – unmodified 2-D nnU-Net. 
+
+• nnU-Net + IAC – skip connections replaced with IACs found by the original 200-epoch search. 
+
+• nnU-Net + IAC-LTH – skip connections replaced with IACs found by the proposed accelerated search. All IAC variants use the same cell topology, search space and final training protocol described in Section 3 and Section 5. 
+
+6.3. Training protocol 
+
+All models use loss functions that follow nnU-Net con-ventions Isensee et al. (2021, 2024): 
+
+𝐿 = 𝜆 (1 − 𝐷 soft ) + (1 − 𝜆 ) 𝐿 CE , (22) where 
+
+𝐷 soft = 1
+
+| |∑
+
+> 𝑐 ∈
+
+2 ∑𝑥 𝑦 𝑐 𝑝 𝑐 + 𝜀 
+
+∑𝑥 𝑦 𝑐 + ∑𝑥 𝑝 𝑐 + 𝜀 (23) is the macro-average soft Dice over foreground classes (background excluded), 
+
+𝐿 CE = − 1
+
+|Ω|∑
+
+> 𝑥
+
+∑
+
+> 𝑐
+
+𝑦 𝑐 log 𝑝 𝑐 (24) with 𝜆 = 0 .5 and 𝜀 = 10 −5 . Here, 𝑦 𝑐 denotes the one-hot ground-truth for class 𝑐 , 𝑝 𝑐 the softmax probability, Ω the set of pixels, and  the set of foreground classes. When deep supervision is enabled (nnU-Net setting), we sum the loss over all decoder outputs using the standard nnU-Net output weights. For the backbone-grid experiments we disable deep supervision to isolate architectural effects. For evaluation, we compute Dice per test case (patient) for each foreground class and report per-class means and the mean foreground Dice (macro-average over foreground classes, background excluded). Dataset scores are averages of these per-case/patient-level values. Although all models operate on 2-D slices, evaluation is performed at the case level by aggregating true positives (TP), false positives (FP)   
+
+> :Preprint submitted to Elsevier Page 13 of 19
+
+Efficient Search of IACs for Medical Image Segmentation 
+
+and false negatives (FN) over all slices of a patient before computing Dice. 
+
+Stage I (reference backbones). Each 2-D U-Net back-bone is trained for 200 epochs using Adam (learning rate 0.001, batch size 128), selecting the best checkpoint on the validation set based on mean patient-level foreground Dice. 
+
+Stage III (discrete cells). After search and discretiza-tion, we instantiate the discrete IAC / IAC-LTH cell in the U-Net that was used during search and train only the IAC / IAC-LTH weights for 200 epochs with the same optimizer, learning rate and loss as in Stage I, while keeping the backbone frozen. For the baseline IAC we follow the original regime and re-initialize the IAC weights with a fresh random initialization before this final training stage. For IAC-LTH, following the Lottery Ticket protocol, we instead reset the weights of the discovered subnetwork to the values they had at the start of the search (i.e., the initial random initialization stored before any updates) and train from this preserved initialization. For the backbone grid and nnU-Net, we follow the orig-inal IAC setup for the search phase: 
+
+• Search is performed once per backbone and dataset with frozen encoder-decoder weights. 
+
+• For the baseline IAC, we use the original split of the training data into train_search and val_search and alternate updates of 𝜔 and (𝛼, 𝛽 ) on these subsets, as in Section 3.3. 
+
+• For IAC-LTH, we use the same overall training set but do not create an internal validation subset: 𝜔 and (𝛼, 𝛽 )
+
+are optimized jointly on the full training set according to Eq. (17). 
+
+• The IAC search phase runs for up to 200 epochs in the full-search baseline; the accelerated variant applies JS-based stability checks and pruning after each epoch and thus typically terminates much earlier (Section 6.7). Unless stated otherwise, both IAC and IAC-LTH use the same supernet optimization hyperparameters (SGD for cell weights with learning rate 0.01, Adam for architecture pa-rameters with learning rate 0.001, cosine power annealing, batch size 128); only the use of the internal train/validation split and the JS-based pruning differ. 
+
+6.4. Backbone grid: Dice gains over reference U-Net 
+
+We first evaluate how different skip-connection refine-ments behave across the grid of six U-Net backbones. For each dataset and method we compute the per-backbone patient-level Dice difference relative to the reference U-Net, 
+
+ΔDice = Dice method − Dice Ref , and then average over the six backbones. Table 1 summarizes the mean ΔDice for all skip vari-ants: Attention, Nested, Residual Attention, IAC and IAC-LTH, together with 95% bootstrap confidence intervals. All numbers are expressed as absolute Dice differences. 
+
+Table 1 
+
+Backbone grid: mean Dice difference vs. reference U-Net (ΔDice = Dice method − Dice Ref ) across six backbones. Values in brackets are 95% bootstrap confidence intervals over back-bones. The last column reports global patient-level significance 
+
+𝑝 Fisher (Fisher aggregation over backbones and patients).                                                                
+
+> Dataset Method ΔDice 𝑝 Fisher
+> ACDC Attention 0.068 [ -0.000, 0.192] 4.1 × 10 −19
+> ACDC Nested 0.034 [0.013, 0.065] 7.3 × 10 −39
+> ACDC Residual Att. 0.048 [0.002, 0.128] 3.0 × 10 −21
+> ACDC IAC 0.011 [0.000, 0.025] 1.7 × 10 −25
+> ACDC IAC-LTH 0.010 [0.001, 0.020] 4.5 × 10 −15
+> AMOS Attention -0.063 [-0.165, 0.027] 1.6 × 10 −61
+> AMOS Nested 0.031 [ -0.043, 0.106] 3.1 × 10 −53
+> AMOS Residual Att. 0.055 [ -0.011, 0.129] 2.5 × 10 −51
+> AMOS IAC 0.055 [ -0.041, 0.134] 1.2 × 10 −47
+> AMOS IAC-LTH 0.050 [ -0.029, 0.125] 3.2 × 10 −57
+> BraTS Attention 0.008 [0.003, 0.013] 1.5 × 10 −30
+> BraTS Nested 0.010 [0.005, 0.016] 1.8 × 10 −61
+> BraTS Residual Att. 0.007 [0.002, 0.013] 6.7 × 10 −34
+> BraTS IAC 0.013 [0.007, 0.019] 1.1 × 10 −67
+> BraTS IAC-LTH 0.012 [0.006, 0.019] 5.1 × 10 −59
+> KiTS Attention -0.005 [-0.031, 0.020] 4.1 × 10 −22
+> KiTS Nested 0.012 [ -0.016, 0.039] 1.4 × 10 −21
+> KiTS Residual Att. 0.017 [ -0.011, 0.047] 1.7 × 10 −24
+> KiTS IAC 0.032 [0.005, 0.060] 1.2 × 10 −29
+> KiTS IAC-LTH 0.025 [0.004, 0.045] 1.0 × 10 −25
+
+Unless stated otherwise, statistical significance is as-sessed at the patient level. For pairwise method comparisons on a given dataset and backbone we use the Wilcoxon signed-rank test on per-patient Dice scores. To summarize significance across backbones, we aggregate the resulting 𝑝 -values using Fisher’s method: 
+
+𝜒 2 = −2 
+
+> 𝐾
+
+∑
+
+> 𝑘 =1
+
+ln 𝑝 𝑘 , 𝜒 2 ∼ 𝜒 22𝐾 ,
+
+where 𝑝 𝑘 is the 𝑝 -value for backbone 𝑘 and 𝐾 is the number of backbones. We report the corresponding combined 𝑝 -value as 𝑝 Fisher in Table 1. Several trends emerge. 
+
+• On ACDC , all refined skip variants yield positive mean ΔDice over the six backbones. Attention has the largest average gain (but with a wide confidence inter-val that includes zero), Nested and Residual Attention are in the middle, while IAC and IAC-LTH deliver smaller but consistent gains with tight intervals just above zero. 
+
+• On AMOS , Attention slightly hurts performance on average, whereas all other methods improve over the reference U-Net. IAC and Residual Attention achieve the largest mean gains ( ≈ 0.055 Dice), with IAC-LTH close behind ( 0.050 Dice) and Nested somewhat lower. 
+
+• On BraTS , all skip variants provide small but consis-tently positive gains. Here IAC and IAC-LTH attain 
+
+: Preprint submitted to Elsevier Page 14 of 19 Efficient Search of IACs for Medical Image Segmentation 
+
+the highest average improvements ( 0.013 and 0.012 
+
+Dice, respectively), followed by Nested and Atten-tion/Residual Attention. 
+
+• On KiTS , Attention is again neutral or slightly nega-tive on average, while all other methods bring positive gains. IAC achieves the largest mean improvement (0.032 Dice), IAC-LTH is the second-best ( 0.025 
+
+Dice), and Nested and Residual Attention lag behind, with confidence intervals that overlap zero. The last column of Table 1 reports Fisher-aggregated patient-level 𝑝 -values for IAC and IAC-LTH, combining all backbones and patients. All these 𝑝 Fisher values are extremely small (between 10 −15 and 10 −67 ), confirming that the gains of IAC and IAC-LTH over the reference U-Net are statisti-cally significant at the patient level and not driven by a few lucky backbones. In summary, across the backbone grid the proposed IAC-LTH is consistently competitive with, and often stronger than, classical skip refinements such as Attention, Nested and Residual Attention: 
+
+• on AMOS and KiTS , it outperforms Attention and Nested, and matches or slightly trails the best residual variant; 
+
+• on BraTS , IAC and IAC-LTH obtain the largest aver-age gains among all skip types; 
+
+• on ACDC , all refined skips help, with IAC/IAC-LTH providing small but robust improvements with narrow confidence intervals. Thus, within the family of plug-in skip modules for medical image segmentation, the accelerated IAC search preserves the behavior of IAC while remaining at least on par with, and in several cases better than, widely used alter-natives such as attention-gated and nested skip connections. 
+
+6.5. nnU-Net without data augmentation 
+
+We next move to the 2-D nnU-Net baseline without any data augmentation. This creates a controlled but challenging setting in which the architecture has to compensate for lack of regularization and therefore tests whether the searched skip modules retain value in a strong medical segmentation pipeline. For each dataset we compare: 
+
+• nnU-Net (Ref), 
+
+• nnU-Net + IAC, 
+
+• nnU-Net + IAC-LTH, and compute patient-level Dice differences between all pairs. We define 
+
+ΔDice (𝐴 → 𝐵 ) = Dice 𝐵 − Dice 𝐴 ,
+
+so positive values mean that method 𝐵 improves over method 𝐴 . Table 2 summarizes the mean ΔDice, with 95% bootstrap confidence intervals. The first two columns confirm that both nnU-Net + IAC and nnU-Net + IAC-LTH improve over the unmodified nnU-Net on all four datasets. The gains are modest on ACDC and BraTS (about +0 .02 –0.03 Dice for IAC and IAC-LTH on ACDC, and about +0 .05 Dice for IAC vs. +0 .01 Dice for IAC-LTH on BraTS), and very large on the more challenging CT datasets AMOS and KiTS (up to +0 .37 Dice without augmentation). All these improvements are statistically sig-nificant at the patient level (Wilcoxon 𝑝 ≤ 4.9 × 10 −2 ,typically much smaller). The third column shows the relative ranking of IAC vs. IAC-LTH in this regime. On ACDC, IAC-LTH is numer-ically almost identical to IAC (about +0 .002 Dice; 𝑝 =3.5 × 10 −11 ), i.e. the difference is statistically detectable but negligible in practice. On KiTS, IAC-LTH improves over IAC by about +0 .02 Dice ( 𝑝 = 2.2 × 10 −6 ). On AMOS, the difference is small and slightly negative ( −0 .004 
+
+Dice, 𝑝 = 2 .6 × 10 −2 ), indicating that the two variants are essentially tied. On BraTS, IAC is ahead by about 0.04 Dice (𝑝 ≈ 2 .5 × 10 −37 ). Overall, in the no-augmentation regime, the accelerated search retains the main improvements of IAC over nnU-Net, and the choice between full IAC and IAC-LTH has a second-order effect compared to their common gain over the baseline. 
+
+6.6. nnU-Net with data augmentation 
+
+We now repeat the nnU-Net experiments with the full data augmentation pipeline enabled. This setting is closer to realistic medical segmentation training and tests whether the accelerated IAC search remains beneficial when the backbone is already strongly regularized. Again we compute ΔDice (𝐴 → 𝐵 ) at the patient level. Table 3 reports the mean differences and 95% confidence intervals. The first two columns show that even in a strong aug-mented pipeline, inserting IACs into the skip connections yields consistent patient-level improvements on all datasets: 
+
+• nnU-Net + IAC improves over nnU-Net by about 
+
++0 .11 Dice on ACDC, +0 .15 on AMOS, +0 .05 on BraTS and +0 .11 on KiTS (all 𝑝 ≤ 1.6 × 10 −11 ). 
+
+• nnU-Net + IAC-LTH also improves over nnU-Net, with gains of +0 .08 (ACDC), +0 .45 (AMOS), +0 .04 
+
+(BraTS) and +0 .22 (KiTS), all with extremely small 
+
+𝑝 -values ( 𝑝 ≤ 1.7 × 10 −13 ). The third column reveals the interaction between data augmentation and the accelerated search. On ACDC, IAC is slightly ahead of IAC-LTH by about 0.03 Dice ( 𝑝 =7.0 × 10 −5 ). On BraTS, the difference is very small and not statistically significant ( −0 .006 Dice, confidence interval in-cludes zero, 𝑝 = 0 .13 ), so the two variants can be considered equivalent. On the more challenging CT datasets AMOS and KiTS, however, IAC-LTH outperforms the full-search IAC: by +0 .30 Dice on AMOS and +0 .11 Dice on KiTS, both with very tight confidence intervals and 𝑝 ≈ 1 .7 × 10 −13 . In these regimes, the early-stabilized operation choices discovered   
+
+> :Preprint submitted to Elsevier Page 15 of 19
+
+Efficient Search of IACs for Medical Image Segmentation 
+
+Table 2 
+
+nnU-Net without data augmentation: mean pairwise Dice differences ΔDice (𝐴 → 𝐵 ) at the patient level. Positive values indicate that method 𝐵 outperforms method 𝐴 . Values in brackets: 95% bootstrap confidence intervals.                
+
+> Dataset ΔDice(Ref →IAC) ΔDice(Ref →IAC-LTH) ΔDice(IAC →IAC-LTH) ACDC 0.023 [0.007, 0.042] 0.025 [0.007, 0.045] 0.002 [0.000, 0.003] AMOS 0.367 [0.350, 0.385] 0.363 [0.345, 0.381] -0.004 [-0.008, 0.000] BraTS 0.052 [0.043, 0.061] 0.012 [0.003, 0.022] -0.039 [-0.045, -0.034] KiTS 0.161 [0.140, 0.184] 0.182 [0.158, 0.208] 0.021 [0.012, 0.031]
+
+Table 3 
+
+nnU-Net with data augmentation: mean pairwise Dice differences ΔDice (𝐴 → 𝐵 ) at the patient level. Positive values indicate that method 𝐵 outperforms method 𝐴 . Values in brackets: 95% bootstrap confidence intervals.                
+
+> Dataset ΔDice(Ref →IAC) ΔDice(Ref →IAC-LTH) ΔDice(IAC →IAC-LTH) ACDC 0.106 [0.082, 0.134] 0.076 [0.055, 0.099] -0.030 [-0.051, -0.014] AMOS 0.145 [0.135, 0.154] 0.448 [0.426, 0.470] 0.303 [0.285, 0.321] BraTS 0.048 [0.039, 0.056] 0.042 [0.033, 0.051] -0.006 [-0.014, 0.002] KiTS 0.114 [0.099, 0.131] 0.222 [0.192, 0.253] 0.108 [0.085, 0.131]
+
+by the accelerated search appear to interact favorably with strong data augmentation. 
+
+6.7. Search efficiency and wall-clock cost 
+
+While the Dice scores of IAC and IAC-LTH are closely matched, the main motivation for introducing the accelerated search is efficiency. In the original IAC framework, the differentiable search phase was always run for 200 epochs per backbone and dataset, regardless of whether the archi-tecture had already stabilized. As shown in Section 4, the 
+
+𝛼 ⋅ 𝛽 vectors converge much earlier: cosine similarity to the final configuration exceeds 0.95 around epoch 100 and often stabilizes by 40-60 epochs, whereas the final discrete genotype only snaps into place near the end of the run. The JS-based stability criterion in IAC-LTH exploits this behavior by monitoring, for each edge, the JS divergence between successive operation-importance distributions and pruning low-importance operations once these distributions stabilize. In practice this leads to a substantial reduction in both the number of search epochs and the wall-clock cost. Table 4 reports the average search cost over the six U-Net backbones (Base, VGG-16, ResNet-50, MobileNetV3-Large, EfficientNetV2-S/M) for each dataset. The baseline IAC search always uses 200 epochs; IAC-LTH stops early once every edge has a single operation and each node has at most two incoming edges. Across the backbone grid, IAC-LTH consistently termi-nates after roughly 45-50 epochs instead of 200, i.e. about 
+
+4× fewer epochs. This translates into a 3.7-5.1× reduction in wall-clock search time, depending on the dataset, while pre-serving (and sometimes slightly improving) Dice compared to the full 200-epoch IAC search. Table 5 shows the same comparison inside the nnU-Net pipeline, with and without data augmentation. Again, the IAC search always runs for 200 epochs, whereas IAC-LTH stops after approximately 50-56 epochs. In nnU-Net, the epoch reduction is again about 3.5-
+
+4× , and the wall-clock speed-up ranges from roughly 2.8× 
+
+(BraTS) to over 16× in the heaviest configuration (AMOS with augmentation). The most extreme case, AMOS with nnU-Net and augmentation, drops from 2635 minutes ( ≈ 44 
+
+hours) for IAC to 162 minutes ( ≈ 2 .7 hours) for IAC-LTH, while achieving higher Dice (Section 6.6). Since both methods share the same deployed architec-ture size and inference pipeline, model FLOPs, parameter counts and test-time latency remain nearly identical, as in the original IAC paper. The main practical gain of IAC-LTH is therefore in offline search cost , not runtime deployment: good IAC cells for medical segmentation can be discovered in a few dozen epochs and a couple of hours of GPU time instead of multi-hundred-epoch, multi-hour or even multi-day searches. 
+
+6.8. Summary of empirical findings 
+
+The experimental results can be distilled into three main messages: 1. IAC-LTH preserves, and in some settings enhances, the benefits of adaptive skip modules for medical segmentation. Across four datasets, multiple U-Net backbones and the nnU-Net pipeline, IAC-LTH deliv-ers patient-level Dice gains very similar to or larger than those of the original IAC search. In several CT scenarios (AMOS and KiTS with augmentation) it outperforms the full-search IAC. 2. Improvements are robust and statistically signifi-cant. Both backbone-grid and nnU-Net experiments show consistently positive ΔDice vs. reference mod-els, with very low 𝑝 -values from Wilcoxon tests and Fisher-aggregated patient-level statistics for backbone grid experiments. Gains are not limited to a few easy cases; they shift the entire patient distribution. 3. Search becomes cheaper without sacrificing accu-racy. Thanks to early detection of “winning” oper-ations and JS-based stability checks, the accelerated search shrinks the search space on the fly, prunes 
+
+: Preprint submitted to Elsevier Page 16 of 19 Efficient Search of IACs for Medical Image Segmentation                                                                  
+
+> Table 4
+> Backbone grid: average search cost over six U-Net backbones for each dataset. IAC uses a fixed 200-epoch search. IAC-LTH stops early once the cell is fully discrete. Time is wall-clock GPU time for the search phase only. All times are in minutes, and the number of epochs is the average across multiple backbones for a given dataset.
+> Dataset IAC time IAC-LTH epochs IAC-LTH time Time speed-up ACDC 16.3 43 3.7 4.5×
+> AMOS 632.7 48 124.3 5.1×
+> BraTS 471.7 51 128.5 3.7×
+> KiTS 234.5 48 53.7 4.4×
+> Table 5
+> nnU-Net: search cost for IAC vs. IAC-LTH with and without data augmentation. IAC always runs for 200 epochs; IAC-LTH stops when the cell is fully discrete. Time is wall-clock GPU time for the search phase. All times are in minutes, and the number of epochs is the average across multiple seeds for a given dataset and configuration.
+> Dataset Config IAC time IAC-LTH epochs IAC-LTH time Time speed-up ACDC no aug 37 48 11 3.4×
+> ACDC aug 41 49 11 3.7×
+> AMOS no aug 631 56 179 3.5×
+> AMOS aug 2635 55 162 16 .3×
+> BraTS no aug 1110 54 401 2.8×
+> BraTS aug 1162 57 409 2.8×
+> KiTS no aug 515 54 179 2.9×
+> KiTS aug 1009 51 163 6.2×
+
+unpromising operations and terminates once the archi-tecture has stabilized. This reduces the search budget by several times (up to an order of magnitude in wall-clock time in the most demanding settings) while delivering cells whose segmentation performance is on par with, or in some settings better than, those produced by the full IAC procedure. These findings indicate that early stabilization inside Implantable Adaptive Cells can be exploited to make NAS more practical for medical image segmentation, preserving the accuracy benefits of adaptive skip modules while reduc-ing the search cost. 
+
+## 7. Discussion, limitations and positioning 
+
+Implications for medical image segmentation. The main result of this study is practical: adaptive skip modules for medical image segmentation can be searched more effi-ciently than the original IAC protocol suggests. Instead of always running a full 200-epoch differentiable search, we track how the relative importance of competing operations on each edge of the IAC cell evolves during search and prune once those preferences stabilize. The results show that the operations which survive discretization are already among the strongest candidates after only a small fraction of the search budget, and that the continuous architecture parameters stabilize long before the final epoch. This behavior is compatible with LTH-style early win-ner emergence, but in the present paper its importance is methodological rather than purely theoretical. Our JS-based stability test quantifies when the per-edge distribution over operations stops changing significantly. Once an edge is sta-ble, continuing to train all operations on that edge adds little information, and discarding weak operations has minimal impact on the eventual discrete cell. In addition, we observe that the speed of convergence varies across edges and datasets, and that different random initializations of the IAC weights can lead to slightly dif-ferent final genotypes, again echoing LTH findings on the sensitivity of tickets to initialization and training dynamics. These effects are modulated by the backbone and dataset: larger backbones such as ResNet-50 converge slightly more slowly, and highly informative datasets such as BraTS favor earlier identification of winning operations. 
+
+Practical implications. From a practical perspective, the main implication is that full-length differentiable NAS searches are often unnecessary when targeting plug-in mod-ules such as IACs. Once operation-level importance distri-butions stabilize and early winners are clearly separated, the search can be safely truncated. Our JS-based criterion gives a simple, implementation-agnostic rule for deciding when this point has been reached. The accelerated search reduces the computational barrier to using IACs in medical segmentation workflows. Instead of running 200-epoch searches for each new dataset and backbone, practitioners can monitor JS divergence and prune low-importance operations as soon as stability is detected. In our experiments this shortens the search from hundreds of epochs to a few dozen, and from many hours to at most a few hours of GPU time, without sacrificing segmentation accuracy. Such savings are particularly relevant in hospitals and small labs where GPU time is scarce and rapid adapta-tion to new imaging protocols is critical. Within the scope of this paper, these results also strengthen the case for skip-focused search in medical imaging: the gains are observed on public datasets, evaluated at the patient   
+
+> :Preprint submitted to Elsevier Page 17 of 19
+
+Efficient Search of IACs for Medical Image Segmentation 
+
+level, and retained in a standard 2-D nnU-Net pipeline, including experiments with and without augmentation. 
+
+Limitations and future work. Our study has several limitations. First, it focuses on a specific search space: a single IAC cell with spatially preserving operations inserted into 2-D U-Net skip connections. Although we evaluate across four datasets and multiple backbones, the findings may not directly transfer to 3-D networks, non-U-shaped architectures or search spaces with more aggressive down-/up-sampling operations. Second, the JS divergence threshold and pruning sched-ule are heuristic and hand-tuned. While our choices work ro-bustly across the studied datasets, more systematic methods for adaptive thresholding or Bayesian stopping rules could further improve reliability. In particular, future work could explore fully training-free or low-cost proxies that predict stability based on early gradients or weight statistics, without requiring repeated full forward passes. Third, the experimental design is primarily focused on segmentation quality and search cost. We do not explicitly evaluate robustness to domain shift, calibration of predic-tion maps or energy consumption on edge devices, and the backbone-grid experiments use a single seed per backbone (multi-seed evaluation is restricted to the nnU-Net setting). Since the IAC cell slightly increases inference cost, a more comprehensive study could combine our accelerated search with downstream efficiency optimizations such as quantiza-tion, structured pruning or hardware-aware constraints. 
+
+Conclusion. We have shown that operation choices in-side Implantable Adaptive Cells stabilize early enough to support shorter search for medical image segmentation. By quantifying this stability with JS divergence and designing a simple on-the-fly pruning strategy (IAC-LTH), we reduce the IAC search cost by factors between roughly 3× and 
+
+16× in practice, while preserving or improving patient-level segmentation accuracy across four diverse public medical datasets and both plain U-Net and 2-D nnU-Net pipelines. These findings support adaptive skip-module search as a more practical option for biomedical image segmentation when computational budget is limited. 
+
+## References 
+
+Alabdulmohsin, I., Markeeva, L., Keysers, D., Tolstikhin, I., 2021. Ageneralized lottery ticket hypothesis. URL: https://arxiv.org/abs/2107. 06825 , arXiv:2107.06825 .Azad, R., Aghdam, E.K., Rauland, A., Jia, Y., Avval, A.H., Bozorgpour, A., Karimijafarbigloo, S., Cohen, J.P., Adeli, E., Merhof, D., 2024. Medical image segmentation review: The success of u-net. IEEE Transactions on Pattern Analysis and Machine Intelligence 46, 10076–10095. doi: 10. 1109/TPAMI.2024.3435571 .Bakas, S., Sotiras, A., Bilello, M., Rozycki, M., Kirby, J., Freymann, J., Farahani, K., Davatzikos, C., 2017. Segmentation Labels and Radiomic Features for the Pre-operative Scans of the TCGA-GBM collection [Data set]. doi: 10.7937/K9/TCIA.2017.KLXWJJ1Q .Benedykciuk, E., Denkowski, M., Wójcik, G., 2025. Implantable Adaptive Cells: A Novel Enhancement for Pre-Trained U-Nets in Medical Image Segmentation. CoRR abs/2405.03420. arXiv:2405.03420 .Bernard, O., Lalande, A., Zotti, C., Cervenansky, F., Yang, X., Heng, P.A., Cetin, I., Lekadir, K., Camara, O., Gonzalez Ballester, M.A., Sanroma, G., Napel, S., Petersen, S., Tziritas, G., Grinias, E., Khened, M., Kollerathu, V.A., Krishnamurthi, G., Rohé, M.M., Pennec, X., Sermesant, M., Isensee, F., Jäger, P., Maier-Hein, K.H., Full, P.M., Wolf, I., Engelhardt, S., Baumgartner, C.F., Koch, L.M., Wolterink, J.M., Išgum, I., Jang, Y., Hong, Y., Patravali, J., Jain, S., Humbert, O., Jodoin, P.M., 2018. Deep learning techniques for automatic mri cardiac multi-structures segmentation and diagnosis: Is the problem solved? IEEE Transactions on Medical Imaging 37, 2514–2525. doi: 10.1109/TMI.2018. 2837502 .Chen, W., Gong, X., Liu, X., Zhang, Q., Li, Y., Wang, Z., 2020. Fasterseg: Searching for faster real-time semantic segmentation, in: 8th Interna-tional Conference on Learning Representations (ICLR 2020), OpenRe-view.net, Online. URL: https://openreview.net/forum?id=BJgqQ6NYvB .Frankle, J., Carbin, M., 2019. The Lottery Ticket Hypothesis: Find-ing Sparse, Trainable Neural Networks. CoRR abs/1803.03635. 
+
+> arXiv:1803.03635
+
+.Girish, S., Maiya, S.R., Gupta, K., Chen, H., Davis, L., Shrivastava, A., 2021. The lottery ticket hypothesis for object recognition, in: 2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 762–771. doi: 10.1109/CVPR46437.2021.00082 .He, K., Zhang, X., Ren, S., Sun, J., 2016. Deep residual learning for image recognition, in: IEEE Conference on Computer Vision and Pattern Recognition (CVPR), IEEE Computer Society, Washington, DC, USA. pp. 770–778. doi: 10.1109/CVPR.2016.90 .He, Y., Yang, D., Roth, H., Zhao, C., Xu, D., 2021. Dints: Differentiable neural network topology search for 3d medical image segmentation, in: IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), Computer Vision Foundation / IEEE, Washington, DC, USA. pp. 5841–5850. doi: 10.1109/CVPR46437.2021.00578 .Heller, N., Isensee, F., Trofimova, D., Tejpaul, R., Zhao, Z., Chen, H., Wang, L., Golts, A., Khapun, D., Shats, D., Shoshan, Y., Gilboa-Solomon, F., George, Y., Yang, X., Zhang, J., Zhang, J., Xia, Y., Wu, M., Liu, Z., Walczak, E., McSweeney, S., Vasdev, R., Hornung, C., Solaiman, R., Schoephoerster, J., Abernathy, B., Wu, D., Abdulkadir, S., Byun, B., Spriggs, J., Struyk, G., Austin, A., Simpson, B., Hagstrom, M., Virnig, S., French, J., Venkatesh, N., Chan, S., Moore, K., Jacobsen, A., Austin, S., Austin, M., Regmi, S., Papanikolopoulos, N., Weight, C., 2023. The KiTS21 Challenge: Automatic segmentation of kidneys, renal tumors, and renal cysts in corticomedullary-phase CT. arXiv preprint arXiv:2307.01984 . Hou, P., Jin, Y., Chen, Y., 2021. Single-darts: Towards stable architecture search, in: IEEE/CVF International Conference on Computer Vision Workshops (ICCVW), IEEE, Washington, DC, USA. pp. 373–382. doi: 10.1109/ICCVW54120.2021.00046 .Howard, A., Sandler, M., Chen, B., Wang, W., Chen, L.C., Tan, M., Chu, G., Vasudevan, V., Zhu, Y., Pang, R., Adam, H., Le, Q., 2019. Searching for MobileNetV3, in: 2019 IEEE/CVF International Conference on Computer Vision (ICCV), pp. 1314–1324. doi: 10.1109/ICCV.2019.00140 .Isensee, F., Jaeger, P.F., Kohl, S.A.A., Petersen, J., Maier-Hein, K.H., 2021. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods 18, 203–211. doi: 10.1038/ s41592-020-01008-z .Isensee, F., Wald, T., Ulrich, C., Baumgartner, M., Roy, S., Maier-Hein, K.H., Jäger, P.F., 2024. nnU-Net Revisited: A Call for Rigorous Vali-dation in 3D Medical Image Segmentation., in: Linguraru, M.G., Dou, Q., Feragen, A., Giannarou, S., Glocker, B., Lekadir, K., Schnabel, J.A. (Eds.), Medical Image Computing and Computer Assisted Intervention – MICCAI 2024, Springer Nature Switzerland, Cham. pp. 488–498. doi: 10.1007/978-3-031-72114-4\_47 .Ji, Y., Bai, H., Ge, C., Yang, J., Zhu, Y., Zhang, R., Li, Z., Zhang, L., Ma, W., Wan, X., Luo, P., 2022. AMOS: a large-scale abdominal multi-organ benchmark for versatile medical image segmentation, in: Proceedings of the 36th International Conference on Neural Information Processing Systems, Curran Associates Inc., Red Hook, NY, USA. doi: 10.5555/ 3600270.3602931 .Kim, Y., Li, Y., Park, H., Venkatesha, Y., Yin, R., Panda, P., 2022. Exploring lottery ticket hypothesis in spiking neural networks, in: Computer Vision 
+
+: Preprint submitted to Elsevier Page 18 of 19 Efficient Search of IACs for Medical Image Segmentation 
+
+– ECCV 2022: 17th European Conference, Tel Aviv, Israel, October 23– 27 2022, Proceedings, Part XII, Springer, Berlin, Heidelberg. pp. 102– 120. doi: 10.1007/978-3-031-19775-8\_7 .Lee, M., Sanchez-Matilla, R., Stoyanov, D., Luengo, I., 2024. Dipo: Differentiable parallel operation blocks for surgical neural architecture search. IEEE Journal of Biomedical and Health Informatics 28, 5540– 5550. doi: 10.1109/JBHI.2024.3406065 .Lee, N., Ajanthan, T., Torr, P.H.S., 2019. SNIP: Single-shot Net-work Pruning based on Connection Sensit. CoRR abs/1810.02340. 
+
+> arXiv:1810.02340
+
+.Li, G., Hoang, D., Bhardwaj, K., Lin, M., Wang, Z., Marculescu, R., 2024a. Zero-shot neural architecture search: Challenges, solutions, and opportunities. IEEE Transactions on Pattern Analysis and Machine Intelligence 46, 7618–7635. doi: 10.1109/TPAMI.2024.3395423 .Li, H.B., Conte, G.M., Anwar, S.M., Kofler, F., Leemput, K.V., Piraud, M., Ezhov, I., Meissen, F., Adewole, M., Janas, A., Kazerooni, A.F., LaBella, D., Moawad, A.W., Farahani, K., Eddy, J.A., Bergquist, T., Chung, V., Shinohara, R.T., Dako, F., Wiggins, W.I., Reitman, Z., Wang, C., Liu, X., Jiang, Z., Familiar, A., Johanson, E., Meier, Z., Davatzikos, C., Freymann, J.B., Kirby, J.S., Marcus, D.S., Milchenko, M., Nazeri, A., Weber, M., Wiestler, B., 2024b. The Brain Tumor Segmentation (BraTS) Challenge 2023: Brain MR Image Synthesis for Tumor Segmentation (BraSyn). arXiv preprint arXiv:2305.09011 . Liu, B., Zhang, Z., He, P., Wang, Z., Xiao, Y., Ye, R., Zhou, Y., Ku, W.S., Hui, B., 2024. A survey of lottery ticket hypothesis. URL: 
+
+> https://arxiv.org/abs/2403.04861
+
+, arXiv:2403.04861 .Liu, C., Chen, L.C., Schroff, F., Adam, H., Hua, W., Yuille, A.L., Fei-Fei, L., 2019a. Auto-DeepLab: Hierarchical Neural Architecture Search for Semantic Image Segmentation, in: 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 82–92. doi: 10. 1109/CVPR.2019.00017 .Liu, H., Simonyan, K., Yang, Y., 2019b. Darts: Differentiable architecture search, in: 7th International Conference on Learning Representations (ICLR 2019), OpenReview.net, New Orleans, LA, USA. URL: https: //openreview.net/forum?id=S1eYHoC5FX .Liu, S., Deng, W., 2015. Very deep convolutional neural network based image classification using small training sample size, in: 2015 3rd IAPR Asian Conference on Pattern Recognition (ACPR), pp. 730–734. doi: 10. 1109/ACPR.2015.7486599 .Menze, B.H., Jakab, A., Bauer, S., Kalpathy-Cramer, J., Farahani, K., Kirby, J., Burren, Y., Porz, N., Slotboom, J., Wiest, R., et al., 2015. The Multimodal Brain Tumor Image Segmentation Benchmark (BRATS). IEEE Transactions on Medical Imaging 34, 1993–2024. doi: 10.1109/ TMI.2014.2377694 .Peng, C., Myronenko, A., Hatamizadeh, A., Nath, V., Siddiquee, M.M.R., He, Y., Xu, D., Chellappa, R., Yang, D., 2022. Hypersegnas: Bridging one-shot neural architecture search with 3d medical image segmentation using hypernet, in: IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), IEEE, Washington, DC, USA. pp. 20709– 20719. doi: 10.1109/CVPR52688.2022.02008 .Qian, J., Li, R., Yang, X., Huang, Y., Luo, M., Lin, Z., Hong, W., Huang, R., Fan, H., Ni, D., Cheng, J., 2022. Hasa: Hybrid architecture search with aggregation strategy for echinococcosis classification and ovary segmentation in ultrasound images. Expert Systems with Applications 202, 117242. doi: 10.1016/j.eswa.2022.117242 .Ronneberger, O., Fischer, P., Brox, T., 2015. U-net: Convolutional networks for biomedical image segmentation, in: Navab, N., Hornegger, J., Wells, W.M., Frangi, A.F. (Eds.), Medical Image Computing and Computer-Assisted Intervention – MICCAI 2015, Springer International Publish-ing, Cham. pp. 234–241. Shen, M., Molchanov, P., Yin, H., Alvarez, J.M., 2021. When to prune? a policy towards early structural pruning. arXiv preprint arXiv:2110.12007 . Tan, M., Le, Q., 2021. Efficientnetv2: Smaller models and faster training, in: Meila, M., Zhang, T. (Eds.), Proceedings of the 38th International Conference on Machine Learning (ICML 2021), PMLR, Online. pp. 10096–10106. URL: https://proceedings.mlr.press/v139/tan21a.html .Wang, C., Zhang, G., Grosse, R.B., 2020. Picking winning tickets be-fore training by preserving gradient flow, in: Proceedings of the 8th International Conference on Learning Representations (ICLR 2020). URL: https://openreview.net/forum?id=SkgsACVKPH , arXiv:2002.07376 .iCLR 2020. Wang, R., Cheng, M., Chen, X., Tang, X., Hsieh, C.J., 2021. Rethinking architecture selection in differentiable nas. ArXiv abs/2108.04392. URL: https://api.semanticscholar.org/CorpusID:235613622 .Weng, Y., Zhou, T., Li, Y., Qiu, X., 2019. NAS-Unet: Neural Architecture Search for Medical Image Segmentation. IEEE Access 7, 44247–44257. doi: 10.1109/ACCESS.2019.2908991 .Xiang, L., Dudziak, Ł., Abdelfattah, M.S., Chau, T., Lane, N.D., Wen, H., 2023. Zero-cost operation scoring in differentiable architecture search, in: Proceedings of the Thirty-Seventh AAAI Conference on Artificial Intelligence (AAAI 2023), AAAI Press, Palo Alto, CA, USA. pp. 1174– 1184. URL: https://doi.org/10.1609/aaai.v37i9.26243 , doi: 10.1609/ aaai.v37i9.26243 .Xu, G., Wang, X., Wu, X., Leng, X., Xu, Y., 2024. Development of skip connection in deep neural networks for computer vision and medical image analysis: A survey. arXiv preprint arXiv:2405.01725 . Xu, Y., Xie, L., Zhang, X., Chen, X., Qi, G.J., Tian, Q., Xiong, H., 2020. Pc-darts: Partial channel connections for memory-efficient architecture search, in: 8th International Conference on Learning Representations (ICLR 2020), OpenReview.net, Addis Ababa, Ethiopia. URL: https: //openreview.net/forum?id=BJlS634tPr .Yang, D., Xu, Z., He, Y., Nath, V., Li, W., Myronenko, A., Hatamizadeh, A., Zhao, C., Roth, H.R., Xu, D., 2023. Dast: Differentiable architec-ture search with transformer for 3d medical image segmentation, in: Greenspan, H., Madabhushi, A., Mousavi, P., Salcudean, S., Duncan, J., Syeda-Mahmood, T., Taylor, R. (Eds.), Medical Image Computing and Computer Assisted Intervention – MICCAI 2023, Springer Nature Switzerland, Cham. pp. 747–756. You, H., Li, B., Sun, Z., Ouyang, X., Lin, Y., 2022. Supertickets: Drawing task-agnostic lottery tickets from supernets via jointly archi-tecture searching and parameter pruning, in: Avidan, S., Brostow, G., Cissé, M., Farinella, G.M., Hassner, T. (Eds.), Computer Vision – ECCV 2022, Springer Nature Switzerland, Cham. pp. 674–690. doi: 10. 1007/978-3-031-20083-0_40 .You, H., Li, C., Xu, P., Yunchao Fu, Yue Wang, Xiaohan Chen, Yingyan Lin, Zhangyang Wang, Richard Baraniuk, 2019. Drawing early-bird tickets: Towards more efficient training of deep networks. arXiv preprint arXiv:1909.11957 URL: https://arxiv.org/abs/1909. 11957 .Yu, H., Yang, L.T., Zhang, Q., Armstrong, D., Deen, M.J., 2021. Con-volutional neural networks for medical image analysis: State-of-the-art, comparisons, improvement and perspectives. Neurocomputing 444, 92–110. URL: https://www.sciencedirect.com/science/article/pii/ S0925231221001314 , doi: https://doi.org/10.1016/j.neucom.2020.04.157 .
+
+: Preprint submitted to Elsevier Page 19 of 19

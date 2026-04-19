@@ -1,0 +1,417 @@
+Title: MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+URL Source: https://arxiv.org/pdf/2604.11197v1
+
+Published Time: Tue, 14 Apr 2026 02:53:20 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration 
+
+## Jiahui Peng a, He Yao a, Jingwen Li b, Yanzhou Su c, Sibo Ju d, Yujie Lu a, Jin Ye e,Hongchun Lu f, Xue Li b, Lincheng Jiang a, Min Zhu a,∗ and Junlong Cheng a,e ,∗
+
+> a
+
+Sichuan University, Chengdu, 610065, China 
+
+> b
+
+Xinjiang University, Urumqi, 830046, China 
+
+> c
+
+Alibaba Group, Hangzhou, 310023, China 
+
+> d
+
+Fuzhou University, Fuzhou, 350108, China 
+
+> e
+
+Shanghai AI Laboratory, Shanghai, 200232, China 
+
+> f
+
+Southwest Jiaotong University, Chengdu, 611756, China 
+
+A R T I C L E I N F O 
+
+Keywords :Contrastive Language-Image Pre-training Region-Aware Medical Vision-Language Model Large-Scale Dataset 
+
+A B S T R A C T 
+
+Contrastive Language-Image Pre-training (CLIP) has demonstrated outstanding performance in global image understanding and zero-shot transfer through large-scale text-image alignment. However, the core of medical image analysis often lies in the fine-grained understanding of specific anatomical structures or lesion regions. Therefore, precisely comprehending region-of-interest (RoI) information provided by medical professionals or perception models becomes crucial. To address this need, we propose MedP-CLIP, a region-aware medical vision-language model (VLM). MedP-CLIP innovatively integrates medical prior knowledge and designs a feature-level region prompt integration mechanism, enabling it to flexibly respond to various prompt forms (e.g., points, bounding boxes, masks) while maintaining global contextual aware-ness when focusing on local regions. We pre-train the model on a meticulously constructed large-scale dataset (containing over 6.4 million medical images and 97.3 million region-level annotations), equipping it with cross-disease and cross-modality fine-grained spatial semantic understanding capabilities. Experiments demonstrate that MedP-CLIP significantly outperforms baseline methods in various medical tasks, including zero-shot recognition, interactive segmen-tation, and empowering multimodal large language models. This model provides a scalable, plug-and-play visual backbone for medical AI, combining holistic image understanding with precise regional analysis. 
+
+## 1. Introduction 
+
+CLIP (Radford et al., 2021) has achieved remarkable zero-shot generalization across diverse vision-language applications, including open-world recognition (Gu et al., 2021; Xu et al., 2023), multimodal large language models (MLLMs) (Li et al., 2023c; Liu et al., 2023), and generative tasks in both 2D and 3D domains (Li et al., 2023b; Nichol et al., 2022; Lee and Chang, 2022). This success stems from large-scale pretraining that captures holistic image-text alignment, enabling robust understanding of global semantics. However, CLIP and its derivatives struggle in domains requiring precise, fine-grained region-specific interpretation—most critically in medical imaging, where diagnostic accuracy hinges on localized anatomical structures or pathological lesions. Medical image analysis fundamentally differs from natural image understanding. Clinical workflows are inherently localized: diagnoses often depend on identifying subtle, spatially confined anatomical structures or pathological regions, such as tumors, lesions, or organ boundaries. Existing CLIP adaptations for the medical domain, such as BiomedCLIP (Zhang et al., 2025), PMC-CLIP (Lin et al., 2023), and MedCLIP (Wang et al., 2022), enhance global semantic alignment by pretraining on domain-specific image-text corpora (Lin et al., 2023; Wang et al., 2022). Yet, these models still lack native region-aware capabilities and remain global encoders, limiting their utility in clinical scenarios that require precise spatial reasoning. In pursuit of region-aware understanding, several approaches have emerged in general computer vision. Naive strategies include isolating RoIs through cropping (Subramanian et al., 2022; Zhong et al., 2022) or suppressing background context via masking (applied at either the input or feature/attention level) (Zhou et al., 2022; Liang et al., 2023). However, these methods suffer critical drawbacks: cropping inherently disrupts crucial global context, while 
+
+> ∗
+
+Corresponding author Emails: zhumin@scu.edu.cn (M. Zhu); cjl951015@163.com (J. Cheng) 
+
+> ORCID
+
+(s): 0000-0002-6849-9093 (J. Cheng) 
+
+J. Peng et al.: Preprint submitted to Elsevier Page 1 of 20  
+
+> arXiv:2604.11197v1 [cs.CV] 13 Apr 2026 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+> Figure 1: MedP-CLIP can be flexibly deployed for various downstream tasks, significantly enhancing the region-aware analysis capability of medical imaging. This model supports direct application and plug-and-play integration, and accepts explicit prompts from users as well as outputs from perceptual models.
+
+masking neglects potentially informative surrounding structures and both undermine the holistic reasoning essential for accurate medical interpretation. Alternative frameworks like Alpha-CLIP (Sun et al., 2024) attempt to mitigate this by fusing RoI information via an auxiliary alpha channel input, preserving the full image context. Nevertheless, this architectural choice inherently ties the model’s inference performance to the precision of the mask provided, exhibiting limited practicality in rapid clinical workflows due to cumbersome input requirements. Within the medical domain, methods such as R-LLaVA (Chen et al., 2025) and MedPLIB (Huang et al., 2025) leverage bounding boxes or masks to guide large language models (LLMs) in contextualizing local regions. However, these solutions typically entail intricate, task-specific multimodal pipelines that incur substantial training costs and lack scalability across diverse clinical applications. To overcome these limitations, we introduce MedP-CLIP, a region-aware VLM designed specifically for medical image analysis. Unlike approaches that compromise global context or impose impractical input requirements at inference, MedP-CLIP features a novel feature-level region prompt integration mechanism to achieve true native promptability. While we utilize high-precision pixel-level masks during pre-training to establish accurate anatomical ground truth, our architecture is explicitly designed to decouple from them during deployment. By processing sparse embeddings through cross-attention, this design natively handles low-effort, arbitrary spatial prompts (including points, bounding boxes, and masks) while preserving comprehensive image context. Crucially, we synthesize 97.3 million regions by systematically integrating mask annotations from the IMed-361M (Cheng et al., 2025) dataset. This medical-specific optimization enables flexible, precise region understanding without task-specific pipelines or complex multimodal fusion, establishing a scalable backbone for diverse clinical applications. We comprehensively evaluate the four core medical AI capabilities of MedP-CLIP (Fig. 1), demonstrating its transformative impact on region-aware comprehension: (1) Image Recognition (Fig. 1(a)): While preserving CLIP’s global recognition capabilities, MedP-CLIP uniquely enables prompting for arbitrary regions, improving average accuracy by 4.45% over UniMed-CLIP on unseen datasets. (2) Interactive Segmentation (Fig. 1(b)): As a plug-and-play backbone for interactive frameworks (e.g., SAM), MedP-CLIP achieves state-of-the-art segmentation performance with minimal fine-tuning costs ( ∼1% of total parameters). (3) Region-Level Visual Grounding (Fig. 1(c)): By extending CLIP’s image-text alignment to regional semantics, our model establishes correlations between local lesions and diagnostic narratives. (4) MLLM Clinical Reasoning (Fig. 1(d)): Integrated with LLMs, our visual encoder mitigates anatomic misidentification (e.g., kidney vs. liver structures) and enables medical vision-language QA.   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 2 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+In summary, MedP-CLIP fundamentally enhances CLIP’s fine-grained spatial understanding through a regional prompt integration mechanism. It seamlessly processes various prompts while preserving critical global context. Pre-trained on a meticulously curated large-scale dataset comprising 97.3 million medical region-text pairs, it achieves robust cross-modal fine-grained semantic reasoning capabilities. MedP-CLIP outperforms benchmark models across various medical tasks, including but not limited to zero-shot recognition, interactive segmentation, and empowering multimodal LLMs, thereby establishing an expressive and scalable foundation for biomedicine. 
+
+## 2. Related Work 
+
+2.1. Medical VLMs 
+
+CLIP (Radford et al., 2021) has established powerful transferable representations through large-scale image-text alignment, but its application in the medical domain remains challenging due to the lack of prior anatomical knowledge and limitations in fine-grained semantic representation. To address this, domain-specific adaptation methods have been pre-trained on medical corpora. For instance, MedCLIP (Wang et al., 2022) and PMC-CLIP (Lin et al., 2023) leverage medical image-text data for specialized pre-training, enabling CLIP to align global information in medical images with relevant text. Further, BiomedCLIP (Zhang et al., 2025) underwent large-scale training on the PMC-15M dataset containing 15 million biomedical image-text pairs, even outperforming state-of-the-art radiology-specific models on tasks like RSNA pneumonia detection. Recently, Khattak et al. developed UniMed-CLIP (Khattak et al., 2024) on datasets spanning six medical modalities, enhancing CLIP’s multimodal generalization ability in medicine. Crucially, these models predominantly adopt a global representation paradigm, which stands in fundamental conflict with the clinical diagnostic workflow requiring precise localization of anatomical structures and pathological regions. Even task-customized extensions, such as CLIP-Lung (Lei et al., 2023) for malignancy prediction or MediCLIP (Zhang et al., 2024) for few-shot abnormality detection, still rely solely on image-level embeddings, lacking an explicit mechanism to associate textual semantics with spatial regions. Consequently, they are unable to support clinician-in-the-loop interaction requiring dynamic region-aware prompting, highlighting an unresolved gap in medical VLMs. 
+
+2.2. Region-Aware Methods in VLMs 
+
+Research on region-aware visual language models aims to address the limitations of global image representations. Early input-level adaptive methods, such as ReCLIP (Subramanian et al., 2022) and CircleCLIP (Shtedritski et al., 2023), guided model attention by cropping or overlaying regions of interest. However, such disruptive operations inevitably sacrifice critical contextual information, which is particularly detrimental in medical imaging where patho-logical structures exhibit complex spatial dependencies. Subsequent feature-level methods, including MaskCLIP (Zhou et al., 2022) and MaskAdaptedCLIP (Liang et al., 2023), preserved structures through attention masking but severely lost edge information relevant to diagnosis. While RegionCLIP (Zhong et al., 2022) improved box-level alignment and Alpha-CLIP (Sun et al., 2024) introduced auxiliary alpha channels for soft modulation, they respectively suffered from coarse spatial reasoning and an architectural reliance on clinically impractical high-precision mask annotations during inference. Expansion in the medical domain has demonstrated the utility of spatial priors: R-LLaVA (Chen et al., 2025) enhanced region awareness by directly injecting bounding boxes into image space for visual question answering, while MedPLIB (Huang et al., 2025) supported flexible region prompts through multi-stage mixture-of-experts training. However, these methods either extended the global CLIP backbone in a task-specific manner (e.g., R-LLaVA) or required complex multi-stage training and inference pipelines (e.g., MedPLIB), thereby imposing significant limitations on scalability and practical deployment. In contrast, our MedP-CLIP addresses this issue by treating region prompts as a native interface for interaction. It supports multiple spatial input modes without relying on external modules or post-hoc inference mechanisms, enabling precise and native region-level representations within a unified architecture. 
+
+2.3. Non-Native Region Integration in Medical VLMs 
+
+The imperative for spatial precision in medical diagnosis has spurred the development of models capable of directly interpreting and responding to region-specific prompts. Such models aim to fuse textual instructions with localized image semantics to simulate clinician interaction paradigms. For instance, MedRegA (Wang et al., 2025) leverages sample-specific lesion or anatomical structure coordinates to focus attention, while (Gao et al., 2025) integrate abnormal region awareness within multimodal fusion for generating more detailed descriptions. Although these methods surpass global models in localization capability, they frequently depend on multi-stage alignment   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 3 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+processes, constraining model flexibility. Concurrently, techniques like M2CRL (Hu et al., 2024) employ intricate masking schemes for endoscopic video analysis, and VertFound (Wu et al., 2024) combines CLIP semantics with spatial features from SAM (Kirillov et al., 2023) for fine-grained vertebra classification; however, these approaches are often confined to specific tasks or modalities. Furthermore, MedDAM (Xiao et al., 2025) adapts local description models to prioritize clinically critical lesion features. Critically, a common limitation persists: these solutions typically incur increased model complexity and computational overhead. More fundamentally, they rely on non-intuitive prompts (e.g., predefined coordinate systems) or auxiliary modules for spatial encoding. This dependence on specialized, non-native interfaces fundamentally impedes seamless, clinician-centric interactions driven by intuitive prompts. Therefore, addressing this gap necessitates a model that natively supports intuitive region prompting. Our proposed MedP-CLIP is designed to accurately interpret regions of interest specified via intuitive clinician prompts or perception models, establishing native region-level perception within the CLIP for medical scenarios at minimal modification cost. 
+
+## 3. Method 
+
+MedP-CLIP enhances the CLIP framework into a region-promptable VLM. While preserving CLIP’s inherent strength in global image-text alignment, MedP-CLIP uniquely enables region-specific visual reasoning conditioned on fine-grained spatial prompts, addressing the critical need for Medical RoIs analysis. To achieve this, we introduce two key components: (1) Large-scale Medical Region-Text Dataset: We compile the largest medical region-text dataset containing 97.3M pairs of localized image regions and corresponding textual descriptions. (2) Plug-in Prompt Modulation: We devise a lightweight, plug-in prompt modulation mechanism that seamlessly integrates clinician-specified spatial prompts (points, bounding boxes, or masks) into CLIP’s feature embedding space, dynamically guiding the model’s attention to target RoI regions. This mechanism requires no modifications to the backbone network architecture while maintaining full compatibility with all downstream medical applications that benefit from standard CLIP’s transferability. 
+
+3.1. Medical Image Region–Text Pairs Generation 
+
+As shown in Fig. 2(a), we generate medical image region-text pairs based on the IMed-361M dataset (Cheng et al., 2025). This dataset was originally designed for interactive segmentation, providing pixel-level mask annotations and category labels for 6.4M medical images. To construct region-text pairs, we first decompose each original image into 
+
+𝑛 region-annotated samples, where 𝑛 corresponds to the number of different anatomical structures in the image. The core of our data generation pipeline leverages GPT-4o to synthesize clinically based textual descriptions. For each triplet {𝐼, 𝑀 𝑘 , 𝐶 𝑘 } (representing the original image, the k-th region mask, and the associated category label), we input this information into GPT-4o. The model is given constrained instructions to generate comprehensive descriptions covering both the global context and specific features of the masked region, as well as to produce different variants based on provided templates. Example descriptions include: “The contrast-enhanced CT image shows the segmented liver parenchyma, with prominent vascular enhancement within the masked region” and “The grayscale abdominal scan displays the oval-shaped splenic parenchyma highlighted by the overlaid mask”. Comprehensive implementation details of the text generation framework and our quality control mechanisms are elaborated in App. A. As shown in Fig. 2(b), we ultimately obtained a dataset of 97.3M region-text pairs, covering 15 different modalities, significantly surpassing the 6 modalities used in UniMed-CLIP pre-training. The region-text pairs were systematically categorized into six major anatomical groups (abdomen, bone, head neck, pelvis, thorax, and lesions), comprehensively covering the primary human anatomical systems. Crucially, quantitative analysis revealed that 86.9% of the regions accounted for less than 2% of the total image area, empirically demonstrating the prevalence of highly localized RoIs in medical imaging. 
+
+3.2. MedP-CLIP 
+
+MedP-CLIP bridges the gap between user-provided spatial prompts and medical image understanding through a unified framework that processes visual data ( 𝐼 ), regional text descriptions ( 𝑇 ), and prompts ( 𝑃 ). As depicted in Fig. 2(c), our architecture enhances CLIP’s foundational capabilities with explicit region-aware reasoning via an attention block that jointly reasons over visual features and prompt semantics. This enables precise alignment between clinician-specified regions and textual descriptions.    
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 4 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+> Figure 2: MedP-CLIP: data, architecture and training. From IMed-361M we convert pixel-level organ/lesion masks into region–text pairs by generating prompts (point/box/mask) and GPT-4o based clinical descriptions (a). Dataset statistics across modalities, anatomies and mask ratios (b). Model pipeline: the image is encoded by a ViT, while the prompt is embedded by a lightweight Prompt Encoder (c). A feature-level Attention Block fuses dense and sparse prompt embeddings with image tokens via cross/self attention (d).
+
+3.2.1. Image and Text Encoder 
+
+We adopt CLIP’s Vision Transformer (ViT) architecture as the image encoder, specifically instantiated as ViT-B/16@224 and ViT-L/14@336. This encoder processes the input image 𝐼 into a sequence of patch tokens 𝐅 𝐈 ∈ ℝ𝐿 ×𝐷 1 ,where 𝐿 denotes the number of patches and 𝐷 1 represents the hidden feature dimension. Meanwhile, the CLIP text encoder is frozen to encode the regional text description 𝑇 , producing a global text feature 𝐅 𝑇 ∈ ℝ𝐷 , where 𝐷 
+
+represents the feature dimension. 
+
+3.2.2. Prompt Encoder 
+
+Inspired by SAM (Kirillov et al., 2023), our prompt encoder processes two types of prompt information: sparse prompts (points, boxes) and dense prompts (masks). For sparse prompts, we combine positional encoding and learnable type embeddings to represent each point or box, forming sparse prompt features 𝐅 𝐒𝐩𝐚𝐫𝐬𝐞 ∈ ℝ𝑆 ×𝐷 1 , where S denotes the number of sparse prompts. For dense prompts, we employ a set of lightweight convolutional networks for feature embedding, generating dense prompt features 𝐅 𝐃𝐞𝐧𝐬𝐞 ∈ ℝ𝐿 ×𝐷 1 that maintain spatial resolution consistency with the image patch tokens. 
+
+3.2.3. Attention Block 
+
+As shown in Fig. 2(d), this block is the core component of MedP-CLIP, leveraging the geometric positions and type information of prompts to guide the model in focusing on user-specified image regions. It primarily consists of the following sequential processing steps: (1) Self-attention computation for sparse embeddings, and element-wise addition of dense embeddings (if present) with image embeddings; (2) Use sparse embeddings as queries to perform cross-attention computation with image embeddings, followed by a pointwise MLP update for each embedding; (3) Use image embeddings as queries to perform cross-attention computation with sparse embeddings; (4) Obtain the final image embedding 𝐅 𝐀 ∈ ℝ𝐷 through 𝐺𝐴𝑃 and 𝑀𝐿𝑃 . During computation, each self-attention/cross-attention module and 𝑀𝐿𝑃 includes residual connections and layer normalization layers. The above process can be expressed as follows:   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 5 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+⎧⎪⎪⎨⎪⎪⎩
+
+𝐅 𝐀 ′ = 𝑆𝑒𝑙𝑓 𝐴𝑡𝑡𝑛 (𝐅 𝐒𝐩𝐚𝐫𝐬𝐞 ), 𝐅 𝐈 ′ = 𝐅 𝐃𝐞𝐧𝐬𝐞 + 𝐅 𝐈 
+
+𝐅 𝐀 ′′ = 𝑀𝐿𝑃 (𝐶𝑟𝑜𝑠𝑠𝐴𝑡𝑡𝑛 (𝐅 𝐀 ′, 𝐅 𝐈 ′)) 
+
+𝐅 𝐀 ′′′ = 𝐶𝑟𝑜𝑠𝑠𝐴𝑡𝑡𝑛 (𝐅 𝐈 ′, 𝐅 𝐀 ′′ )
+
+𝐅 𝐀 = 𝑀𝐿𝑃 (𝐺𝐴𝑃 (𝐅 𝐀 ′′′ )) 
+
+(1) 
+
+3.2.4. Training Objective 
+
+Given a batch of 𝑁 triplets {𝐼 𝑖 , 𝑃 𝑖 , 𝑇 𝑖 }𝑁 𝑖 =1 where each triplet consists of an image, a user prompt, and a region-specific text description, we first normalize the output features from the attention module 𝐅 𝐀 and the text encoder 𝐅 𝐓 
+
+to obtain normalized embeddings ̂ 𝐅 𝐀 and ̂ 𝐅 𝐓 . We then compute the following objectives including similarity matrix calculation, bidirectional contrastive losses, and the final symmetric loss function: 
+
+⎧⎪⎪⎪⎨⎪⎪⎪⎩
+
+→ = −1 
+
+> 𝑁
+
+∑𝑁 𝑖 =1 log exp 
+
+(⟨̂ 𝐅 𝐴,𝑖 ,̂ 𝐅 𝑇 ,𝑖 ⟩∕𝜏 
+
+)∑𝑁 𝑘 =1 exp 
+
+(⟨̂ 𝐅 𝐴,𝑖 ,̂ 𝐅 𝑇 ,𝑘 ⟩∕𝜏 
+
+)
+
+ → = −1 
+
+> 𝑁
+
+∑𝑁 𝑗 =1 log exp 
+
+(⟨̂ 𝐅 𝑇 ,𝑗 ,̂ 𝐅 𝐴,𝑗 ⟩∕𝜏 
+
+)∑𝑁 𝑘 =1 exp 
+
+(⟨̂ 𝐅 𝑇 ,𝑘 ,̂ 𝐅 𝐴,𝑗 ⟩∕𝜏 
+
+)
+
+𝑁𝐶𝐸 = 12 (𝐼 →𝑇 + 𝑇 →𝐼 )
+
+(2) where 𝜏 is a learnable temperature. It should be noted that while our ground-truth data is derived from precise pixel-level masks, we actively simulate degraded, sparse inputs during training to decouple the model from high-precision mask dependency. Specifically, to prevent the model from over-relying on any single prompt type while maintaining holistic recognition capabilities, for each image we randomly select one prompt type from point prompts, box prompts, mask prompts, and point+box combined prompts with probabilities {0 .3, 0.3, 0.3, 0.1} . This strategy forces the model to map imprecise spatial inputs to complex semantic regions, thereby ensuring robust native promptability during inference. Additionally, with a small probability ( 𝑝 = 0 .1), prompts are entirely discarded to train on complete image-text pairs. 
+
+3.2.5. MedP-CLIP for Downstream Tasks 
+
+Following pre-training, MedP-CLIP enables versatile downstream capabilities: (1) image-level zero-shot recog-nition with optional prompt customization; (2) region-level retrieval and classification within medical images using diverse prompt formats (points, bounding boxes, or combinations); (3) serving as the backbone for robust interactive medical image segmentation when integrated with the Segment Anything Model (SAM); and (4) plug-and-play replacement of existing visual encoders within medical large language model pipelines, requiring no architectural modifications. 
+
+## 4. Experiments 
+
+4.1. Training Setup 
+
+All MedP-CLIP variants were trained on 16 NVIDIA RTX 4090 GPUs (24GB). The hyperparameters listed in Tab. 1 were consistently applied across all pre-training experiments. 
+
+4.2. Evaluation Dataset and Metrics 
+
+To rigorously evaluate MedP-CLIP across the four downstream tasks: zero-shot image-level classification, region-level retrieval, interactive segmentation, and medical visual question answering (VQA). As shown in Tab. 2, we conduct experiments on a diverse and comprehensive benchmark comprising 11 publicly available medical imaging datasets spanning 8 modalities (CT, MRI, fundus, X-ray, etc.) and 129,298 expert-annotated samples. Crucially, all datasets are held-out and excluded from training, with the sole exception of AMOS2022 (Ji et al., 2022), ensuring a strict assessment of out-of-distribution generalization under realistic clinical conditions. Specifically, for zero-shot classification, we use COVID-CT (Yang et al., 2020), ACL (Bien et al., 2018), ChestCT (Matsuyama et al., 2024), and ACRIMA (Ovreiu                      
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 6 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+> Table 1. Hyperparameter configurations for MedP-CLIP pre-training
+> Hyperparameters Value
+> Optimizer AdamW (Loshchilov and Hutter, 2017) Learning rate 1𝑒 − 2
+> Weight decay 1𝑒 − 2
+> Optimizer momentum 𝛽 1= 0 .9, 𝛽 2= 0 .999
+> Learning rate schedule MultiStepLR, Step={25, 50, 75, 90, 120} Epochs 150 Warmup (in steps) 800 Random seed 2025 Image mean (123.675, 116.28, 103.53) Image std (58.395, 57.12, 57.375) Augmentation RandScaleIntensityd, RandShiftIntensityd (Cardoso et al., 2022) Log scale 4.6052 Backbones ViT-B/16@224, ViT-L/14@336 (Radford et al., 2021)
+
+et al., 2021). Region-level retrieval is evaluated on Br35H (Wageh et al., 2024), AMOS2022 (Ji et al., 2022), and 3D-IRCADB (Soler et al., 2010). Interactive segmentation is benchmarked on ISLES (Hernandez Petzsche et al., 2022), SegThor (Lambert et al., 2020), and TotalSegmentator MRI (Akinci D’Antonoli et al., 2025). For medical VQA, we adopt MeCoVQA-R (Huang et al., 2025), the most comprehensive region-aware benchmark to date, featuring 126,661 training and 2,637 test questions across eight modalities.                                                         
+
+> Table 2. Overview of evaluation datasets for image-level classification, region-level retrieval, and interactive segmentation
+> Dataset Modality Classes Evaluation type Image Num. Mask Num.
+> Covid-CT (Yang et al., 2020) CT 2Image-Level Class. 746 None ACL (Bien et al., 2018) MRI 2Image-Level Class. 1021 None ChestCT (Matsuyama et al., 2024) CT 4Image-Level Class. 1000 None ACRIMA (Ovreiu et al., 2021) Fundus 2Image-Level Class. 705 None Br35H (Wageh et al., 2024) MRI 2Region-Level Class. 3000 801 AMOS2022 (Ji et al., 2022) CT 15 Region-Level Class. 19310 77822 3D-IRCADB (Soler et al., 2010) CT 16 Region-Level Class. 2823 12250 ISLES (Hernandez Petzsche et al., 2022) CT 2Interactive Seg. 364 364 SegThor (Lambert et al., 2020) CT 4Interactive Seg. 516 1258 TotalSeg. MRI (Akinci D’Antonoli et al., 2025) MRI 12 Interactive Seg. 2147 8100
+
+Evaluation metrics are aligned with task semantics and community standards: Top-1/Top-5 accuracy and recall for classification and region retrieval; Dice coefficient for interactive segmentation; and precision and recall for region-level VQA, following the MedPLIB protocol (Huang et al., 2025). This unified evaluation framework enables a holistic and clinically meaningful assessment of MedP-CLIP’s multimodal reasoning, spatial grounding, and zero-shot adaptability across heterogeneous medical imaging scenarios. 
+
+4.3. Image-Level Zero-Shot Classification 
+
+As mentioned above, we conducted zero-shot classification experiments on four different medical imaging datasets: COVID-CT (Yang et al., 2020), ACL (Bien et al., 2018), ChestCT (Matsuyama et al., 2024), and ACRIMA (Ovreiu et al., 2021). Among them, ChestCT contains four categories (normal, adenocarcinoma, large cell carcinoma, and squamous cell carcinoma), while the other datasets are binary classification tasks. Although MedP-CLIP is primarily designed for region-level reasoning, our results demonstrate that it effectively retains the global representation capabilities inherent to CLIP and its recent medical variants. As shown in Tab. 3, MedP-CLIP achieves the best performance on the COVID-CT and ACL datasets, with improvements of up to 3.52% compared to the best existing methods. The model also maintains strong performance on the more challenging ChestCT dataset, which includes multiple disease categories that may benefit from our region-aware design. Notably, MedP-CLIP achieves an                                                       
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 7 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+> Table 3. Comparison of zero-shot image-level classification accuracy across four medical datasets
+> Models COVID-CT ACL ChestCT ACRIMA Average
+> CLIP (Radford et al., 2021) 48.28% 44.27% 26.59% 57.61% 44.19% MedCLIP (Wang et al., 2022) 47.78% 40.55% 25.45% 45.66% 39.86% BiomedCLIP (Zhang et al., 2025) 62.07% 48.38% 22.19% 56.05% 47.17% UniMed-CLIP (Khattak et al., 2024) 61.08% 43.78% 35.40% 59.32% 49.90% ASG (Li et al., 2024) 53.18% 55.73% 32.14% 56.19% 49.31% CARZero (Lai et al., 2024a) 59.06% 49.36% 36.70% 51.07% 49.05% GenMedCLIP (Ikezogwo et al., 2025) 60.24% 55.83% 37.85% 56.61% 52.63% BMC-CLIP (Lozano et al., 2025) 65.88% 54.16% 26.75% 56.33% 50.78%
+> MedP-CLIP (ViT-B/16) 68.47% 59.35% 33.12% 56.47% 54.35%
+> Figure 3: Qualitative comparison of attention maps for zero-shot classification on COVID-CT and ACL datasets.
+
+average accuracy of 54.35% across all datasets, representing a 1.72% improvement over the current top-performing GenMedCLIP baseline. To further corroborate these quantitative findings, we provide qualitative visual comparisons in Fig. 3. As illustrated, state-of-the-art global representation models, such as Biomed-CLIP and BMC-CLIP, often exhibit diffuse attention maps and struggle to localize spatially confined pathological regions. While MedP-CLIP without explicit prompts already demonstrates improved focal attention (e.g., yielding a 77.26% confidence score on the COVID-CT sample compared to Biomed-CLIP’s 11.09%), the introduction of point prompts enables highly precise region-text alignment. By explicitly guiding the model to the target lesion, MedP-CLIP successfully mitigates irrelevant background interference, resulting in the most accurate attention maps and the highest diagnostic confidence scores. These results confirm that our method, while explicitly learning to handle regional prompts, does not compromise overall semantic alignment, making MedP-CLIP more versatile and reliable in practical clinical applications. 
+
+4.4. Region-Level Retrieval and Classification 
+
+In addition to global classification, we also evaluated specific regional understanding for diagnostic tasks requiring localized reasoning. As shown in Tab. 4, MedP-CLIP achieved an image-level classification accuracy of 58.61% on Br35H (brain tumor classification). Building on this, with just a single bounding box prompt, the accuracy increased to 79.46% (+20.85%), already outperforming recent region-aware baselines like GenMedCLIP (78.93%). Further extending with composite prompts and the ViT-L/14 backbone model, the accuracy improved to 92.38%, surpassing all baseline medical CLIP models, including highly competitive methods such as BiomedCLIP (91.95%) and BMC-CLIP (91.70%). This is crucial for clinical workflows, as entire images often contain multiple anatomical structures or pathologies that require precise separation.                                                        
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 8 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+> Table 4. Region-level classification performance on the Br35H dataset across varying prompt types
+> Models Data Scale Med. Domain Dataset Region Information Region-aware Design Br35H
+> CLIP (Radford et al., 2021) 400 M ✗✗✗52.93% MedCLIP (Wang et al., 2022) 0.6 M ✓✗✗48.56% BiomedCLIP (Zhang et al., 2025) 15 M ✓✗✗91.95% UniMed-CLIP (Khattak et al., 2024) 5.3 M ✓✗✗74.59% ASG (Li et al., 2024) 217 K ✓✓✓67.03% CARZero (Lai et al., 2024a) 377 K ✓✗✓51.93% GenMedCLIP (Ikezogwo et al., 2025) 4.7 M ✓✓✗78.93% BMC-CLIP (Lozano et al., 2025) 24 M ✓✗✗91.70% MedP-CLIP (ViT-B/16, w/o. prompt) 6.4 M ✓✓✓
+> 58.61% MedP-CLIP (ViT-B/16, w. point) 69.85% MedP-CLIP (ViT-B/16, w. box) 79.46% MedP-CLIP (ViT-B/16, w. both) 78.90%
+> MedP-CLIP (ViT-L/14, w. both) 92.38%
+> Figure 4: Performance comparison of region-level classification on multi-organ datasets. “ Δ” denotes the performance difference between Top-5 and Top-1. “Rect.” indicates rectangular region prompts generated from original masks via Alpha-CLIP.
+
+We extended the evaluation to multi-organ matching tasks on AMOS2022 and 3D-IRCADB. Due to the lack of region-level tuning in medical baseline models, we benchmarked against Alpha-CLIP (a natural image foundation model). As shown in Fig. 4, MedP-CLIP significantly outperformed Alpha-CLIP in region-aware tasks, with bounding boxes (providing explicit spatial context) generally yielding higher accuracy than point prompts, while composite prompts achieved the best accuracy and recall. Fig. 5 visually validates these findings: under flexible regional prompts, MedP-CLIP was able to retrieve semantically aligned text descriptions with near-certain confidence ( >98%). These findings confirm that: (i) our feature-level prompt fusion effectively integrates positional guidance; (ii) prompt quality is directly correlated with discriminative localization capability a key advantage for medical image interpretation. 
+
+4.5. MedP-CLIP in Interactive Segmentation 
+
+Leveraging MedP-CLIP’s intrinsic prompt affinity, we developed MedP-CLIP+SAM by substituting the original SAM ViT encoder. This architecture exploits synergy through shared prompt encoding features between MedP-CLIP (focusing the backbone on relevant regions) and SAM’s mask decoder (guiding segmentation). Following   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 9 of 20
+
+MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration 
+
+Figure 5: Visual validation of MedP-CLIP’s region-aware retrieval capabilities. 
+
+Table 5. Interactive segmentation results on external datasets 
+
+Models Dataset / Dice (%) 
+
+ISLES SegThor Totalseg. SAM (Kirillov et al., 2023) 55.92 84.46 75.45 SAM2 (Ravi et al., 2024) 60.14 85.86 77.62 SAM-Med2D (Cheng et al., 2023) 68.22 86.43 75.92 IMIS-Net (Cheng et al., 2025) 71.78 89.27 79.06 
+
+MedP-CLIP+SAM 73.14 88.91 81.55 
+
+Table 6. Region-level medical VQA on MeCoVQA-R 
+
+Models MeCoVQA-R (%) 
+
+Precision Recall LLaVA (Liu et al., 2023) 18.01 44.98 LLaVA-Med (Li et al., 2023a) 15.47 34.86 LISA (Lai et al., 2024b) 12.31 13.20 MedPLIB (Huang et al., 2025) 64.92 63.84 
+
+MedP-CLIP+LLaVA-Med 67.96 70.36 
+
+Figure 6: Qualitative results of MedP-CLIP. Prompt guides the visual encoder to focus on the RoIs. 
+
+the IMIS-Net (Cheng et al., 2025) protocol, we fine-tuned the decoder ( <1% of encoder parameters) for 5 epochs on IMed-361M, achieving rapid convergence. As detailed in Tab. 5, MedP-CLIP+SAM delivers consistent and substantial improvements over the original SAM across all datasets. Critically, our model achieves new state-of-the-art performance on ISLES (73.14%) and TotalSegmentator MRI (81.55%), surpassing IMIS-Net. These results underscore MedP-CLIP’s dual capability: it serves as a powerful backbone for downstream medical vision tasks while uniquely enabling targeted performance gains by directing computational resources towards clinically critical regions. 
+
+J. Peng et al.: Preprint submitted to Elsevier Page 10 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration 
+
+Furthermore, visualization of the prompted feature responses (Fig. 6) reveals that the model’s attention consistently concentrates on prompt-relevant areas. This focused attention mechanism facilitates rapid localization of regions-of-interest for the segmentation model, contributing to the observed performance gains.  
+
+> Figure 7: Segmentation results of MedP-CLIP+SAM with five points interaction.
+
+In addition, we provide comprehensive qualitative comparisons in Fig. 7 and Fig. 8. As illustrated in Fig. 8(b), when benchmarked against established foundation models, baseline methods such as SAM and SAM 2 frequently struggle with ambiguous anatomical boundaries often exhibiting significant over-segmentation or failing to capture the complete region of interest (e.g., in complex skin lesions and multi-organ abdominal CTs). In contrast, MedP-CLIP+SAM, benefiting from its fine-grained region-aware capabilities, demonstrates a superior ability to accurately delineate complex structures and capture fine details across diverse modalities, generating masks that closely align with the ground truth. Additionally, as shown in Fig. 8(a), our model seamlessly integrates with minimal user interactions, utilizing standard bounding boxes or a single click to effectively localize and segment various clinical targets. 
+
+4.6. Region-Level Medical VQA 
+
+We adapt the LLaVA-Med (Li et al., 2023a) framework for region-level medical VQA by integrating our MedP-CLIP (ViT-B/16@224) as the vision encoder. This simple replacement enables focused reasoning on user-defined regions—specifically, bounding-box prompts derived from masks—while aligning projector dimensions via a two-layer MLP with GELU non-linearity. Following LLaVA-Med 1.5 (Li et al., 2023a), we retain Mistral-7B as the LLM, freeze the visual encoder, and fine-tune only the projector and LLM for one epoch on MeCoVQA-R to maintain efficiency. Evaluation on the MeCoVQA-R test split confirms that MedP-CLIP robustly directs attention to prompted regions, avoiding distractions from irrelevant image contexts seen in generic baselines (e.g., LLaVA and LISA). As summarized in Tab. 6, MedP-CLIP sets a new state-of-the-art for region-level medical VQA, achieving 67.96% precision and 70.36% recall. This significantly outperforms recent approaches, including MedPLIB (64.92%) and generic MLLMs such as LLaVA (18.01%), LLaVA-Med (15.47%), and LISA (12.31%). The improvements stem from MedP-CLIP’s enhanced encoding capabilities, which minimize error propagation in crowded medical scenes by focusing precisely on prompts. Furthermore, to intuitively demonstrate the practical reasoning capabilities of our model, we provide qualitative comparisons in Fig. 9. When prompted with a specific bounding box highlighting the pancreas, baseline models such as MedPLIB and the original LLaVA-Med exhibit severe anatomical misidentification erroneously predicting the “aorta” or “spine” and generate hallucinated clinical findings. Conversely, MedP-CLIP+LLaVA-Med accurately grounds the visual prompt, correctly identifies the targeted organ, and provides clinically sound descriptions. These qualitative   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 11 of 20
+
+MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration 
+
+Figure 8: Qualitative experimental comparison of interactive segmentation. 
+
+results explicitly corroborate our quantitative findings, proving that our feature-level region integration effectively mitigates error propagation in complex clinical scenarios. 
+
+Figure 9: Qualitative comparison of region-level medical Visual Question Answering (VQA) capabilities. J. Peng et al.: Preprint submitted to Elsevier Page 12 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration 
+
+4.7. Case Study and Limitation Analysis 
+
+To comprehensively evaluate the boundary conditions and prompt sensitivity of the proposed MedP-CLIP framework, we conduct an in-depth case study analyzing typical failure modes alongside successful predictions. As illustrated in Fig. 10, we evaluate three representative clinical scenarios across single-point, multi-point, and bounding box interaction modalities to understand how prompt granularity influences model reasoning and feature decoupling.  
+
+> Figure 10: Exploration of model prompt sensitivity and boundary conditions. By comparing single point, multiple points, and bounding box interactions, this figure reveals the limitations of the model when dealing with out-of-distribution noise (left column) and ambiguous local features (middle column), using the right column as a baseline success reference.
+
+Case1: Impact of Artifacts and Noise 
+
+The first column of Fig. 10 demonstrates the vulnerability of current VLM-based frameworks to out-of-distribution noise. In this case, severe artifacts disrupt the normal boundary and texture of the kidney, resulting in an abnormal intensity pattern resembling intestinal structures. When restricted to a highly localized "single-point" prompt, the visual encoder struggles to extract reliable structural embeddings, leading to a misclassification of the region as the small intestine (confidence score 0.309 vs. kidney 0.274). However, providing denser prompts (i.e., multi-point or bounding box) successfully rectifies this error. This indicates that broader spatial constraints introduce sufficient surrounding context, effectively counteracting local pixel degradation and highlighting the practical advantage of MedP-CLIP’s flexible prompting mechanism in noisy environments. 
+
+Case2: Semantic Confusion in Similar Adjacent Structures 
+
+The second column reveals a critical limitation stemming from semantic and morphological ambiguity. Liver cysts typically manifest as well-defined low-density areas, sharing highly similar visual characteristics with the adjacent gallbladder. Under a "single-point" prompt, the model relies on overly localized appearance cues and misclassifies the cyst as the gallbladder. Conversely, under a "bounding box" prompt, the model is misled because the elongated shape framed by the box strongly mimics the typical morphological appearance of the pancreas in 2D CT slices, resulting in misclassification. Accurate prediction is only achieved using the "multi-point" prompt, which provides sufficient constraints to outline the irregular lesion accurately. This failure mode underscores the challenge of relying solely on 2D visual cues without explicit 3D anatomical priors, which occasionally leads to confusion among structures with similar visual or morphological profiles. 
+
+Case3: Prompt Robustness in Distinct Anatomy 
+
+For comparison, the third column presents a standard success case involving a gallbladder with exceptionally clear anatomical boundaries. MedP-CLIP exhibits strong robustness here, achieving correct predictions across all three prompt types. Notably, as the prompt’s information density increases from a single point to a bounding box, the model’s   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 13 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+prediction confidence exhibits a steady upward trajectory (0.728, 0.772, and 0.833, respectively). This validates the efficacy of our feature-level prompt fusion mechanism, proving that in images with low semantic ambiguity, a bounding box can perfectly encapsulate the complete anatomical context to maximize discriminative confidence. The overarching analysis reveals that the quality and granularity of interactive prompts are directly correlated with the model’s localization capabilities. While empowering clinicians to flexibly adjust interaction modalities (e.g., switching from bounding boxes to multi-point prompts for blurred boundaries) significantly enhances practical usability, resolving the fundamental confusion of adjacent semantic structures remains an open challenge. In future work, integrating global 3D anatomical atlases into the spatial reasoning module will be a crucial direction to provide explicit structural priors and further mitigate prompt sensitivity. 
+
+4.8. Discussion 
+
+While MedP-CLIP builds upon the foundational success of vision-language pre-training and promptable architec-tures, its core contribution is not a mere amalgamation of existing modules (e.g., SAM and CLIP). Instead, it represents a fundamental architectural shift designed to resolve a critical bottleneck in medical artificial intelligence: the inherent conflict between the global representation paradigm of standard VLMs and the clinical necessity for fine-grained, region-specific diagnostic reasoning. To elucidate the distinct novelty of MedP-CLIP, we systematically compare it with SOTA models across four critical dimensions.                                 
+
+> Table 7. Systematic comparison of MedP-CLIP with SOTA models across key architectural and functional dimensions
+> Model Medical VLM Feature-Level Integration Region-Aware Representation Region-Text Pre-training Unified Foundation
+> SAM (Kirillov et al., 2023) ✗✓✓✗✗
+> Alpha-CLIP (Sun et al., 2024) ✗✗✓✓✓
+> UniMed-CLIP (Khattak et al., 2024) ✓✗✗✗✓
+> ASG (Li et al., 2024) ✓✗✓✓✗
+> R-LLaVA (Chen et al., 2025) ✓✗✓✗✗
+> MedP-CLIP ✓✓✓✓✓
+
+(1) Feature-level vs. Input-level Integration 
+
+Promptable models have revolutionized general computer vision, yet directly adapting them to medical VLMs poses severe structural challenges. SAM exhibits profound zero-shot segmentation capabilities via prompt encoders. However, SAM operates strictly within the vision domain; it lacks a text encoder and cannot perform cross-modal semantic reasoning, rendering it incapable of tasks like diagnostic visual question answering (VQA) or region-text retrieval. To introduce region-awareness into VLMs, models like Alpha-CLIP rely on an input-level modification, fusing RoI information via an auxiliary alpha channel. This architectural choice necessitates dense masks at inference time, which is clinically impractical. In contrast, MedP-CLIP innovates through a native feature-level integration mechanism. By processing points, bounding boxes, and masks into sparse and dense embeddings that interact directly with image tokens via cross-attention, MedP-CLIP completely decouples its reasoning pipeline from the need for pixel-level masks or auxiliary input channels. This allows for dynamic, lightweight interaction without altering the original image space. 
+
+(2) Region-Aware vs. Global Encoders 
+
+Recent advancements in medical VLMs, including MedCLIP, BiomedCLIP, UniMed-CLIP, and the highly scaled BMC-CLIP (trained on 24M images), have significantly pushed the boundaries of medical image-text alignment. However, these models are fundamentally constrained by their global pooling architectures. They map entire images to holistic textual descriptions, effectively averaging out critical spatial nuances. Since clinical diagnoses often hinge on subtle, highly localized pathologies (e.g., a millimeter-sized nodule in a full chest CT), these global encoders inevitably fail at fine-grained localization. MedP-CLIP inherently bridges this gap. By conditioning the visual representation on spatial prompts, it maintains the robust global semantic alignment of baseline CLIPs (as evidenced by our superior zero-shot classification performance) while unlocking precise regional comprehension previously unattainable by global models.   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 14 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+(3) Region Image-Text vs. Global Image-Text 
+
+To support these architectural innovations, MedP-CLIP employs the largest medical region-text dataset to date. While global models typically rely on scraping vast amounts of image-text pairs, this approach inherently lacks spatial specificity. Instead of merely increasing the number of global images, we focus on mining local semantic value, extracting 97.3 million fine-grained region-level annotations and structured clinical diagnostic descriptions from 6.4 million medical images. This significantly surpasses existing medical VLM datasets in both scale and breadth, seamlessly covering 15 different imaging modalities and six major anatomical groups. Furthermore, to ensure the network learns near-authentic medical representations, we synthesize these textual data through an ontology-based process, strictly adhering to the constraints of the RadLex Lexicon v4.1. Human sampling validation confirms a data validity rate of 98.4%. 
+
+(4) Native vs. Task-Specific 
+
+Recognizing the limitations of global encoders, several recent methods have attempted to introduce region-awareness, but typically through fragmented, task-specific pipelines. Models like ASG and CARZero achieve anatomical- or patch-level alignment during training, but they do not support explicit, user-driven spatial prompts during inference. Methods such as R-LLaVA incorporate spatial constraints by directly merging bounding box annotations into the input image space via alpha blending, alongside passing spatial coordinates into the text prompt of the LLMs. While effective for specific tasks, modifying the raw image pixels and relying on the language model to interpret spatial coordinates can disrupt the unified, end-to-end nature of the visual encoder. Unlike these fragmented approaches, MedP-CLIP is designed as a scalable, plug-and-play visual backbone. It natively supports intuitive clinician prompts (points, boxes) without requiring external feature extractors, coordinate-to-text transformations, or destructive image operations like cropping or pixel blending. This enables seamless deployment across diverse clinical applications from interactive segmentation to multimodal clinical reasoning, establishing a unified foundational capability for medical AI.                              
+
+> Table 8. Ablation studies and comparative analysis. (a) Impact of prompt ensembling on zero-shot performance across distinct templates. (b) Effect of varying the number of unfrozen Transformer blocks. (c) Performance comparison with UniMed-CLIP under equivalent data scaling (5.3M Images).
+> (a) The result of prompt ensembling on the COVID-CT and ACL datasets COVID-CT ACL Best Template 68.47% 59.35% Worst Template 63.55% 49.66% Ensembling Templates 67.49% 51.71% (b) Unfreeze block ablation
+> Unfreeze Block Top-1 Acc
+> 286.54% 487.24% 687.96% 888.64% 10 89.41% 12 90.24% (c) Comparison with UniMed-CLIP
+> Dataset UniMed-CLIP MedP-CLIP
+> COVID-CT 61.08% 66.70% ACL 43.78% 58.63% ChestCT 35.40% 32.85% ACRIMA 59.32% 55.21% Br35H 74.59% 90.28% Avg. Acc 54.83% 60.73%
+
+## 5. Ablation Studies 
+
+5.1. Test-time Prompt Ensembling 
+
+As shown in Tab. 8a, our evaluation demonstrates that the choice of prompt templates in zero-shot inference considerably affects performance. Although certain prompts can achieve superior results on specific datasets or modalities, using a single template often leads to inconsistent outcomes due to its sensitivity to phrasing and domain alignment. In comparison, ensembling multiple prompts provides a more balanced and robust strategy. While not   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 15 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+always attaining peak performance, this approach mitigates the instability associated with individual templates. To improve generalization and reduce performance variance, we recommend creating diverse and context-aware prompt templates adapted to the characteristics and modalities of each dataset. These can be designed manually or generated automatically using language models such as GPT (Brown et al., 2020). Ensembling such prompts can then enhance the robustness and stability of zero-shot inference.  
+
+> Figure 11: The relationship between MedP-CLIP pre-training data scaling and zero-shot classification.
+
+5.2. Encoder Unfreezing 
+
+Optimizing MedP-CLIP performance, we trained the model on the TotalSegmentator dataset (Wasserthal et al., 2023) while unfreezing varying numbers of vision encoder layers. Experiments employed the ViT-B/16 architec-ture (Radford et al., 2021) (containing 12 Transformer blocks). Model performance was evaluated via zero-shot Top-1 accuracy for regional (anatomical structure) classification on the AMOS2022 dataset (Ji et al., 2022). As shown in Tab. 8b, we incrementally increased the number of unfrozen Transformer blocks with a step size of 2 (ranging from 2 to fully unfrozen blocks). Results demonstrate that classification accuracy exhibits a consistent upward trend as the number of unfrozen layers increases. 
+
+5.3. Data Volume Scaling 
+
+We investigated the impact of data volume on enhancing model robustness through ablation studies. The study conducted pre-training on the ViT-L/14 model using 10%, 25%, 50%, and 100% of the dataset, followed by zero-shot classification without prompts and box-prompted classification on the Br35H dataset (Wageh et al., 2024). As shown in Fig. 11, the number of training images increased from 0.6M to 6.4M, while the region-text pairs grew from 11.2M to 97.3M. The model’s classification performance improved with larger pre-training datasets, demonstrating that data volume is crucial for model learning capability. Notably, when box prompts were used, the model’s classification accuracy significantly improved. Furthermore, to isolate our methodological advantages from the benefits of mere data scaling, we conducted a comparative analysis against UniMed-CLIP under an equivalent data volume constraint of 5.3M images. As detailed in Table 8(c), our MedP-CLIP achieves a superior average accuracy of 60.73% across five datasets, yielding a notable 5.9% improvement over UniMed-CLIP (54.83%). Although UniMed-CLIP maintains a slight edge on the ChestCT and ACRIMA datasets, MedP-CLIP demonstrates substantial gains on COVID-CT, ACL,   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 16 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+and particularly Br35H, confirming the inherent effectiveness and robust zero-shot generalizability of our proposed framework even when trained on identical data scales. 
+
+## 6. Conclusion 
+
+MedP-CLIP is a novel region-aware VLM addressing the pressing need for fine-grained spatial understand-ing in medical imaging. By integrating medical prior knowledge and proposing a versatile feature-level region prompt integration mechanism, our model responds to various spatial prompts while preserving essential global context, overcoming critical limitations of previous methods like cropping or masking that disrupt context. Pre-trained on a meticulously constructed medical image region-text dataset, MedP-CLIP demonstrates state-of-the-art performance across multiple clinically relevant tasks, including image-level zero-shot recognition, region-level retrieval/classification, interactive segmentation, and multimodal large language model reasoning. It seamlessly integrates with existing CLIP-based pipelines, providing a scalable, plug-and-play visual backbone that synergistically combines holistic image understanding with precise regional analysis, significantly enhancing medical AI capabilities. Despite the paradigm shift MedP-CLIP introduces by transitioning from holistic global representation to fine-grained, region-aware reasoning, several avenues remain for future refinement. First, while our feature-level inte-gration natively accommodates flexible prompts and successfully decouples reasoning from dense clinical masks, it occasionally exhibits semantic confusion when differentiating morphologically similar adjacent structures within 2D slices. Addressing this morphological ambiguity necessitates the future integration of global 3D anatomical atlases to provide explicit structural priors. Second, although MedP-CLIP excels as a plug-and-play backbone in interactive, clinician-in-the-loop workflows, its current reliance on explicit spatial guidance poses challenges for fully automated, high-throughput screening environments. Consequently, empowering the model to autonomously infer implicit regions of interest directly from unstructured diagnostic narratives represents a critical next step to reduce workflow friction. Finally, adapting the architecture to support higher-resolution inputs for micron-scale pathology identification will further solidify MedP-CLIP as a comprehensive and scalable foundation for next-generation medical AI. 
+
+## A. Region-Aware Text Generation Methodology 
+
+(1) Ontology-Constrained Text Generation 
+
+We introduce a structured multimodal generation paradigm that leverages a large language model (GPT-4o) to translate Image 𝐼 , Mask 𝑀 𝑘 , Category 𝐶 𝑘 triplets into professional diagnostic descriptions. To suppress the emergence of "hallucinations" and generic linguistic patterns during the generation process, we incorporated strict ontology constraints and an evidence-bound mechanism into the pipeline. First, the model is prohibited from generating free-form text. Its vocabulary space is strictly confined to the Radiology Lexicon v4.1, which structurally eliminates speculative or ambiguous phrasing (e.g., "likely," "suggestive of"). Second, all generated descriptions must strictly adhere to the explicit visual evidence provided by the mask 𝑀 𝑘 within the triplet (e.g., morphological contours, dimensions, and radiomic enhancement features). Any generation attempting to extrapolate beyond the mask boundaries is automatically intercepted by the system. 
+
+(2) Automated Quality Control 
+
+To further ensure the diversity and clinical precision of the corpus, we implemented multi-stage quality control and semantic distinctness filtering strategies. During the automated verification phase, the system checks for missing core elements (e.g., modality, spatial location) and validates the image-text spatial consistency of the triplets. To prevent the model from collapsing into generic linguistic patterns, we quantify the semantic distinctness by computing the cosine similarity between the newly generated descriptions and existing instances. Specifically, given a newly generated description 𝑡 new and an existing description 𝑡 𝑗 from the established corpus  , we extract their high-dimensional embeddings 𝐯 new = Φ( 𝑡 new ) and 𝐯 𝑗 = Φ( 𝑡 𝑗 ) using a text encoder Φ. The semantic similarity score  is formulated as: 
+
+(𝑡 new , 𝑡 𝑗 ) = 𝐯 ⊤
+
+> new
+
+𝐯 𝑗 
+
+‖𝐯 new ‖2‖𝐯 𝑗 ‖2
+
+If the maximum semantic overlap exceeds a predefined threshold 𝜏 (i.e., max 𝑡 𝑗 ∈ (𝑡 new , 𝑡 𝑗 ) > 𝜏 , where 𝜏 = 0 .9), or if contradictory descriptions for the same anatomical region emerge (e.g., describing the exact same region as both "hypodense" and "isodense"), the instance is automatically discarded, triggering a regeneration mechanism. This   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 17 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration
+
+mathematical constraint forces the data distribution to align naturally with clinical variations and explicitly prevents linguistic homogenization. 
+
+(3) Manual Sampling Validation 
+
+Beyond automated constraints, we introduced a rigorous double-blind expert review mechanism. A stratified random sample of 15,374 cross-modality and cross-organ descriptions was independently evaluated by board-certified radiologists. The evaluation criteria encompassed anatomical plausibility, image-semantic consistency, terminology standardization, and visual evidence fidelity. The audit revealed exceptionally high inter-rater reliability (Cohen’s 
+
+𝜅 = 0 .87 ), with the generated medical texts achieving a clinical validity rate of 98.4% and an overall rejection rate strictly maintained below 2%. This robustly demonstrates that our generation strategy effectively captures authentic medical knowledge rather than simply fitting an AI-like stylistic template.  
+
+> Figure 12: t-SNE visualization of semantic embeddings from our synthesized clinical descriptions (red circles) and human-annotated RadGenome-Chest CT descriptions (green triangles) across 13 anatomical categories.
+
+(4) Semantic Feature Distribution Validation 
+
+To provide intuitive empirical support from the feature space perspective, we conducted a quantitative analysis of the semantic and linguistic distribution of the synthesized texts (as illustrated in Fig. 12). We randomly sampled descriptions corresponding to 13 distinct abdominal organ categories from both our synthetic dataset and the expert-annotated RadGenome-Chest CT dataset. We extracted semantic embeddings using a frozen domain-specific text encoder (BioClinicalBERT) and applied t-SNE for dimensionality reduction. The results demonstrate that the synthesized descriptions (red circles) and human expert annotations (green triangles) exhibit near-complete overlap and co-distribution within every anatomical cluster. This visualization reveals two critical characteristics: First, high intra-class alignment proves that within the same organ category, the synthetic data seamlessly integrates into the human-annotated data distribution, rather than isolating into an artificial GPT linguistic space. Second, strong inter-class separability indicates that the generated texts accurately preserve highly specific, organ-level medical features without collapsing into ambiguous, generic patterns.   
+
+> J. Peng et al.: Preprint submitted to Elsevier Page 18 of 20
+
+MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration 
+
+## References 
+
+Akinci D’Antonoli, T., Berger, L.K., Indrakanti, A.K., Vishwanathan, N., Weiss, J., Jung, M., Berkarda, Z., Rau, A., Reisert, M., Küstner, T., et al., 2025. Totalsegmentator mri: Robust sequence-independent segmentation of multiple anatomic structures in mri. Radiology 314, e241613. Bien, N., Rajpurkar, P., Ball, R.L., Irvin, J., Park, A., Jones, E., Bereket, M., Patel, B.N., Yeom, K.W., Shpanskaya, K., et al., 2018. Deep-learning-assisted diagnosis for knee magnetic resonance imaging: development and retrospective validation of mrnet. PLoS medicine 15, e1002699. Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J.D., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., Askell, A., et al., 2020. Language models are few-shot learners. Advances in neural information processing systems 33, 1877–1901. Cardoso, M.J., Li, W., Brown, R., Ma, N., Kerfoot, E., Wang, Y., Murrey, B., Myronenko, A., Zhao, C., Yang, D., et al., 2022. Monai: An open-source framework for deep learning in healthcare. arXiv preprint arXiv:2211.02701 . Chen, X., Lai, Z., Ruan, K., Chen, S., Liu, J., Liu, Z., 2025. R-llava: Improving med-vqa understanding through visual region of interest, in: ICLR 2025 Workshop on Human-AI Coevolution. Cheng, J., Fu, B., Ye, J., Wang, G., Li, T., Wang, H., Li, R., Yao, H., Cheng, J., Li, J., et al., 2025. Interactive medical image segmentation: A benchmark dataset and baseline, in: Proceedings of the Computer Vision and Pattern Recognition Conference, pp. 20841–20851. Cheng, J., Ye, J., Deng, Z., Chen, J., Li, T., Wang, H., Su, Y., Huang, Z., Chen, J., Jiang, L., et al., 2023. Sam-med2d. preprint arXiv:2308.16184 . Gao, Y., Ni, Z., Liu, W., Ni, L., Xin, L., Hu, L., Zhang, L., 2025. Abnormal-region-aware multi-modal feature fusion for medical report generation. Knowledge-Based Systems 318, 113538. doi: 10.1016/j.knosys.2025.113538 .Gu, X., Lin, T.Y., Kuo, W., Cui, Y., 2021. Open-vocabulary object detection via vision and language knowledge distillation, in: International Conference on Learning Representations. URL: https://api.semanticscholar.org/CorpusID:238744187 .Hernandez Petzsche, M.R., de la Rosa, E., Hanning, U., Wiest, R., Valenzuela, W., Reyes, M., Meyer, M., Liew, S.L., Kofler, F., Ezhov, I., et al., 2022. Isles 2022: A multi-center magnetic resonance imaging stroke lesion segmentation dataset. Scientific data 9, 762. Hu, K., Xiao, Y., Zhang, Y., Gao, X., 2024. Multi-view masked contrastive representation learning for endoscopic video analysis. Advances in Neural Information Processing Systems . Huang, X., Shen, L., Liu, J., Shang, F., Li, H., Huang, H., Yang, Y., 2025. Towards a multimodal large language model with pixel-level insight for biomedicine, in: Proceedings of the AAAI Conference on Artificial Intelligence, pp. 3779–3787. Ikezogwo, W.O., Zhang, K., Seyfioglu, M.S., Ghezloo, F., Shapiro, L., Krishna, R., 2025. Medicalnarratives: Connecting medical vision and language with localized narratives. arXiv preprint arXiv:2501.04184 . Ji, Y., Bai, H., Ge, C., Yang, J., Zhu, Y., Zhang, R., Li, Z., Zhanng, L., Ma, W., Wan, X., et al., 2022. Amos: A large-scale abdominal multi-organ benchmark for versatile medical image segmentation. Advances in neural information processing systems 35, 36722–36732. Khattak, M.U., Kunhimon, S., Naseer, M., Khan, S., Khan, F.S., 2024. Unimed-clip: Towards a unified image-text pretraining paradigm for diverse medical imaging modalities. arXiv preprint arXiv:2412.10372 . Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., et al., 2023. Segment anything, in: Proceedings of the IEEE/CVF international conference on computer vision, pp. 4015–4026. Lai, H., Yao, Q., Jiang, Z., Wang, R., He, Z., Tao, X., Zhou, S.K., 2024a. Carzero: Cross-attention alignment for radiology zero-shot classification, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 11137–11146. Lai, X., Tian, Z., Chen, Y., Li, Y., Yuan, Y., Liu, S., Jia, J., 2024b. Lisa: Reasoning segmentation via large language model, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 9579–9589. Lambert, Z., Petitjean, C., Dubray, B., Kuan, S., 2020. Segthor: Segmentation of thoracic organs at risk in ct images, in: 2020 Tenth International Conference on Image Processing Theory, Tools and Applications (IPTA), IEEE. pp. 1–6. Lee, H.H., Chang, A.X., 2022. Understanding pure clip guidance for voxel grid nerf models. arXiv preprint arXiv:2209.15172 . Lei, Y., Li, Z., Shen, Y., Zhang, J., Shan, H., 2023. Clip-lung: Textual knowledge-guided lung nodule malignancy prediction, in: International Conference on Medical Image Computing and Computer-Assisted Intervention, Springer. pp. 403–412. Li, C., Wong, C., Zhang, S., Usuyama, N., Liu, H., Yang, J., Naumann, T., Poon, H., Gao, J., 2023a. Llava-med: Training a large language-and-vision assistant for biomedicine in one day. Advances in Neural Information Processing Systems 36, 28541–28564. Li, D., Li, J., Hoi, S., 2023b. Blip-diffusion: Pre-trained subject representation for controllable text-to-image generation and editing. Advances in Neural Information Processing Systems 36, 30146–30166. Li, J., Li, D., Savarese, S., Hoi, S.C.H., 2023c. BLIP-2: bootstrapping language-image pre-training with frozen image encoders and large language models, in: Krause, A., Brunskill, E., Cho, K., Engelhardt, B., Sabato, S., Scarlett, J. (Eds.), International Conference on Machine Learning, ICML 2023, 23-29 July 2023, Honolulu, Hawaii, USA, PMLR. pp. 19730–19742. URL: https://proceedings.mlr.press/v202/li23q.html .Li, Q., Yan, X., Xu, J., Yuan, R., Zhang, Y., Feng, R., Shen, Q., Zhang, X., Wang, S., 2024. Anatomical structure-guided medical vision-language pre-training, in: International Conference on Medical Image Computing and Computer-Assisted Intervention, Springer. pp. 80–90. Liang, F., Wu, B., Dai, X., Li, K., Zhao, Y., Zhang, H., Zhang, P., Vajda, P., Marculescu, D., 2023. Open-vocabulary semantic segmentation with mask-adapted clip, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 7061–7070. Lin, W., Zhao, Z., Zhang, X., Wu, C., Zhang, Y., Wang, Y., Xie, W., 2023. Pmc-clip: Contrastive language-image pre-training using biomedical documents, in: International Conference on Medical Image Computing and Computer-Assisted Intervention, Springer. pp. 525–536. Liu, H., Li, C., Wu, Q., Lee, Y.J., 2023. Visual instruction tuning. Advances in neural information processing systems 36, 34892–34916. Loshchilov, I., Hutter, F., 2017. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 . Lozano, A., Sun, M.W., Burgess, J., Chen, L., Nirschl, J.J., Gu, J., Lopez, I., Aklilu, J., Rau, A., Katzer, A.W., et al., 2025. Biomedica: An open biomedical image-caption archive, dataset, and vision-language models derived from scientific literature, in: Proceedings of the Computer Vision and Pattern Recognition Conference, pp. 19724–19735. Matsuyama, E., Watanabe, H., Takahashi, N., 2024. Performance comparison of vision transformer-and cnn-based image classification using cross entropy: A preliminary application to lung cancer discrimination from ct images. Journal of Biomedical Science and Engineering 17, 157–170. Nichol, A., Jun, H., Dhariwal, P., Mishkin, P., Chen, M., 2022. Point-e: A system for generating 3d point clouds from complex prompts. arXiv preprint arXiv:2212.08751 . 
+
+J. Peng et al.: Preprint submitted to Elsevier Page 19 of 20 MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration 
+
+Ovreiu, S., Paraschiv, E.A., Ovreiu, E., 2021. Deep learning & digital fundus images: Glaucoma detection using densenet, in: 2021 13th international conference on electronics, computers and artificial intelligence (ECAI), IEEE. pp. 1–4. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al., 2021. Learning transferable visual models from natural language supervision, in: International conference on machine learning, PMLR. pp. 8748–8763. Ravi, N., Gabeur, V., Hu, Y.T., Hu, R., Ryali, C., Ma, T., Khedr, H., Rädle, R., Rolland, C., Gustafson, L., et al., 2024. Sam 2: Segment anything in images and videos. arXiv preprint arXiv:2408.00714 . Shtedritski, A., Rupprecht, C., Vedaldi, A., 2023. What does clip know about a red circle? visual prompt engineering for vlms, in: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 11987–11997. Soler, L., Hostettler, A., Agnus, V., Charnoz, A., Fasquel, J.B., Moreau, J., Osswald, A.B., Bouhadjar, M., Marescaux, J., 2010. 3d image reconstruction for comparison of algorithm database. URL: https://www.ircad.fr/research/data-sets/liver-segmentation-3d-ircadb-01 . Subramanian, S., Merrill, W., Darrell, T., Gardner, M., Singh, S., Rohrbach, A., 2022. Reclip: A strong zero-shot baseline for referring expression comprehension, in: Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 5198–5215. Sun, Z., Fang, Y., Wu, T., Zhang, P., Zang, Y., Kong, S., Xiong, Y., Lin, D., Wang, J., 2024. Alpha-clip: A clip model focusing on wherever you want, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 13019–13029. Wageh, M., Amin, K., Algarni, A.D., Hamad, A.M., Ibrahim, M., 2024. Brain tumor detection based on deep features concatenation and machine learning classifiers with genetic selection. IEEE Access . Wang, L., Wang, H., Yang, H., Mao, J., Yang, Z., Shen, J., Li, X., 2025. Interpretable bilingual multimodal large language model for diverse biomedical tasks, in: The Thirteenth International Conference on Learning Representations. URL: https://openreview.net/forum?id= YuHQTo6G9S .Wang, Z., Wu, Z., Agarwal, D., Sun, J., 2022. Medclip: Contrastive learning from unpaired medical images and text, in: Proceedings of the Conference on Empirical Methods in Natural Language Processing. Conference on Empirical Methods in Natural Language Processing, p. 3876. Wasserthal, J., Breit, H.C., Meyer, M.T., Pradella, M., Hinck, D., Sauter, A.W., Heye, T., Boll, D.T., Cyriac, J., Yang, S., et al., 2023. Totalsegmentator: robust segmentation of 104 anatomic structures in ct images. Radiology: Artificial Intelligence 5, e230024. Wu, Y., Tang, J., Yao, Z., Li, M., Hong, Y., Yu, D., Gao, Z., Chen, B., Zhao, S., 2024. Vertfound: synergizing semantic and spatial understanding for fine-grained vertebrae classification via foundation models, in: International Conference on Medical Image Computing and Computer-Assisted Intervention, Springer. pp. 763–772. Xiao, X., Zhang, Y., Nguyen, T.H., Lam, B.T., Wang, J., Zhao, L., Hamm, J., Wang, T., Li, X., Wang, X., Xu, H., Liu, T., Xu, M., 2025. Describe anything in medical images. URL: https://arxiv.org/abs/2505.05804 , arXiv:2505.05804 .Xu, J., Liu, S., Vahdat, A., Byeon, W., Wang, X., De Mello, S., 2023. Open-vocabulary panoptic segmentation with text-to-image diffusion models, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 2955–2966. Yang, X., He, X., Zhao, J., Zhang, Y., Zhang, S., Xie, P., 2020. Covid-ct-dataset: a ct scan dataset about covid-19. arXiv preprint arXiv:2003.13865 .Zhang, S., Xu, Y., Usuyama, N., Xu, H., Bagga, J., Tinn, R., Preston, S., Rao, R., Wei, M., Valluri, N., et al., 2025. A multimodal biomedical foundation model trained from fifteen million image–text pairs. Nejm Ai 2, AIoa2400640. Zhang, X., Xu, M., Qiu, D., Yan, R., Lang, N., Zhou, X., 2024. Mediclip: Adapting clip for few-shot medical image anomaly detection, in: International Conference on Medical Image Computing and Computer-Assisted Intervention, Springer. pp. 458–468. Zhong, Y., Yang, J., Zhang, P., Li, C., Codella, N., Li, L.H., Zhou, L., Dai, X., Yuan, L., Li, Y., et al., 2022. Regionclip: Region-based language-image pretraining, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 16793–16803. Zhou, C., Loy, C.C., Dai, B., 2022. Extract free dense labels from clip, in: European Conference on Computer Vision, Springer. pp. 696–712. 
+
+J. Peng et al.: Preprint submitted to Elsevier Page 20 of 20
