@@ -1,0 +1,539 @@
+Title: Parameter-efficient Prompt Tuning and Hierarchical Textual Guidance for Few-shot Whole Slide Image Classification
+
+URL Source: https://arxiv.org/pdf/2603.21504v1
+
+Published Time: Tue, 24 Mar 2026 02:32:29 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# Parameter-efficient Prompt Tuning and Hierarchical Textual Guidance for Few-shot Whole Slide Image Classification 
+
+Jayanie Bogahawatte, Sachith Seneviratne, Saman Halgamuge AI, Optimization and Pattern Recognition Research Group Dept. of Mechanical Eng., University of Melbourne, Australia   
+
+> jbogahawatte@student.unimelb.edu.au, {sachith.seneviratne, saman }@unimelb.edu.au
+
+Abstract 
+
+Whole Slide Images (WSIs) are giga-pixel in scale and are typically partitioned into small instances in WSI classifi-cation pipelines for computational feasibility. However, ob-taining extensive instance level annotations is costly, mak-ing few-shot weakly supervised WSI classification (FSWC) crucial for learning from limited slide-level labels. Re-cently, pre-trained vision-language models (VLMs) have been adopted in FSWC, yet they exhibit several limitations. Existing prompt tuning methods in FSWC substantially in-crease both the number of trainable parameters and in-ference overhead. Moreover, current methods discard in-stances with low alignment to text embeddings from VLMs, potentially leading to information loss. To address these challenges, we propose two key contributions. First, we in-troduce a new parameter efficient prompt tuning method by scaling and shifting features in text encoder, which signif-icantly reduces the computational cost. Second, to lever-age not only the pre-trained knowledge of VLMs, but also the inherent hierarchical structure of WSIs, we introduce a WSI representation learning approach with a soft hierar-chical textual guidance strategy without utilizing hard in-stance filtering. Comprehensive evaluations on pathology datasets covering breast, lung, and ovarian cancer types demonstrate consistent improvements up-to 10.9%, 7.8%, and 13.8% respectively, over the state-of-the-art methods in FSWC. Our method reduces the number of trainable param-eters by 18.1% on both breast and lung cancer datasets, and 5.8% on the ovarian cancer dataset, while also excelling at weakly-supervised tumor localization. 
+
+1. Introduction 
+
+Computational pathology (CPath) has undergone aparadigm shift with the integration of deep learning meth-ods [4, 29], enabling automated analysis of Whole Slide Images (WSIs). However, WSIs pose unique challenges compared to natural images due to their gigapixel scale and the confinement of diagnostically relevant features, such as malignant cells to extremely small regions. Therefore, con-structing large-scale WSI datasets with precise annotations of those malignant cell regions demands labor-intensive domain expertise [14]. To reduce annotation costs, mul-tiple instance learning (MIL) has become a predominant mechanism for WSI classification by training models in a weakly-supervised manner with only slide-level labels [5, 12, 16, 23, 27, 32]. MIL-based methods first partition WSIs into smaller patches called instances and treat each slide as a bag of instances without explicitly considering the spatial structure of the WSIs. Then, instance em-beddings are obtained using pre-trained encoder models, which are later aggregated into a slide-level or bag-level representation. Despite their success, they require large volumes of slide-level annotated WSIs, which are scarce due to the data sensitivity in medical domain and limited availability for rare diseases [9]. In response to these constraints, few-shot learning frameworks have emerged as a promising direction [24, 30]. In few-shot weakly supervised WSI classification (FSWC), introduced by [24], only a limited number of slide-level (bag-level) labels per class are required for training. Recent Vision-Language Models (VLMs) such as CLIP [26], ALIGN [13], and FILIP [31], have demonstrated strong zero-shot and few-shot performance on natural imag-ing tasks, enabled by their transfer learning capabilities [33]. This progress has opened promising avenues for lever-aging VLMs in CPath, particularly for FSWC. With the availability of CPath-VLMs pretrained on millions of in-stance level image-text pairs [10, 11, 20, 21], transferring rich visual-language representations to downstream tasks with minimal supervision has become feasible. Recent FSWC approaches leverage a prompt tuning strategy known as context optimization (CoOp) [35], to adapt VLMs by op-timizing a small set of prompt parameters while keeping the pre-trained VLM backbone frozen. To further enhance the textual prompt quality, Large Language Models (LLMs) 1
+
+> arXiv:2603.21504v1 [cs.CV] 23 Mar 2026
+
+are employed to generate class-specific descriptions that capture morphological features of different cancer subtypes [7, 24, 28]. However, a core challenge lies in using VLMs pre-trained with instance level image-text pairs, with slide-level representations in the downstream task. Since WSIs are in giga-pixel scale and contain diverse instances, bridg-ing the distribution and semantic gap between localized instance-level features and global slide-level labels is non-trivial. To address this, prior work employs either cross-attention mechanisms [7, 28] or contrastive learning frame-works [6, 24] together with CoOp-based prompt learning [35]. While cross-attention offers fine-grained alignment, it introduces a substantial number of trainable parameters, increasing the risk of overfitting, particularly evident in extreme few-shot settings. In addition, CoOp-based con-trastive learning methods often struggle to adapt VLMs to slide-level semantics in few-shot regimes and incur addi-tional inference overhead [17]. On the other hand, WSIs possess an inherent hierarchi-cal spatial structure, where fine-grained regions reflect lo-calized cellular interactions and larger regions encode spa-tial organization of cell clusters and tumor-immune inter-faces [3]. Since diagnostically relevant regions are spatially confined, aggregating all instance embeddings without con-sidering the spatial structure of WSIs can dilute informative signals [5]. Moreover, prior methods often discard instances solely based on their alignment with text embeddings ob-tained from the VLM text encoder to reduce computational cost [7, 8, 34]. In some cases, this results in eliminating over 60% of the instances in WSIs. However, we suggest that such hard filtering may discard regions with some diag-nostically relevant information that may not be represented in the text embeddings. This can be detrimental in few-shot settings as demonstrated through experiments. These limi-tations can collectively lead to inaccurate tumor localization and thereby compromising the diagnostic reliability. Hence, effective adaptation of VLMs in few-shot settings necessi-tates a soft textual guidance from the text embeddings from VLM text encoder that integrates the pre-trained knowledge of the VLM together with the intrinsic hierarchical and spa-tial structure of WSIs during representation learning. To address the above mentioned limitations, we pro-pose Hierarchical textual guidance based WS I representa-tion learning and Prompt tuning with Scaling and Shifting features for FSWC (HIPSS). HIPSS is built upon two key contributions. First, we introduce a new prompt tuning ap-proach, which is inspired by Scaling and Shifting Features (SSF) in pre-trained vision encoders [17, 22]. We propose to employ a parameter-efficient linear transformation of fea-tures in the pre-trained text encoder which significantly re-duces the number of trainable parameters as opposed to prior work that utilizes cross attention for feature-fusion [7, 8, 28]. In contrast to CoOp-based methods [35], our prompt learning method does not incur additional cost at inference as the linear transformations can be merged into the model using re-parameterization [17]. To the best of our knowledge, scaling and shifting features is unexplored in the domain of VLM-based prompt tuning. Second, we pro-pose a new hierarchical textual guidance strategy for WSI representation learning. Each WSI is first partitioned into regions, each of which is further divided into instances. To provide the hierarchical textual guidance, we propose to use attention pooling blocks at each stage that aggregates fea-tures together with attention weights refinement using the text embeddings from the VLM text encoder without any hard instance filtering. The main contributions of our work are summarized as follows: 1. We introduce a new parameter efficient prompt tuning approach with scaling and shifting features in text en-coder. 2. We introduce a new soft hierarchical textual guidance-based WSI representation learning method. 3. HIPSS consistently outperforms state-of-the-art (SOTA) methods in comprehensive evaluations across three WSI datasets comprising breast, lung and ovarian cancer types under few-shot settings. 4. We demonstrate the quality of the learned WSI repre-sentations by achieving strong performance in weakly-supervised tumor localization task. 
+
+2. Related Work 
+
+2.1. Multiple Instance Learning for WSI Classifica-tion 
+
+Multiple Instance Learning (MIL) is a widely adopted weakly supervised approach for WSI classification in CPath, where only slide-level labels are available dur-ing training. A key challenge in MIL is to effectively aggregate instance-level features into slide-level repre-sentations. Early methods used non-trainable functions (e.g.max/mean pooling), which fail to capture instance im-portance. Attention-based methods such as ABMIL [12] introduced trainable mechanisms to weigh instances by rel-evance. DTFD-MIL [32] improved localization by forming pseudo-bags and applying attention mechanism. DSMIL [16] incorporated multi-scale features to capture both fine-grained and global patterns. Transformer-based MIL [27] models leveraged self-attention to model inter-instance de-pendencies, while self-supervised methods including HIPT [3] pre-trains across resolutions but incur high computa-tional costs during pre-training. Spatially-aware MIL meth-ods, including CAMIL [5], further enhanced performance via context-driven attention. Despite these advancements, current MIL methods rely heavily on large numbers of la-beled WSIs for effective training [19, 24], which can be a constraint in real-world clinical settings. 2Contrastive Learning based Loss: Cosine Similarity between F(X i) and T               
+
+> Whole Slide
+> Image (WSI)
+> (X i)
+> Partition
+> the WSI into regions
+> of size 4096 x 4096
+> 4096 px
+> Partition each
+> region into instances
+> of size 256 x 256
+> 256 px
+> Instance Encoding by pre-trained and frozen Vision Encoder from VLM
+> Image embedding
+> of WSI (F(X i))
+> (b) Hierarchical Text Guidance based WSI Representation Learning
+> Text-Guided WSI Encoder
+> Text-Guided Region Encoder
+> WSI (X i)
+> z
+> Region 1 (R i,1 )
+> Region 2 (R i,2 )
+> Region M (R i,M )
+> Region m (R i,m )
+> z
+> Region 1 (R i,1 )
+> Region 2 (R i,2 )
+> Region M (R i,M )
+> Region m (R i,m )
+> Instance Embedding ( )Region Embedding ( )
+> Notations
+> Describe the visual characteristics of <Class Name> in a whole slide image
+> Describe the visual characteristics of <Class Name> in 4096 x 4096 regions consists of 256 x 256 patches in a whole slide image
+> Query Prompt regarding the WSI Query Prompt regarding the regions
+> in WSI
+> LLM Generated Description about WSI
+> (Prompt WSI )
+> LLM Generated Description about Regions in WSI (Prompt REG )
+> Tokenizer WSI Description
+> Vector WSI Region Description
+> Vector
+> Concatenated
+> Description Vectors (Prompt )
+> Text Encoder from VLM Text embedding of WSI (T)
+> Norm
+> (a) Prompt Tuning with Scaling and Shifting Features in Text Encoder
+> MHA
+> Norm
+> MLP
+> z l -1
+> γ1, β1
+> γ2, β2
+> γ3, β3
+> γ4, β4
+> z l
+> L x
+> Text Encoder attached with scaling and shifting Parameters
+> Tokenizer LLM
+> LLM
+> Cosine Similarity based Attention Weights Update
+> Cosine Similarity based Attention Weights Update
+
+Figure 1. Illustration of HIPSS framework. (a) : Two text descriptions are generated considering the entire WSI and the regions in WSI. Aset of task-specific parameters: γ and β are attached to a set of selected layers of the text encoder backbone, up-to a pre-defined depth . (b) : WSI representation learning using two attention pooling mechanisms with textual guidance. Region encoder creates each region embedding considering the instances in the specific region. WSI encoder creates the WSI embedding by aggregating region embeddings. Attention weights are refined based on the cosine similarity between instance (or region) embeddings and the text embeddings . Contrastive learning based loss is calculated between image and text embeddings. 
+
+2.2. Few-shot Weakly Supervised WSI Classifica-tion (FSWC) 
+
+Few-shot weakly supervised WSI classification presents unique challenges due to the scarcity of slide-level labels and the sparsity of diagnostically relevant regions. Few-shot learning methods in natural image domain often fail under these constraints. TOP [24] introduced a VLM-based framework with instance and bag-level prompt learn-ing. However, effective dataset-specific instance prompt de-sign demands substantial domain expertise. PEMP [25] im-proves alignment via task-specific visual exemplars, though it assumes availability of auxiliary samples, limiting scal-ability. ViLa-MIL [28], MSCPT [8], and MAPLE [34] leverage multi-scale vision-language fusion using cross-attention and graph neural networks. Nevertheless, these methods depend on paired WSIs across magnifications, which can be impractical in many settings. FOCUS [7] in-troduces adaptive visual token compression to reduce com-putational overhead; however, this strategy may inadver-tently discard subtle yet clinically significant regions. FAST [6] combines slide and instance-level supervision for en-hanced localization. While this hybrid annotation setting improves discriminative localization and classification, it assumes access to expert-annotated instances, which may constrain scalability in low-resource or rapidly evolving di-agnostic contexts. 
+
+VLM-based Prompt Learning in FSWC: Current meth-ods in this space rely on VLMs such as CLIP [26] and CONCH [20], using a prompt learning strategy known as CoOp [35] to align visual and textual modalities. CoOp in-troduces learnable context vectors into the prompt embed-dings while keeping the image and text encoders frozen, en-abling efficient adaptation to new tasks with minimal super-vision. Unlike the natural image domain, CPath involves a fundamental distribution shift between WSI instances and slide-level representations. VLMs such as CONCH [20] are typically pre-trained on WSI instances, which limits their ability to capture global context necessary for WSI classifi-cation in few-shot settings. Consequently, existing prompt learning approaches such as CoOp may struggle to adapt these VLMs for slide-level classification or require compu-tational costly fusing techniques including cross-attention [7, 28], resulting in suboptimal performance in 1 or 2-shot settings. 
+
+3. Method 
+
+This section outlines the proposed HIPSS method as illus-trated in Fig. 1. HIPSS consists of a scaling and shift-ing feature-based prompt tuning approach and a soft hierar-chical textual guidance based WSI representation learning strategy. 
+
+3.1. Problem Definition 
+
+Let X = {X1, X 2, ..., X N } be a dataset of N WSIs, where 
+
+Xi denotes a WSI which is associated with a slide-level la-bel Yi. The objective is to minimize the error between pre-dicted slide-level label and ground truth label, under weak supervision without any instance-level labels. In FSWC set-3ting, there is only a limited number of labeled WSIs avail-able during training. We adopt a k-shot formulation, in which only k number of labeled WSIs per class are avail-able for training. 
+
+3.2. Pathology Query Prompt Formulation 
+
+CPath-VLMs are typically pre-trained on WSI instance level image-text pairs [10, 11, 20]. To leverage these VLMs for FSWC, it is essential to formulate the textual prompts that effectively represent the visual characteristics of WSIs. Therefore, we begin by formulating a structured query to use with a LLM, to generate a detailed textual descrip-tion of the WSI. Following the hierarchical structure of the WSIs, we design two queries to obtain two prompts con-taining visual characteristics of the WSIs at region level (P rompt REG ) and at slide level ( P rompt W SI ). This for-mulation incorporates both fine-grained region or instance-level attributes and slide-level context. The LLM-generated descriptions are then passed through the tokenizer in the VLM to obtain the two token sequences corresponding to each prompt. These two token sequences are concatenated to use as the input to the text encoder in VLM, which is denoted as P rompt in Fig. 1 (a). 
+
+3.3. Prompt Tuning with Scaling and Shifting Fea-tures in Text Encoder 
+
+Since the VLMs are pre-trained on WSI instance level image-text pairs, the text encoder often require finetuning to better handle target WSI downstream tasks. To adapt the pre-trained text features for WSI classification task, we in-troduce scaling and shifting features (SSF) in text encoder as the prompt tuning mechanism. Specifically, for each se-lected layer in the text encoder, a pair of task-specific learn-able scale and shift parameters, γ ∈ RDt and β ∈ RDt are attached. Features of each layer, x ∈ RDt are transformed into y ∈ RDt using γ and β, as defined by Eq. 1, where · is the dot product. Here, Dt is the dimension of the text em-beddings in VLM. During training, the pre-trained weights of the layers in text encoder are kept frozen and only the γ
+
+and β parameters are updated. This approach is motivated by alignment of feature distributions, where only two pa-rameters per layer are learned to modulate pre-trained fea-tures to the target distribution. 
+
+y = γ · x + β (1) 
+
+Tuning depth of text encoder using SSF: To control the degree of adaptation, we selectively insert the SSF parame-ters only to a subset of blocks in the text encoder by vary-ing the depth or number of trainable blocks, ds. The list of blocks which we apply SSF is defined as [( L − ds +1) , ..., L ], where L is the total number of blocks in the text encoder. We tune different types of layers in each block in the text encoder using SSF, including layer normalization and multi layer perceptron as depicted in Fig. 1 (a). While the types of layers that we attach the SSF parameters can be customized, our implementation adopts SSF tuning across these layers to maximize adaptability while reducing computational cost. 
+
+P rompt is passed through the text encoder with SSF tuning to generate the text embeddings T .
+
+3.4. Hierarchical Textual Guidance based WSI Rep-resentation Learning 
+
+In hierarchical textual guidance based WSI representation learning, region-level embeddings are computed using a re-gion encoder, while the WSI encoder aggregates region em-beddings to generate the final slide-level representation. At-tention weights at each stage are refined using the text em-beddings obtained from VLM text encoder to provide the soft textual guidance in a hierarchical manner. 
+
+Region Encoder: As depicted in Fig. 1 (b), we first parti-tion each WSI, Xi into regions of size 4096 × 4096 . Each WSI is represented as, Xi = {Ri, 1, R i, 2, ..., R i,M }, where 
+
+M denotes the number of regions in slide Xi, which varies across slides. Secondly, each region Ri,m is further parti-tioned into instances of size 256 × 256 . Each region can be denoted as Ri,m = {P 1
+
+> i,m
+
+, P 2
+
+> i,m
+
+, ..., P Ji,m }, where J is the number of instances in Ri,m . To extract the feature rep-resentations of the instances, we use the pre-trained image encoder of the VLM while keeping its weights frozen dur-ing training. Let hji,m ∈ RDv be the extracted feature rep-resentation of an instance P ji,m . Dv is the dimension of the feature vector, which is same as the feature dimension of the VLM image encoder. Feature representation F (Ri,m )
+
+of a region Ri,m is computed using an attention pooling block denoted by Eq. 2, only considering the instances in the Ri,m region: 
+
+F (Ri,m ) = 
+
+> J
+
+X
+
+> j=1
+
+aji,m hji,m ∈ RDv , (2) where aji,m is the learnable attention weight for hji,m , which is determined by Eq. 3, following [12] and modified using the proposed text-guided attention refinement score denoted by sji,m :
+
+aji,m = exp {w⊤ 
+
+> r
+
+(tanh( V1hji,m 
+
+> ⊤
+
+) ⊙ σ(V2hji,m 
+
+> ⊤
+
+)) + sji,m }
+
+> T
+
+P
+
+> k=1
+
+exp {w⊤ 
+
+> r
+
+(tanh( V1hki,m 
+
+> ⊤
+
+) ⊙ σ(V2hki,m 
+
+> ⊤
+
+)) + ski,m }
+
+,
+
+(3) Here, wr , V1, and V2 are learnable parameters, ⊙ is the element-wise multiplication, and σ denotes the sigmoid function. sji,m is the score which is computed to refine the attention weights using the text embeddings obtained from 4the VLM text encoder, using Eq. 4: 
+
+sji,m =
+
+
+
+λ ∗ cos (hji,m , T ), if cos (hji,m , T ) > α cos (hji,m , T ), if 0 < cos (hji,m , T ) < α 
+
+0, otherwise (4) where cos (., . ) is the cosine similarity between feature rep-resentation of each instance in a specific region and the text embedding ( T ) obtained from VLM text encoder (Re-fer Sec. 3.2 and 3.3). For binary classification tasks, T
+
+corresponds to the tumor class description embedding and for multi-cancer subtype classification, T is computed as the mean embedding of all subtype descriptions, provid-ing a unified semantic representation of cancer phenotypes. 
+
+λ and α are the empirically determined refinement factor and threshold values respectively. We formulate soft textual guidance with three alignment regimes based on cosine sim-ilarity. Negative similarities are suppressed as semantically inconsistent; low positive similarities are linearly weighted to retain uncertain but informative instances; and similar-ities above a threshold are amplified to emphasize high-confidence semantic matches. This enables a reliability-aware gating and weighting mechanism without hard in-stance filtering. 
+
+WSI Encoder: To compute the feature representation of the WSI F (Xi), we use a different attention-pooling block as formulated by Eq. 5 using the region embeddings computed with Eq. 2: 
+
+F (Xi) = 
+
+> M
+
+X
+
+> m=1
+
+ai,m (F (Ri,m )) ∈ RDv , (5) where ai,m is the learnable attention weight for F (Ri,m ),which is determined by Eq. 6. F (Ri,m ) is denoted by ri,m 
+
+in Eq. 6 for simplicity. 
+
+ai,m = exp {w⊤(tanh( U1ri,m ⊤) ⊙ σ(U2ri,m ⊤)) + si,m }
+
+> M
+
+P
+
+> k=1
+
+exp {w⊤(tanh( U1ri,k ⊤)) ⊙ σ(U2ri,k ⊤)) + si,k }
+
+,
+
+(6) In Eq. 6, w, U1, and U2 are learnable parameters, ⊙ is the element-wise multiplication, σ is the sigmoid function and 
+
+si,m is the score computed similar to Eq. 4 for each region. Finally, the feature representation of the WSI, F (Xi) is later used in the classification. 
+
+3.5. Contrastive Learning based Training Strategy 
+
+With the utilization of the VLM image encoder and hier-archical textual guidance based WSI representation learn-ing module, the visual embedding of each WSI is gener-ated as F (Xi). The text descriptions are passed through the text encoder with SSF tuning to generate the textual em-beddings T . These embeddings are jointly optimized using a contrastive loss that brings paired image-text representa-tions closer in the shared embedding space and repels non-matching pairs [24]. The predicted probability for class c is defined by Eq. 7: 
+
+P (Yi = c|Xi) = exp( cos (F (Xi), T c)/τ )
+
+> C
+
+P
+
+> j=1
+
+exp( cos (F (Xi), T j )) /τ )
+
+, (7) where cos (., . ) is the cosine similarity between embeddings and each embedding is normalized, C is the number of classes, and τ is the temperature coefficient. We utilize the cross entropy loss between the predicted probability, 
+
+P (Xi) and ground truth slide-level label, Yi for the end-to-end training of HIPSS pipeline. 
+
+4. Experiments and Results 
+
+The proposed method is evaluated on FSWC tasks using three distinct datasets, each representing a different cancer type. We conducted experiments under varying few-shot settings, utilizing 1, 2, 4, 8, and 16 labeled WSIs per class for training, referred to as 1-shot, 2-shot, 4-shot, 8-shot, and 16-shot settings respectively. 
+
+4.1. Experimental Details 
+
+Datasets: We perform comprehensive experiments across three publicly available CPath datasets: Camelyon16 [2], TCGA-Lung 1, and UBC-OCEAN [1], encompassing breast, lung and ovarian cancer types respectively. Came-lyon16 (C16) dataset comprises normal slides and slides with breast cancer metastases. TCGA-Lung dataset in-cludes two lung cancer subtypes and UBC-OCEAN is a multi-class dataset, which covers five ovarian cancer sub-types. The WSIs in Camelyon16 and TCGA-Lung datasets were acquired at a magnification level of ×40 , while those in UBC-OCEAN dataset were obtained at ×20 .
+
+Evaluation Metrics: Following prior work [24], we use Area Under the Curve (AUC) as the evaluation metric. To ensure robustness and mitigate the effects of randomness in-herent in few-shot settings, we report the mean AUC scores averaged over 3 different folds, each evaluated using 20 ran-dom seeds. In accordance with standard evaluation proto-cols, training and validation folds are constructed for each dataset, while the test sets remain fixed and independent throughout all experiments for each dataset. 
+
+Implementation Details: In accordance with the pre-processing pipeline outlined in CLAM [18], we first re-moved the background areas from the WSI. As the next step, each WSI was segmented into non-overlapping re-gions of size 4096 × 4096 , which were later partitioned into 256 × 256 instances. Since the spatial extent of tumor 
+
+> 1https://portal.gdc.cancer.gov
+
+5Table 1. Few Shot Classification results for Camelyon16, TCGA-Lung, and UBC-OCEAN Datasets. Mean AUC values averaged over 3 different folds, each evaluated using 20 random seeds are reported (Refer to Section 4.1 for further details). Performance improvement compared to the second best method is reported within brackets with (+). Bold: best results, Underline: second best results. Dataset Method 16-shot setting 8-shot setting 4-shot setting 2-shot setting 1-shot setting Camelyon16 Max Pooling - CLIP 0.5947 ±0.0135 0.5814 ±0.0112 0.5417 ±0.0126 0.5401 ±0.0197 0.5268 ±0.0154 
+
+Mean Pooling - CLIP 0.5816 ±0.0127 0.5627 ±0.0098 0.4930 ±0.0122 0.3235 ±0.0178 0.3357 ±0.0173 
+
+Max Pooling 0.6709 ±0.0182 0.6725 ±0.0095 0.6263 ±0.0128 0.5684 ±0.0406 0.5732 ±0.0191 
+
+Mean Pooling 0.6843 ±0.0193 0.6330 ±0.0449 0.5959 ±0.0141 0.5637 ±0.0318 0.5716 ±0.0259 
+
+ABMIL (ICML’ 18) 0.7820 ±0.0455 0.7195 ±0.0314 0.6086 ±0.0587 0.5969 ±0.0431 0.5706 ±0.0426 
+
+ViLa-MIL (CVPR’ 24) 0.7997 ±0.0383 0.7599 ±0.0474 0.5617 ±0.0543 0.4601 ±0.0365 0.4565 ±0.0280 
+
+TOP (NeurIPS’ 23) 0.8345 ±0.0167 0.7301 ±0.0133 0.7282 ±0.0132 0.7054 ±0.0179 0.6852 ±0.0199 
+
+FAST (NeurIPS’ 24) 0.8197 ±0.0474 0.7742 ±0.0249 0.7359 ±0.0853 0.7595 ±0.0391 0.6933 ±0.0846 
+
+FOCUS (CVPR’ 25) 0.8402 ±0.0412 0.7974 ±0.0499 0.6366 ±0.0555 0.5682 ±0.0117 0.5265 ±0.0224 
+
+HIPSS (Ours) 0.9105 ±0.0104 0.8586 ±0.0067 0.8159 ±0.0165 0.8066 ±0.0069 0.7429 ±0.0087 
+
+(+8.4) (+7.7) (+10.9) (+6.2) (+7.2) TCGA-Lung Max Pooling - CLIP 0.6227 ±0.0092 0.5547 ±0.0137 0.5155 ±0.0128 0.4985 ±0.0103 0.4876 ±0.0087 
+
+Mean Pooling - CLIP 0.6022 ±0.0083 0.5418 ±0.0109 0.4934 ±0.0167 0.4908 ±0.0078 0.4876 ±0.0099 
+
+Max Pooling 0.7781 ±0.0067 0.7009 ±0.0133 0.6129 ±0.0264 0.6301 ±0.0156 0.6007 ±0.0141 
+
+Mean Pooling 0.7618 ±0.0123 0.7409 ±0.0099 0.6357 ±0.0141 0.6341 ±0.0164 0.5889 ±0.0194 
+
+ABMIL (ICML’ 18) 0.8074 ±0.0166 0.7709 ±0.0118 0.6832 ±0.0281 0.6541 ±0.0166 0.5965 ±0.0297 
+
+ViLa-MIL (CVPR’ 24) 0.8787 ±0.0176 0.8012 ±0.0191 0.6942 ±0.0248 0.6385 ±0.0472 0.5761 ±0.0345 
+
+TOP (NeurIPS’ 23) 0.8256 ±0.0189 0.8161 ±0.0181 0.7689 ±0.0132 0.7341 ±0.0178 0.7131 ±0.0162 
+
+FOCUS (CVPR’ 25) 0.8717 ±0.0237 0.7688 ±0.0381 0.7111 ±0.0385 0.6515 ±0.0681 0.5665 ±0.0455 
+
+MAPLE (NeurIPS’ 25) 0.9044 ±0.0128 0.8579 ±0.0221 0.7558 ±0.0161 0.7213 ±0.0284 0.6995 ±0.0216 
+
+HIPSS (Ours) 0.9097 ±0.0155 0.8745 ±0.0312 0.8285 ±0.0205 0.7616 ±0.0181 0.7217 ±0.0141 
+
+(+0.6) (+1.9) (+7.8) (+3.7) (+1.2) UBC-OCEAN Max Pooling - CLIP 0.8012 ±0.0082 0.8127 ±0.0091 0.7056 ±0.0069 0.5123 ±0.0071 0.4926 ±0.0095 
+
+Mean Pooling - CLIP 0.8001 ±0.0061 0.8068 ±0.0077 0.6997 ±0.0051 0.5154 ±0.0062 0.4818 ±0.0083 
+
+Max Pooling 0.8496 ±0.0087 0.8373 ±0.0060 0.7922 ±0.0087 0.5574 ±0.0237 0.5139 ±0.0204 
+
+Mean Pooling 0.8456 ±0.0064 0.8394 ±0.0056 0.7910 ±0.0081 0.6609 ±0.0214 0.5990 ±0.0192 
+
+ABMIL (ICML’ 18) 0.8432 ±0.0132 0.8425 ±0.0068 0.7857 ±0.0107 0.7037 ±0.0143 0.6244 ±0.0237 
+
+ViLa-MIL (CVPR’ 24) 0.9199 ±0.0047 0.9051 ±0.0086 0.8489 ±0.0049 0.7753 ±0.0150 0.7212 ±0.0141 
+
+TOP (NeurIPS’ 23) 0.8003 ±0.0022 0.7560 ±0.0048 0.7295 ±0.0274 0.6272 ±0.0014 0.5449 ±0.0291 
+
+FOCUS (CVPR’ 25) 0.9433 ±0.0034 0.9394 ±0.0051 0.9144 ±0.0065 0.8487 ±0.0047 0.7508 ±0.0091 
+
+HIPSS (Ours) 0.9540 ±0.0138 0.9516 ±0.0121 0.9305 ±0.0131 0.8797 ±0.0152 0.8542 ±0.0146 
+
+(+1.1) (+1.3) (+1.8) (+3.7) (+13.8) 
+
+regions is unknown during training, the appropriate granu-larity should be empirically determined. We observed that using excessively large regions risks diluting discrimina-tive features with irrelevant context, whereas overly small regions may possess limited receptive fields by the drop in performances with both. Pathology related descriptions were generated using ChatGPT-4o, based on a set of queries for each class. We use the same set of generated textual descriptions across all experiments to ensure consistency. We employed the CONCH model [20, 21] as the VLM. We randomly initialized scale and shift parameters with a mean value of one and mean value of zero respectively. The num-ber of layers that we tune using SSF in the text encoder was determined empirically. 2 layers were used for C16 and TCGA-Lung datasets, while 8 layers were found op-timal for UBC-OCEAN dataset for SSF tuning. Attention weights refinement factor was 10 and threshold value was 0.2 through all experiments. Section 4.3 provides more dis-cussion on these choices. We utilized Adam optimizer [15] with learning rates ranging from 0.01 to 0.0001. We trained our model for 100 epochs with early stopping based on val-idation performance. All experiments were conducted on a single 80GB Nvidia A100 GPU. 
+
+Baselines: We compare our proposed method with SOTA methods in conventional WSI classification and few-shot weakly supervised WSI classification. Baseline methods encompass a wide range of models including Max/Mean pooling, ABMIL [12], ViLa-MIL [28], TOP [24], FOCUS [7], FAST [6], and MAPLE [34]. To ensure fair compari-son across all methods, we employed CONCH model as the VLM backbone for all the baseline methods. For the FAST method, we report the results directly from [6], as this ap-proach requires instance-level annotations for WSIs during training, which are not publicly available. Consequently, re-producing the method under our experimental setup was not feasible for TCGA-Lung and UBC-OCEAN datasets. For the MAPLE method, we report the results only for TCGA-Lung dataset with the text prompts and settings provided in [34]. Additionally, we incorporated CLIP-based models [26] with Max/Mean pooling as baseline methods. 6Table 2. Ablation Studies on 3 datasets. Mean AUC values are reported. Components are denoted as H: Hierarchical WSI rep-resentation learning, T: Text-guided attention refinement strategy, and S: SSF-based prompt tuning in text encoder. Full results are provided in the Appendix. 
+
+Dataset H T S 16-shot 4-shot 1-shot Camelyon16  × × × 0.7820 ±0.0455 0.6086 ±0.0587 0.5706 ±0.0426 
+
+✓ × × 0.8666 ±0.0085 0.6903 ±0.0170 0.6433 ±0.0169 
+
+✓ ✓ × 0.8724 ±0.0086 0.7552 ±0.0173 0.6512 ±0.0089 
+
+× × ✓ 0.8853 ±0.0267 0.7798 ±0.0033 0.7071 ±0.0070 
+
+✓ × ✓ 0.9006 ±0.0116 0.8034 ±0.0139 0.7217 ±0.0081 
+
+✓ ✓ ✓ 0.9105 ±0.0104 0.8159 ±0.0165 0.7429 ±0.0087 
+
+> TCGA-Lung
+
+× × × 0.8074 ±0.0166 0.6832 ±0.0281 0.5965 ±0.0297 
+
+✓ × × 0.8487 ±0.0305 0.7420 ±0.0148 0.6202 ±0.0197 
+
+✓ ✓ × 0.8661 ±0.0154 0.7451 ±0.0093 0.6311 ±0.0123 
+
+× × ✓ 0.8781 ±0.0469 0.7757 ±0.0098 0.6801 ±0.0197 
+
+✓ × ✓ 0.9072 ±0.0051 0.7842 ±0.0029 0.7203 ±0.0034 
+
+✓ ✓ ✓ 0.9097 ±0.0155 0.8285 ±0.0205 0.7217 ±0.0141 
+
+> UBC-OCEAN
+
+× × × 0.8432 ±0.0132 0.7857 ±0.0107 0.6244 ±0.0237 
+
+✓ × × 0.9165 ±0.0064 0.8095 ±0.0068 0.6885 ±0.0089 
+
+✓ ✓ × 0.9347 ±0.0074 0.8233 ±0.0101 0.6983 ±0.0132 
+
+× × ✓ 0.9467 ±0.0036 0.8330 ±0.0032 0.8278 ±0.0054 
+
+✓ × ✓ 0.9517 ±0.0023 0.9320 ±0.0056 0.8498 ±0.0019 
+
+✓ ✓ ✓ 0.9540 ±0.0138 0.9305 ±0.0131 0.8542 ±0.0146 
+
+Table 3. Performance comparison with LoRA-based prompt tun-ing on C16 dataset. Mean AUC values are reported. Number of trainable parameters of LoRA-based prompt tuning is 0.7053 M. 
+
+Method 16-shot 4-shot 1-shot LoRA-based prompt tuning 0.8513 ±0.0162 0.7668 ±0.0258 0.5667 ±0.0289 
+
+HIPSS (Ours) 0.9105 ±0.0104 0.8159 ±0.0165 0.7429 ±0.0087 
+
+4.2. Comparison Results 
+
+C16 (2 classes): Table 1 shows that our method consistently outperforms existing SOTA methods across all few-shot set-tings on C16 dataset, with gains of 7.2% (1-shot) and 6.2% (2-shot). HIPSS achieves improvements of 10.9%, 7.7%, and 8.4% in the 4, 8, and 16 shot settings, respectively. 
+
+TCGA-Lung (2 classes): As shown in Table 1, HIPSS demonstrates clear improvements over the SOTA methods across all few-shot settings on TCGA-Lung dataset. It ex-ceeds the performance of the second best method by 1.2%, 3.7%, 7.8%, and 1.9% in 1, 2, 4, and 8-shot settings respec-tively. 
+
+UBC-OCEAN (5 classes): As demonstrated in Table 1, performance enhancements also persist on UBC-OCEAN dataset, reporting improvements of 3.7%, 1.8%, 1.8%, and 1.1% for 2, 4, 8, and 16 shots respectively with relative to second-best method. Under the most constrained 1-shot set-ting, our method outperforms SOTA baseline by a signifi-cant margin of 13.8%. 
+
+4.3. Ablations and Analysis 
+
+Ablation Studies: In Table 2, we show the impact of the components in HIPSS, considering hierarchical textual guidance based WSI representation learning and SSF-based prompt tuning. Strong average performance improvements 2 4 6 8 10 12 
+
+Number of Tuned Blocks in Text Encoder with SSF 
+
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Mean AUC
+> ds=2
+> ds=2
+> ds=2
+> ds=2
+> ds=2
+> ds=8
+> ds=8
+> ds=8
+> ds=8
+> ds=8
+> Camelyon16 (16-shot)
+> Camelyon16 (8-shot)
+> Camelyon16 (4-shot)
+> Camelyon16 (2-shot)
+> Camelyon16 (1-shot)
+> UBC-OCEAN (16-shot)
+> UBC-OCEAN (8-shot)
+> UBC-OCEAN (4-shot)
+> UBC-OCEAN (2-shot)
+> UBC-OCEAN (1-shot)
+
+Figure 2. Variation of AUC values based on the number of tuned blocks ds in the text encoder with SSF. Mean AUC values are re-ported. The ds values with the highest AUC are denoted by red dots. 2.5 5.0 7.5 10.0 12.5 15.0 17.5 20.0          
+
+> Attention Weight Refinement Factor ( )
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> Mean AUC
+> =10
+> =10
+> =10
+> =10
+> =10
+> 16-shot
+> 8-shot
+> 4-shot
+> 2-shot
+> 1-shot 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8
+> Attention Weight Threshold ( )
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> Mean AUC
+> =0.2
+> =0.2
+> =0.2
+> =0.2
+> =0.2
+> 16-shot
+> 8-shot
+> 4-shot
+> 2-shot
+> 1-shot (a)(b)
+
+Figure 3. Variation of AUC values based on (a): the attention weights refinement factor ( λ) and (b): threshold value ( α). We report the mean AUC averaged across three datasets. The λ and α
+
+values with the highest AUC are denoted by red dots. Table 4. Computational efficiency comparison. Total number of trainable parameters (in millions) and average inference time per slide (in ms) are reported. The reduction compared to the second efficient FSWC method is indicated by ↓.
+
+Method Training Parameters Avg Inference C16/ TCGA-Lung UBC-OCEAN time per slide (C16) TOP [24] 0.3472 0.3702 58 .81 
+
+FOCUS [7] 1.3276 1.3783 328 .49 
+
+ViLa-MIL [28] 2.6516 2.6747 27 .30 
+
+HIPSS (Ours) 0.2844 (↓ 18 .1% ) 0.3489 (↓ 5.8% ) 23 .85 (↓ 12 .6% )
+
+Table 5. Weakly-supervised tumor localization results on C16 Dataset as an evaluation protocol on the quality of learned feature representations. Dice coefficient is reported. Results of conven-tional MIL methods are cited from [5]. 
+
+Method Type Method Dice Coefficient Conventional MIL methods CLAM-SB 0.459 
+
+TransMIL 0.103 
+
+DTFD-MIL 0.525 
+
+DSMIL 0.259 
+
+CAMIL 0.515 
+
+Few-shot methods ABMIL [12] 0.164 
+
+TOP [24] 0.203 
+
+HIPSS (Ours) 0.732 
+
+of 23.5%, 15.9%, and 11.4% observed under 1, 4, and 16-7(a) Ground Truth Annotation   
+
+> of WSI (b) Coarse-grained Visualisations:
+> High Attention 4096 x 4096 regions
+> predicted by HIPSS
+> (c) Fine-grained Visualisations:
+> High Attention 256 x 256 instances
+> predicted by HIPSS Figure 4. Attention map visualizations from HIPSS compared with ground truth annotation. (b) : High attention regions predicted by the WSI Encoder. (c) : High attention instances predicted by the region encoder. Attention maps are overlaid where red indicates instances of higher attention. Quantitative results in Table 5 further demonstrates the tumor localization capabilities of our method.
+
+shot settings respectively when SSF-based prompt tuning is integrated compared to the baseline model. Additionally, an average performance gain of 3.1% is demonstrated when the text-guided attention refinement strategy is integrated into the hierarchical attention pooling approach. 
+
+Impact of varying tuning depth of text encoder with SSF: Fig. 2 presents the mean AUC values across C16 and UBC-OCEAN datasets as the number of tuned text en-coder blocks ds varies, where 0 < d s ≤ L and L = 12 .A key observation is that, there is no single value of ds
+
+that consistently yields optimal results across all datasets. This behavior is expected, as each dataset exhibits dis-tinct morphological characteristics and domain shifts rel-ative to the pre-training distribution of the VLM. However, our method achieves the peak performance for all datasets when ds < 12 , indicating that it maintains superior perfor-mance with fewer trainable parameters. 
+
+Impact of varying attention weight refinement factor and threshold values in soft hierarchical textual guid-ance: Fig. 3 (a) presents the impact of attention weight re-finement factor ( λ) on model performance, while Fig. 3 (b) demonstrates the effect of different threshold values ( α) in hierarchical textual guidance strategy, with results averaged across three datasets. We observed that performance varies consistently across all datasets rather than being highly sen-sitive to parameter choices. 
+
+Comparison with LoRA-based prompt tuning: Table 3 shows the performance gains over LoRA-based prompt tun-ing approach. Our method achieves a mean improvement of 16.4% across all shot settings on C16, while reducing the number of trainable parameters by 59.7%. 
+
+Computational efficiency analysis: Table 4 compares the total number of trainable parameters and inference time across our method and 3 baselines. TOP [24] employs CoOp-based prompt learning with contrastive alignment, while FOCUS [7] and ViLa-MIL [28] combine CoOp with cross-attention, resulting in a substantially larger parame-ter count. Despite TOP having fewer trainable parameters, our method achieves a further reduction while maintaining SOTA performance. In addition, HIPSS reduces the average inference time per slide by 12.6% for C16 dataset demon-strating minimal inference overhead. 
+
+Attention map visualizations: As qualitative analysis, we visualize the attention maps obtained by our method in Fig. 4. Since HIPSS has a hierarchical-structure aware WSI representation learning approach, we can go from coarse-grained visualizations to fine-grained visualizations. 
+
+Tumor localization evaluation: Though our method is trained for FSWC, it demonstrates strong weakly-supervised localization capabilities as shown in Table 5. We report segmentation performance using dice coefficient on C16 dataset as an evaluation protocol on the quality of the learned feature representations. We utilize a simple thresh-olding mechanism using the attention scores for the evalu-ation following [5]. Our method achieves a dice coefficient of 0.732 without any localization-specific finetuning. 
+
+5. Conclusion 
+
+This paper proposes a new method for FSWC, which deliv-ers a hierarchical textual guidance strategy and a SSF-based prompt tuning approach. HIPSS consistently outperforms the existing methods across diverse pathology datasets, while highlighting its computational efficiency. Further-more, the strong weakly supervised localization capability of HIPSS highlights its potential for other downstream tasks including tumor segmentation. A key limitation is the lack of validation of LLM-generated descriptions, which could be addressed through expert-in-the-loop evaluations. 8References 
+
+[1] Ali Bashashati, Hossein Farahani, OTTA Consortium, An-thony Karnezis, Ardalan Akbari, Sirim Kim, Ashley Chow, Sohier Dane, Allen Zhang, and Maryam Asadi. Ubc ovar-ian cancer subtype classification and outlier detection (ubc-ocean). https://kaggle.com/competitions/ UBC-OCEAN , 2023. Kaggle. 5 [2] Babak Ehteshami Bejnordi, Mitko Veta, Paul Johannes Van Diest, Bram Van Ginneken, Nico Karssemeijer, Geert Litjens, Jeroen AWM Van Der Laak, Meyke Hermsen, Quirine F Manson, Maschenka Balkenhol, et al. Diagnos-tic assessment of deep learning algorithms for detection of lymph node metastases in women with breast cancer. Jama ,318(22):2199–2210, 2017. 5 [3] Richard J Chen, Chengkuan Chen, Yicong Li, Tiffany Y Chen, Andrew D Trister, Rahul G Krishnan, and Faisal Mahmood. Scaling vision transformers to gigapixel images via hierarchical self-supervised learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16144–16155, 2022. 2 [4] Miao Cui and David Y Zhang. Artificial intelligence and computational pathology. Laboratory Investigation , 101(4): 412–422, 2021. 1 [5] Olga Fourkioti, Matt De Vries, Chen Jin, Daniel C Alexan-der, and Chris Bakal. Camil: Context-aware multiple in-stance learning for cancer detection and subtyping in whole slide images. arXiv preprint arXiv:2305.05314 , 2023. 1, 2, 7, 8 [6] Kexue Fu, Linhao Qu, Shuo Wang, Ying Xiong, Ilias Ma-glogiannis, Longxiang Gao, Manning Wang, et al. Fast: A dual-tier few-shot learning paradigm for whole slide image classification. Advances in Neural Information Processing Systems , 37:105090–105113, 2024. 2, 3, 6 [7] Zhengrui Guo, Conghao Xiong, Jiabo Ma, Qichen Sun, Lishuang Feng, Jinzhuo Wang, and Hao Chen. Focus: Knowledge-enhanced adaptive visual compression for few-shot whole slide image classification. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 15590–15600, 2025. 2, 3, 6, 7, 8 [8] Minghao Han, Linhao Qu, Dingkang Yang, Xukun Zhang, Xiaoying Wang, and Lihua Zhang. Mscpt: Few-shot whole slide image classification with multi-scale and context-focused prompt tuning. IEEE Transactions on Medical Imaging , 2025. 2, 3 [9] Mahdi S Hosseini, Babak Ehteshami Bejnordi, Vincent Quoc-Huy Trinh, Lyndon Chan, Danial Hasan, Xingwen Li, Stephen Yang, Taehyo Kim, Haochen Zhang, Theodore Wu, et al. Computational pathology: a survey review and the way forward. Journal of Pathology Informatics , 15:100357, 2024. 1 [10] Zhi Huang, Federico Bianchi, Mert Yuksekgonul, Thomas J Montine, and James Zou. A visual–language foundation model for pathology image analysis using medical twitter. 
+
+Nature medicine , 29(9):2307–2316, 2023. 1, 4 [11] Wisdom Ikezogwo, Saygin Seyfioglu, Fatemeh Ghezloo, Dylan Geva, Fatwir Sheikh Mohammed, Pavan Kumar Anand, Ranjay Krishna, and Linda Shapiro. Quilt-1m: One million image-text pairs for histopathology. Advances in neural information processing systems , 36:37995–38017, 2023. 1, 4 [12] Maximilian Ilse, Jakub Tomczak, and Max Welling. Attention-based deep multiple instance learning. In Inter-national conference on machine learning , pages 2127–2136. PMLR, 2018. 1, 2, 4, 6, 7 [13] Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc Le, Yun-Hsuan Sung, Zhen Li, and Tom Duerig. Scaling up visual and vision-language representa-tion learning with noisy text supervision. In International conference on machine learning , pages 4904–4916. PMLR, 2021. 1 [14] Cheng Jin, Zhengrui Guo, Yi Lin, Luyang Luo, and Hao Chen. Label-efficient deep learning in medical image anal-ysis: Challenges and future directions. arXiv preprint arXiv:2303.12484 , 2023. 1 [15] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 ,2014. 6 [16] Bin Li, Yin Li, and Kevin W Eliceiri. Dual-stream multiple instance learning network for whole slide image classifica-tion with self-supervised contrastive learning. In Proceed-ings of the IEEE/CVF conference on computer vision and pattern recognition , pages 14318–14328, 2021. 1, 2 [17] Dongze Lian, Daquan Zhou, Jiashi Feng, and Xinchao Wang. Scaling & shifting your features: A new baseline for efficient model tuning. Advances in Neural Information Processing Systems , 35:109–123, 2022. 2 [18] Ming Y Lu, Drew FK Williamson, Tiffany Y Chen, Richard J Chen, Matteo Barbieri, and Faisal Mahmood. Data-efficient and weakly supervised computational pathology on whole-slide images. Nature biomedical engineering , 5(6):555–570, 2021. 5 [19] Ming Y Lu, Bowen Chen, Andrew Zhang, Drew FK Williamson, Richard J Chen, Tong Ding, Long Phi Le, Yung-Sung Chuang, and Faisal Mahmood. Visual language pre-trained multiple instance zero-shot transfer for histopathol-ogy images. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 19764– 19775, 2023. 2 [20] Ming Y Lu, Bowen Chen, Drew FK Williamson, Richard J Chen, Ivy Liang, Tong Ding, Guillaume Jaume, Igor Odintsov, Long Phi Le, Georg Gerber, et al. A visual-language foundation model for computational pathology. 
+
+Nature medicine , 30(3):863–874, 2024. 1, 3, 4, 6 [21] Peter Neidlinger, Omar SM El Nahhas, Hannah Sophie Muti, Tim Lenz, Michael Hoffmeister, Hermann Brenner, Marko van Treeck, Rupert Langer, Bastian Dislich, Hans Michael Behrens, et al. Benchmarking foundation models as feature extractors for weakly supervised computational pathology. 
+
+Nature biomedical engineering , pages 1–11, 2025. 1, 6 [22] Rashindrie Perera and Saman Halgamuge. Discriminative sample-guided and parameter-efficient feature space adapta-tion for cross-domain few-shot learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 23794–23804, 2024. 2 
+
+9[23] Rashindrie Perera, Peter Savas, Damith Senanayake, Roberto Salgado, Heikki Joensuu, Sandra O’Toole, Jason Li, Sherene Loi, and Saman Halgamuge. Annotation-efficient deep learning for breast cancer whole-slide image classifi-cation using tumour infiltrating lymphocytes and slide-level labels. Communications Engineering , 3(1):104, 2024. 1 [24] Linhao Qu, Kexue Fu, Manning Wang, Zhijian Song, et al. The rise of ai language pathologists: Exploring two-level prompt learning for few-shot weakly-supervised whole slide image classification. Advances in Neural Information Pro-cessing Systems , 36:67551–67564, 2023. 1, 2, 3, 5, 6, 7, 8[25] Linhao Qu, Dingkang Yang, Dan Huang, Qinhao Guo, Rongkui Luo, Shaoting Zhang, and Xiaosong Wang. Pathology-knowledge enhanced multi-instance prompt learning for few-shot whole slide image classification. In 
+
+European conference on computer vision , pages 196–212. Springer, 2024. 3 [26] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervi-sion. In International conference on machine learning , pages 8748–8763. PmLR, 2021. 1, 3, 6 [27] Zhuchen Shao, Hao Bian, Yang Chen, Yifeng Wang, Jian Zhang, Xiangyang Ji, et al. Transmil: Transformer based correlated multiple instance learning for whole slide image classification. Advances in neural information processing systems , 34:2136–2147, 2021. 1, 2 [28] Jiangbo Shi, Chen Li, Tieliang Gong, Yefeng Zheng, and Huazhu Fu. Vila-mil: Dual-scale vision-language multiple instance learning for whole slide image classification. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , pages 11248–11258, 2024. 2, 3, 6, 7, 8 [29] Chetan L Srinidhi, Ozan Ciga, and Anne L Martel. Deep neural network models for computational histopathology: A survey. Medical image analysis , 67:101813, 2021. 1 [30] Jiawei Yang, Hanbo Chen, Jiangpeng Yan, Xiaoyu Chen, and Jianhua Yao. Towards better understanding and better generalization of few-shot classification in histology images with contrastive learning. arXiv preprint arXiv:2202.09059 ,2022. 1 [31] Lewei Yao, Runhui Huang, Lu Hou, Guansong Lu, Minzhe Niu, Hang Xu, Xiaodan Liang, Zhenguo Li, Xin Jiang, and Chunjing Xu. Filip: Fine-grained interactive language-image pre-training. arXiv preprint arXiv:2111.07783 , 2021. 1 [32] Hongrun Zhang, Yanda Meng, Yitian Zhao, Yihong Qiao, Xiaoyun Yang, Sarah E Coupland, and Yalin Zheng. Dtfd-mil: Double-tier feature distillation multiple instance learn-ing for histopathology whole slide image classification. In 
+
+Proceedings of the IEEE/CVF conference on computer vi-sion and pattern recognition , pages 18802–18812, 2022. 1, 2[33] Jingyi Zhang, Jiaxing Huang, Sheng Jin, and Shijian Lu. Vision-language models for vision tasks: A survey. IEEE transactions on pattern analysis and machine intelligence ,46(8):5625–5644, 2024. 1 [34] Junjie Zhou, Wei Shao, Yagao Yue, Wei Mu, Peng Wan, Qi Zhu, and Daoqiang Zhang. Maple: Multi-scale attribute-enhanced prompt learning for few-shot whole slide image classification. arXiv preprint arXiv:2509.25863 , 2025. 2, 3, 6[35] Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Learning to prompt for vision-language models. In-ternational Journal of Computer Vision , 130(9):2337–2348, 2022. 1, 2, 3 
+
+10

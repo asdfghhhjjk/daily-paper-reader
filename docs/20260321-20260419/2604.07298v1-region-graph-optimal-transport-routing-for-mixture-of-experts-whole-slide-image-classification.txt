@@ -1,0 +1,305 @@
+Title: Region-Graph Optimal Transport Routing for Mixture-of-Experts Whole-Slide Image Classification
+
+URL Source: https://arxiv.org/pdf/2604.07298v1
+
+Published Time: Thu, 09 Apr 2026 01:24:32 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# Region-Graph Optimal Transport Routing for Mixture-of-Experts Whole-Slide Image Classification 
+
+Xin Tian 1 (B), Jiuliu Lu 2, Ephraim Tsalik 3, Bart Wanders 2, Colleen Knoth 3,and Julian Knight 1 
+
+> 1
+
+Centre for Human Genetics, University of Oxford, Oxford, UK 
+
+xin.tian@well.ox.ac.uk, julian.knight@well.ox.ac.uk  
+
+> 2
+
+Beckman Coulter Diagnostics, Brea, CA, USA  
+
+> 3
+
+Danaher Corporation, Washington, DC, USA 
+
+Abstract. Multiple Instance Learning (MIL) is the dominant frame-work for gigapixel whole-slide image (WSI) classification in computa-tional pathology. However, current MIL aggregators route all instances through a shared pathway, constraining their capacity to specialise across the pathological heterogeneity inherent in each slide. Mixture-of-Experts (MoE) methods offer a natural remedy by partitioning instances across specialised expert subnetworks; yet unconstrained softmax routing may yield highly imbalanced utilisation, where one or a few experts absorb most routing mass, collapsing the mixture back to a near-single-pathway solution. To address these limitations, we propose ROAM ( Region-graph 
+
+Optim Al-transport Mixture-of-experts), a spatially aware MoE-MIL ag-gregator that routes region tokens to expert poolers via capacity-constrained entropic optimal transport, promoting balanced expert utilisation by construction. ROAM operates on spatial region tokens—obtained by compressing dense patch bags into spatially binned units that align rout-ing with local tissue neighbourhoods—and introduces two key mecha-nisms: (i) region-to-expert assignment formulated as entropic optimal transport (Sinkhorn) with explicit per-slide capacity marginals, enforc-ing balanced expert utilisation without auxiliary load-balancing losses; and (ii) graph-regularised Sinkhorn iterations that diffuse routing as-signments over the spatial region graph, encouraging neighbouring re-gions to coherently route to the same experts. Evaluated on four WSI benchmarks with frozen foundation-model patch embeddings, ROAM achieves performance competitive against strong MIL and MoE base-lines, and on NSCLC generalisation (TCGA →CPTAC) reaches external AUC 0.845 ± 0.019 . The code will be made available upon publication. 
+
+Keywords: Multiple instance learning · computational pathology · mix-ture of experts · optimal transport · whole-slide image 
+
+## 1 Introduction 
+
+Whole-slide images (WSIs) contain gigapixel-scale tissue with extreme morpho-logical and spatial heterogeneity, where diagnostically relevant evidence is of- 
+
+> arXiv:2604.07298v1 [cs.CV] 8 Apr 2026 2X. Tian et al.
+
+ten sparse and locally clustered. With the rise of pathology foundation models, it has become standard to represent a WSI as a bag of frozen patch embed-dings [3,23] and learn a slide-level predictor under weak supervision. Multiple Instance Learning (MIL) is the dominant framework for this setting [9,2]: treat each patch embedding as an instance, aggregate across the bag (one bag per slide), and predict a slide-level label with only bag-level supervision. Typically, gated attention (ABMIL [9]) learns instance-level importance weights. Instance-level clustering (CLAM [13]) partitions instances into subgroups before pooling. Dual-stream architectures (DSMIL [12]) combine max-instance and attention pathways. Transformer-based aggregators (TransMIL [17]) model pairwise in-stance correlations, while low-rank approximations (ILRA [22]) improve scala-bility. However, all these methods share a structural limitation: every instance is processed through a single shared pathway, forcing morphologically and se-mantically distinct populations into a common parameter space. This conflation limits both specialisation and interpretability. Mixture-of-Experts (MoE) methods offer a principled alternative by decom-posing the shared pathway into specialised subnetworks. MAMMOTH [16] re-places linear projections in MIL aggregators with factorised mini-expert modules. PAMoE [21] uses expert choice routing supervised by tissue prototypes. Graph of Tokens [14] proposes inter-token similarity-aware routing for sparse MoE in vision. In a complementary direction, OTSurv [15] applies semi-relaxed Sinkhorn optimal transport [4,11] to learnable prototypes for survival prediction, showing the benefit of capacity-constrained assignment over standard attention pooling. Despite these advances, two challenges remain underaddressed. First, un-constrained softmax dispatch in MoE imposes no constraint on aggregate rout-ing mass: if one expert’s gating score dominates, it absorbs the majority of instances, collapsing the MoE into a near-single-pathway model [7]. Auxiliary load-balancing losses partially mitigate this but introduce a sensitive hyperpa-rameter and provide no hard guarantee [19,24]. Second, patch-wise routing is typically computed per instance with limited spatial context, despite the fact that pathologically meaningful structures in WSIs are spatially coherent [6]. This can fragment neighbouring coherent patches, thus weakening interpretabil-ity and destabilising expert learning. To address these challenges, we propose ROAM ( Region-graph Optim Al-transport Mixture-of-experts), a spatially aware MoE-MIL aggregator that routes spatial region tokens to expert poolers via capacity-constrained entropic opti-mal transport. First, ROAM compresses dense patch bags into spatial region to-kens via grid binning, so routing operates on local tissue neighbourhoods rather than isolated patches. This makes routing tractable ( M ≪N ) and better aligns assignments with spatially coherent morphology. Second, region-to-expert as-signment is formulated as an entropic optimal transport problem [10,18] with explicit per-slide capacity marginals. Unlike softmax dispatch, which provides no utilisation control and is prone to routing imbalance [7], Sinkhorn enforces balanced expert load in the routing plan by construction, avoiding auxiliary load-balancing losses [19]. Third, we interleave a lightweight graph smooth-ROAM: Region-Graph Optimal Transport Routing for WSI Classification 3Classifier          
+
+> Prediction
+> 𝑬 𝑹 (·)
+> .
+> .
+> . 𝒙 𝑵 ,𝒑 𝑵 𝒙 𝟏 ,𝒑 𝟏
+> Region
+> Tokenization
+> 𝑯 ,𝑨 ,𝒄 𝒎
+> 𝑮 𝒔 (𝑽 ,𝑬 )
+> 𝒄 𝒎
+> GNN
+> 𝒁
+> 𝑬 𝟏 𝑬 𝟐 𝑬 𝟑
+> Graph -Regularised Sinkhorn
+> Cosine similarity
+
+Fig. 1. Frozen patch embeddings are pooled into M spatial region tokens. A routing GNN on the region graph parameterises region-to-expert costs, and Sinkhorn opti-mal transport routes region mass to E experts under per-slide capacity constraints (with optional graph smoothing). Each expert performs gated-attention pooling over its routed regions, and expert outputs are fused for slide-level prediction. 
+
+ing step within unrolled Sinkhorn updates on a spatial region graph, encour-aging spatially coherent routing distributions and reducing fragmentation in-duced by instance-independent routing [6]. Across four WSI benchmarks with frozen foundation-model embeddings, ROAM is competitive with strong MIL and MoE baselines, and on NSCLC generalisation (TCGA →CPTAC) reaches external AUC 0.845 ± 0.019 .
+
+## 2 Methodology 
+
+2.1 Problem Formulation and Overview 
+
+A WSI is represented as a bag of N frozen patch embeddings and 2D coordinates 
+
+{(xi, pi)}Ni=1 , where xi ∈ Rdin and pi ∈ R2. Given a slide-level label y, we predict logits ˆy by aggregating instance evidence with a MoE MIL aggregator. ROAM replaces patch-wise softmax dispatch with capacity-constrained routing on spatial region tokens , followed by per-expert attention pooling and expert fusion. Fig. 1 summarises ROAM: region tokenisation → (graph-aware) capacity-constrained Sinkhorn routing → per-expert gated-attention pooling → expert fusion. 
+
+2.2 Region tokenisation 
+
+We first project patch embeddings to a working dimension: hi = ϕ(xi), where 
+
+ϕ : Rdin → Rd is a lightweight MLP (linear layer, nonlinearity, and dropout). To make routing tractable and spatially local, we compress the patch bag into M ≪N region tokens using grid binning in normalised coordinate space. Let 
+
+ρ(i) ∈ { 1, . . . , M } denote the region assignment of patch i and Rm = {i : ρ(i) = 
+
+m} the set of patches in region m. We compute region features, masses, and centroids: 
+
+H0 
+
+> m
+
+= 1
+
+|Rm|
+
+X
+
+> i∈Rm
+
+hi, Am = |Rm|, cm = 1
+
+|Rm|
+
+X
+
+> i∈Rm
+
+pi. (1) 4 X. Tian et al. 
+
+Stacking over regions yields H0 ∈ RM ×d, A ∈ RM , and P ∈ RM ×2. Region tokenisation reduces the routing computation from O(N E ) to O(M E ) and pro-vides routing units that correspond to local tissue neighbourhoods, which sup-ports the spatial-coherence regularisation introduced in §2.4. 
+
+2.3 Capacity-Constrained Optimal Transport Routing 
+
+We assign M region tokens to E experts via entropic optimal transport with per-slide capacity marginals. Let Π ∈ RM ×E 
+
+> +
+
+denote the routing plan, where 
+
+Πm,e is the mass routed from region m to expert e.
+
+Routing context via spatial region graph. We build a kNN -nearest-neighbour graph Gs = (V, E) over region centroids {cm}. A two-layer GNN produces context-enriched routing embeddings :
+
+Z = GNN( H0, Gs) ∈ RM ×d, (2) where zm denotes the m-th row of Z and h0 
+
+> m
+
+the m-th row of H0. Z is used only 
+
+to parameterise routing costs; experts aggregate content features H0 in §2.5. 
+
+Transport cost. Each expert e has a learnable prototype μe ∈ Rd. The region-to-expert cost is cosine dissimilarity between the routing embedding and the prototype: 
+
+Cm,e = 1 − cos( zm, μe). (3) Let C ∈ RM ×E denote the cost matrix with entries Cm,e .
+
+Entropic OT with capacity marginals. We set region supply masses r ∈ ∆M
+
+with rm ∝ Am (normalised) and expert capacities q ∈ ∆E as qe = 1 /E . The routing plan is obtained by: 
+
+Π⋆ = arg min  
+
+> Π≥0
+
+⟨Π, C⟩ + ε X
+
+> m,e
+
+Πm,e (log Πm,e − 1) s.t. Π1 = r, Π ⊤1 = q, (4) solved by Sinkhorn scaling. The key property is the column marginal Π⊤1 = q:it constrains per-slide expert load in the dense routing plan Π⋆. In contrast, softmax dispatch normalises locally per region and imposes no constraint on ag-gregate utilisation; if one expert achieves slightly higher affinity, it can absorb the majority of routing mass, a self-reinforcing dynamic that leads to routing col-lapse [7]. ROAM enforces balanced utilisation without auxiliary load-balancing losses and their sensitive hyperparameters [19]. ROAM: Region-Graph Optimal Transport Routing for WSI Classification 5
+
+2.4 Graph-Regularised Sinkhorn Iterations 
+
+Capacity-constrained OT balances expert load but is agnostic to spatial layout: adjacent regions in the same tumour nest may split across experts. To promote spatially coherent assignments, we interleave a graph diffusion step within the Sinkhorn iterations. After each row–column projection pair, we smooth the log-transport plan over Gs:
+
+log Πm, : ← (1 − λs) log Πm, : + λs
+
+X 
+
+> n∈N (m)
+
+wmn log Πn, :, (5) where N (m) denotes the spatial neighbours of region m (excluding m itself), 
+
+wmn ∝ exp( −∥ cm − cn∥22/τ ) with τ > 0 are heat-kernel edge weights normalised so that P  
+
+> n∈N (m)
+
+wmn = 1 , and λs ∈ [0 , 1] controls smoothing strength. Sinkhorn projections are then reapplied to restore marginal feasibility; the interleaving repeats for T iterations. This is not a modified OT objective but a routing regulariser that biases iterates toward spatially smooth plans while preserving the capacity marginals through re-projection. Setting λs=0 recovers standard Sinkhorn, isolating the effect of spatial regularisation in ablations (§4). 
+
+2.5 Sparse Dispatch and Expert Aggregation Top-k sparsification. We retain the k largest entries per row of Π⋆ and rescale them to preserve the row marginal rm:
+
+γm,e =
+
+
+
+rm Π⋆m,e 
+
+.P 
+
+> e′∈top -k( m)
+
+Π⋆m,e ′ if e ∈ top -k( m),
+
+0 otherwise ,
+
+(6) where top -k( m) denotes the indices of the k largest entries in Π⋆m, :. This yields a sparse dispatch matrix γ ∈ RM ×E 
+
+> +
+
+with at most k nonzero entries per row. Expert e’s support set is Se = {m | γm,e > 0}. Capacity balance holds exactly for Π⋆ and approximately after top-k sparsification. 
+
+Per-expert gated attention pooling. Each expert e applies an independent gated-attention pooler [9] over its support Se, operating on content features H0:
+
+se(m) = w⊤
+
+> e
+
+tanh( Veh0
+
+> m
+
+) ⊙ σ(Ueh0
+
+> m
+
+), β(e) 
+
+> m
+
+= softmax m∈S e
+
+ se(m), (7) 
+
+oe = X
+
+> m∈S e
+
+β(e) 
+
+> m
+
+h0 
+
+> m
+
+∈ Rd. (8) 
+
+Expert fusion and slide prediction. Expert embeddings are fused via gated attention and classified: 
+
+ge = softmax e
+
+ ψ(oe), oslide =
+
+> E
+
+X
+
+> e=1
+
+ge oe, ˆy = MLP  oslide 
+
+, (9) where ψ is a lightweight gating MLP. The full pipeline is end-to-end differentiable and trained with cross-entropy loss. 6 X. Tian et al. 
+
+## 3 Experimental Setup and Baselines 
+
+Datasets We evaluate four WSI tasks. For The Cancer Genome Atlas (TCGA) cohorts [20], we use patient-stratified 5-fold cross-validation: (i) non-small cell lung cancer (NSCLC) histology : lung adenocarcinoma (LUAD) vs. lung squamous cell carcinoma (LUSC): 1,043 TCGA slides, with 2,206 Clinical Pro-teomic Tumor Analysis Consortium (CPTAC) slides [5] for external testing; (ii) breast cancer (BRCA) subtype : invasive ductal carcinoma (IDC) vs. non-IDC: 1,126 slides; (iii) colorectal cancer (CRC) subtype : colon ade-nocarcinoma (COAD) vs. rectum adenocarcinoma (READ): 600 slides; and (iv) 
+
+prostate grading on the Prostate cANcer graDe Assessment (PANDA) dataset [1]: 10,615 slides with six-class International Society of Urological Pathology (ISUP) grades 0–5. 
+
+Baselines and Metrics We compare to MeanPool, MaxPool, ABMIL [9], CLAM-SB/MB [13], DSMIL [12], TransMIL [17], ILRA [22], and MoE/OT base-lines MAMMOTH-ABMIL, MAMMOTH-TransM [16], PAMoE [21], and OT-Surv [15]. All methods use identical frozen patch embeddings (UNI2-h [3]) and the same training protocol unless stated otherwise. We report slide-level AUC for binary tasks (NSCLC, BRCA, CRC) and QWK for six-class PANDA. 
+
+Implementations Models are trained with AdamW, cosine decay with 5-epoch warmup, cross-entropy, batch size 1, dropout 0.25, gradient clipping (max norm 1.0), up to 200 epochs with early stopping (patience 20). Default lr 2×10 −4, wd 
+
+1×10 −5; ROAM uses lr 5×10 −4, wd 1×10 −4. Bags exceeding 4,096 patches are randomly subsampled during training; full bags are used at evaluation. ROAM uses projection dimension d=512 , M =256 regions, region-graph kNN =8 , E=8 ex-perts with top-2 dispatch, 2-layer GraphSAGE [8] for routing, OT regularisation 
+
+ε=0 .1, T =20 Sinkhorn iterations, and graph smoothing strength λs=0 .3 applied for 3 smoothing steps within the unrolled routing procedure; expert pooling uses gated attention with dattn =64 . All experiments run on a single NVIDIA A100 40 GB. 
+
+## 4 Results and Analysis 
+
+Quantitative Analysis Table 1 reports a controlled comparison under frozen UNI2-h embeddings and shared patient-stratified splits. In-domain TCGA per-formance is near-saturated (AUC within ∼1 pp), so the informative setting is NSCLC external generalisation (TCGA →CPTAC), where ROAM achieves AUC 
+
+0.845 ±0.019 , matching DSMIL ( 0.844 ±0.016 ) while substantially outperforming OT-based aggregation without spatial modelling (OTSurv, 0.786 ±0.021 ). MoE baselines PAMoE and MAMMOTH-ABMIL reach comparable exter-nal means ( 0.837 , 0.842 ) but with higher fold variance ( ±0.053 and ±0.028 vs. ROAM: Region-Graph Optimal Transport Routing for WSI Classification 7
+
+Table 1. WSI benchmark results with UNI2 patch encoders (mean ±std over 5-folds). For NSCLC (LUAD/LUSC) , we report internal AUC on TCGA ( int. ) and external AUC on CPTAC ( ext. ); for BRCA and CRC we report internal AUC; for 
+
+PANDA we report internal QWK. Best per column in bold ; second best underlined.                                                                              
+
+> Enc. Method NSCLC (LUAD/LUSC) BRCA CRC PANDA
+> int. AUC ↑ext. AUC ↑int. AUC ↑int. AUC ↑int. QWK ↑
+> UNI2-h
+> OTSurv [15] 0.964 ±0.014 0.786 ±0.021 0.884 ±0.017 0.661 ±0.055 0.873 ±0.019 MeanPool 0.965 ±0.013 0.800 ±0.018 0.881 ±0.023 0.671 ±0.046 0.893 ±0.012 MaxPool 0.964 ±0.017 0.823 ±0.021 0.867 ±0.023 0.636 ±0.046 0.811 ±0.015 ILRA [22] 0.974 ±0.012 0.827 ±0.023 0.898 ±0.021 0.702 ±0.022 0.916 ±0.005 CLAM-MB [13] 0.969 ±0.020 0.831 ±0.017 0.901 ±0.021 0.697 ±0.050 0.911 ±0.009 ABMIL [9] 0.974 ±0.012 0.836 ±0.002 0.903 ±0.020 0.693 ±0.026 0.913 ±0.012 TransMIL [17] 0.974 ±0.015 0.836 ±0.023 0.905 ±0.018 0.677 ±0.036 0.884 ±0.008 MAMMOTH-TransM [16] 0.972 ±0.017 0.837 ±0.022 0.897 ±0.015 0.699 ±0.039 0.893 ±0.003 PAMoE [21] 0.975 ±0.016 0.837 ±0.053 0.901 ±0.018 0.696 ±0.028 0.885 ±0.007 DSMIL [12] 0.969 ±0.018 0.844 ±0.016 0.897 ±0.014 0.687 ±0.032 0.873 ±0.003 MAMMOTH-ABMIL [16] 0.972 ±0.016 0.842 ±0.028 0.897 ±0.014 0.696 ±0.039 0.892 ±0.005 CLAM-SB [13] 0.972 ±0.018 0.842 ±0.018 0.904 ±0.021 0.697 ±0.022 0.915 ±0.005
+> ROAM (ours) 0.976 ±0.015 0.845 ±0.019 0.905 ±0.014 0.699 ±0.030 0.917 ±0.003
+
+Table 2. Ablation study on NSCLC (LUAD vs. LUSC) using UNI2-h em-beddings (mean ±std over 5 folds). Internal evaluation is on TCGA ( int. ); external evaluation is on CPTAC ( ext. ). 
+
+Configurations int. AUC ↑ ext. AUC ↑
+
+I w/o routing GNN 0.971 ±0.022 0.836 ±0.023 
+
+II w/o graph regularisation 0.966 ±0.019 0.813 ±0.035 
+
+III softmax routing (no capacity constraint) 0.964 ±0.029 0.809 ±0.045 
+
+IV w/o OT-guided pooling (no OT modulation) 0.966 ±0.026 0.825 ±0.015 
+
+V OT-guided pooling (detach routing weights) 0.970 ±0.019 0.820 ±0.055 
+
+ROAM 0.976 ±0.015 0.845 ±0.019 
+
+ROAM’s ±0.019 ), and PAMoE does not improve over its single-pathway coun-terpart CLAM-SB ( 0.842 ext.), supporting the premise that experts without load control do not reliably help. On PANDA (10,615 slides, 6 classes), ROAM achieves the highest QWK (0.917 ±0.003 ), suggesting capacity-balanced routing scales to larger multi-class settings. 
+
+Qualitative routing visualisation. Fig. 2 compares ROAM expert routing maps with ABMIL and CLAM-SB attention heatmaps on two CPTAC slides. These encode different quantities, discrete expert assignment vs. continuous at-tention weight, so the comparison illustrates routing structure , not prediction quality. ROAM produces spatially contiguous expert territories with all eight experts receiving visible mass, consistent with the capacity marginal Π⊤1=q
+
+(§2.3) and graph smoothing (§2.4). 8 X. Tian et al. ROAM  ABMIL  CLAM -SB     
+
+> LUAD
+> P(LUSC)=0.079 P(LUSC)=0.054 P(LUSC)=0.102
+> P(LUSC)=0. 682 P(LUSC)=0.861 P(LUSC)=0.340
+> LUSC
+
+Fig. 2. Qualitative routing visualisation on CPTAC (NSCLC). Two CPTAC external-test slides (top: LUAD; bottom: LUSC); numbers denote P (LUSC) . Left: ROAM dom-inant expert per region (territories). Middle/Right: ABMIL and CLAM-SB attention heatmaps (normalised for visualisation). 
+
+Ablation Studies Table 2 ablates ROAM on NSCLC, where the external CP-TAC column is most discriminative. Removing either capacity-constrained OT routing (III, 0.809 ) or graph regularisation (II, 0.813 ) degrades external perfor-mance relative to ROAM ( 0.845 ), indicating that both capacity control (§2.3) and spatial coherence (§2.4) contribute to generalisation. Detaching routing gra-dients (V) yields the largest fold variance ( ±0.055 ), suggesting that end-to-end supervision is important for stable routing in our setting. 
+
+## 5 Conclusion 
+
+We presented ROAM , a spatially aware MoE aggregator that routes region to-kens to experts via capacity-constrained entropic optimal transport with a graph-based smoothing regulariser within unrolled Sinkhorn updates. Across four WSI benchmarks with frozen foundation-model embeddings, ROAM achieves com-petitive performance against strong MIL and MoE baselines; on NSCLC exter-nal generalisation (TCGA →CPTAC) it achieves AUC 0.845 ±0.019 and exhibits lower fold-to-fold variance than softmax-routed MoE baselines in our setting, consistent with the hypothesis that explicit capacity marginals stabilise routing under domain shift. Limitations include reliance on frozen encoders and fixed grid-based region tokenisation; adaptive regionisation and end-to-end fine-tuning are promising directions for future work. ROAM: Region-Graph Optimal Transport Routing for WSI Classification 9
+
+Disclosure of Interests. The authors have no competing interests to declare that are relevant to the content of this article. 
+
+## References 
+
+1. Bulten, W., Kartasalo, K., Chen, P.H.C., Ström, P., Pinckaers, H., Nagpal, K., Cai, Y., Steiner, D.F., Van Boven, H., Vink, R., et al.: Artificial intelligence for diagnosis and Gleason grading of prostate cancer: the PANDA challenge. Nature medicine 28 (1), 154–163 (2022) 2. Campanella, G., Hanna, M.G., Geneslaw, L., Miraflor, A., Silva, V.W.K., Busam, K.J., Brogi, E., Reuter, V.E., Klimstra, D.S., Fuchs, T.J.: Clinical-grade compu-tational pathology using weakly supervised deep learning on whole slide images. Nature Medicine 25 (8), 1301–1309 (2019) 3. Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F.K., Jaume, G., Song, A.H., Chen, B., Zhang, A., Shao, D., Shaban, M., Williams, M., Oldenburg, L., Weishaupt, L.L., Wang, J.J., Vaidya, A., Le, L.P., Gerber, G., Sahai, S., Williams, W., Mahmood, F.: Towards a general-purpose foundation model for computational pathology. Nature Medicine 30 , 850–862 (2024) 4. Cuturi, M.: Sinkhorn distances: Lightspeed computation of optimal transporta-tion distances. In: Advances in Neural Information Processing Systems (NeurIPS). vol. 26, pp. 2292–2300 (2013) 5. Edwards, N.J., Oberti, M., Thangudu, R.R., Cai, S., McGarvey, P.B., Jacob, S., Madhavan, S., Ketchum, K.A.: The CPTAC Data Portal: A Resource for Cancer Proteomics Research. Journal of Proteome Research 14 (6), 2707–2713 (Jun 2015) 6. Fang, H., Huang, S., Tang, W., Huangfu, L., Liu, B.: SAM-MIL: A spatial contex-tual aware multiple instance learning approach for whole slide image classification. In: ACM Multimedia (2024) 7. Fedus, W., Zoph, B., Shazeer, N.: Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity. Journal of Machine Learning Research 
+
+23 , 1–40 (2022) 8. Hamilton, W., Ying, Z., Leskovec, J.: Inductive representation learning on large graphs. Advances in neural information processing systems 30 (2017) 9. Ilse, M., Tomczak, J.M., Welling, M.: Attention-based deep multiple instance learn-ing. In: Proceedings of the 35th International Conference on Machine Learning (ICML). vol. 80, pp. 2127–2136. PMLR (2018) 10. Khamis, A., Tsuchida, R., Tarek, M., Rolland, V., Petersson, L.: Scalable optimal transport methods in machine learning: A contemporary survey. IEEE Transac-tions on Pattern Analysis and Machine Intelligence (2024) 11. Knight, P.A.: The sinkhorn–knopp algorithm: convergence and applications. SIAM Journal on Matrix Analysis and Applications (2008) 12. Li, B., Li, Y., Eliceiri, K.W.: Dual-stream multiple instance learning network for whole slide image classification with self-supervised contrastive learning. In: IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2021) 13. Lu, M.Y., Williamson, D.F.K., Chen, T.Y., Chen, R.J., Barbieri, M., Mahmood, F.: Data-efficient and weakly supervised computational pathology on whole-slide images. Nature Biomedical Engineering 5, 555–570 (2021) 14. Nguyen, T., Tran, N.N., Nguyen, K., Baraniuk, R.G.: Improving routing in sparse mixture of experts with graph of tokens. arXiv preprint arXiv:2505.00792 (2025) 10 X. Tian et al. 15. Ren, Q., Wang, Y., Fang, R., Ling, H., You, C.: OTSurv: A novel multiple in-stance learning framework for survival prediction with heterogeneity-aware opti-mal transport. In: Medical Image Computing and Computer Assisted Intervention (MICCAI) (2025) 16. Shao, D., Runevic, J., Chen, R.J., Williamson, D.F.K., Kim, A., Song, A.H., Mah-mood, F.: Mixture of mini experts: Overcoming the linear layer bottleneck in mul-tiple instance learning. In: International Conference on Learning Representations (ICLR) (2026) 17. Shao, Z., Bian, H., Chen, Y., Wang, Y., Zhang, J., Ji, X., Zhang, Y.: Trans-MIL: Transformer based correlated multiple instance learning for whole slide image classification. In: Advances in Neural Information Processing Systems (NeurIPS). vol. 34 (2021) 18. Villani, C., et al.: Optimal transport: old and new, vol. 338. Springer (2009) 19. Wang, L., Huang, H., Wu, S., Ma, S., Wei, F.: Auxiliary-loss-free load balancing strategy for mixture-of-experts. In: ICLR (2025) 20. Weinstein, J.N., Collisson, E.A., Mills, G.B., Shaw, K.R., Ozenberger, B.A., Ellrott, K., Shmulevich, I., Sander, C., Stuart, J.M.: The cancer genome atlas pan-cancer analysis project. Nature genetics 45 (10), 1113–1120 (2013) 21. Wu, J., Chen, M., Ke, X., Xun, T., Jiang, X., Zhou, H., Shao, L., Kong, Y.: Learning heterogeneous tissues with mixture of experts for gigapixel whole slide images. In: IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2025) 22. Xiang, J., Wang, X., Zhang, J., Yang, S., Han, X., Yang, W.: Exploring low-rank property in multiple instance learning for whole slide image classification. In: International Conference on Learning Representations (ICLR) (2023) 23. Xu, H., Usuyama, N., Bagga, J., Zhang, S., Rao, R., Naumann, T., Wong, C., Gero, Z., González, J., Gu, Y., et al.: A whole-slide foundation model for digital pathology from real-world data. Nature 630 (8015), 181–188 (2024) 24. Zhou, Y., Lei, T., Liu, H., Du, N., Huang, Y., Zhao, V., Dai, A., Chen, Z., Le, Q., Laudon, J.: Mixture-of-experts with expert choice routing. In: NeurIPS. vol. 35 (2022)

@@ -6,88 +6,91 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-10 ~ 2026-04-19
-- 运行时间：2026-04-19 07:58:32 UTC
+- 最新运行日期：2026-03-21 ~ 2026-04-19
+- 运行时间：2026-04-19 08:23:49 UTC
 - 运行状态：成功
-- 本次总论文数：22
-- 精读区：11
+- 本次总论文数：23
+- 精读区：12
 - 速读区：11
 
 ### 今日简报（AI）
-继续深挖病理图像分割与多模态表征方向，今日共完成 22 篇论文阅读。  
-两篇满分精读展示了基于大模型的半监督分割与自动形态聚类的新突破。  
-建议普通读者关注这些方法如何提升组织切片分析效率与准确性。
-- 详情：[/20260410-20260419/README](/20260410-20260419/README)
+聚焦多模态大模型与病理图像理解，今日共研读 23 篇论文。  
+重点突破在于层级全切片理解和高效少样本分类两大方向。  
+建议普通读者关注医学影像智能化趋势，了解多模态模型在诊断中的应用。
+- 详情：[/20260321-20260419/README](/20260321-20260419/README)
 
 ### 精读区论文标签
-1. [UniSemAlign: Text-Prototype Alignment with a Foundation Encoder for Semi-Supervised Histopathology Segmentation](/20260410-20260419/2604.09169v1-unisemalign-text-prototype-alignment-with-a-foundation-encoder-for-semi-supervised-histopathology-segmentation)  
+1. [MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding](/20260321-20260419/2603.23067v1-mllm-hwsi-a-multimodal-large-language-model-for-hierarchical-whole-slide-image-understanding)  
    标签：评分：10.0/10、query:pathseg
-   evidence：基于病理预训练Transformer编码器和文本-原型对齐的半监督组织病理学分割
-2. [Cluster-First Labelling: An Automated Pipeline for Segmentation and Morphological Clustering in Histology Whole Slide Images](/20260410-20260419/2604.09370v1-cluster-first-labelling-an-automated-pipeline-for-segmentation-and-morphological-clustering-in-histology-whole-slide-images)  
+   evidence：用于从细胞到区域的多尺度全切片图像理解的多模态大语言模型
+2. [MLLM-HWSI: A Multimodal Large Language Model for Hierarchical Whole Slide Image Understanding](/20260321-20260419/2603.23067v2-mllm-hwsi-a-multimodal-large-language-model-for-hierarchical-whole-slide-image-understanding)  
    标签：评分：10.0/10、query:pathseg
-   evidence：在组织学全切片图像中使用Cellpose-SAM分割组织成分
-3. [Self-supervised Pretraining of Cell Segmentation Models](/20260410-20260419/2604.10609v1-self-supervised-pretraining-of-cell-segmentation-models)  
+   evidence：用于计算病理学的分层WSI级多模态大语言模型
+3. [Adapting SAM to Nuclei Instance Segmentation and Classification via Cooperative Fine-Grained Refinement](/20260321-20260419/2603.28027v1-adapting-sam-to-nuclei-instance-segmentation-and-classification-via-cooperative-fine-grained-refinement)  
    标签：评分：10.0/10、query:pathseg
-   evidence：使用DINOv2的细胞实例分割自监督框架
-4. [OpenTME: An Open Dataset of AI-powered H&E Tumor Microenvironment Profiles from TCGA](/20260410-20260419/2604.12075v1-opentme-an-open-dataset-of-ai-powered-he-tumor-microenvironment-profiles-from-tcga)  
+   evidence：将SAM应用于病理学中的细胞核实例分割与分类
+4. [UniSemAlign: Text-Prototype Alignment with a Foundation Encoder for Semi-Supervised Histopathology Segmentation](/20260321-20260419/2604.09169v1-unisemalign-text-prototype-alignment-with-a-foundation-encoder-for-semi-supervised-histopathology-segmentation)  
    标签：评分：10.0/10、query:pathseg
-   evidence：利用病理基础模型进行H&E肿瘤微环境分析，包含组织分割与细胞检测
-5. [Cell Instance Segmentation via Multi-Task Image-to-Image Schrödinger Bridge](/20260410-20260419/2604.12318v1-cell-instance-segmentation-via-multi-task-image-to-image-schrdinger-bridge)  
+   evidence：使用病理预训练 Transformer 的半监督组织病理学分割
+5. [OpenTME: An Open Dataset of AI-powered H&E Tumor Microenvironment Profiles from TCGA](/20260321-20260419/2604.12075v1-opentme-an-open-dataset-of-ai-powered-he-tumor-microenvironment-profiles-from-tcga)  
    标签：评分：10.0/10、query:pathseg
-   evidence：在PanNuke和MoNuSeg数据集上通过多任务薛定谔桥进行细胞实例分割
-6. [AnnotateAnyCell: Open-Source AI Framework for Efficient Annotation in Digital Pathology](/20260410-20260419/biorxiv-10-1101-2025-11-02-686114-v3-annotateanycell-open-source-ai-framework-for-efficient-annotation-in-digital-pathology)  
+   evidence：基于病理基础模型的AI驱动H&E肿瘤微环境分析，包含组织分割与细胞检测
+6. [AnnotateAnyCell: Open-Source AI Framework for Efficient Annotation in Digital Pathology](/20260321-20260419/biorxiv-10-1101-2025-11-02-686114-v3-annotateanycell-open-source-ai-framework-for-efficient-annotation-in-digital-pathology)  
    标签：评分：10.0/10、query:pathseg
-   evidence：组织病理学WSI中高效的细胞标注与分类
-7. [DSVTLA: Deep Swin Vision Transformer-Based Transfer Learning Architecture for Multi-Type Cancer Histopathological Cancer Image Classification](/20260410-20260419/2604.09468v1-dsvtla-deep-swin-vision-transformer-based-transfer-learning-architecture-for-multi-type-cancer-histopathological-cancer-image-classification)  
+   evidence：数字病理中细胞标注与分割的AI框架
+7. [LEMON: a foundation model for nuclear morphology in Computational Pathology](/20260321-20260419/2603.25802v1-lemon-a-foundation-model-for-nuclear-morphology-in-computational-pathology)  
    标签：评分：9.0/10、query:pathseg
-   evidence：用于多种癌症组织病理学图像分类的Swin Transformer
-8. [PC-MIL: Decoupling Feature Resolution from Supervision Scale in Whole-Slide Learning](/20260410-20260419/2604.12100v1-pc-mil-decoupling-feature-resolution-from-supervision-scale-in-whole-slide-learning)  
+   evidence：病理学中细胞核形态和单细胞表征的基础模型
+8. [MOOZY: A Patient-First Foundation Model for Computational Pathology](/20260321-20260419/2603.27048v1-moozy-a-patient-first-foundation-model-for-computational-pathology)  
    标签：评分：9.0/10、query:pathseg
-   evidence：计算病理学中的全切片学习与分类
-9. [Learning Class Difficulty in Imbalanced Histopathology Segmentation via Dynamic Focal Attention](/20260410-20260419/2604.13479v1-learning-class-difficulty-in-imbalanced-histopathology-segmentation-via-dynamic-focal-attention)  
+   evidence：基于WSI的以患者为中心的计算病理学基础模型
+9. [Clore: Interactive Pathology Image Segmentation with Click-based Local Refinement](/20260321-20260419/2603.27625v1-clore-interactive-pathology-image-segmentation-with-click-based-local-refinement)  
    标签：评分：9.0/10、query:pathseg
-   evidence：类别不平衡下的组织病理学图像语义分割
-10. [A deep learning framework for glomeruli segmentation with boundary attention](/20260410-20260419/2604.14263v1-a-deep-learning-framework-for-glomeruli-segmentation-with-boundary-attention)  
+   evidence：基于点击局部细化的交互式病理图像分割
+10. [A Generative Foundation Model for Multimodal Histopathology](/20260321-20260419/2604.03635v1-a-generative-foundation-model-for-multimodal-histopathology)  
    标签：评分：9.0/10、query:pathseg
-   evidence：用于肾小球实例级分割的病理学基础模型
-11. [Multi-Stain Fusion of Histopathology Images Using Deep Learning for Pediatric Brain Tumor Classification](/20260410-20260419/biorxiv-10-64898-2026-04-10-717785-v1-multi-stain-fusion-of-histopathology-images-using-deep-learning-for-pediatric-brain-tumor-classification)  
+   evidence：针对H&E组织学和多模态病理学的生成式基础模型
+11. [Identity-Aware U-Net: Fine-grained Cell Segmentation via Identity-Aware Representation Learning](/20260321-20260419/2604.09702v1-identity-aware-u-net-fine-grained-cell-segmentation-via-identity-aware-representation-learning)  
    标签：评分：9.0/10、query:pathseg
-   evidence：利用H&E全切片图像进行儿科脑肿瘤分类
+   evidence：通过身份感知表示学习进行细粒度细胞分割
+12. [Translating Histopathology Foundation Model Embeddings into Cellular and Molecular Features for Clinical Studies](/20260321-20260419/biorxiv-10-64898-2026-03-17-711896-v2-translating-histopathology-foundation-model-embeddings-into-cellular-and-molecular-features-for-clinical-studies)  
+   标签：评分：9.0/10、query:pathseg
+   evidence：将病理基础模型嵌入转化为细胞类型组成
 
 ### 速读区论文标签
-1. [Cross-Modal Knowledge Distillation from Spatial Transcriptomics to Histology](/20260410-20260419/2604.09076v1-cross-modal-knowledge-distillation-from-spatial-transcriptomics-to-histology)  
+1. [Boundary-Aware Instance Segmentation in Microscopy Imaging](/20260321-20260419/2603.21206v1-boundary-aware-instance-segmentation-in-microscopy-imaging)  
    标签：评分：8.0/10、query:pathseg
-   evidence：从空间转录组学到H&E组织学的跨模态知识蒸馏
-2. [RobustMedSAM: Degradation-Resilient Medical Image Segmentation via Robust Foundation Model Adaptation](/20260410-20260419/2604.09814v1-robustmedsam-degradation-resilient-medical-image-segmentation-via-robust-foundation-model-adaptation)  
+   evidence：显微镜下的细胞边界感知实例分割，参考了SAM模型
+2. [Parameter-efficient Prompt Tuning and Hierarchical Textual Guidance for Few-shot Whole Slide Image Classification](/20260321-20260419/2603.21504v1-parameter-efficient-prompt-tuning-and-hierarchical-textual-guidance-for-few-shot-whole-slide-image-classification)  
+   标签：评分：8.0/10、query:pathseg
+   evidence：利用视觉语言模型进行少样本全切片图像分类
+3. [MOOZY: A Patient-First Foundation Model for Computational Pathology](/20260321-20260419/2603.27048v2-moozy-a-patient-first-foundation-model-for-computational-pathology)  
+   标签：评分：8.0/10、query:pathseg
+   evidence：使用患者级Case Transformer的计算病理学全切片图像基础模型
+4. [Region-Graph Optimal Transport Routing for Mixture-of-Experts Whole-Slide Image Classification](/20260321-20260419/2604.07298v1-region-graph-optimal-transport-routing-for-mixture-of-experts-whole-slide-image-classification)  
+   标签：评分：8.0/10、query:pathseg
+   evidence：用于全切片图像分类的混合专家模型
+5. [SegMaFormer: A Hybrid State-Space and Transformer Model for Efficient Segmentation](/20260321-20260419/2603.22002v1-segmaformer-a-hybrid-state-space-and-transformer-model-for-efficient-segmentation)  
    标签：评分：7.0/10、query:pathseg
-   evidence：通过SAM适配实现鲁棒的医学图像分割模型RobustMedSAM
-3. [SIMPLER: H&E-Informed Representation Learning for Structured Illumination Microscopy](/20260410-20260419/2604.10334v1-simpler-he-informed-representation-learning-for-structured-illumination-microscopy)  
+   evidence：用于医学图像分割的Mamba与Transformer混合架构
+6. [Cross-Slice Knowledge Transfer via Masked Multi-Modal Heterogeneous Graph Contrastive Learning for Spatial Gene Expression Inference](/20260321-20260419/2603.22821v1-cross-slice-knowledge-transfer-via-masked-multi-modal-heterogeneous-graph-contrastive-learning-for-spatial-gene-expression-inference)  
    标签：评分：7.0/10、query:pathseg
-   evidence：针对数字病理学的H&E知情表征学习
-4. [TAMISeg: Text-Aligned Multi-scale Medical Image Segmentation with Semantic Encoder Distillation](/20260410-20260419/2604.10912v1-tamiseg-text-aligned-multi-scale-medical-image-segmentation-with-semantic-encoder-distillation)  
+   evidence：用于组织学图像分析的病理基础模型嵌入
+7. [RAP: Retrieve, Adapt, and Prompt-Fit for Training-Free Few-Shot Medical Image Segmentation](/20260321-20260419/2603.27705v1-rap-retrieve-adapt-and-prompt-fit-for-training-free-few-shot-medical-image-segmentation)  
    标签：评分：7.0/10、query:pathseg
-   evidence：带有语义编码器蒸馏的文本引导分割
-5. [Delving Aleatoric Uncertainty in Medical Image Segmentation via Vision Foundation Models](/20260410-20260419/2604.10963v1-delving-aleatoric-uncertainty-in-medical-image-segmentation-via-vision-foundation-models)  
+   evidence：将SAM2应用于免训练的少样本医学图像分割
+8. [TP-Seg: Task-Prototype Framework for Unified Medical Lesion Segmentation](/20260321-20260419/2604.00684v1-tp-seg-task-prototype-framework-for-unified-medical-lesion-segmentation)  
    标签：评分：7.0/10、query:pathseg
-   evidence：利用视觉基础模型进行医学图像分割
-6. [Scaling In-Context Segmentation with Hierarchical Supervision](/20260410-20260419/2604.12752v1-scaling-in-context-segmentation-with-hierarchical-supervision)  
-   标签：评分：7.0/10、query:pathseg
-   evidence：用于医学图像分割的上下文学习分层框架
-7. [Deep Learning Enables Automated Segmentation and Quantification of Ultrastructure from Transmission Electron Microscopy Images](/20260410-20260419/biorxiv-10-1101-2025-11-05-686793-v2-deep-learning-enables-automated-segmentation-and-quantification-of-ultrastructure-from-transmission-electron-microscopy-images)  
-   标签：评分：7.0/10、query:pathseg
-   evidence：显微镜图像超微结构的自动分割
-8. [Camyla: Scaling Autonomous Research in Medical Image Segmentation](/20260410-20260419/2604.10696v1-camyla-scaling-autonomous-research-in-medical-image-segmentation)  
+   evidence：跨多种任务和模态的统一医学病灶分割
+9. [Foundation Model-guided Iteratively Prompting and Pseudo-Labeling for Partially Labeled Medical Image Segmentation](/20260321-20260419/2604.01038v1-foundation-model-guided-iteratively-prompting-and-pseudo-labeling-for-partially-labeled-medical-image-segmentation)  
    标签：评分：6.0/10、query:pathseg
-   evidence：医学图像分割的自主研究系统
-9. [RADA: Region-Aware Dual-encoder Auxiliary learning for Barely-supervised Medical Image Segmentation](/20260410-20260419/2604.11164v1-rada-region-aware-dual-encoder-auxiliary-learning-for-barely-supervised-medical-image-segmentation)  
+   evidence：基础模型引导的医学图像分割框架
+10. [Dense Point-to-Mask Optimization with Reinforced Point Selection for Crowd Instance Segmentation](/20260321-20260419/2604.01742v1-dense-point-to-mask-optimization-with-reinforced-point-selection-for-crowd-instance-segmentation)  
    标签：评分：6.0/10、query:pathseg
-   evidence：用于医学图像分割的区域感知双编码器
-10. [Do Instance Priors Help Weakly Supervised Semantic Segmentation?](/20260410-20260419/2604.11170v1-do-instance-priors-help-weakly-supervised-semantic-segmentation)  
+   evidence：整合SAM并利用点标签进行密集实例分割
+11. [SD-FSMIS: Adapting Stable Diffusion for Few-Shot Medical Image Segmentation](/20260321-20260419/2604.03134v1-sd-fsmis-adapting-stable-diffusion-for-few-shot-medical-image-segmentation)  
    标签：评分：6.0/10、query:pathseg
-   evidence：将Segment Anything Model (SAM)应用于语义分割
-11. [DeferredSeg: A Multi-Expert Deferral Framework for Trustworthy Medical Image Segmentation](/20260410-20260419/2604.12411v1-deferredseg-a-multi-expert-deferral-framework-for-trustworthy-medical-image-segmentation)  
-   标签：评分：6.0/10、query:pathseg
-   evidence：用于医学图像分割的延迟感知框架
+   evidence：使用扩散模型的少样本医学图像分割框架
 
 
 <div class="dpr-home-promo-card">
