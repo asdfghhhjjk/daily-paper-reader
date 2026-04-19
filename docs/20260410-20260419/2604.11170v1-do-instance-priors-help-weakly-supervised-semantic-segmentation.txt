@@ -1,0 +1,441 @@
+Title: Do Instance Priors Help Weakly Supervised Semantic Segmentation?
+
+URL Source: https://arxiv.org/pdf/2604.11170v1
+
+Published Time: Tue, 14 Apr 2026 02:25:08 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# Do Instance Priors Help Weakly Supervised Semantic Segmentation? 
+
+Anurag Das 1 Anna Kukleva 1 Xinting Hu 1 Yuki M. Asano 2 Bernt Schiele 1 
+
+> 1
+
+Max Planck Institute for Informatics, Saarland Informatics Campus  
+
+> 2
+
+University of Technology Nuremberg Point  Scribble  Coarse Image       
+
+> +6.7%
+> ~0.75 min
+> +4.7%
+> ~7 min
+> +8.9%
+> ~2.2 min
+> -98% budget
+> ~90 min
+> SeSAM + Point SeSAM + Scribble SeSAM + Coarse GT (Fine annotation)
+
+Figure 1: Our SeSAM framework , utilizing additional instance priors, integrates with various weak labels (points, scribbles, and coarse annotations) and enhances semantic segmentation quality (see road and car on the left) while remaining cost-effective (right plot). For instance, using scribbles achieves 94% of fine-supervised performance while requiring only 2% of the annotation budget. 
+
+# Abstract 
+
+Semantic segmentation requires dense pixel-level annotations, which are costly and time-consuming to acquire. To address this, we present SeSAM, a framework that uses a foun-dational segmentation model, i.e. Segment Anything Model (SAM), with weak labels, in-cluding coarse masks, scribbles, and points. SAM, originally designed for instance-based segmentation, cannot be directly used for semantic segmentation tasks. In this work, we identify specific challenges faced by SAM and determine appropriate components to adapt it for class-based segmentation using weak labels. Specifically, SeSAM decomposes class masks into connected components, samples point prompts along object skeletons, selects SAM masks using weak-label coverage, and iteratively refines labels using pseudo-labels, enabling SAM-generated masks to be effectively used for semantic segmentation. Integrated with a semi-supervised learning framework, SeSAM balances ground-truth labels, SAM-based pseudo-labels, and high-confidence pseudo-labels, significantly improving segmenta-tion quality. Extensive experiments across multiple benchmarks and weak annotation types show that SeSAM consistently outperforms weakly supervised baselines while substantially reducing annotation cost relative to fine supervision. 
+
+# 1 Introduction 
+
+Semantic segmentation, the task of assigning semantic labels to each pixel in an image, typically relies on dense pixel-level annotations, which are expensive and time-consuming to collect at scale (Cordts et al., 2016; Neuhold et al., 2017; Zhou et al., 2017). To reduce the annotation effort, foundation models for segmentation, particularly the instance-based SAM (Segment Anything Model) (Kirillov et al., 2023), may appear to offer a universal solution. However, the general-purpose nature of these models limits their direct applicability across different segmentation tasks (VS et al., 2024; Kweon & Yoon, 2024), requiring specific adaptations (Zhang 1
+
+> arXiv:2604.11170v1 [cs.CV] 13 Apr 2026
+
+et al., 2024b). For instance, Semantic-SAM (Li et al., 2023) proposes complete retraining of the model to accommodate semantic segmentation. In this work, we present an approach to adapt a foundational instance segmentation model to semantic segmentation, a task that requires pixel-level semantic labels, using weak annotations, including coarse, scribble, and point labels. Our method demonstrates that with careful adaptation, instance priors from foundation models can be effectively leveraged for high-quality semantic segmentation with cost-efficient weak labels, significantly reducing the annotation burden. While general purpose foundational segmentation models like SAM are powerful for class-agnostic segmenta-tion, applying them to weakly supervised semantic segmentation is non-trivial. SAM is designed to segment 
+
+individual instances, whereas semantic segmentation requires class-wise labels that may span multiple dis-connected instances across various locations in an image. Moreover, selecting points as prompts for best segmentation result remains a challenge. SAM also produces masks of varying granularity for the same prompt, often merging multiple semantic objects into a single mask. Since different applications require different levels of segmentation detail, controllable segmentation granularity is essential. To adapt this class-agnostic segmentation model for efficient weakly supervised semantic segmentation (WSSS), our framework addresses each of these challenges, refining SAM’s outputs for precise, class-based segmentation tasks 1.In particular, we introduce SeSAM, a WSSS framework for high-quality semantic segmentation that adapts SAM, a foundation model for instance segmentation, in three steps by answering the following questions: I. How to use class-wise weak labels to prompt SAM? II. How to select points to prompt SAM? III. How to choose the relevant masks from SAM? First, since semantic segmentation is instance-agnostic, we begin by isolating potential instances through morphological operations on coarse segmentation masks. Second, we investigate effective point sampling strategies for prompting the SAM model and selecting the desired segmentation granularity. In particular, we find that equally distributed probability-based sampling along the skeleton of the input shape produces the best quality masks. Third, to resolve the ambiguity in selecting the mask of desired granularity, we propose a selection criterion based on intersection with the weak labels. Additionally, we integrate weak ground-truth segmentation labels with instance priors generated by SAM in a semi-supervised framework, balancing three types of labels: ground-truth labels, SAM-based instance priors, and simple pseudo-labels. To enhance mask quality, we further iteratively refine the weak ground-truth segmentation labels by sampling point prompts from the refined mask. Finally, we show that SeSAM achieves high-quality semantic segmentation with significantly reduced annotation costs compared to fully supervised fine-grained segmentation. We summarize our main contributions as follows: 
+
+• We show that a direct application of foundation instance segmentation models alongside weak an-notations performs poorly for semantic segmentation; to address this gap, we propose a three-step pipeline to adapt instance priors from these foundation models to the semantic segmentation task. 
+
+• We introduce a semi-supervised framework that iteratively refines the instance priors while balanc-ing between three types of annotations: ground-truth weak semantic segmentation labels, instance priors, and pseudo-labels. 
+
+• We provide cost-performance trade-off analysis across different weak annotation types, including point, scribbles, and coarse labels, enabling practitioners to make informed choices on annotation types. In particular, we observe that using SeSAM with scribbles achieves 94% of full supervision performance with only 2% annotation budget. 
+
+• We extend WSSS evaluation beyond the commonly used PASCAL (Everingham et al., 2010) bench-mark to more challenging Cityscapes (Cordts et al., 2016) and ADE20k (Zhou et al., 2017) datasets. We demonstrate that SeSAM generalizes effectively across multiple weak annotation types and con-sistently outperforms prior weakly supervised baselines.   
+
+> 1SAM has been trained with large amounts of annotated segmentation masks. The goal of this paper is to explore how SAM can be leveraged to reduce the annotation effort for semantic segmentation. As we report in the experimental section, the annotation cost for semantic segmentation can be significantly reduced, indicating that annotation costs of SAM can be entirely amortized when systematically used for novel semantic segmentation tasks.
+
+2Without Instance Separation   
+
+> With Instance Separation
+> Coarse mask Re fi ned Coarse mask
+> Coarse mask Re fi ned Coarse mask
+> Con fi dence based points sampling
+> Our points sampling
+> Mask ambiguity and selection
+> SAM Score: 95.2
+> SAM Score: 96.2
+> SAM Score: 95.5
+
+Figure 2: SAM challenges. Left : As an instance-based model, SAM performs poorly when segmenting a class comprising multiple instances, see the class “person”. Splitting the class mask into individual instances addresses this challenge. Middle : Confidence-based sampling (Kweon & Yoon, 2024) yields a suboptimal mask; in contrast, our proposed sampling strategy achieves comprehensive mask coverage, resulting in im-proved segmentation. Right : SAM score-based mask selection may not give the best desired segmentation (see mask in red box). Our mask selection strategy using intersection with the coarse mask determines the desired mask granularity (see mask in green box). 
+
+# 2 Related Work 
+
+Weakly Supervised Semantic Segmentation. 
+
+Weakly supervised semantic segmentation (WSSS) aims to reduce annotation effort by leveraging various forms of weak supervision, including image-level labels (Pathak et al., 2015; Wei et al., 2017; Ahn & Kwak, 2018; Sun et al., 2020; Kweon & Yoon, 2024), bounding-boxes (Dai et al., 2015; Khoreva et al., 2017; Song et al., 2019), points (Bearman et al., 2016; Zhang et al., 2021; Wu et al., 2022; Liang et al., 2022; Wu et al., 2023), scribbles (Lin et al., 2016; Pan et al., 2021; Ke et al., 2021; Wu et al., 2022; Liang et al., 2022; Wu et al., 2023), and coarse annotations (Das et al., 2023b). Approaches based on image-level supervision primarily rely on class activation maps (CAMs) (Zhou et al., 2016) to localize objects. Several works (Ahn & Kwak, 2018; Sun et al., 2020) improve CAM quality using affinity-based propagation strategies, while more recent approaches (Kweon & Yoon, 2024) incorporate SAM to further refine CAM-based predictions. Although such methods perform well on relatively simple datasets such as PASCAL, generating reliable CAMs for more complex real-world scenes, such as Cityscapes (Cordts et al., 2016) and ADE20k (Zhou et al., 2017) remains challenging because of frequent multi-class co-occurrences. Bounding box supervision provides stronger spatial cues than image-level labels and therefore enables improved segmentation performance (Dai et al., 2015; Khoreva et al., 2017). In this work, we focus on fine-grained weak annotations, including points, scribbles, and coarse masks. Prior fine-grained WSSS methods (Pan et al., 2021; Ke et al., 2021; Wu et al., 2022; Liang et al., 2022; Wu et al., 2023; Zhang et al., 2021) are primarily evaluated on the relatively simpler PASCAL benchmark and typically consider only point or scribble supervision using conventional CNN-based architectures such as DeepLab. In contrast, we extend evaluation to more challenging benchmarks, including ADE20k (Zhou et al., 2017) and Cityscapes (Cordts et al., 2016), incorporate an additional coarse annotation setting, and adopt the state-of-the-art transformer-based segmentation architecture SegFormer (Xie et al., 2021). Furthermore, we leverage SAM as an instance prior to enhance the effectiveness of fine-grained weak annotations for weakly supervised semantic segmentation. 
+
+SAM as Segmentation Prior. SAM (Kirillov et al., 2023; Ravi et al., 2025) is a segmentation foundation model that enables zero-shot segmentation using various prompts, including points, bounding-boxes, and masks. It has demonstrated strong performance across a wide range of fine-grained vision tasks, such as domain adaptation (Zhang et al., 2024a; Chen et al., 2023; Benigmim et al., 2024), object tracking (Yang 31. Separate Instances  2. Sample points  3. Select SAM masks     
+
+> 0. Re fi ne coarse labels
+> pseudo-labels with
+> high-con fi dence coarse labels
+> SeSAM labels = Repeat for all instances of all classes
+> weak augmentation
+> Teacher
+> EMA
+> coarse labels pseudo-labels
+> SeSAM labels ( s)
+> strong augmentation
+> Student predictions ( p)loss(p,s)
+
+Figure 3: SeSAM framework for coarse supervision . First, pseudo-labels for training images are generated by the teacher model. Next, these pseudo-labels are then refined following the key steps 1-3, namely instance separation, point sampling and mask selection (see Section 3). To improve mask quality, we augment coarse labels with high-confidence pseudo-labels before applying SAM (step 0). The resulting refined labels, called SeSAM labels, are then used to train the student network. et al., 2023; Li et al., 2024), referring segmentation (Yang et al., 2024; Sun et al., 2024; Zhang et al., 2024b), and medical image segmentation (Ma et al., 2024; Shi et al., 2023; Deng et al., 2025; Hu et al., 2023). Despite its flexibility and strong zero-shot capabilities, directly applying SAM to downstream tasks remains challenging due to its dependence on user-provided prompts. Prior works (Yang et al., 2024; Xie et al., 2024; Chen et al., 2024) address this limitation by using SAM’s automatic mask generator, which produces masks for the entire image using a grid of point prompts. However, segmentation quality is highly sensitive to prompt placement, making grid-based prompting suboptimal. Alternative approaches guide prompt selection using network confidence (Kweon & Yoon, 2024) or feature similarity (Zhang et al., 2024b). Nevertheless, selecting multiple prompts based solely on confidence or feature similarity does not consistently produce optimal segmentation results (see Fig. 2). In this work, we investigate SAM in the less-explored setting of weakly supervised semantic segmentation with fine-grained annotations, including points, scribbles, and coarse masks. We address key challenges in prompt selection, mask granularity, and semantic consistency, and integrate SAM within a semi-supervised framework to effectively leverage instance-level priors for semantic segmentation. 
+
+# 3 SeSAM Method 
+
+In this section, we begin with the preliminary work, describing the Segment Anything Model (SAM). We then introduce our SeSAM components (see Fig. 3), addressing the challenges of leveraging instance priors from SAM for WSSS. First, we discuss how to use weak class labels to prompt SAM, followed by our sampling strategy for improved segmentation and then our approach to selecting the best mask granularity. Finally, we explain how we integrate semi-supervised learning with SAM-based instance priors during training. 
+
+3.1 SAM Preliminary 
+
+The Segment Anything Model (Kirillov et al., 2023) (SAM) is a foundational model for promptable segmen-tation, extensively utilized across various downstream applications. SAM consists of three primary modules: an image encoder, a prompt encoder, and a mask decoder. Given a prompt (e.g., points, boxes or masks), SAM generates a segmentation mask for a single object, part of an object, or group of connected objects. Specifically, the target image is first encoded into an image embedding, which is combined with the prompt embedding and subsequently decoded into a segmentation mask. SAM produces three candidate masks with different levels of granularity, representing whole object, object part, and subpart, each accompanied by a confidence score. In our work, we retain the overall pipeline as is and instead focus particularly on the input point prompts and the three mask outputs. We determine how to effectively prompt the SAM model to enhance the quality of semantic segmentation using various weak annotations and how to train the model with ground-truth labels, SAM instance priors, and pseudo-labels simultaneously. 43.2 SAM as an Instance Prior 
+
+In this subsection, we outline the key components of our SeSAM framework. We first discuss the different types of weak supervision, followed by how we can leverage the instance priors of the SAM model with these weak-supervision labels. 
+
+Types of Weak Supervision. We perform WSSS using three types of fine-grained weak labels: point, scribble, and coarse annotations. Since point and scribble annotations are inherently sparse, we first convert them into coarser forms by leveraging SAM. Specifically, we first obtain an initial coarse mask by prompting SAM with the available weak labels. To ensure high precision, we select the smallest-area SAM mask out of the three generated masks as our initial coarse mask. This coarse mask is then refined during training using our SeSAM pipeline. 
+
+Classes vs. Instances. While SAM can produce segmentation masks for given prompts, these masks cannot be directly used for semantic segmentation. Semantic segmentation requires labeling each pixel in an image as one of the predefined set of N classes (e.g., one of 19 classes in Cityscapes), each representing all instances of the same class within the image. A naïve solution is to sample class points based on these class masks introduces ambiguity between different instances, as illustrated in Fig. 2 (e.g., class person). In this scenario, sampled points are distributed across all instances of a class, leading SAM to produce a single mask covering all sampled points. This often results in noisy masks and imprecise boundaries. To address this issue, we first identify the connected components (Tarjan, 1972) within each coarse class mask to separate individual instances. Let M (c) ∈ { 0, 1}H×W denote the coarse mask for class c ∈ { 1, . . . , N },where M (c)(p) = 1 indicates that pixel p belongs to class c. Each class mask is decomposed into a set of Kc
+
+disjoint instance masks using the connected component operator: 
+
+{M (c) 
+
+> k
+
+}Kc 
+
+> k=1
+
+= CC( M (c)), M (c) =
+
+> Kc
+
+⋃
+
+> k=1
+
+M (c) 
+
+> k
+
+, M (c) 
+
+> i
+
+∩ M (c) 
+
+> j
+
+= ∅ ∀i̸ = j. (1) We then sample points for each identified instance, rather than across the entire class, and use these as prompts for SAM to generate instance-specific masks. This instance-based sampling strategy substantially improves mask accuracy and boundary precision. 
+
+Point Sampling Matters. To prompt SAM effectively, we rely on sampled points from each identified instance. However, for optimal refinement of the coarse labels associated with each instance, it is crucial to determine how we select K points from within the mask to obtain the best possible segmentation proxies from SAM for subsequent training. As a naïve solution, random sampling, or sampling points solely from high-confidence regions, often produces masks that do not cover the full object extent. For example, as shown in Fig. 2 confidence-based sampling (Kweon & Yoon, 2024) for class ’person’ results in segmenting only a part of the class instance. In order to ensure maximum coverage of the annotated region, we design a sampling strategy with three goals: (1) most of the points should be positioned near the central line of the mask to capture central details and connection between the different sub parts of the object; (2) some points should be close to the boundaries to refine edges; and (3) all K sampled points should be uniformly distributed throughout the region. This approach ensures comprehensive coverage and enhances segmentation accuracy. To address the first criterion, we propose sampling points from the topological skeleton of the shape -a simplified representation that captures the essential structure of a shape while preserving its topology. Formally, the skeleton of a 2D shape is a set of points lying at the “center” of the shape, equidistant from its boundaries. It effectively reduces the shape to a thin, connected line structure that retains important geometrical and topological properties, such as connectivity and general shape. For the second criterion, we define a probability distribution over the shape and its skeleton using a normalized distance field. This field is based on normalized Euclidean distances from each point within the shape to the nearest background point. With this setup, the skeleton forms the highest-probability region, while areas closer to the boundaries are less prominent. To satisfy the final criterion of uniformity, we employ a grid-based sampling approach. Specifically, we divide the bounding-box around the coarse annotations, with dimensions S = s1 × s2 (where 
+
+s1 and s2 are the side lengths), into a grid of size -5Table 1: Comparisons on PASCAL VOC 2012 using scribble and point labels with DeepLabv3+ and DeepLabV2 segmentation networks (ResNet-101 backbone). WvF (Ke et al., 2021) refers to weak vs fine supervision performance ratio. AGMM ∗: Our re-implementation.                                                               
+
+> Scribble Point
+> Method DeepLab mIoU WvF mIoU WvF Pan et al. (Pan et al., 2021) V2 74.6 96.0 --SPML (Ke et al., 2021) V2 74.2 95.5 --A2GNN (Zhang et al., 2021) V2 74.3 95.5 66.8 85.9 Supervised V3+ 69.7 87.6 61.6 77.4 Fixmatch (Sohn et al., 2020) V3+ 71.3 89.6 68.4 86.0 DBFNet (Wu et al., 2022) V3+ 72.5 91.2 66.8 84.0 TEL (Liang et al., 2022) V3+ 75.8 96.9 63.3 86.0 AGMM (Wu et al., 2023) V3+ 76.4 96.1 69.6 87.5 AGMM ∗(Wu et al., 2023) V3+ 76.7 96.4 68.7 86.4 SAM baseline V3+ 70.3 88.4 38.4 48.3 Ours V3+ 78.1 98.2 75.3 94.7
+
+⌈ s1
+
+√ SK
+
+⌉ × ⌈ s2
+
+√ SK
+
+⌉, (2) where ⌈·⌉ is the ceiling function. We then randomly select K cells from this grid and sample one point from each cell based on the defined probability distribution. Following this sampling strategy, we obtain a better mask that covers the entire class instance. We show the visualization of sampling and refined mask in Appendix Fig. 12. 
+
+Best SAM Mask. To provide flexibility and minimize ambiguity, SAM generates three masks for each prompted object, covering whole, part, and subpart regions, each with an associated confidence score. Anaïve solution would be to select the mask at random or with the highest confidence score predicted by SAM. However, such an approach often results in misleading coverage of the region (see Fig. 2, where selecting the mask with the highest SAM score results in part segmentation for the ‘person’ class). Given the weakly supervised nature of our approach, selecting the most appropriate mask is essential to maximize both recall and precision. To balance these metrics, we propose a two-fold selection criterion: 1) we select the SAM mask that maximally covers the weak supervision area to maximize recall; 2) we exclude any excessively large SAM masks that significantly exceed the area of the initial weak supervision to maximize precision. For each prompt, SAM produces three candidate masks {Si}3
+
+> i=1
+
+. Given a weak mask W , we compute a coverage score ( ri) and compatibility score ( pi) given by -
+
+ri = |Si ∩ W ||W | pi = |Si ∩ W ||Si|
+
+We retain candidate masks that satisfy ri ≥ τ1 and pi ≥ τ2, and select the valid mask with the highest compatibility score. In our experiments, we set (τ1, τ 2) = (0 .3, 0.7) . If no candidate satisfies both thresholds, we select the mask with the highest compatibility score. This criterion avoids selecting overly partial masks while preserving consistency with the weak annotation. 
+
+3.3 SAM & Semi-Supervised Learning 
+
+In our approach, we leverage three types of labels: ground-truth weak annotations, SAM-generated labels, and pseudo-labels. For robust pseudo-labels, our method employs weak-strong augmentations to enhance semi-supervised learning, similarly to Fixmatch (Sohn et al., 2020). This framework leverages SAM to dynamically generate segmentation masks, supporting flexibility in training while improving segmentation quality, particularly where ground-truth labels are coarse or incomplete. The ground-truth consists of weak 6Table 2: Comparison on Cityscapes (Cordts et al., 2016), ADE20k (Zhou et al., 2017), and PASCAL VOC 2012 (Everingham et al., 2010) with SegFormer (Xie et al., 2021) and DeepLabV3+. AGMM ∗ denotes our reimplementation of AGMM (Wu et al., 2023). The SAM baseline naïvely uses weak labels as prompts to SAM (see Section 4.1). SegFormer uses MiT-B0, whereas DeepLabV3+ uses ResNet-101 (He et al., 2016).                                                                                            
+
+> SegFormer DeepLabV3+
+> Annotation Method Cityscapes ADE20k PASCAL Cityscapes ADE20k
+> Point
+> Supervised 51.8 26.5 61.5 52.2 29.5 Fixmatch (Sohn et al., 2020) 53.1 27.2 63.6 52.9 29.8 AGMM ∗(Wu et al., 2023) 53.4 -56.6 52.4 -SAM baseline 51.0 29.3 59.0 50.0 35.1 Ours 58.5 32.6 67.5 61.7 36.3 Scribble
+> Supervised 62.6 35.5 66.4 63.8 39.6 Fixmatch (Sohn et al., 2020) 64.2 35.8 67.1 64.8 40.4 AGMM ∗(Wu et al., 2023) 56.7 -68.1 67.4 -SAM baseline 24.2 10.6 34.8 26.3 11.2 Ours 71.5 36.9 71.4 75.1 43.5 Coarse
+> Supervised 65.2 35.7 62.8 67.9 40.9 Fixmatch (Sohn et al., 2020) 66.7 36.7 63.6 68.9 41.3 AGMM ∗(Wu et al., 2023) 57.1 -58.6 70.6 -SAM baseline 42.4 23.5 22.3 47.9 26.9 Ours 69.9 37.4 70.1 72.4 43.2
+> Fine Supervised 76.0 38.1 73.5 80.2 44.6
+
+annotations in the form of coarse semantic segmentation masks, which often lack precise boundaries and may omit small objects due to labeling constraints. During training, SAM is applied only to weakly augmented images, adding variations and scalability to SAM-derived masks. This helps in improving segmentation accuracy by incorporating diverse views of the segmentation boundaries. Following (Sohn et al., 2020), we utilize high-confidence pseudo-labels filtered using threshold Θ1. These pseudo-labels effectively address segmentation for small objects that lack ground-truth labels and enhance object coverage over the training process. 
+
+Refined Mask Sampling. Since the coarse mask often fails to cover the entire class instance, sampling points exclusively from these regions can be suboptimal. To enable sampling from the full object extent, we extend coarse masks using pseudo-labels filtered with a stricter threshold, Θ2 > Θ1. Sampling from this pseudo-labeled extension improves recovery of the complete instance mask. To further improve efficiency, we dynamically resample SAM masks every M = 4 iterations to reflect updates in the coarse annotations. This periodic resampling produces our SeSAM masks (Fig. 3), allowing the masks to adapt to progressively refined and expanded annotations, ensuring consistency across evolving masks. We provide ablations on the sampling-frequency trade-off in Appendix Table 7 and runtime comparisons in Appendix Table 6. 
+
+Overall Loss Function. We train the segmentation network using three sources of supervision: weak labels, SAM-derived labels, and teacher pseudo-labels. The overall objective is 
+
+L = Lcoarse + λ1LSAM + λ2Lpseudo 
+
+where λ1 and λ2 are weights for loss components with SAM-derived labels and teacher pseudo-labels re-spectively. Each loss is computed only on the pixels labeled by its corresponding supervision source, while unlabeled pixels are ignored. When multiple supervision sources overlap, weak labels take precedence over SAM-derived labels, and SAM-derived labels take precedence over pseudo-labels. 
+
+# 4 Experiments 
+
+In this section, we discuss the extensive experiments to show the effectiveness of our SeSAM framework. 7Datasets and metrics used. Following prior works (Pan et al., 2021; Ke et al., 2021; Zhang et al., 2021; Wu et al., 2022; Liang et al., 2022; Wu et al., 2023), we evaluate our method on PASCAL VOC 2012 (Everingham et al., 2010) and further extend evaluation to the challenging ADE20k (Zhou et al., 2017) and Cityscapes (Cordts et al., 2016). PASCAL VOC 2012 contains 10,582 training images and 1,449 validation images, with 20 annotated classes. ADE20k features both indoor and outdoor scenes, with 150 labeled classes and approximately 20,000 training and 5,000 validation images. Cityscapes comprises urban scenes with 2,975 training images and 500 validation images across 19 annotated classes. For all the datasets, we obtain the point annotations by randomly sampling one point per class per image following (Paul et al., 2020). Scribble annotations for these datasets are provided by (Boettcher et al., 2024; Lin et al., 2016). While Cityscapes provides manually annotated coarse labels, we obtain the coarse annotation for ADE20k and PASCAL VOC 2012 dataset following (Das et al., 2023b). For evaluation, we use the mean Intersection over Union (mIoU) metric and Weak over Fine supervision performance ratio (WvF). 
+
+Implementation details. We present our results on two segmentation networks: SegFormer (Xie et al., 2021) with MiT-B0 backbone and DeepLabv3+ (Chen et al., 2018) with ResNet-101 backbone. We use standard crop sizes (Xie et al., 2021) of 1024 ×1024 for Cityscapes and 512 ×512 for ADE20k and PASCAL VOC 2012 during training. For the Segment Anything model (SAM) (Kirillov et al., 2023), we employ the SAM ViT-B variant in our experiments, keeping the model frozen throughout training. We train for 120k iterations with a batch size of 8 for Cityscapes, 160k iterations with batch size of 16 for ADE20k, and 60k iterations with batch size of 16 for PASCAL VOC 2012 dataset. We use the AdamW optimizer with an initial learning rate of 1 × 10 −4. To generate robust pseudo-labels, we adopt a standard teacher-student framework (Sohn et al., 2020), where the teacher model is an exponential moving average of the student model (EMA decay rate, α = 0 .999 ). We sample K = 5 points from each instance mask. Following Fixmatch (Sohn et al., 2020) we choose Θ1 = 0 .96 . For loss terms weighting, we select λ1 = 1 .0 and λ2 = 0 .01 . For confident pseudo-labels used for coarse extension, we use higher threshold for Θ2 as 0.98. 
+
+Annotation costs. For the Cityscapes dataset, annotating with fine labels takes around 90 min per image (Cordts et al., 2016) , while coarse annotation requires around 7 min (Cordts et al., 2016). Point annotations are significantly faster at ∼45 seconds (Paul et al., 2020; Das et al., 2023a) per image. Following (Lin et al., 2016), the annotation cost of scribble labels is estimated to be around 2.2 min per image. 
+
+4.1 Comparison with baselines 
+
+Prior works (Pan et al., 2021; Ke et al., 2021; Zhang et al., 2021; Wu et al., 2022; Liang et al., 2022; Wu et al., 2023) have primarily evaluated WSSS on the relatively simple PASCAL VOC 2012 dataset using only two weak labels (point and coarse) and CNN-based segmentation networks (DeepLabv2/DeepLabv3+). In contrast, we extend the evaluation to more challenging Cityscapes and ADE20k datasets, using three weak labels (including an additional coarse label) and employing the transformer-based SegFormer network. In Table 1 we first compare SeSAM’s performance on standard PASCAL VOC 2012 benchmark. Next, in Table 2 we provide comparison on challenging Cityscapes and ADE20k datasets. For this comparison, we take the best performing prior work, AGMM (Wu et al., 2023) and reimplement it on this setting. In Table 1, we present comparisons to the previous work on a simple object-oriented PASCAL dataset. Our method significantly outperforms all prior work (Pan et al., 2021; Ke et al., 2021; Zhang et al., 2021; Wu et al., 2022; Liang et al., 2022; Wu et al., 2023) with both scribble and point labeling. In particular, SeSAM shows better performance than the best prior work AGMM by 1.7% and 5.7% mIoU with scribble and point labels, respectively, achieving best weak vs fine (WvF) supervision performance ratio. Further, we go beyond simple object-centric PASCAL dataset and evaluate on more realistic and challenging scenarios, such as in Cityscapes and ADE20k datasets. In Table 2, we evaluate our proposed method SeSAM on these datasets with CNN-based architecture (DeepLabV3+) and transformer-based architecture (SegFormer) and show that SeSAM outperforms the baselines and the best previous method AGMM by a substantial margin. Note that AGMM re-engineers the DeepLabv3+ network and their method does not generalize well to transformer based segmentation networks. It further becomes computationally infeasible with increasing number of classes. For ADE20k with 150 classes it requires around 259.2 GB GPU memory for DeepLabV3+(ResNet-101) compared to 75.5 GB for PASCAL dataset (21 classes). 81 4 8 32 128 500 4000                    
+
+> Cost in annotation hrs
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Cityscapes mIoU
+> 60.7%
+> 56.5%
+> SeSAM-Point vs Point
+> SeSAM-Point
+> Point
+> 14832 128 500 4000
+> Cost in annotation hrs
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 71.5%
+> 62.6%
+> SeSAM-Scribbles vs Scribbles
+> SeSAM-Scribbles
+> Scribbles
+> 14832 128 500 4000
+> Cost in annotation hrs
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Cityscapes mIoU
+> 69.9%
+> 65.2%
+> SeSAM-Coarse vs Coarse
+> SeSAM-Coarse
+> Coarse
+> 14832 128 500 4000
+> Cost in annotation hrs
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80 SeSAM weak vs Fine anot.
+> SeSAM-Point
+> SeSAM-Coarse
+> SeSAM-Scribbles
+> Fine anot.
+
+Figure 4: Annotation cost vs. performance plot . We compare the performance at different budgets for each of the weak labels (point, scribble and coarse), and compare the cost-effectiveness of our method with fine annotation (bottom-left). In particular, scribble supervision reaches performance comparable to fine-label supervision using only 6% of the annotation budget. Whereas, in a low-budget setting (109 hrs), it outperforms fine annotations by 18.5%. While it is not straightforward to apply SAM using weak labels for the WSSS task (see Fig. 2), we constructed a naïve baseline that directly uses the weak labels (point (Bearman et al., 2016), scribble (Lin et al., 2016), and coarse (Das et al., 2023b)) to prompt SAM and generate labels for training the segmentation model. In particular, for point-based labels, each labeled point is provided as input to SAM. Scribbles are treated as a collection of points and used as such for prompting SAM, while coarse labels are provided as mask prompts. We pre-generate labels using SAM with these weak label prompts and train the segmentation model on the resulting annotations. We observe a major drop in performance particularly for scribble and coarse labels (e.g., a drop of 47.3% mIoU for Cityscapes with scribbles), suggesting naïvely using SAM generates noisy labels. Further, when compared to the upper bound performance, i.e. supervised baseline on fine labels, we observe that our approach successfully narrows the performance gap between weak and fine annotations. For example, our coarse setting on ADE20k dataset achieves 37.4% mIoU whereas supervised training on full fine annotation yields 38.1%. Overall, our proposed framework outperforms the prior works and baselines for all of the weak labels (point, coarse, and scribbles) showing the effectiveness of incorporating SAM priors in the WSSS setting. 
+
+Qualitative Comparison. We provide the qualitative comparison of SeSAM and supervised learning with different weak labels (point, scribble, and coarse) on Cityscapes dataset using SegFormer segmentation network in Fig. 5. We observe that with additional SAM instance priors, SeSAM has better prediction along boundaries (e.g. car). It also correctly predicts the class road for scribble and point weak labels. 
+
+4.2 Cost vs performance trade-off 
+
+In this experiment we show the cost-effectiveness of our approach. We perform this comparison on Cityscapes dataset in Fig. 4. We sample 100, 500, 1500, 2975 images from the Cityscapes fine and coarse training sets. The cost of annotations are computed following the annoation costs mentioned in Section 4. For example, annotating 100 images with fine labels costs 150hrs, coarse labels cost 11.6 hrs, scribble labels 3.6 hrs, whereas point label costs 1.2 hrs. 9Point  Scribble  Coarse 
+
+> Weak ann. SeSAM +
+> Weak ann.
+> GT  Image
+
+Figure 5: Qualitative performance comparison . We conduct a qualitative performance comparison of our framework with supervised models using various weak labels, including point, scribble, and coarse annotations. Overall, our method demonstrates superior class segmentation, particularly with enhanced prediction along boundaries (see car). We make two comparisons. First, we compare the performances of different weak labels in different labeling budgets. Then, we compare the performance with supervised learning on fine labels and different weak labels. For the first comparison, we observe that scribble labels outperform the coarse and point labels. For the Cityscapes dataset, we generated the initial coarse masks from scribbles as discussed in Section 3. The better performance can be justified by the higher quality of “SAM generated” coarse masks than of the manually labeled coarse annotations (see Appendix ). For the second comparison, we observe that scribble labeling is a better alternative to fine annotations in limited budget setting. In particular, scribble annotation achieves similar performance to fine annotations using only 6% of the annotation budget (109 hrs vs 4463 hrs). In limited budget setting (e.g. 109 hrs), scribble outperforms fine annotation by 18.5%. A similar conclusion can be drawn for other weak labels. Overall, weak labels are cost-effective alternatives to fine labels, particularly in constrained budgets. Table 3: Ablation studies of SeSAM. We study the contribution of the proposed components, instance mask separation, and refined-mask-based point sampling. Base refers to the FixMatch (Sohn et al., 2020)-based segmentation network. Experiments on Cityscapes with SegFormer-B0. Base Instance Mask Selection Prompt Sampling Refined Sampling Coarse                                  
+
+> ✓65.2
+> ✓✓68.6
+> ✓✓✓68.9
+> ✓✓✓69.1
+> ✓✓✓✓69.4
+> ✓✓✓✓✓69.9
+> (a) Ablation of SeSAM components.
+> Coarse W/o instance 67.9 With instance 69.9
+> (b) Effect of in-stance mask separa-tion.
+> Coarse Point W/o refined 69.4 56.0 With refined 69.9 58.5
+> (c) Effect of refined-mask-based point sam-pling.
+
+4.3 Ablation Studies and Analysis 
+
+In this subsection, we analyze the key components of SeSAM through a series of ablation studies. We first ablate the core components of the framework, and then examine the main design choices introduced to address the challenges of using SAM for weakly supervised semantic segmentation, including instance separation, mask selection, point sampling, and prompt type. Finally, we study the impact of sampling point prompts from refined masks during training. 
+
+SeSAM components. In this experiment (see Table 3, left), we ablate the individual components of SeSAM. Starting from FixMatch (Sohn et al., 2020) as the baseline, we progressively incorporate SAM-based instance priors. Instance separation alone provides a significant gain of 3.4% over FixMatch. For this variant, we use naïve point sampling and mask selection strategies; specifically, we sample high-confidence 10 Table 4: Analysis of SeSAM design choices. We study the effect of different point sampling strategies, mask selection strategies, and prompt types. Experiments on Cityscapes with SegFormer-B0. Method Coarse High confidence 68.6 Center 68.4 Boundary 68.8 Random 69.4 Ours 69.9           
+
+> (a) Sampling strategies.
+> Method Coarse Best score 69.0 Random 68.8 Ours 69.9
+> (b) Effect of mask se-lection strategy.
+> Label mIoU BBox 68.3 Mask 63.4 Point 69.9
+> (c) Effect of prompt type.
+
+point prompts (top-k) and select the highest-scoring masks. We further observe that our proposed mask selection strategy and uniform probabilistic prompt sampling each improve performance individually, while their combination yields an additional gain of 0.8%. Finally, refined mask sampling provides a further improvement of 0.5%. Overall, the ablation confirms that the proposed components are complementary and jointly yield the best performance. 
+
+Instance Separation. Qualitatively, we observe that separating instances within class masks improves segmentation quality with SAM, as shown in Fig. 2. Quantitatively, performance drops by 2% relative to a baseline without instance separation (see Table 3, middle), highlighting the importance of this design choice. This suggests that sampling points from instance-level masks, rather than class masks, provides better prompts and leads to more accurate mask refinement. 
+
+Selection of SAM mask granularity. The naïve baseline is to select the candidate mask with the highest SAM score. However, as shown in Fig. 2, the highest-scoring mask often corresponds to a partial object rather than the desired full instance. Selecting the mask based on the best score results in a reduction in performance by 0.9 mIoU, while random mask selection reduces performance by 1.2 mIoU. Overall, our weak-label-aware mask selection strategy consistently outperforms these baselines (see Table 4). 
+
+Point sampling strategy. In this experiment, we compare various ways of sampling points from coarse masks for better SAM segmentation. As shown in Fig. 2, sampling of points based on network confidence is suboptimal. We further quantify this ablation in Table 4 left. We additionally compare with center sampling, boundary sampling, and random sampling. Center sampling selects pixels near the distance-transform maxima; boundary sampling selects pixels close to object boundaries; and random sampling draws uniformly from the foreground. Among these strategies, our skeleton-aware probabilistic sampling achieves the best performance. 
+
+Sampling from refined mask. Our framework iteratively refines SAM masks by extending the coarse mask with pseudo-labels as discussed in Section 3. We further allow sampling of point prompts from these pseudo-label extension of coarse masks. We ablate (see Table 3 right) this addition with a baseline that does not allow sampling from pseudo-labels. We observe that allowing sampling of point prompts from pseudo-label extensions can further boost the performance. In particular, we observe a bigger performance gain for point label (2.5%) than coarse label (0.5%), as point labels allow a larger extension with pseudo-labels than coarse labels. 
+
+Why do we use points for prompting? In this experiment, we compare different choices of prompts used by SeSAM. For point prompts, we sample points from the coarse mask based on our uniform skeleton-based probabilistic sampling discussed in Section 3. For bounding-boxes, we compute the bounding-box around the coarse mask and use it as a prompt for SAM. For mask prompt, we directly use the coarse mask as prompt. Mask prompts fail to generate meaningful SAM masks, whereas bounding-box prompt restricts the mask to the box (see Appendix Fig. 8). Overall, point prompting performs better (see Table 4) than other prompting types. 
+
+Comparison across different SAM versions. We conduct an additional experiment to compare the mask generation quality of different SAM versions: SAM (Kirillov et al., 2023), SAM 2 (Ravi et al., 2025), and SAM 3 (Carion et al., 2025). We use the Cityscapes validation set and apply the sampling strategy 11 Table 5: Comparison across SAM versions. We compare the mask generation quality of different SAM versions using precision and recall. Although newer versions (SAM 2 and SAM 3) introduce additional capabilities beyond image segmentation (Ravi et al., 2025; Carion et al., 2025), the original SAM provides the best trade-off between precision and recall for image-based segmentation. Experiments on Cityscapes dataset.            
+
+> SAM (Kirillov et al., 2023) SAM 2 (Ravi et al., 2025) SAM 3 (Carion et al., 2025) Precision 92.2 92.8 92.1 Recall 62.7 61.8 61.9 F1 74.7 74.2 73.9
+
+from Section 3 to sample points from coarse instance labels. These points are used to prompt SAM, which refines the coarse masks by expanding them with SAM-generated masks. We evaluate refinement quality using precision and recall computed on labels added by SAM. As shown in Table 5, the original SAM achieves the best trade-off between precision and recall for image segmentation, whereas newer versions (SAM 2 and SAM 3), despite their additional capabilities such as video and concept-based segmentation, perform slightly worse in this setting. For a fair comparison, we use: SAM ViT-B for SAM, SAM 2.1 Hiera-B+ for SAM 2, and the only publicly released model for SAM 3. Table 6: Runtime and memory comparison on Cityscapes using DeepLabv3+. We report training time per iteration, GPU memory usage, and mIoU.          
+
+> Training time (sec/iter) GPU memory (Gb) Performance (mIoU) Fixmatch (Sohn et al., 2020) 0.24 22.3 68.9 AGMM (Wu et al., 2023) 1.56 60.8 70.6 Ours 0.81 22.7 72.4
+
+Efficiency Analysis. We evaluate SeSAM in terms of training time and GPU memory usage, and compare it with the prior WSSS method AGMM (Wu et al., 2023) and the semi-supervised semantic segmentation baseline FixMatch (Sohn et al., 2020). All experiments are conducted on the Cityscapes dataset with a batch size of 4 and a crop size of 1024 × 1024 . For a fair comparison with the prior state of the art, AGMM, we adopt the same DeepLabV3+ backbone. As shown in Table 6, SeSAM is substantially more efficient than AGMM, reducing training time from 1.56 to 0.81 sec/iter and GPU memory usage from 60.8 to 22.7 GB, while also improving mIoU from 70.6 to 72.4. Relative to the lighter FixMatch baseline, SeSAM requires longer training time due to SAM-based mask generation, but preserves similar memory usage (22.7 vs. 22.3 GB) and yields a notable gain in mIoU (72.4 vs. 68.9 mIoU). Overall, these results show that SeSAM substantially improves over the prior WSSS method AGMM and achieves higher accuracy than FixMatch with similar memory usage, at the cost of increased training time. 
+
+# 5 Conclusion 
+
+This work presents SeSAM, a weakly supervised semantic segmentation framework that leverages instance priors from the Segment Anything Model (SAM). We address key challenges in adapting SAM for weak supervision. First, we show how to prompt SAM using weak class labels, proposing an approach that separates class masks into individual instances. Next, we show that uniform point sampling along the mask skeleton yields optimal mask quality. To address ambiguity in selecting the desired mask granularity, we introduce a metric based on intersection with weak labels. Finally, we integrate diverse label types—ground-truth weak labels, SAM-generated labels, and pseudo-labels within a semi-supervised framework, enhancing mask quality by sampling points from pseudo-label extensions of the weak labels. Overall, our framework operates with various weak labels: points, scribbles, and coarse annotations, narrowing the performance gap with fully annotated data at a fraction of the annotation cost. 12 References 
+
+Segment Anything Model (SAM) with Mask Labeling. GitHub - facebookresearch, November 2024. Accessed: 2024-11-14, Available at: https://github.com/facebookresearch/segment-anything/issues/169 .Jiwoon Ahn and Suha Kwak. Learning Pixel-level Semantic Affinity with Image-level Supervision for Weakly Supervised Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 4981–4990, 2018. Amy Bearman, Olga Russakovsky, Vittorio Ferrari, and Li Fei-Fei. What’s the Point: Semantic Segmentation with Point Supervision. In Proceedings of the European Conference on Computer Vision , 2016. Yasser Benigmim, Subhankar Roy, Slim Essid, Vicky Kalogeiton, and Stéphane Lathuilière. Collaborating Foundation Models for Domain Generalized Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 3108–3119, 2024. Wolfgang Boettcher, Lukas Hoyer, Ozan Unal, Jan Eric Lenssen, and Bernt Schiele. Scribbles for All: Benchmarking Scribble Supervised Segmentation Across Datasets. In Advances in Neural Information Processing Systems , 2024. doi: 10.52202/079017-1463. URL https://doi.org/10.52202/079017-1463 .Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik Debnath, Ronghang Hu, Didac Suris, Chaitanya Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew Huang, et al. Sam 3: Segment Anything with Concepts. arXiv preprint arXiv:2511.16719 , 2025. Liang-Chieh Chen, Yukun Zhu, George Papandreou, Florian Schroff, and Hartwig Adam. Encoder-decoder with Atrous Separable Convolution for Semantic Image Segmentation. In Proceedings of the European Conference on Computer Vision , pp. 801–818, 2018. Tianle Chen, Zheda Mai, Ruiwen Li, and Wei-Lun Chao. Segment Anything Model (SAM) Enhances Pseudo-Labels for Weakly Supervised Semantic Segmentation. In I Can’t Believe It’s Not Better Workshop: Failure Modes in the Age of Foundation Models , 2024. URL https://openreview.net/forum?id=EooD8NMyQM .Tianrun Chen, Lanyun Zhu, Chaotao Deng, Runlong Cao, Yan Wang, Shangzhan Zhang, Zejian Li, Lingyun Sun, Ying Zang, and Papa Mao. Sam-adapter: Adapting segment anything in underperformed scenes. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 3367–3375, 2023. Marius Cordts, Mohamed Omran, Sebastian Ramos, Timo Rehfeld, Markus Enzweiler, Rodrigo Benenson, Uwe Franke, Stefan Roth, and Bernt Schiele. The Cityscapes Dataset for Semantic Urban Scene Under-standing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 3213–3223, 2016. Jifeng Dai, Kaiming He, and Jian Sun. Boxsup: Exploiting Bounding Boxes to Supervise Convolutional Networks for Semantic Segmentation. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 1635–1643, 2015. Anurag Das, Yongqin Xian, Dengxin Dai, and Bernt Schiele. Weakly-supervised Domain Adaptive Semantic Segmentation with Prototypical Contrastive Learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 15434–15443, 2023a. Anurag Das, Yongqin Xian, Yang He, Zeynep Akata, and Bernt Schiele. Urban Scene Semantic Segmentation with Low-cost Coarse Annotation. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision . IEEE, 2023b. Ruining Deng, Can Cui, Quan Liu, Tianyuan Yao, Lucas W Remedios, Shunxing Bao, Bennett A Landman, Lee E Wheless, Lori A Coburn, Keith T Wilson, et al. Segment anything model (sam) for digital pathology: Assess zero-shot segmentation on whole slide imaging. In IS&T International Symposium on Electronic Imaging , volume 37, pp. COIMG–132, 2025. Mark Everingham, Luc Van Gool, Christopher KI Williams, John Winn, and Andrew Zisserman. The Pascal Visual Object Classes (Voc) Challenge. International journal of computer vision , 88:303–338, 2010. 13 Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep Residual Learning for Image Recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 770–778, 2016. Dan Hendrycks and Thomas Dietterich. Benchmarking Neural Network Robustness to Common Cor-ruptions and Perturbations. In International Conference on Learning Representations , 2019. URL 
+
+https://openreview.net/forum?id=HJz6tiCqYm .Chuanfei Hu, Tianyi Xia, Shenghong Ju, and Xinde Li. When Sam Meets Medical Images: An Investi-gation of Segment Anything Model (Sam) on Multi-phase Liver Tumor Segmentation. arXiv preprint arXiv:2304.08506 , 2023. Tsung-Wei Ke, Jyh-Jing Hwang, and Stella Yu. Universal Weakly Supervised Segmentation by Pixel-to-Segment Contrastive Learning. In International Conference on Learning Representations , 2021. URL 
+
+https://openreview.net/forum?id=N33d7wjgzde .Anna Khoreva, Rodrigo Benenson, Jan Hosang, Matthias Hein, and Bernt Schiele. Simple Does It: Weakly Supervised Instance and Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pp. 876–885, 2017. Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C Berg, Wan-Yen Lo, et al. Segment Anything. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 4015–4026, 2023. Hyeokjun Kweon and Kuk-Jin Yoon. From SAM to Cams: Exploring Segment Anything Model for Weakly Supervised Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 19499–19509, 2024. Feng Li, Hao Zhang, Peize Sun, Xueyan Zou, Shilong Liu, Jianwei Yang, Chunyuan Li, Lei Zhang, and Jianfeng Gao. Semantic-sam: Segment and Recognize Anything at Any Granularity. In Lecture Notes in Computer Science , 2023. doi: 10.1007/978-3-031-73195-2_27. URL https://doi.org/10.1007/ 978-3-031-73195-2_27 .Siyuan Li, Lei Ke, Martin Danelljan, Luigi Piccinelli, Mattia Segu, Luc Van Gool, and Fisher Yu. Matching Anything by Segmenting Anything. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 18963–18973, 2024. Zhiyuan Liang, Tiancai Wang, Xiangyu Zhang, Jian Sun, and Jianbing Shen. Tree Energy Loss: Towards Sparsely Annotated Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 16907–16916, 2022. Di Lin, Jifeng Dai, Jiaya Jia, Kaiming He, and Jian Sun. Scribblesup: Scribble-supervised Convolutional Networks for Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 3159–3167, 2016. Jun Ma, Yuting He, Feifei Li, Lin Han, Chenyu You, and Bo Wang. Segment Anything in Medical Images. 
+
+Nature Communications , 15(1):654, 2024. Gerhard Neuhold, Tobias Ollmann, Samuel Rota Bulo, and Peter Kontschieder. The Mapillary Vistas Dataset for Semantic Understanding of Street Scenes. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 4990–4999, 2017. Zhiyi Pan, Peng Jiang, Yunhai Wang, Changhe Tu, and Anthony G Cohn. Scribble-supervised Semantic Seg-mentation by Uncertainty Reduction on Neural Representation and Self-supervision on Neural Eigenspace. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 7416–7425, 2021. Deepak Pathak, Philipp Krahenbuhl, and Trevor Darrell. Constrained Convolutional Neural Networks for Weakly Supervised Segmentation. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 1796–1804, 2015. 14 Sujoy Paul, Yi-Hsuan Tsai, Samuel Schulter, Amit K Roy-Chowdhury, and Manmohan Chandraker. Domain Adaptive Semantic Segmentation Using Weak Labels. In Proceedings of the European Conference on Computer Vision , pp. 571–587. Springer, 2020. Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nico-las Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollar, and Christoph Feichtenhofer. SAM 2: Segment Anything in Images and Videos. In The Thirteenth International Conference on Learning Representations ,2025. Peilun Shi, Jianing Qiu, Sai Mu Dalike Abaxi, Hao Wei, Frank P-W Lo, and Wu Yuan. Generalist Vision Foundation Models for Medical Imaging: A Case Study of Segment Anything Model on Zero-shot Medical Segmentation. Diagnostics , 13(11):1947, 2023. Kihyuk Sohn, David Berthelot, Nicholas Carlini, Zizhao Zhang, Han Zhang, Colin A Raffel, Ekin Dogus Cubuk, Alexey Kurakin, and Chun-Liang Li. Fixmatch: Simplifying Semi-supervised Learning with Con-sistency and Confidence. Advances in Neural Information Processing Systems , 33:596–608, 2020. Chunfeng Song, Yan Huang, Wanli Ouyang, and Liang Wang. Box-driven Class-wise Region Masking and Filling Rate Guided Loss for Weakly Supervised Semantic Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 3136–3145, 2019. Guolei Sun, Wenguan Wang, Jifeng Dai, and Luc Van Gool. Mining Cross-image Semantics for Weakly Supervised Semantic Segmentation. In Proceedings of the European Conference on Computer Vision , pp. 347–365. Springer, 2020. Yanpeng Sun, Jiahui Chen, Shan Zhang, Xinyu Zhang, Qiang Chen, Gang Zhang, Errui Ding, Jingdong Wang, and Zechao Li. VRP-SAM: SAM with Visual Reference Prompt. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 23565–23574, 2024. Robert Tarjan. Depth-first Search and Linear Graph Algorithms. SIAM journal on computing , 1(2):146–160, 1972. Vibashan VS, Shubhankar Borse, Hyojin Park, Debasmit Das, Vishal Patel, Munawar Hayat, and Fatih Porikli. Possam: Panoptic Open-vocabulary Segment Anything. arXiv preprint arXiv:2403.09620 , 2024. Yunchao Wei, Jiashi Feng, Xiaodan Liang, Ming-Ming Cheng, Yao Zhao, and Shuicheng Yan. Object Region Mining with Adversarial Erasing: A Simple Classification to Semantic Segmentation Approach. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 1568–1576, 2017. Linshan Wu, Leyuan Fang, Jun Yue, Bob Zhang, Pedram Ghamisi, and Min He. Deep Bilateral Filtering Network for Point-supervised Semantic Segmentation in Remote Sensing Images. IEEE Transactions on Image Processing , 31:7419–7434, 2022. Linshan Wu, Zhun Zhong, Leyuan Fang, Xingxin He, Qiang Liu, Jiayi Ma, and Hao Chen. Sparsely An-notated Semantic Segmentation with Adaptive Gaussian Mixtures. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 15454–15464, 2023. Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M Alvarez, and Ping Luo. Segformer: Simple and Efficient Design for Semantic Segmentation with Transformers. Advances in Neural Information Processing Systems , 34:12077–12090, 2021. Junyu Xie, Charig Yang, Weidi Xie, and Andrew Zisserman. Moving object segmentation: All you need is sam (and flow). In Proceedings of the Asian conference on computer vision , pp. 162–178, 2024. Danni Yang, Jiayi Ji, Yiwei Ma, Tianyu Guo, Haowei Wang, Xiaoshuai Sun, and Rongrong Ji. SAM as the Guide: Mastering Pseudo-Label Refinement in Semi-Supervised Referring Expression Segmentation. In 
+
+International Conference on Machine Learning , pp. 56139–56155, 2024. 15 Jinyu Yang, Mingqi Gao, Zhe Li, Shang Gao, Fangjing Wang, and Feng Zheng. Track Anything: Segment Anything Meets Videos. arXiv preprint arXiv:2304.11968 , 2023. Bingfeng Zhang, Jimin Xiao, Jianbo Jiao, Yunchao Wei, and Yao Zhao. Affinity Attention Graph Neural Network for Weakly Supervised Semantic Segmentation. IEEE Transactions on Pattern Analysis and Machine Intelligence , 44(11):8082–8096, 2021. Haojie Zhang, Yongyi Su, Xun Xu, and Kui Jia. Improving the Generalization of Segmentation Foundation Model under Distribution Shift via Weakly Supervised Adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 23385–23395, 2024a. Renrui Zhang, Zhengkai Jiang, Ziyu Guo, Shilin Yan, Junting Pan, Hao Dong, Yu Qiao, Peng Gao, and Hongsheng Li. Personalize Segment Anything Model with One Shot. In The Twelfth International Con-ference on Learning Representations , 2024b. Bolei Zhou, Aditya Khosla, Agata Lapedriza, Aude Oliva, and Antonio Torralba. Learning Deep Features for Discriminative Localization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 2921–2929, 2016. Bolei Zhou, Hang Zhao, Xavier Puig, Sanja Fidler, Adela Barriuso, and Antonio Torralba. Scene Parsing Through Ade20k Dataset. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 633–641, 2017. 16 A Appendix 
+
+A.1 Additional results and ablations 
+
+SAM iterations during training. In this experiment, we investigate the impact of varying the frequency of applying SAM during training. Given the computational cost of SAM inference, we explore its application at reduced intervals. The performance results for different frequencies are summarized in Table 7. Our findings indicate that applying SAM too frequently (e.g., at every training iteration) results in a slight performance drop (69.3% vs. 69.9%). Conversely, applying SAM less frequently (e.g., once every 16 training iterations) leads to a more pronounced degradation in performance (68.2% vs. 69.9%). These results suggest that balancing the frequency of SAM application is crucial for optimizing performance while mitigating computational overhead. Table 7: Ablation experiment with frequency of applying SAM during training. We observe that applying SAM too frequently, i.e, every training iteration does not improve performance compared to training once every few iterations (once in 4 iterations). Further applying SAM in even fewer iterations (once in 16 iterations) results in performance degradation. # of iterations 1 2 4 8 16 Cityscapes mIoU 69.3 69.4 69.9 68.2 68.2 Table 8: Classwise performance comparison on Cityscapes. We compare the classwise performance of SeSAM for different weak labels with fine labels. In general, scribble performs better than other weak labels for all of the classes. Further, we also compare mIoU (mIoU ∗) performance by removing problematic classes with wrong ground-truth labels( Table 9). By removing such classes, we observe further narrowing of the performance gap with fine labels. Classwise performance comparison: Cityscapes road sidewalk building wall fence pole tra. light tra. sign vege. terrain sky person rider car truck bus train motor. bicycle mIoU mIoU* point 94.9 66.6 85.9 42.2 37.9 45.1 34.6 59.6 86.3 44.4 88.9 67.0 38.4 87.1 38.4 55.6 41.1 38.1 60.2 58.5 64.8 scribble 96.8 76.2 90.0 58.3 48.5 48.0 59.7 72.7 90.4 56.7 93.1 76.3 52.2 92.2 66.6 80.9 71.7 56.7 71.5 71.5 77.6                                         
+
+> coarse 95.7 71.7 89.3 54.6 47.5 53.9 54.7 68.7 89.4 44.5 93.9 74.6 50.6 92.0 70.3 76.1 70.1 55.6 70.2 69.9 75.9 Fine 98.0 83.4 91.7 60.3 55.3 59.8 67.4 76.1 92.2 64.2 94.6 79.3 56.2 94.2 73.8 83.6 77.0 61.6 75.6 76.0 80.8
+
+Classwise performance comparison. We also show classwise performance comparison of SeSAM with different weak labels in Table 8. We observe scribble to perform superior to other weak labels for almost all of the classes except class pole, sky, truck and motorbike. Further we also compare mIoU performance by removing inconsistent classes (colored ones where there is label mismatch, see Table 9, Fig. 9 and Section A.2). We observe that by removing the mismatched classes, we can further narrow the performance gap with fine labels (78.0 with scribbles and 75.9 with coarse vs 80.8 with fine). 
+
+Ablation with number of point prompts. In this experiment, we investigate the effect of varying the number of points sampled from ’instance’ masks to prompt the SAM model. Using the Cityscapes validation set, we apply the sampling strategy outlined in Section 3 to extract N points from coarse ‘instance’ labels. These sampled points are then used to prompt SAM, which subsequently refines the coarse masks by expanding them with SAM-generated masks. We evaluate the refinement’s quality by calculating precision and recall for the refined SAM mask. Our results in Fig. 6 indicate that the highest precision and recall values for SAM labels are achieved at N = 5 .
+
+Ablation with mask selection hyperparameters. In this experiment, we investigate the effect mask selection hyperparameter τ1, τ 2 in mask quality. Using the Cityscapes validation set, we first apply the sam-pling strategy outlined in Section 3 to extract five points from coarse ‘instance’ labels. These sampled points 17 1 2 5 10 20 
+
+> No of points
+> 61.0
+> 61.5
+> 62.0
+> 62.5
+> 63.0
+> Recall (%)
+> Precision and Recall (Cityscapes)
+> Cityscapes Recall
+> Cityscapes Precision
+> 91.0
+> 91.5
+> 92.0
+> 92.5
+> 93.0
+> Precision (%)
+
+Figure 6: Ablation with number of point prompts. We compute precision and recall for SAM masks for different num-ber of point prompts. We observe N = 5 
+
+yields the best trade-off. (1,9) (3,7) (5,5) (7,3)   
+
+> (1,2)
+> 52
+> 56
+> 60
+> 64
+> 68
+> Recall (%)
+> Cityscapes Recall
+> Cityscapes Precision
+> 89
+> 90
+> 91
+> 92
+> 93
+> 94
+> 95
+> Precision (%)
+
+Figure 7: Ablation with τ1, τ 2. We com-pute precision and recall for SAM masks for different combinations of τ1, τ 2. We observe 
+
+(τ1, τ 2 = 0 .3, 0.7) provides the best trade-off. are then used to prompt SAM, to obtain three masks. We select the best mask using τ1, τ 2 hyperparameter as discussing in Section 3. As shown in Fig. 7 (τ1, τ 2 = 0 .3, 0.7) provides the better trade-off for mask refinement. Point prompting Bounding box prompting Mask prompting 
+
+Figure 8: Why points for prompting? Point prompts generate the best segmentation masks using SAM (left). Whereas, bounding-box prompting forces SAM to generate labels within the box and does not completely label the object (middle). Mask prompt fails to generate meaningful mask (right) as also discussed in (sam, 2024). 
+
+A.2 Additional Details 
+
+Why points as prompts? In our experiments, we choose points as the prompting method for SAM. However, SAM allows prompting with bounding-boxes and masks as well. In this experiment, we show how prompting with points is optimal compared to other ways of prompting. We first obtain individual instance masks from the coarse annotation. Then for point prompts, we follow our sampling strategy (Sec. 3) for obtaining the SAM corrected mask. For bounding-box prompting, we compute the bounding-box of the coarse instance mask and use it as a prompt to SAM. For mask prompting, we directly use the coarse mask as a prompt to SAM. We provide the quantitative comparison in the main paper (Tab. 5) and observe that point prompting outperforms the other two prompting approaches. Further, we present a qualitative visualization of the generated masks in Fig. 8. Point prompts generate masks covering the whole object, whereas bounding-box prompt generates partial mask as it focuses to segment object only inside the bounding-box. Further mask prompting doesn’t work as discussed in (sam, 2024) and shown in figure. Overall, prompting with points is the most suitable prompting choice compared to other approaches. 
+
+Robustness of hyperparameters. In this experiment ( Fig. 7) we show robustness of our hyperparameters (Sec. 3.2) across datasets - Cityscapes and ADE20k. In particular, we ablate number of points sampled from coarse mask as well as mask selection hyperparameter ( (τ1, τ 2)). We observe that sampling 5 points works 18 Table 9: Inconsistency between coarse and fine annotations. We perform an experiment to understand the label mismatch between manually labeled coarse and fine labels. We compute intersection of fine and coarse labels over coarse labels (mIoU † for both train and val sets. We observe classes wall, fence and terrain to be severely affected, also shown in Fig. 9 Coarse vs Fine label mismatch in Cityscapes road sidewalk building wall fence pole tra. light tra. sign vege. terrain sky person rider car truck bus train motor. bicycle mIoU †   
+
+> val 98.8 93.2 96.8 61.1 71.6 87.9 86.5 94.4 97.4 67.4 97.6 96.2 86.1 99.2 94.9 98.2 90.0 87.2 93.5 89.4 train 99.0 91.7 97.4 62.7 74.3 84.9 87.6 91.6 96.3 70.1 97.5 97.3 89.0 98.9 86.7 94.6 95.8 92.4 91.4 89.4
+
+well for both Cityscapes and ADE20k dataset. Similarly, mask sampling hyperparameter ( τ1, τ 2 = 0.3,0.7) provides the best precision-recall trade-off for SAM masks in our experiments. Image Fine Coarse 
+
+Figure 9: Inconsistency between coarse and fine labels . In this example, we see the class wall is incorrectly labeled as fence in coarse annotation. Similarly, vegetation is wrongly labeled as road in coarse annotation. 
+
+Why are scribbles better? In our experimental evaluation(Tab. 1), we observe scribbles outperforming coarse annotation, particularly for Cityscapes dataset. We have the following reasons supporting this ex-perimental evaluation. First, the scribbles have better recall than coarse annotation. On average scribbles annotate 31.5 ‘instance’ objects in an image, whereas coarse annotation covers 27.5 objects. Since, scribble is automatically generated from fine-labeled annotation (Boettcher et al., 2024), it doesn’t skip small sized objects as in manual coarse annotations. Next, we observed manual annotation errors in ground-truth coarse labels. In particular, classes such as wall, fence and terrain are wrongly labeled (see Fig. 9). We also per-formed quantitative evaluation to understand the extent of annotation errors. We computed mIoU of coarse annotations with fine annotations only on the labeled coarse regions. As shown in Table 9, classes wall, fence and terrain are much worse labeled than other classes. Scribbles, on the other hand, use fine annotation to generate the labels and hence do not suffer from this mismatch error, resulting in better performance. 
+
+Image label as weak supervision. Our main focus lies on solving weakly supervised semantic segmenta-tion (WSSS) for real world challenging datasets such as Cityscapes and ADE20k. While prior image label based WSSS works employ class activation maps (CAMs) to get weak class localisation, they evaluate only on simpler PASCAL dataset. In complex datasets it becomes difficult to obtain correct CAMs as classes co-occur quite often. For example, road and car in most of the Cityscapes images. In this experiment, we take the best image label based WSSS method, SAM2CAM (Kweon & Yoon, 2024) and train it on Cityscapes dataset. We observed that the model is unable to localize class ‘road’ in any of the images, and wrongly predicts it as bus (see Fig. 10). SAM2CAM achieves a mean IoU of 5.8% on Cityscapes dataset compared to 61.7% by our SeSAM using point labels with the same DeepLabv3+ segmentation network. 
+
+Dependence on SAM Quality. We conducted an experiment to evaluate SAM’s robustness to image corruptions (Hendrycks & Dietterich, 2019), including contrast and weather changes (e.g., fog) at varying severity levels. Using our three-step refinement strategy, we generated refined SAM masks for coarse labels and computed the F1 score. Overall, we observe SAM to be quite robust. Even at extreme severity level 5, 19 Ground Truth Labels 
+
+> SAM2CAM prediction
+
+Figure 10: Image label as weak supervision. Best performing image label WSSS method SAM2CAM (Kweon & Yoon, 2024) fails to predict correct segmentation labels for Cityscapes dataset ( Class ‘road’ is wrongly predicted as ‘bus’). In such real world datasets, classes co-occur quite often (e.g. car and road in all images) making it difficult to obtain correct CAM for class localization. where image is barely visible, the F1 drop is minimal (3.0% with contrast, 1.1% for fog) wrt severity 0 (no corruption). Severity 0 Severity 2 Severity 4                   
+
+> Cityscapes Sev.0 Sev.1 Sev.2 Sev.3 Sev.4 Sev.5 Contrast 74.7 74.3 74.2 73.7 72.9 71.7 Fog 74.7 74.2 74.1 74.0 73.9 73.6
+
+Figure 11: Top: Contrast corruption on Cityscapes image for different severity levels. Bottom: Performance comparison for Contrast and Fog corruptions across severity levels. SAM remains robust with minimal F1 drop up to severity 3. 
+
+A.3 Additional Qualitative Results 
+
+Sampling of points. We propose uniform probabilistic sampling from the topological skeleton of the coarse masks as discussed in Sec. 3. As shown in Fig. 12, we obtain probability score for pixels in the masks based on the Euclidean distance transform that gives the topological skeleton for the coarse masks. We further divide the coarse mask into grids to allow uniform sampling throughout the mask. As shown in Fig. 12, our sampled points cover the whole mask with more focus on sampling from the topological skeleton. This ensures that the generated SAM masks cover the object well, as shown in Fig. 12. 
+
+Visualization of SAM masks and discussion. We visualise the SAM masks granularities obtained from coarse masks in Fig. 13. We randomly sample point prompt from the coarse mask and generate the SAM masks. Further, we also computed the overlap between the three masks in the Cityscapes dataset to understand the nested nature of the SAM masks. We found that the masks are not strictly nested. In particular, we found that the subpart mask has an overlap of 93.5% with the part mask and around 86.5% overlap with whole mask. 
+
+Additional qualitative comparison. We provide additional qualitative comparisons on Cityscapes in Fig. 14 and ADE20k dataset in Fig. 15. For both comparisons, we compare SeSAM againsts model trained with weak labels alone. For Cityscapes, we observe better segmentation quality with SeSAM, par-ticularly along the boundaries (see car in row 1, row 4 and bicycle in row 2). We observe similar superior 20 Image Skeleton samp. Refined mask Figure 12: Skeleton-based uniform sampling. We propose uniform prob-ability based sampling from topologi-cal skeleton of the mask. Image Coarse mask SAM mask 1 SAM mask 2 SAM mask 3 
+
+Figure 13: Visualization of SAM masks. In this visualization we show the three mask granularities generated by SAM. performance of SeSAM in ADE20k dataset as well, where our approach segments house (row 1) and chair (row 3) better compared to the baseline. 21 SeSAM + Weak ann.   
+
+> Weak ann.
+> Point Scribble Coarse
+> SeSAM + Weak ann.
+> Weak ann. SeSAM + Weak ann.
+> Weak ann. SeSAM + Weak ann.
+> Weak ann.
+
+Figure 14: Qualitative performance comparison on Cityscapes. We conduct a qualitative performance comparison of our framework with supervised models using various weak labels, including point, scribble, and coarse supervision. Overall, our method demonstrates superior class segmentation, particularly with enhanced prediction along boundaries (see car in row 1, 3 and 4, wall and bicycle in row 2). 22 SeSAM + Weak ann.   
+
+> Weak ann.
+> Point Scribble Coarse
+> SeSAM + Weak ann.
+> Weak ann. SeSAM + Weak ann.
+> Weak ann. SeSAM + Weak ann.
+> Weak ann.
+
+Figure 15: Qualitative performance comparison on ADE20k. We conduct a qualitative performance comparison of our framework with supervised models using various weak labels, including point, scribble, and coarse supervision. Overall, our method demonstrates superior class segmentation, particularly with enhanced prediction along boundaries (see house in row 1 and chair in row 3). 23
