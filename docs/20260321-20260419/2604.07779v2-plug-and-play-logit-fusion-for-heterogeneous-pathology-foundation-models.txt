@@ -1,0 +1,280 @@
+Title: Plug-and-Play Logit Fusion for Heterogeneous Pathology Foundation Models
+
+URL Source: https://arxiv.org/pdf/2604.07779v2
+
+Published Time: Mon, 13 Apr 2026 01:11:26 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# Plug-and-Play Logit Fusion for Heterogeneous Pathology Foundation Models 
+
+Gexin Huang ⋆1,3, Anqi Li ⋆2, Yusheng Tan 2, Beidi Zhao 1,3, Gang Wang 1,Zu-hua Gao 1, and Xiaoxiao Li 1,3 
+
+> 1
+
+University of British Columbia, Vancouver, BC, Canada 
+
+gexinml@gmail.com, beidiz@student.ubc.ca, gang.wang1@bccancer.bc.ca, zuhua.gao@ubc.ca, xiaoxiao.li@ece.ubc.ca  
+
+> 2
+
+Washington University in St. Louis, St. Louis, MO, USA 
+
+anqi.li1@wustl.edu, t.yusheng@wustl.edu  
+
+> 3
+
+Vector Institute, Toronto, ON, Canada 
+
+Abstract. Pathology foundation models (FMs) have become central to computational histopathology, offering strong transfer performance across a wide range of diagnostic and prognostic tasks. The rapid prolif-eration of pathology foundation models creates a model-selection bottle-neck: no single model is uniformly best [17,16] , yet exhaustively adapting and validating many candidates for each downstream endpoint is pro-hibitively expensive. We address this challenge with a lightweight and novel model fusion strategy, LogitProd , which treats independently trained FM-based predictors as fixed experts and learns sample-adaptive fusion weights over their slide-level outputs.The fusion operates purely on logits, requiring no encoder retraining and no feature-space alignment across heterogeneous backbones. We further provide a theoretical anal-ysis showing that the optimal weighted product fusion is guaranteed to perform at least as well as the best individual expert under the train-ing objective. We systematically evaluate LogitProd on 22 benchmarks spanning WSI-level classification, tile-level classification, gene mutation prediction, and discrete-time survival modeling. LogitProd ranks first on 20/22 tasks and improves the average performance across all tasks by 
+
+∼3% over the strongest single expert. LogitProd enables practitioners to upgrade heterogeneous FM-based pipelines in a plug-and-play man-ner, achieving multi-expert gains with ∼12 × lower training cost than feature-fusion alternatives. The code is available here. 
+
+Keywords: Pathology · Foundation models · Ensemble learning. 
+
+## 1 Introduction 
+
+With hematoxylin and eosin (H&E) stained whole-slide image (WSI) digitization and deep learning, computational pathology has enabled automated diagnosis, risk stratification, and biomarker discovery from routine clinical specimens. A  
+
+> ⋆
+
+Equal contribution.  
+
+> arXiv:2604.07779v2 [cs.CV] 10 Apr 2026 2Gexin Huang et al.
+
+standard WSI pipeline tessellates a slide into patches, encodes them into repre-sentations, and applies multiple instance learning (MIL) to aggregate patch fea-tures into slide- or patient-level predictions under weak supervision [8,13,18,23]. Recently, pathology foundation models (FMs) have become strong, general-purpose encoders for these pipelines (e.g., UNI [3], CONCH [12], Virchow [19], Prov-GigaPath [22]), but their rapid proliferation has created a heterogeneous model zoo with substantial differences in pretraining data, architectures, and objectives. Large-scale benchmarks increasingly suggest that no single FM is uniformly best across tasks, and that different FMs can exhibit complementary strengths even on the same endpoint [17,16]. As a result, FM selection becomes a practical bottleneck: exhaustively adapting and validating many FMs for each new cohort or task is computationally expensive, while committing to a single convenient choice can leave performance unrealized. To alleviate this model-selection bottleneck, existing solutions in computa-tional pathology largely pursue training-time integration of multiple FMs. First, some works intervene at the pretraining stage by distilling multiple teachers into a single, more generalizable foundation model (e.g., GPFM [15]). Second, a growing body of integration methods combines multiple pathology FMs for a downstream task by learning representation-level fusion or alignment, often through offline or online distillation to obtain task-aligned embeddings and pre-dictors [11,24,14]. Although effective, these strategies face practical barriers at WSI scale: (i) optimization overhead : they entail substantial training to obtain a student model and/or a fusion-aware downstream head (e.g., 16 ×80 GB H800 GPUs per cohort [15]); (ii) re-encoding overhead : they require re-encoding many patches or slides with multiple encoders to build fused representations, which is costly in compute, I/O, and storage; and (iii) inflexibility : they typically demand re-tuning the representation fusion pipeline when experts are added or cohorts shift, limiting plug-and-play upgrades. A natural alternative is inference-time integration using only prediction out-puts. Prediction-level fusion, such as probability averaging, fixed product rules, or majority voting—provides a training-free way to combine models [4,7,10]. Yet, in a heterogeneous FM-based expert pool, fixed fusion rules are inher-ently limited: expert confidence is rarely calibrated across different encoders, and an individual expert’s reliability varies drastically across different slides. While learned gating (like Mixture-of-Experts) can address this by weighting experts adaptively [21], standard routing mechanisms rely on high-dimensional input features (e.g., patch embeddings)—the exact computational bottleneck we aim to bypass These observations motivate a complementary question: Can we achieve sample-adaptive fusion of heterogeneous pathology experts from predic-tion outputs, without re-encoding features or retraining experts? 
+
+To address this gap, we propose LogitProd , a lightweight logit-level product fusion framework for plug-and-play integration of independently trained FM-based experts. LogitProd starts from a collection of heterogeneous experts for the same endpoint, where each expert pairs a frozen FM encoder with a task-specific head and outputs prediction logits. Our key insight is that, even without Plug-and-Play Logit Fusion for Heterogeneous Pathology Foundation Models 3
+
+Fig. 1: Overview of LogitProd. Frozen FM experts output logits; Logit-Prod derives confidence/entropy/disagreement cues to predict sample-adaptive weights and fuses experts via weighted product fusion, enabling efficient multi-task prediction without re-encoding or feature alignment. accessing patch embeddings, expert logits contain informative reliability cues ,e.g., confidence/uncertainty statistics and inter-expert disagreement, that can guide sample-specific fusion. Accordingly, LogitProd learns a minimal gating network to predict sample-adaptive, nonnegative expert weights directly from these logit-derived cues. Crucially, rather than using standard additive blending, LogitProd aggregates experts via a weighted product-of-experts (PoE) formula-tion. This multiplicative design naturally sharpens consensus when experts agree and strictly suppresses overconfident errors from unreliable experts on a given slide. By operating purely at the prediction level, LogitProd composes experts across encoders and embedding dimensionalities without patch re-encoding, fea-ture alignment, or retraining a new MIL aggregator, and supports incremental expert-pool expansion by (re)fitting only a lightweight gating network on log-its, with negligible additional overhead beyond running the existing experts. We make three contributions: (i) LogitProd, a plug-and-play logit-level product fu-sion method that composes independently trained pathology FM–MIL experts without patch re-encoding, feature alignment, or MIL retraining; (ii) a theoret-ical analysis showing that under product fusion there exists a weighting whose risk is no worse than the best individual expert, motivating the product form; and (iii) systematic validation on 22 benchmarks spanning WSI/tile classifica-tion, long-tailed mutation prediction, and survival, together with an accuracy– efficiency analysis against representation-fusion baselines. 
+
+## 2 Fusion of Pathology Models 
+
+2.1 Problem Formulation 
+
+We study weakly supervised learning on WSIs using multiple pretrained pathol-ogy FMs as frozen experts. Let D = {(Xi, y i)}Ni=1 denote a patient-level dataset, where Xi is the set of diagnostic WSIs for patient i. For classification, yi ∈4 Gexin Huang et al. 
+
+{1, . . . , K }; for survival analysis, yi = ( ti, δ i) and we adopt a discrete-time for-mulation with K time bins. Following standard WSI preprocessing, each patient is processed by M in-dependently trained FM-based predictors {fm}Mm=1 , each consisting of a frozen FM encoder paired with a task-specific prediction head. For patient i, expert m
+
+outputs prediction logits zi,m = fm(Xi) ∈ RK , which parameterize a categori-cal distribution for classification or a bin-wise risk model for survival. We stack expert outputs as Zi = [ z⊤
+
+> i, 1
+
+, . . . , z⊤ 
+
+> i,M
+
+]⊤ ∈ RM ×K .Our goal is to learn a logit-only fusion module that produces nonnegative expert weights wi ∈ ∆M −1 from Zi and combines the M predictive distributions into a fused prediction pθ (y | X i). The weights are parameterized by a lightweight fusion network gθ operating on logit-derived features of Zi (Section 2.2) and trained by minimizing the task loss, using cross-entropy for classification and negative log-likelihood for survival, while keeping all experts {fm}Mm=1 frozen. 
+
+2.2 LogitProd: Logit-level Product Fusion of Pathology FMs 
+
+Given expert logits Zi ∈ RM ×K for patient i, LogitProd performs logit-only fusion of heterogeneous frozen predictors. Working purely at the prediction level avoids feature alignment and retraining, but raw logits from independently trained predictors can be scale-mismatched and highly correlated, making gating brittle and vulnerable to correlated failure modes when multiple predictors err together. LogitProd therefore builds compact logit-derived cues that summarize per-expert confidence and inter-expert disagreement, enabling sample-adaptive weighting that can down-weight unreliable consensus and emphasize the most reliable predictor(s) on hard cases. 
+
+Logit-derived Gating Features. We first apply a standard per-expert tem-perature scaling [6] to improve logit comparability across predictors: for expert 
+
+m, a scalar τm > 0 is fitted on a held-out calibration fold by minimizing the task negative log-likelihood, and logits are calibrated as ˜zi,m = zi,m /τ m. We then convert calibrated logits to probabilities pi,m = softmax(˜ zi,m ) and ex-tract three cues: i) the maximum predicted probability si,m = max k pi,mk ; ii) the top-2 probability margin γi,m = pi,m (k1) − pi,m (k2), where k1 and k2 in-dex the largest and second-largest probabilities in pi,m ; and iii) the predictive entropy hi,m = − PKk=1 pi,mk log pi,mk . Stacking across experts gives vectors 
+
+si, γi, hi ∈ RM . To capture inter-expert disagreement, we compute 
+
+¯hi = 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+hi,m , ¯pi = 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+pi,m , ui = H(¯ pi) − ¯hi, (1) where H(¯ pi) = − P 
+
+> k
+
+¯pik log ¯ pik . The disagreement score ui increases when ex-perts are individually confident yet predict different classes, having high entropy of the mean, which helps the gate detect unreliable consensus under correlated errors. We concatenate these cues into the gating input 
+
+xi = concat  si, γi, hi, ¯hi, u i
+
+ ∈ R3M +2 . (2) Plug-and-Play Logit Fusion for Heterogeneous Pathology Foundation Models 5
+
+Sample-adaptive Gating. A lightweight gating network gθ maps xi to non-negative expert weights. For classification, it outputs wi = gθ (xi) ∈ ∆M −1. For discrete-time survival with K bins, it outputs Wi ∈ RM ×K whose columns w(k)
+
+> i
+
+lie on the simplex. gθ is a two-layer MLP with 64 hidden units and ReLU, fol-lowed by a softmax; for discrete-time survival, it uses K independent gates of the same architecture (one per time bin, no parameter sharing). 
+
+Logit-level Product Fusion. Given expert probabilities {pi,m } and weights 
+
+wi, LogitProd forms the fused predictive distribution via a normalized weighted product: 
+
+pθ (y | X i) = 1
+
+ZiMY
+
+> m=1
+
+pi,m (y)wi,m , Zi = X
+
+> y′
+> M
+
+Y
+
+> m=1
+
+pi,m (y′)wi,m . (3) For survival, we apply the same product fusion independently to each time bin 
+
+k using w(k) 
+
+> i
+
+. The fusion module is trained using the task loss, while all expert predictors remain frozen. As shown next, for both classification and bin-wise survival there exists a choice of weights such that the product-federated model is no worse in cross-entropy risk than the best individual predictor. 
+
+2.3 Theoretical Analysis of Logit-level Product Fusion 
+
+This section provides a theory-backed justification for our central claim. In a strict logit-only setting where predictors are trained independently and are not jointly aligned or retrained, product fusion admits an optimal weighting whose cross-entropy risk is no worse than that of the best individual predictor. 
+
+Proposition 1 (Classification). Let Y = {1, . . . , K } and let pdata be the true label distribution. Each predictor m ∈ { 1, . . . , M } induces a categorical distribution pm. Consider the product-federated distribution pw obtained by Eq. (3) with a fixed weight vector w ∈ ∆M −1, and denote its normalization constant by Z(w). Then there exists w⋆ ∈ ∆M −1 such that 
+
+H(pdata , p w⋆ ) ≤ min   
+
+> m∈{ 1,...,M }
+
+H(pdata , p m), (4) where H(pdata , q ) = EY ∼pdata [− log q(Y )] .
+
+Proof Sketch. For each y, the weighted geometric mean is upper-bounded by the weighted arithmetic mean: Q 
+
+> m
+
+pm(y)wm ≤ P 
+
+> m
+
+wmpm(y) for w ∈ ∆M −1.Summing over y yields Z(w) ≤ 1 and thus log Z(w) ≤ 0. Using Eq. (3), the cross-entropy expands as 
+
+H(pdata , p w) = 
+
+> M
+
+X
+
+> m=1
+
+wm H(pdata , p m) + log Z(w) ≤
+
+> M
+
+X
+
+> m=1
+
+wm H(pdata , p m). (5) Choosing w to be one-hot recovers the best single predictor on the right-hand side. Therefore, the minimizer w⋆ over ∆M −1 satisfies Eq. (4). 
+
+Corollary 1 (Discrete-Time Survival). In discrete-time survival, the neg-ative log-likelihood decomposes into a sum of bin-wise binary cross-entropies. 6 Gexin Huang et al. 
+
+Applying Proposition 1 independently to each time bin (with bin-specific sim-plex weights) and summing over bins implies that there exists a collection of bin-wise weights for which the overall survival loss of product fusion is no worse than that of the best individual predictor. Overall, our analysis shows that within the logit-level product-federated fam-ily, there exists a (globally optimal) fixed weighting whose cross-entropy risk is no worse than that of the best individual predictor. We view this result as a lower bound on the capacity of product fusion rather than a guarantee on the learned gate. In practice, we learn sample-adaptive weights from logit-derived cues to exploit instance-level variation, which improves numerical conditioning across heterogeneous predictors and yields more robust fusion empirically. 
+
+## 3 Experiments 
+
+3.1 Implementation Details Setting. We follow a standard weakly supervised WSI pipeline. Each diagnostic WSI is tiled into fixed-size patches at a predefined magnification, with back-ground removed by tissue masking. Patches are embedded using nine pretrained pathology FMs: CONCHv1.5 [12], UNI2-h [3], Phikon-v2 [5], Virchow2 [19], CTransPath–CHIEF [20], H-optimus-1 [2], Kaiko [1], Lunit [9], and Prov–GigaPath [22]. For each dataset–FM pair, embeddings are computed once and reused across tasks. We use 5-fold stratified cross-validation for downstream tasks. For each task, we train a task-specific predictor on frozen FM features (ABMIL for slide-level tasks and an MLP classifier for tile-level tasks), producing a pool of in-dependently trained FM-based predictors under identical train/validation/test splits. We further reserve a small held-out subset from the training split that is not used for training or early stopping of the FM-based predictors. We fit per-expert temperature scaling on this held-out subset and train LogitProd on the resulting fixed calibrated logits using the same task loss, while keeping all FM-based predictors frozen. We select models on the validation set and report performance on the test set. 
+
+Dataset. We evaluate 22 benchmarks across four task families. WSI classifica-tion: TCGA-BRCA, TCGA-CRC, BRACS-3, BRACS-7, PANDA. Tile classifica-tion: CRC-100K, CCRCC, CRC-MSI, PanCancer-TIL, ESCA, PCAM. Mutation prediction: five driver genes (TP53, PIK3CA, NF1, PTEN, ARID1A) on TCGA-BRCA and TCGA-LUSC. Survival analysis: six TCGA cohorts (BRCA, CRC, BLCA, KIRC, LUSC, GBMLGG), with time-to-event discretized into K bins. 
+
+Metrics. We report AUC/ACC/F1 for classification and C-index for survival, and summarize the accuracy–efficiency trade-off with EffScore. For classification, 
+
+Perf = (AUC + ACC + F1) /3. Cost uses FLOPs F , parameters P , and train-ing time H, normalized to LogitProd ( F0, P 0, H 0) and combined by a geomet-ric mean: Cost = 
+
+ FF0
+
+1/3  PP0
+
+1/3  HH0
+
+1/3
+
+. Then EffScore = Perf /Perf 0 
+
+> Cost
+
+, with 
+
+EffScore = 1 for LogitProd and higher values indicating better performance at lower cost. Plug-and-Play Logit Fusion for Heterogeneous Pathology Foundation Models 7Genetic Mutation TIL and WSI Classification               
+
+> a. b. c. d. e. f.
+> g. h. i. j. k.
+> Survival Analysis  l. m. n. o. p. q.
+> r.
+
+Fig. 2: Evaluation across 22 pathology tasks. a–f, Gene mutation prediction (mAUC): a, mean across five genes; b–f , per-gene performance with prevalence. 
+
+g–i, TIL classification (AUC) across six datasets. j, WSI-level tumour diagnosis (AUC). k, Breast carcinoma subtyping (AUC). l–q, C-index distributions across six TCGA cohorts for all FM-based experts and LogitProd. Box plots summarize cross-validation folds. r, Task-wide rank heatmap. The rightmost column reports mean rank, and dashed lines separate task groups. 
+
+3.2 Multi-task Performance Comparison and Stability 
+
+LogitProd demonstrates consistent performance gains across diverse task families (Fig. 2). Specifically, it achieves the highest mean AUC in five gene mutation prediction tasks (Fig. 2a–f), outperforming FMs by up to 5.3% (0.7216 vs. 0.6671 in ARID1A). For tile-level classification, LogitProd achieves the highest AUC across six benchmarks (Fig. 2g–i), with a notable margin in CRC-MSI (0.8288 vs. 0.8150). In WSI-level diagnosis, LogitProd improves TCGA-BRCA from 0.9658 to 0.9736 (Fig. 2j). It also remains competitive in subtyping (Fig. 2k), increasing the PANDA AUC to 0.9680. Even on BRACS-3, where gains are typically harder to obtain, LogitProd maintains a narrow margin (0.9121 vs. 0.9223). Across six TCGA cohorts for survival analysis, LogitProd consistently ranks at or near the top (Fig. 2l–q), with the BRCA AUC reaching 0.7338 compared to the second best 0.6975. Overall, LogitProd ranks first in 20 out of 22 tasks, achieving an average performance gain of ∼3% over the best single expert (Fig. 2r). 
+
+3.3 Efficiency Analysis 
+
+Table 1 compares LogitProd with representative slide- and patch-level feature-fusion strategies. Feature-level baselines require retraining a new prediction head and incur substantially higher computational costs, parameters, and training 8 Gexin Huang et al. 
+
+Table 1: Efficiency comparison of fusion strategies .                                                  
+
+> Method FLOPs (G) ↓Params (M) ↓Time (h) ↓Perf ↑EffScore ↑
+> Slide-level fusion baselines
+> Mean Pooling 1.90 1.43 0.90 0.9060 0.80 Max Pooling 1.90 1.43 0.90 0.8897 0.79 MLP (3-layer) 1.91 13.23 0.91 0.9171 0.38 Attention 1.92 8.99 0.94 0.9196 0.42
+> Patch-level fusion baselines
+> Feature Mean 1.44 1.63 10.91 0.9109 0.34 Feature Concat 12.19 12.32 10.63 0.9116 0.09 Patch Concat 3.44 3.12 10.67 0.8903 0.21
+> Ours 1.90 0.77 0.89 0.9274 1.00
+
+Table 2: Ablation of LogitProd. 
+
+We ablate product aggregation (prod), sample-adaptive weighting (adap), and logit-derived features (feat).                                                                                
+
+> Method prod adapt feat TCGA-BRCA TCGA-CRC AUC ↑ACC ↑C-index ↑
+> Majority vote –––95.2 ±2.5 94.2 ±0.9 59.7 ±6.3 Mean –––96.4 ±2.3 94.4 ±1.5 62.4 ±10.4 Uniform product ✓––96.3 ±2.9 93.7 ±1.0 63.3 ±9.0 Learnable sum –✓✓97.1 ±2.2 94.7 ±1.8 73.9 ±6.7 Learnable product ✓✓–97.1 ±2.3 94.5 ±1.6 74.1 ±10.8 LogitProd ✓✓✓97.3 ±2.3 95.0 ±1.6 75.8 ±6.6
+
+time. In contrast, LogitProd performs prediction-level fusion using a lightweight module on frozen predictors. LogitProd achieves best Perf (0.9274) while main-taining high efficiency. Specifically, it utilizes fewer trainable parameters (0.77M) and achieves a ∼12 × reduction in training time compared to patch-level fu-sion baselines (0.89h vs. 10.91h). Overall, this achieves the best performance– efficiency trade-off and demonstrates that multi-expert gains can be realized without costly feature-level fusion or model retraining. 
+
+3.4 Ablation Study 
+
+Table 2 includes standard logit-level ensemble baselines such as mean proba-bility averaging, majority voting, and uniform product-of-experts, which helps disentangle generic ensembling gains from LogitProd-specific design choices. Log-itProd consistently performs best against these baselines, indicating that the improvements are not explained by ensembling alone. Among the learnable vari-ants, disabling sample-adaptive weighting or logit-derived features causes the largest degradation, suggesting that the gains mainly come from feature-driven, instance-wise reweighting rather than the aggregation form alone. 
+
+## 4 Conclusion and Limitations 
+
+We presented LogitProd, a logit-only product fusion framework for aggregat-ing heterogeneous pathology FMs for supervised WSI analysis. LogitProd learns lightweight, sample-adaptive fusion weights from expert outputs and combines predictions via a weighted product, requiring neither encoder retraining nor feature-space alignment. We provide a theoretical justification that there exists a product-fusion weighting whose training objective is no worse than the best in-dividual expert, and empirically validate LogitProd across 22 benchmarks span-ning WSI/tile classification, gene mutation prediction, and discrete-time survival analysis, with a favorable performance–efficiency trade-off against feature-level fusion baselines. LogitProd currently assumes that experts are independently trained for the same endpoint and does not directly support federating predic-tors that target different label spaces or objectives. Because fusion operates on frozen experts, performance ultimately depends on the quality of the expert pool and cannot recover when all experts are uniformly poor. Future work includes Plug-and-Play Logit Fusion for Heterogeneous Pathology Foundation Models 9
+
+online expert selection under distribution shift and extending logit-level fusion to multimodal foundation models. 
+
+## References 
+
+1. Aben, N., de Jong, E.D., Gatopoulos, I., Känzig, N., Karasikov, M., Lagré, A., Moser, R., van Doorn, J., Tang, F., et al.: Towards large-scale training of pathology foundation models. arXiv preprint arXiv:2404.15217 (2024) 2. Bioptimus: H-optimus-1 (2025), https://huggingface.co/bioptimus/ H-optimus-1 
+
+3. Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F.K., Jaume, G., Chen, B., Zhang, A., Shao, D., Song, A.H., Shaban, M., et al.: Towards a general-purpose foundation model for computational pathology. Nature Medicine (2024). https://doi.org/ 10.1038/s41591-024-02857-3 
+
+4. Dietterich, T.G.: Ensemble methods in machine learning. In: International work-shop on multiple classifier systems. pp. 1–15. Springer (2000) 5. Filiot, A., Ghermi, R., Olivier, A., Jacob, P., Fidon, L., Mac Kain, A., Saillard, C., Schiratti, J.B.: Scaling self-supervised learning for histopathology with masked im-age modeling. medRxiv (2023). https://doi.org/10.1101/2023.07.21.23292757 
+
+6. Guo, C., Pleiss, G., Sun, Y., Weinberger, K.Q.: On calibration of modern neural networks. In: International conference on machine learning. pp. 1321–1330. PMLR (2017) 7. Hinton, G.E.: Training products of experts by minimizing contrastive divergence. Neural computation 14 (8), 1771–1800 (2002) 8. Ilse, M., Tomczak, J.M., Welling, M.: Attention-based deep multiple instance learn-ing. In: Proceedings of the 35th International Conference on Machine Learning (ICML). pp. 2132–2141 (2018) 9. Kang, M., Song, H., Park, S., Yoo, D., Pereira, S.: Benchmarking self-supervised learning on diverse pathology datasets. In: Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR). pp. 3344–3354 (June 2023) 10. Lakshminarayanan, B., Pritzel, A., Blundell, C.: Simple and scalable predictive uncertainty estimation using deep ensembles. Advances in neural information pro-cessing systems 30 (2017) 11. Lei, W., Li, A., Tan, Y., Chen, H., Zhang, X.: Shazam: Unifying multi-ple foundation models for advanced computational pathology. arXiv preprint arXiv:2503.00736 (2025) 12. Lu, M.Y., Chen, B., Williamson, D.F.K., Chen, R.J., Ding, T., Jaume, G., Le, L.P., Parwani, A., Zhang, A., Mahmood, F., et al.: A visual-language foundation model for computational pathology. Nature Medicine (2024), volume 30(3):863–874 13. Lu, M.Y., Williamson, D.F.K., Chen, T.Y., Chen, R.J., Barbieri, M., Mahmood, F.: Data-efficient and weakly supervised computational pathology on whole-slide images. Nature Biomedical Engineering 5(6), 555–570 (2021). https://doi.org/ 10.1038/s41551-020-00682-w 
+
+14. Luo, X., Wang, X., Eweje, F., Zhang, X., Yang, S., Quinton, R., Xiang, J., Li, Y., Ji, Y., Li, Z., et al.: Ensemble learning of foundation models for precision oncology. arXiv preprint arXiv:2508.16085 (2025) 15. Ma, J., Guo, Z., Zhou, F., Wang, Y., Xu, Y., Li, J., Yan, F., Cai, Y., Zhu, Z., Jin, C., et al.: A generalizable pathology foundation model using a unified knowledge distillation pretraining framework. Nature Biomedical Engineering pp. 1–20 (2025) 10 Gexin Huang et al. 16. Ma, J., et al.: Pathbench: A comprehensive comparison benchmark for pathology foundation models towards precision oncology. arXiv preprint arXiv:2505.20202 (2025). https://doi.org/10.48550/arXiv.2505.20202 
+
+17. Neidlinger, P., et al.: Benchmarking foundation models as feature extractors for weakly-supervised computational pathology. Nature Biomedical Engineering (2025). https://doi.org/10.1038/s41551-025-01516-3 
+
+18. Shao, Z., Bian, H., Chen, Y., Wang, Y., Zhang, J., Ji, X., Zhang, Y.: Transmil: Transformer based correlated multiple instance learning for whole slide image clas-sification. In: Advances in Neural Information Processing Systems (NeurIPS). pp. 2136–2148 (2021) 19. Vorontsov, E., Bozkurt, A., Casson, A., Shaikovski, G., Zelechowski, M., Sev-erson, K., Zimmermann, E., Hall, J., Tenenholtz, N., Fusi, N., et al.: A foun-dation model for clinical-grade computational pathology and rare cancers de-tection. Nature Medicine 30 (10), 2924–2935 (2024). https://doi.org/10.1038/ s41591-024-03141-0 
+
+20. Wang, X., Chen, H., Gan, C., Lin, Y., Dou, Q., et al.: Transformer-based unsuper-vised contrastive learning for histopathological image classification. Medical Image Analysis 81 , 102559 (2022). https://doi.org/10.1016/j.media.2022.102559 
+
+21. Wu, J., Chen, M., Ke, X., Xun, T., Jiang, X., Zhou, H., Shao, L., Kong, Y.: Learning heterogeneous tissues with mixture of experts for gigapixel whole slide images. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 5144–5153 (2025) 22. Xu, H., Usuyama, N., Bagga, J., Zhang, S., Rao, R., Naumann, T., Wong, C., Gero, Z., González, J., Gu, Y., et al.: A whole-slide foundation model for digital pathology from real-world data. Nature 630 (8015), 181–188 (2024). https://doi. org/10.1038/s41586-024-07441-w 
+
+23. Xu, H., Wang, M., Shi, D., Qin, H., Zhang, Y., Liu, Z., Madabhushi, A., Gao, P., Cong, F., Lu, C.: When multiple instance learning meets foundation models: Advancing histological whole slide image analysis. Medical Image Analysis 101 ,103456 (2025). https://doi.org/10.1016/j.media.2025.103456 
+
+24. Yang, Z., Shi, X., Ba, W., Song, Z., Luan, H., Hu, T., Lin, S., Wang, J., Zhou, S.K., Yan, R.: Fusion of multi-scale heterogeneous pathology foundation models for whole slide image analysis. arXiv preprint arXiv:2510.27237 (2025)

@@ -1,0 +1,333 @@
+Title: Learning Class Difficulty in Imbalanced Histopathology Segmentation via Dynamic Focal Attention
+
+URL Source: https://arxiv.org/pdf/2604.13479v1
+
+Published Time: Thu, 16 Apr 2026 00:30:22 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Learning Class Difficulty in Imbalanced Histopathology Segmentation via Dynamic Focal Attention 
+
+Lakmali Nadeesha Kumari 1 and Sen-Ching Samson Cheung 1,2 
+
+> 1
+
+University of Kentucky, Lexington, KY, USA 
+
+lakmali.nadeesha@uky.edu  
+
+> 2
+
+University of California, Davis, CA, USA 
+
+Abstract. Semantic segmentation of histopathology images under class imbalance is typically addressed through frequency-based loss reweight-ing, which implicitly assumes that rare classes are difficult. However, true difficulty also arises from morphological variability, boundary am-biguity, and contextual similarity—factors that frequency cannot cap-ture. We propose Dynamic Focal Attention (DFA), a simple and efficient mechanism that learns class-specific difficulty directly within the cross-attention of query-based mask decoders. DFA introduces a learnable per-class bias to attention logits, enabling representation-level reweighting prior to prediction rather than gradient-level reweighting after predic-tion. Initialised from a log-frequency prior to prevent gradient starva-tion, the bias is optimised end-to-end, allowing the model to adaptively capture difficulty signals through training, effectively unifying frequency-based and difficulty-aware approaches under a common attention-bias framework. On three histopathology benchmarks (BDSA, BCSS, CRAG), DFA consistently improves Dice and IoU, matching or exceeding a difficulty-aware baseline without a separate estimator or additional training stage. These results demonstrate that encoding class difficulty at the represen-tation level provides a principled alternative to conventional loss reweight-ing for imbalanced segmentation. 
+
+Keywords: Class imbalance · Attention mechanism · Pathology seg-mentation · Transformer · Difficulty-aware learning 
+
+## 1 Introduction 
+
+Semantic segmentation of histopathology images underpins tissue characteri-sation, tumour delineation, and biomarker extraction in computational pathol-ogy [3,16,12]. Transformer-based architectures [7,6] achieve strong overall perfor-mance yet consistently underperform on clinically critical classes—a gap widely attributed to class imbalance. However, imbalance alone is incomplete: difficulty is also governed by morphological variability, boundary ambiguity, and contex-tual similarity, factors largely orthogonal to class frequency.  
+
+> arXiv:2604.13479v1 [eess.IV] 15 Apr 2026 2Lakmali Nadeesha Kumari and Sen-Ching Samson Cheung
+
+Fig. 1: DFA integrated into cross-attention. A learnable class-specific bias 
+
+bc is added to attention logits before softmax, initialised from a log-frequency prior and optimised end-to-end via L (Eq. 7). 
+
+Limitations of existing approaches. Data-level strategies [2,14] alter train-ing distributions without introducing semantic information, while loss-level meth-ods [15,21,8,20] reweight gradient magnitudes after prediction, only once class-specific representations have already been formed. All assume rarity reliably proxies difficulty, yet these factors are largely orthogonal to pixel frequency [2,11] (Section 2.2). Critically, none can direct additional representational capacity to difficult classes during feature aggregation itself .
+
+Attention as a principled intervention point. SAM [13] and SAM-Path [22,5] reformulate segmentation as mask classification via learnable class queries inter-acting with image features through cross-attention [4,6], directly shaping per-class feature aggregation—a natural site for difficulty-aware intervention. Yet standard attention treats all queries uniformly. Structured logit biases [19,18,23] are effective when task-specific priors are available, but none encode class-level semantic difficulty , which is crucial for addressing the diverse challenges in histopathology segmentation. 
+
+Our approach. We propose Dynamic Focal Attention (DFA) , which introduces a learnable class-specific scalar bias bc into cross-attention logits (Fig. 1), enabling difficulty-aware feature aggregation at the representation level. Rather than reweighting gradients after prediction, DFA provides class-conditional logit adjustment within attention, modulating how strongly features are aggre-gated for each class. To prevent early gradient starvation on rare classes, we initialise bc using a centred log-frequency prior; thereafter the bias is updated via the segmentation objective to emphasise more on difficult-to-segment classes. We additionally formalise two variants—class-frequency (CFFA) and hard-class (HCFA)—forming a progression from static to dynamic difficulty estimation. DFA operates in a single stage, adds only one scalar per class, and requires no pre-trained baseline. Title Suppressed Due to Excessive Length 3
+
+Contributions. (i) We show that class frequency is an unreliable difficulty proxy, with direct rarity–difficulty inversions across three pathology benchmarks. (ii ) We propose the Focal Attention Bias framework, unifying CFFA, HCFA, and DFA as a progressive family of class-difficulty-aware attention mechanisms. (iii ) DFA achieves up to 15 .2% Dice improvement on difficult classes and ap-proximately 40% training-time reduction versus two-stage approaches. 
+
+## 2 Method 
+
+2.1 Preliminaries: SAM-Path Decoder 
+
+We build upon SAM-Path [22], which extends the original SAM [13] by incor-porating two encoders: frozen SAM and a pathology foundation model, whose outputs are aligned to form a unified feature H ∈ RN ×d (N : spatial tokens; 
+
+d: feature dimension). The decoder maintains C learnable class prompt tokens 
+
+P ∈ RC×d, which interact with H via cross-attention to produce per-class masks 
+
+ˆyc and IoU predictions ciou c, c = 1 , . . . , C . The cross-attention weights αi,c =exp( si,c )/ P 
+
+> c′
+
+exp( si,c ′ ), si,c = ( QK ⊤)i,c /√d, where Q ∈ RC×d and K ∈ RN ×d are queries and keys from P and H respectively, depend solely on feature–prompt similarity with no explicit mechanism to modulate feature aggregation based on class-level complexity—a limitation we address in this work, which is broadly ap-plicable to cross-attention mechanisms in transformer-based segmentation mod-els beyond SAM-Path. 
+
+2.2 The Frequency–Difficulty Disconnect 
+
+Frequency-based class-balancing assumes pixel frequency reliably reflects seg-mentation difficulty, yet empirical evidence across all three benchmarks con-tradicts this assumption (Fig. 2). In BCSS, Inflammatory and Necrosis share near-identical frequency yet differ by 22 .0 Dice points; Other—the most fre-quent minority class—scores lower than the rarer Necrosis ( 71 .8% vs. 77 .4% ), directly inverting the rarity–difficulty ranking. In BDSA, the rarest class (Su-perficial Cortex, 3.0% ) outperforms the more frequent Leptomeninges ( 6.4% ) by 
+
+13 .2 Dice points. Only CRAG, with near-balanced classes, falls where frequency loosely correlates with difficulty. These observations demonstrate that true difficulty is governed by morpho-logical variability, boundary ambiguity, and inter-class contextual confusion [2], which are largely independent of pixel frequency—motivating learning class dif-ficulty directly from optimisation dynamics. 
+
+2.3 Dynamic Focal Attention Focal Attention Bias framework. We introduce a class-specific scalar bc ∈
+
+R, broadcast across all N spatial positions, and added to the cross-attention 4 Lakmali Nadeesha Kumari and Sen-Ching Samson Cheung 
+
+Fig. 2: Frequency–difficulty disconnect. Pixel frequency (hatched bars) vs. Dice of the focal-loss baseline (solid bars) per class across three datasets. logit for class c before softmax: 
+
+˜αi,c = exp( si,c + bc)
+
+PCc′=1 exp( si,c ′ + bc′ ) , ]Attn( Q, K, V) = softmax 
+
+ QK ⊤ 
+
+> √d
+
++ b
+
+
+
+V, (1) where b = [ b1, . . . , b C ]⊤ ∈ RC and V ∈ RN ×d are values derived from class tokens 
+
+P. Setting bc = log ωc (ωc > 0) multiplicatively rescales the c-th score by ωc
+
+uniformly across all spatial aggregations; parameterising bc yields a progressive family of strategies: 
+
+(S1) Class Frequency Focal Attention (CFFA). CFFA sets bc inversely proportional to pixel frequency: 
+
+bc = γ · log(1 − fc), γ > 0, (2) where fc ∈ (0 , 1) is the normalised training-set frequency of class c and γ
+
+controls bias magnitude; unlike output-level logit adjustment [17], this prior acts on feature aggregation directly. However, CFFA still conflates rarity with difficulty (Section 2.2). 
+
+(S2) Hard Class Focal Attention (HCFA). HCFA replaces frequency with empirical difficulty: 
+
+bc = γ · log(1 − pc), pc = Dice base 
+
+> c
+
+PCc′=1 Dice base 
+
+> c′
+
+, (3) where Dice base  
+
+> c
+
+is the per-class validation Dice of the pre-trained baseline and 
+
+pc its normalised difficulty proxy; HCFA targets hard classes but requires a full pre-training run. 
+
+(S3) Dynamic Focal Attention (DFA)—Proposed. Both CFFA and HCFA fix bc before training, and cannot adapt to difficulty signals that emerge during optimisation. DFA treats bc as a learnable scalar δc ∈ R optimised end-to-end: 
+
+bc = δc, δ ∈ RC , (4) Title Suppressed Due to Excessive Length 5
+
+∂L
+
+∂δ c
+
+=
+
+> N
+
+X
+
+> i=1
+
+∂L
+
+∂ ˜αi,c 
+
+· ˜αi,c (1 − ˜αi,c )
+
+| {z }
+
+> self-gating factor
+
+, (5) driving δc positive for poorly-segmented classes and suppressing it for well-segmented ones. The self-gating factor ˜αi,c (1 − ˜αi,c ) is largest when attention weights are uncertain and diminish when saturates, yielding an implicit curricu-lum effect. 
+
+Warm-start initialisation. Zero-initialising δ causes gradient starvation for rare classes ( ˜αi,c ≈ 0 ⇒ self-gating ≈ 0, regardless of loss magnitude). We there-fore initialise δc using a centred log-frequency prior :
+
+δ(0)  
+
+> c
+
+= β log πc − 1
+
+> CC
+
+X
+
+> c′=1
+
+log πc′
+
+!
+
+, log πc = γ · log(1 − fc), (6) where γ and β are set to provide minority classes a positive initial bias and majority classes a negative one while keeping the mean shift zero. In practice, we use γ = 2 and β = 0 .8. Thereafter, δc is learned end-to-end without any explicit constraints in class frequency or hardness. 
+
+Training objective. Following SAM-Path, the training objective sums per-class Dice, focal, and MSE-IoU losses: 
+
+L =
+
+> C
+
+X
+
+> c=1
+
+(1 − α) Ldice (ˆ yc, y c) + α Lfocal (ˆ yc, y c) + μ Lmse 
+
+  ciou c, IoU(ˆ yc, y c) , (7) where yc is the ground-truth mask, α ∈ [0 , 1] balances Dice and focal terms, and 
+
+μ > 0 weights IoU regression. ℓ2 regularisation Lreg = λ∥δ∥22 (λ = 10 −4) prevents unbounded bias growth; We use a higher learning rate( ηb) for δc (100 times the base rate η) to encourage rapid adaptation. Note that DFA adds almost negligible training cost to the overall model as it needs only one scalar parameter per class and one broadcast logit shift per cross-attention layer. 
+
+## 3 Experiments and Results 
+
+3.1 Experimental Setup Datasets. We evaluate on three histopathology benchmarks: ( i) BCSS [1]: breast cancer, five classes (Tumor, Stroma, Inflammatory, Necrosis, Other), 40 ×,
+
+1024 2 patches; ( ii ) BDSA [9]: brain tissue, five classes (Background, Gray Mat-ter, White Matter, Leptomeninges, Superficial Cortex), 10 ×, 1024 2; ( iii ) CRAG [10]: colorectal adenocarcinoma, two classes (Non-gland, Gland), 20 ×, 1536 2.
+
+Architecture and training. All models use SAM-Path with ViT-B (SAM en-coder) and HIPT (pathology encoder), trained with AdamW ( η = 10 −4, batch 4,cosine annealing) for 30 /20 /60 epochs on BCSS/BDSA/CRAG on NVIDIA A100 GPUs. Hyperparameters: γ = 2 for all focal variants; α = 0 .25 , μ = 0 .0625 on BCSS/BDSA and α = 0 .125 , μ = 0 on CRAG (SAM-Path defaults); β = 0 .8,6 Lakmali Nadeesha Kumari and Sen-Ching Samson Cheung 
+
+λ = 10 −4, ηb = 10 −2 for DFA. All were fixed across datasets after a small grid search on BCSS, and we observe stable performance without extensive tuning. 
+
+Baselines. We compare five configurations that differ only in attention bias: (i) Base w/o FL : Eq. 7 without focal term; ( ii ) Base w/ FL : SAM-Path default (Eq. 7); ( iii ) CFFA : frequency-guided (Eq. 2); ( iv ) HCFA : two-stage hard-class (Eq. 3); ( v) DFA (Ours) : single-stage dynamic (Eq. 4). 
+
+3.2 Main Results 
+
+Table 1 reports per-class Dice (F1 overlap score) and IoU (Jaccard index), with IoU mirroring Dice trends throughout; discussion therefore focuses on Dice. Hard classes (baseline Dice below the dataset mean) are of primary interest. 
+
+BCSS. DFA achieves the highest mean Dice ( 0.7826 ), surpassing the focal-loss baseline by +4 .9 points and HCFA by +0 .5. Inflammatory improves by +15 .2
+
+points over the baseline w/o FL, confirming DFA targets true difficulty rather than frequency; it also yields the best Dice on Other ( 0.7581 ), whose difficulty is underestimated by frequency-based methods. 
+
+BDSA. Without focal loss the base model collapses on Leptomeninges and Superficial Cortex (Dice = 0 .000 ); focal loss recovers them to 0.6191 and 0.7508 .DFA further improves both to 0.6908 and 0.7808 , and achieves the best White Matter score ( 0.9556 ). 
+
+CRAG. Even when imbalance is minimal, DFA achieves the highest mean Dice ( 0.8858 ), outperforming HCFA by +0 .5 points, demonstrating that DFA captures difficulty structure beyond frequency. 
+
+Efficiency. As a single-stage method, DFA reduces wall-clock training time by approximately 40% relative to two-stage HCFA while matching or exceeding its Dice on all benchmarks. 
+
+3.3 Analysis of Learned Attention Biases 
+
+The learned biases δ at convergence (Fig. 3) provide a model-derived diffi-culty signal: hard classes acquire positive bias (e.g., Inflammatory +0 .410 ; Lep-tomeninges +0 .434 ) while easy classes acquire negative bias (e.g., Tumor −0.524 ;Background −0.720 ), with scatter plots confirming a strong negative correlation between baseline Dice and δc. Crucially, biases diverge from frequency-based initialisation: Inflammatory ( fc = 7 .8% ) receives +0 .410 vs. Necrosis +0 .068 de-spite near-identical frequency, closely reflecting their 22 .0-point Dice gap. This suggests δc captures sources of difficulty such as boundary complexity and con-textual confusion that cannot be inferred from class frequency alone. 
+
+Ablation: warm-start initialisation. Table 2 isolates the log-frequency prior (Eq. 6) on BCSS. Cold-start converges to a near-flat δ profile ( |δc| ≤ 0.02 ), as self-gating suppression ( ˜αi,c (1 − ˜αi,c ) ≈ 0) stalls updates. Warm-start breaks this degeneracy, producing ∼20 × wider spread and +0 .75 Dice. Title Suppressed Due to Excessive Length 7
+
+Table 1: Segmentation performance across three histopathology bench-marks. Each method occupies two columns: Dice (left) and IoU (right). Hard classes (baseline Dice below dataset mean) are shaded amber . Bold : best result per row. 
+
+Base w/o FL [22] Base w/ FL [22] CFFA [17] HCFA (Ours) DFA (Ours) Dataset Class Dice IoU Dice IoU Dice IoU Dice IoU Dice IoU 
+
+BCSS 
+
+Mean 0.7032 0.5535 0.7336 0.5882 0.7737 0.6382 0.7780 0.6434 0.7826 0.6488 
+
+±std ±0.003 ±0.004 ±0.003 ±0.003 ±0.002 ±0.003 ±0.002 ±0.003 ±0.002 ±0.002 
+
+Tumor 0.8298 0.7090 0.8410 0.7257 0.8662 0.7640 0.8674 0.7659 0.8684 0.7674 
+
+Stroma 0.7521 0.6027 0.7816 0.6415 0.7968 0.6622 0.7944 0.6590 0.7969 0.6624 
+
+Inflamm. 0.4974 0.3310 0.5537 0.3828 0.6228 0.4522 0.6392 0.4697 0.6493 0.4807 
+
+Necrosis 0.7615 0.6148 0.7739 0.6312 0.8311 0.7110 0.8398 0.7238 0.8402 0.7230 Other 0.6754 0.5099 0.7178 0.5598 0.7514 0.6018 0.7490 0.5987 0.7581 0.6104 BDSA 
+
+Mean 0.5589 0.5241 0.8480 0.7644 0.8703 0.7931 0.8712 0.7944 0.8739 0.7953 
+
+±std ±0.003 ±0.003 ±0.002 ±0.003 ±0.002 ±0.002 ±0.002 ±0.002 ±0.001 ±0.002 
+
+BG 0.9530 0.9121 0.9742 0.9501 0.9761 0.9537 0.9763 0.9539 0.9763 0.9538 GM 0.9270 0.8644 0.9585 0.9205 0.9648 0.9322 0.9656 0.9337 0.9658 0.9335 WM 0.9147 0.8441 0.9375 0.8834 0.9504 0.9060 0.9514 0.9079 0.9556 0.9090 
+
+Lepto. 0.0000 0.0000 0.6191 0.4660 0.6840 0.5384 0.6851 0.5395 0.6908 0.5405 
+
+Super. 0.0000 0.0000 0.7508 0.6022 0.7761 0.6351 0.7773 0.6368 0.7808 0.6395 CRAG 
+
+Mean 0.8423 0.7276 0.8520 0.7422 0.8707 0.7711 0.8806 0.7868 0.8858 0.7951 
+
+±std ±0.003 ±0.004 ±0.002 ±0.003 ±0.002 ±0.003 ±0.002 ±0.002 ±0.002 ±0.002 
+
+Non-gland 0.8392 0.7229 0.8487 0.7372 0.8643 0.7611 0.8712 0.7717 0.8774 0.7816 
+
+Gland 0.8454 0.7322 0.8553 0.7472 0.8771 0.7812 0.8901 0.8020 0.8942 0.8087 
+
+Table 2: Warm- vs. cold-start ablation on BCSS. 
+
+Init δInfl. δOth. δNec. δStr. δTum. Dice ( ±std) 
+
+Cold ( δ(0)  
+
+> c
+
+= 0 ) +0 .010 +0 .002 +0 .001 −0.012 −0.019 0.7751 ±.005 
+
+Warm (Eq. 6) +0 .410 +0 .253 +0 .068 −0.308 −0.524 0.7826 ±.002 
+
+3.4 Qualitative Results 
+
+As shown in Fig. 4, DFA produces consistently improved segmentation across all datasets: misclassified Inflammatory regions in BCSS are recovered with coher-ent boundaries; Leptomeninges boundaries in BDSA sharpen progressively from CFFA, HCFA to DFA; and CRAG glands show markedly reduced fragmentation. 
+
+## 4 Limitations and future work. 
+
+DFA currently applies a single global bias per class; spatially adaptive or region-conditioned extensions could capture instance-level difficulty more precisely. Broader validation across architectures and modalities, and a theoretical analysis of convergence, remain directions for future work. 8 Lakmali Nadeesha Kumari and Sen-Ching Samson Cheung 
+
+Fig. 3: Converged biases δc and difficulty correlation. Top (a–c): δc per class ( positive ⇔ hard, negative ⇔ easy). Bottom (d–f): δc vs. baseline Dice with fitted trend line.      
+
+> Image (WSI) Ground Truth w/o FL w/ FL CFFA HCFA DFA (Ours)
+> BCSS CRAG BDSA
+
+Fig. 4: Qualitative segmentation comparison across three pathology benchmarks. Each row shows a WSI patch with ground truth and predictions from all five methods. 
+
+BCSS: Inflamm. Tumor Stroma Other Necrosis CRAG: Non-Gland Gland BDSA: BG Gray M. White M. Leptom. Superficial. Title Suppressed Due to Excessive Length 9
+
+## 5 Conclusion 
+
+These results confirm that focal loss alone is insufficient, and frequency-based reweighting is unreliable: CFFA fails when rare classes are not inherently hard, and HCFA requires a costly pre-training stage. DFA resolves all three by learning class-specific difficulty continuously within cross-attention, consistently outper-forming all baselines across three benchmarks with only C additional scalar parameters. The warm-start prior prevents gradient starvation, the self-gating factor provides implicit curriculum regulation, and encoding difficulty at the representation level yields model-wide improvements over post-hoc gradient cor-rections. 
+
+## References 
+
+1. Amgad, M., Elfandy, H., Hussein, H., Atteya, L.A., Elsebaie, M.A.T., Abo Elnasr, L.S., Sakr, R.A., Salem, H.S.E., Ismail, A.F., Saad, A.M., Ahmed, J., Rahman, M., Ruhban, I.A., Elgazar, N.M., Alagha, Y., Osman, M.H., Alhusseiny, A.M., Kha-laf, M.M., Younes, A.F., Abdulkarim, A., Younes, D.M., Gadallah, A.M., Elka-shash, A.M., Fala, S.Y., Zaki, B.M., Beezley, J., Chittajallu, D.R., Manthey, D., Gutman, D.A., Cooper, L.A.D.: Structured crowdsourcing enables convolutional segmentation of histology images. Bioinformatics 35 (18), 3461–3467 (Sep 2019). 
+
+https://doi.org/10.1093/bioinformatics/btz083 
+
+2. Buda, M., Maki, A., Mazurowski, M.A.: A systematic study of the class imbalance problem in convolutional neural networks. CoRR abs/1710.05381 (2017), http: //arxiv.org/abs/1710.05381 
+
+3. Campanella, G., Hanna, M.G., Geneslaw, L., Miraflor, A., Werneck Krauss Silva, V., Busam, K.J., Brogi, E., Reuter, V.E., Klimstra, D.S., Fuchs, T.J.: Clinical-grade computational pathology using weakly supervised deep learning on whole slide images. Nature Medicine 25 (8), 1301–1309 (2019). https://doi.org/10. 1038/s41591-019-0508-1 
+
+4. Carion, N., Massa, F., Synnaeve, G., Usunier, N., Kirillov, A., Zagoruyko, S.: End-to-end object detection with transformers. CoRR abs/2005.12872 (2020), 
+
+https://arxiv.org/abs/2005.12872 
+
+5. Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F.K., Jaume, G., Song, A.H., Chen, B., Zhang, A., Shao, D., Shaban, M., Williams, M., Oldenburg, L., Weishaupt, L.L., Wang, J.J., Vaidya, A., Le, L.P., Gerber, G., Sahai, S., Williams, W., Mahmood, F.: Towards a general-purpose foundation model for computational pathology. Nature Medicine 30 , 850–862 (2024). https://doi.org/10.1038/s41591-024-02857-3 
+
+6. Cheng, B., Misra, I., Schwing, A.G., Kirillov, A., Girdhar, R.: Masked-attention mask transformer for universal image segmentation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 1290–1299 (June 2022) 7. Cheng, B., Schwing, A.G., Kirillov, A.: Per-pixel classification is not all you need for semantic segmentation. In: Proceedings of the 35th International Conference on Neural Information Processing Systems. NIPS ’21, Curran Associates Inc., Red Hook, NY, USA (2021) 8. Cui, Y., Jia, M., Lin, T.Y., Song, Y., Belongie, S.: Class-balanced loss based on effective number of samples. In: 2019 IEEE/CVF Conference on Computer Vision 10 Lakmali Nadeesha Kumari and Sen-Ching Samson Cheung and Pattern Recognition (CVPR). pp. 9260–9269 (2019). https://doi.org/10. 1109/CVPR.2019.00949 
+
+9. Flanagan, M.E., Gutman, D., Dugger, B.N., Cooper, L., Pearce, T.M., Kovacs, G.G., Kukull, W.W., Crary, J.F., Manthey, D., Biber, S., Keene, C.D., Sue-moto, C.K., Bumgardner, C., Nelson, P.T.: Brain Digital Slide Archive: An open source whole slide image sharing platform for AD/ADRD research and diagnos-tics. Alzheimer’s & Dementia 21 (Suppl 8), e109898 (2025). https://doi.org/10. 1002/alz70862_109898 
+
+10. Graham, S., Chen, H., Gamper, J., Dou, Q., Heng, P.A., Snead, D., Cheung, Y.W., Rajpoot, N.: MILD-Net: Minimal information loss dilated network for gland in-stance segmentation in colon histology images. Medical Image Analysis 52 , 199–211 (2019). https://doi.org/10.1016/j.media.2018.12.001 
+
+11. Graham, S., Vu, Q.D., Jahanifar, M., Weigert, M., Schmidt, U., Zhang, W., Zhang, J., Yang, S., Xiang, J., Wang, X., Rumberger, J.L., Baumann, E., Hirsch, P., Wang, X., Schürch, C.M., Pizzagalli, D.U., Matos, P., Rosa, I., Narayanan, P.L., Shephard, A.J., Bhatt, D., Zacharias, H.V., Chan, Y.B., Albrecht, T., Liao, Z., Rajpoot, N.M.: CoNIC: Colon nuclei identification and counting challenge 2022. Medical Image Analysis 96 , 103196 (2024). https://doi.org/10.1016/j.media.2024.103196 
+
+12. Graham, S., Vu, Q.D., Raza, S.E.A., Azam, A., Tsang, Y.W., Kwak, J.T., Rajpoot, N.: Hover-net: Simultaneous segmentation and classification of nu-clei in multi-tissue histology images. Medical Image Analysis 58 , 101563 (2019). https://doi.org/https://doi.org/10.1016/j.media.2019.101563 ,
+
+https://www.sciencedirect.com/science/article/pii/S1361841519301045 
+
+13. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., Dollar, P., Girshick, R.: Segment anything. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV). pp. 4015–4026 (October 2023) 14. Kumari, L.N., Bandara, C.T., Chuah, C.N., Cheung, S.C.S.: A warmer start to active learning with adaptive gaussian mixture models for skin lesion segmentation. In: 2025 IEEE International Conference on Image Processing (ICIP). pp. 2247–2252 (2025). https://doi.org/10.1109/ICIP55913.2025.11084666 
+
+15. Lin, T.Y., Goyal, P., Girshick, R., He, K., Dollár, P.: Focal loss for dense object detection. IEEE Transactions on Pattern Analysis and Machine Intelligence 42 (2), 318–327 (2020). https://doi.org/10.1109/TPAMI.2018.2858826 
+
+16. Lu, M.Y., Williamson, D.F.K., Chen, T.Y., Chen, R.J., Barbieri, M., Mahmood, F.: Data-efficient and weakly supervised computational pathology on whole-slide images. Nature Biomedical Engineering 5(6), 555–570 (2021). https://doi.org/ 10.1038/s41551-020-00682-w 
+
+17. Menon, A.K., Jayasumana, S., Rawat, A.S., Jain, H., Veit, A., Kumar, S.: Long-tail learning via logit adjustment. In: International Conference on Learning Represen-tations (ICLR) (2021), https://openreview.net/forum?id=37nvvqkCo5 
+
+18. Press, O., Smith, N.A., Lewis, M.: Train short, test long: Attention with linear biases enables input length extrapolation. CoRR abs/2108.12409 (2021), https: //arxiv.org/abs/2108.12409 
+
+19. Raffel, C., Shazeer, N., Roberts, A., Lee, K., Narang, S., Matena, M., Zhou, Y., Li, W., Liu, P.J.: Exploring the limits of transfer learning with a unified text-to-text transformer. Journal of Machine Learning Research 21 (140), 1–67 (2020), 
+
+http://jmlr.org/papers/v21/20-074.html 
+
+20. Shrivastava, A., Gupta, A., Girshick, R.: Training region-based object detectors with online hard example mining. In: 2016 IEEE Conference on Computer Vi-Title Suppressed Due to Excessive Length 11 sion and Pattern Recognition (CVPR). pp. 761–769 (2016). https://doi.org/10. 1109/CVPR.2016.89 
+
+21. Yeung, M., Sala, E., Schönlieb, C.B., Rundo, L.: Unified focal loss: Generalising Dice and cross entropy-based losses to handle class imbalanced medical image segmentation. Computerized Medical Imaging and Graphics 95 , 102026 (2022). 
+
+https://doi.org/10.1016/j.compmedimag.2021.102026 
+
+22. Zhang, J., Ma, K., Kapse, S., Saltz, J.H., Vakalopoulou, M., Prasanna, P., Samaras, D.: Sam-path: A segment anything model for semantic segmentation in digital pathology. ArXiv abs/2307.09570 (2023), https://api.semanticscholar.org/ CorpusID:259982521 
+
+23. Zhu, X., Su, W., Lu, L., Li, B., Wang, X., Dai, J.: Deformable DETR: deformable transformers for end-to-end object detection. CoRR abs/2010.04159 (2020), 
+
+https://arxiv.org/abs/2010.04159

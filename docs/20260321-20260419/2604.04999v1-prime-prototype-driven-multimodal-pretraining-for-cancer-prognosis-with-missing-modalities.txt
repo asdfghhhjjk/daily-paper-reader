@@ -1,0 +1,571 @@
+Title: PRIME: Prototype-Driven Multimodal Pretraining for Cancer Prognosis with Missing Modalities
+
+URL Source: https://arxiv.org/pdf/2604.04999v1
+
+Published Time: Wed, 08 Apr 2026 00:02:17 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+> 1
+
+# PRIME: Prototype-Driven Multimodal Pretraining for Cancer Prognosis with Missing Modalities 
+
+Kai Yu, Shuang Zhou, Yiran Song, Zaifu Zhan, Jie Peng, Kaixiong Zhou, Tianlong Chen, Feng Xie, Meng Wang, Huazhu Fu, Senior Member, IEEE , Mingquan Lin, Rui Zhang 
+
+Abstract —Multimodal self-supervised pretraining offers apromising route to cancer prognosis by integrating histopathol-ogy whole-slide images, gene expression, and pathology reports, yet most existing approaches require fully paired and complete inputs. In practice, clinical cohorts are fragmented and often miss one or more modalities, limiting both supervised fusion and scalable multimodal pretraining. We propose PRIME, a missing-aware multimodal self-supervised pretraining framework that learns robust and transferable representations from par-tially observed cohorts. PRIME maps heterogeneous modality embeddings into a unified token space and introduces a shared prototype memory bank for latent-space semantic imputation via patient-level consensus retrieval, producing structurally aligned tokens without reconstructing raw signals. Two complementary pretraining objectives: inter-modality alignment and post-fusion consistency under structured missingness augmentation, jointly learn representations that remain predictive under arbitrary modality subsets. We evaluate PRIME on The Cancer Genome Atlas with label-free pretraining on 32 cancer types and down-stream 5-fold evaluation on five cohorts across overall survival prediction, 3-year mortality classification, and 3-year recurrence classification. PRIME achieves the best macro-average perfor-mance among all compared methods, reaching 0.653 C-index, 0.689 AUROC, and 0.637 AUROC on the three tasks, respec-tively, while improving robustness under test-time missingness and supporting parameter-efficient and label-efficient adaptation. These results support missing-aware multimodal pretraining as a practical strategy for prognosis modeling in fragmented clinical data settings. 
+
+Index Terms —Self-Supervised Learning, Multimodal Learn-ing, Missing-Modality Learning, Cancer Prognosis, Prototype-Based Representation Learning 
+
+I. I NTRODUCTION 
+
+# ACCURATE cancer prognosis is central to personalized treatment planning and follow-up scheduling [1]. In clin-ical practice, prognosis is assessed through multiple endpoints, 
+
+This work was supported by the National Institutes of Health’s Na-tional Center for Complementary and Integrative Health under grant number R01AT009457, National Institute on Aging under grant num-ber R01AG078154, and National Cancer Institute under grant number R01CA287413. Kai Yu, Shuang Zhou, Yiran Song, Zaifu Zhan, Feng Xie, Mingquan Lin, and Rui Zhang are with the Division of Computational Health Sciences, Department of Surgery, University of Minnesota, Minneapolis, MN, USA. Jie Peng and Tianlong Chen are with the University of North Carolina at Chapel Hill, Chapel Hill, NC, USA. Kaixiong Zhou is with North Carolina State University, Raleigh, NC, USA. Meng Wang is with the Centre for Innovation & Precision Eye Health, Department of Ophthalmology, Yong Loo Lin School of Medicine, National University of Singapore, Singapore. Huazhu Fu is with the Institute of High Performance Computing, Agency for Science, Technology and Research, Singapore. Mingquan Lin and Rui Zhang are the co-corresponding authors (e-mail: lin01231@umn.edu, ruizhang@umn.edu) 
+
+including time-to-event outcomes such as overall survival (OS) and progression-free interval (PFI), as well as fixed-horizon outcomes that are often more directly actionable (e.g., 3-year mortality and recurrence) [2]. Developing reliable models for these endpoints remains challenging because tumors are highly heterogeneous, labeled outcomes are limited, and predictive signals must often be extracted from heterogeneous and com-plementary data sources [3]. Large-scale resources such as The Cancer Genome Atlas (TCGA) provide an opportunity to learn prognostic signals from complementary modalities [4]. Histopathology whole-slide images (WSIs) capture spatial morphology and tumor microenvironment patterns, bulk RNA sequencing reflects molecular programs, and pathology reports summarize diag-nostic findings in natural language. Jointly leveraging these modalities has repeatedly shown advantages over unimodal modeling [5]–[7]. However, real-world multimodal cohorts are inherently incomplete: modalities are often missing due to cost, assay availability, retrospective collection, or incomplete documentation. Consequently, the intersection of fully paired samples can be substantially smaller than the union of patients with at least one modality, limiting both supervised fusion and scalable representation learning [8], [9]. This fragmentation poses a particular challenge for multimodal pretraining, where cross-modal objectives typically assume complete pairing. Most existing multimodal prognosis pipelines focus on su-pervised fusion at the downstream stage, combining modality-specific features via early/late fusion or attention-based inter-mediate fusion [10], [11]. These approaches handle missing-ness using heuristic placeholders, leading to unstable perfor-mance under incomplete observations [12]. A natural remedy is to improve representations through self-supervised pretrain-ing. However, extending pretraining to multimodal settings faces a key obstacle: common cross-modal objectives require paired observations, restricting learning to the intersection of modalities and preventing the model from exploiting partially observed cohorts [5], [8]. Moreover, most strategies address missing-modality robustness only implicitly, rather than ex-plicitly optimizing representations that remain consistent and predictive under arbitrary modality subsets [8], [13]. In this work, we treat missingness not as an exception but as a structural property of clinical data, and propose PRIME, a missing-aware multimodal self-supervised pretraining frame-work for WSI-RNA-report learning. PRIME operates in a unified token space and introduces a shared prototype memory bank as a latent interface across heterogeneous modalities, where each prototype is a learnable token sequence. For 
+
+> arXiv:2604.04999v1 [cs.LG] 5 Apr 2026 2
+
+a patient with incomplete modalities, PRIME retrieves and aggregates information from a shared prototype bank based on observed evidence, synthesizing plausible latent tokens for missing modalities without reconstructing raw signals. Unlike generative imputation, which requires modality-specific decoders and risks hallucination, prototype-based imputation operates entirely in the latent space and naturally preserves structural alignment across modalities. Building on this mechanism, PRIME optimizes missing-aware pretraining with two complementary components: (i) inter-modality alignment computed on paired modality subsets to scale learning with partially observed cohorts while avoid-ing imputation noise, and (ii) post-fusion consistency under structured missingness augmentation, where modality- and token-level dropout create two views and dropped elements are imputed using Dirichlet-driven prototype mixtures to obtain diverse yet semantically anchored representations. Together, these designs learn robust and transferable multimodal rep-resentations that support inference under arbitrary missing-modality subsets and enable parameter-efficient adaptation (e.g., linear probing) in label-limited settings. We evaluate PRIME on TCGA across three clinically rel-evant endpoints: (i) OS time-to-event prediction evaluated by concordance index (C-index), (ii) 3-year mortality classifica-tion evaluated by AUROC, and (iii) 3-year recurrence classifi-cation based on PFI annotations evaluated by AUROC. Beyond full-modality testing, we perform robustness experiments by removing modalities at inference time, and we further assess label efficient transfer and parameter efficiency. Across tasks, PRIME consistently improves downstream performance after self-supervised pretraining, mitigates performance degrada-tion under missing modalities, and enables parameter-efficient transfer in which linear probing remains competitive with, and can surpass, full fine-tuning. Our contributions are as follows:  
+
+> •
+
+We propose PRIME, a missing-aware multimodal self-supervised pretraining framework that leverages partially observed cohorts for cancer prognosis and supports arbi-trary modality subsets at inference.  
+
+> •
+
+We introduce a learnable prototype memory bank with patient-level consensus retrieval for latent-space semantic imputation, and design two complementary pretraining objectives: inter-modality alignment and post-fusion con-sistency, to learn robust and transferable multimodal representations under missingness.  
+
+> •
+
+We evaluate PRIME on TCGA across three clinically relevant endpoints, where it achieves the best macro-average performance among all compared methods while demonstrating improved robustness under test-time miss-ingness and supporting label-efficient and parameter-efficient adaptation. II. R ELATED WORK 
+
+A. Multimodal Prognostic Modeling 
+
+Multimodal cancer prognosis modeling has been widely studied on cohorts such as TCGA by integrating WSIs, molec-ular profiles, and pathology text. A broad spectrum of fusion strategies has been explored, from early/late fusion and tensor-based or attention-based interaction models [14]–[18], to task-specific pathology-omics architectures such as MCAT [19], Porpoise [20], and PathOmics [21]. More recently, many pipelines adopt frozen unimodal encoders to extract modality-specific embeddings and train lightweight fusion modules, which is computationally efficient and aligns with practical deployment constraints [5], [12], [22]. However, these approaches are architecturally designed for complete inputs: fusion modules expect a fixed set of modality features, and missingness is addressed only as a post hoc workaround, typically by taking zeros or mean features for absent modalities [12]. Such heuristic placeholders inject unin-formative signals into the fusion process, degrading robustness and limiting effective use of partially observed patients. 
+
+B. Multimodal Foundation Models and Pretraining 
+
+Computational pathology has witnessed rapid development of foundation models trained with large-scale self-supervision. Vision-only and vision-language pretraining has produced transferable WSI encoders (e.g., UNI, CONCH) [23], [24], and multimodal pretraining further seeks to align WSIs with molecular and clinical-text modalities for downstream clinical prediction [5], [25], [26]. A representative tri-modal frame-work, mSTAR [5], integrates WSIs, gene-expression features, and pathology reports via cross-modal alignment and self-taught distillation; however, its alignment stage relies on paired modalities, excluding patients who lack a complementary modality, and missing-modality benefits are realized through knowledge injection into a single-modality encoder rather than optimizing fused representations across arbitrary modality subsets. Pathology-omics frameworks such as POMP [26] combine cross-modal contrastive alignment with masking-based modeling to improve robustness to partial corruption, while MICE [25] explores mixture-of-experts for prognostic representation learning. Despite these advances, scalable pre-training that explicitly exploits the union of partially observed cohorts while ensuring consistent inference under arbitrary modality subsets remains an open challenge. 
+
+C. Learning with Missing Modalities 
+
+Missing-modality learning has been addressed through sev-eral strategies. Generative methods synthesize absent modali-ties from observed ones but risk reconstruction-prediction mis-match and error propagation in high-dimensional settings [27]. Retrieval- or memory-based approaches leverage reference patients to approximate missing features, though performance depends on reference-set coverage and similarity metric stabil-ity [9]. Modality-aware prompts or pseudo-embeddings adapt models to variable availability during downstream training but do not address how to scale multimodal pretraining on frag-mented cohorts [12]. Masked modeling and modality dropout improve robustness by exposing models to systematic incom-pleteness [28], [29], yet adapting these designs to WSI-omics-text learning introduces additional challenges including large semantic gaps, heterogeneous token structures, and incom-plete cross-modal pairing. In particular, a unified framework 3       
+
+> Fig. 1. Overview of the proposed PRIME framework for multimodal cancer prognosis with missing modalities. Left (Sample Pre-processing): Frozen encoders extract token embeddings from WSIs, RNA-seq, and pathology reports. Middle (Missing Modality Imputation): In a unified token space, a shared sequence-level prototype memory bank imputes missing modalities via patient-level consensus retrieval, followed by modality-specific refinement. Right (Missing-aware Pretraining): Two complementary objectives, inter-modality contrastive alignment and post-fusion consistency under modality/token dropout with prototype mixtures, jointly drive self-supervised pretraining.
+
+that performs missing-aware pretraining on partially observed cohorts while explicitly optimizing fused representations to remain consistent under arbitrary modality subsets remains limited. III. M ETHOD 
+
+A. Overview 
+
+As illustrated in Fig. 1, PRIME considers three modal-ities: histopathology WSIs (Image), bulk RNA sequencing (RNA), and pathology reports (Text). Frozen encoders extract modality-specific embeddings, a shared prototype memory bank imputes missing modalities in latent space, and two contrastive objectives drive missing-aware pretraining. The pretrained backbone supports arbitrary modality subsets via full fine-tuning or linear probing. 
+
+B. Input Embeddings and Notation 
+
+For each patient i, let the complete set of multimodality inputs be denoted as M = {I, R, T }, corresponding to im-age, RNA, and text, respectively. To facilitate the subsequent multimodal fusion and imputation, we precompute modality-specific feature embeddings using frozen backbone encoders and use these embeddings as inputs. For modality m ∈ M ,the input is a fixed-length token sequence 
+
+E(m) 
+
+> i
+
+∈ RLm×Dm , (1) where Lm is the token length and Dm is the feature dimension. If a modality is unavailable for patient i, we set E(m) 
+
+> i
+
+= ∅
+
+and record its availability by a binary mask ai,m ∈ { 0, 1}.Details of feature extraction and preprocessing are provided in Sec. IV-A. 
+
+C. Missing Modality Imputation 
+
+In real-world clinical settings, patients often lack certain data modalities. To fully utilize incomplete records, we pro-pose a dynamic imputation mechanism via a shared prototype memory bank. For patient i, let Si ⊆ M denote the available modalities. 
+
+1) Modality-Specific Tokenization: Because the pre-computed embeddings E(m) 
+
+> i
+
+have varying sequence lengths, we employ a modality-specific query-based cross-attention tokenizer to map each available modality m ∈ Si into a unified semantic space. Each tokenizer uses Tq learnable query tokens Qm ∈ RTq ×D (with Tq = 128 and hidden dimension 
+
+D = 512 ) as queries in a cross-attention layer followed by a feed-forward network, condensing the variable-length input into a fixed-length representation: 
+
+Z(m) 
+
+> i
+
+= FFN(MHCA(Q = Qm, K, V = E(m) 
+
+> i
+
+)) ∈ RTq ×D
+
+(2) This process structurally aligns all modalities by extracting exactly Tq salient tokens per input. 
+
+2) Cross-Modal Consensus via Shared Prototype Bank: 
+
+To bridge the semantic gap between different modalities and guide the imputation of missing data, we introduce a learnable shared prototype memory bank (a sequence-level codebook) 
+
+C = {Ck}Kc
+
+> k=1
+
+, where each prototype is a token sequence Ck ∈
+
+RTq ×D , and Kc is the total number of prototypes. For an observed modality with token sequence Z(m) 
+
+> i
+
+, we compute a soft assignment over the prototypes based on their 4
+
+mean-pooled token features: 
+
+¯Z(m) 
+
+> i
+
+= norm 
+
+ 1
+
+TqTq
+
+X
+
+> t=1
+
+Z(m)
+
+> i,t
+
+ , ¯Ck = norm 
+
+ 1
+
+TqTq
+
+X
+
+> t=1
+
+Ck,t 
+
+
+
+(3) 
+
+q(m) 
+
+> i,k
+
+=exp 
+
+¯Z(m) 
+
+> i
+
+¯C⊤ 
+
+> k
+
+/τ 
+
+PKc 
+
+> j=1
+
+exp 
+
+¯Z(m) 
+
+> i
+
+¯C⊤ 
+
+> j
+
+/τ 
+
+ (4) where τ is a temperature hyperparameter. To capture the holistic patient state, we aggregate the assignments across all available modalities to obtain a patient-level consensus distribution: 
+
+¯qi = 1
+
+|S i|
+
+X
+
+> m∈S i
+
+q(m) 
+
+> i
+
+(5) This consensus ¯qi serves as a robust, cross-modal anchor that summarizes the patient’s comprehensive profile based on available evidence. 
+
+3) Dynamic Imputation and Refinement: For any missing modality m /∈ Si, we dynamically impute its token se-quence using a mixture of the shared prototypes driven by the consensus distribution. To construct a complete, uniform representation set for patient i across all modalities m ∈ M ,we define the pre-refinement tokens U(m) 
+
+> i
+
+as: 
+
+U(m) 
+
+> i
+
+=
+
+(
+
+Z(m) 
+
+> i
+
+, if m ∈ S i
+
+PKc 
+
+> k=1
+
+¯qi,k Ck, if m / ∈ S i
+
+(6) Finally, to smooth the semantic transition between the orig-inally extracted features and the prototype-imputed features, the unified tokens U(m) 
+
+> i
+
+are passed through a modality-specific refinement module to generate the final aligned tokens: 
+
+˜Z(m) 
+
+> i
+
+= Transformer m
+
+
+
+U(m)
+
+> i
+
+
+
+∈ RTq ×D (7) Notably, this imputation and refinement process operates in the latent representation space rather than attempting to recon-struct raw signals, thereby mitigating hallucination risks and ensuring structural alignment across multimodal latent space. 
+
+D. Modality-Aware MoE Fusion Backbone 
+
+To capture complex cross-modal interactions while effi-ciently increasing model capacity, we pass the aligned tokens into a shared backbone. We concatenate the modality tokens in a fixed order to form a fused sequence for patient i:
+
+Xi = [ ˜Z(I) 
+
+> i
+
+; ˜Z(R) 
+
+> i
+
+; ˜Z(T) 
+
+> i
+
+] ∈ R3Tq ×D (8) A Transformer backbone processes Xi to produce contextu-alized tokens. To balance modality-specific specialization and holistic cross-modal context exchange, the backbone alternates between Vanilla Transformer blocks and Sparse Mixture-of-Experts (MoE) blocks. Specifically, in the MoE layers, tokens are routed dynami-cally to top-k experts via a modality-aware gate: 
+
+r = Wg (x + bm) (9) where bm is a learned modality index embedding injected into the gating input to condition the routing on the source modal-ity. We select the top-k experts using softmax (r) and compute the output as a weighted sum of the selected expert Feed-Forward Networks (FFNs). We further apply a load-balancing regularizer Lrouter to encourage uniform expert utilization and prevent routing collapse. 
+
+E. Missing-Aware Self-Supervised Pretraining 
+
+Our pretraining paradigm optimizes three complementary objectives: (i) cross-modal alignment before fusion, (ii) post-fusion consistency under structured missingness augmentation, and (iii) MoE routing regularization. 
+
+1) Pre-Fusion Inter-Modality Alignment: Before modality fusion, we explicitly align the latent spaces of the available modalities. For each modality m, we pool the tokens and apply a projection head gm:
+
+v(m) 
+
+> i
+
+= norm (gm(pool (˜Z(m) 
+
+> i
+
+))) ∈ RDd (10) where Dd = 256 . Let ai,m ∈ {0, 1} indicate whether modality m is naturally observed for patient i. We compute the pairwise InfoNCE loss strictly over the valid cohort where both modalities are present, denoted by the set Ωm,n = {i :
+
+ai,m = ai,n = 1 }:
+
+Lalign = 1
+
+|P| 
+
+X
+
+> (m,n )∈P
+
+InfoNCE 
+
+
+
+{v(m) 
+
+> i
+
+}i∈Ωm,n , {v(n) 
+
+> i
+
+}i∈Ωm,n 
+
+
+
+(11) where P = {(I, R), (I, T ), (R, T )} represents all valid modality pairs. This masked formulation naturally leverages the union of partially observed cohorts without introducing imputation noise. 
+
+2) Stochastic Augmentation: To improve robustness against incomplete multimodal inputs, we propose a Dirichlet-driven stochastic augmentation module to generate two augmented views. For each view, we apply sample-wise modality dropout (pmod ) and token-level dropout ( ptok ) to the observed modal-ities, yielding a binary keep mask M(m) that is constrained to preserve at least one valid token per view. Instead of naive zero-masking, dropped elements are im-puted using semantically plausible prototype mixtures. Specif-ically, we first compute the soft assignment q(m) 
+
+> i
+
+over the shared prototype bank C, and sparsify this distribution by retaining the Top-Ks probabilities with re-normalizing, yield-ing a valid probability simplex ˆq(m) 
+
+> i
+
+. We then parameter-ize a Dirichlet distribution using this sparsified distribution scaled by a concentration factor α. Dirichlet provides simplex-constrained weights centered at ˆq(m) 
+
+> i
+
+, with α controlling diversity. By sampling continuous mixture weights ˜p ∼
+
+Dirichlet (α · ˆq(m) 
+
+> i
+
+), the augmented tokens for modality m are synthesized as: 
+
+˜Z′(m) 
+
+> i
+
+= M(m) 
+
+> i
+
+⊙ ˜Z(m) 
+
+> i
+
++ (1 − M(m) 
+
+> i
+
+) ⊙
+
+> Kc
+
+X
+
+> k=1
+
+˜pi,k Ck
+
+!
+
+(12) Overall, this augmentation produces diverse imputed views for contrastive learning while remaining anchored to patient-specific prototype evidence, reducing the risk of implausible imputations under structured missingness. 5                                       
+
+> TABLE I PER -CANCER COHORT STATISTICS FOR DOWNSTREAM EVALUATION USING TRI -MODAL COMPLETE CASES .Ntri DENOTES THE TRI -MODAL COHORT SIZE . OS ENTRIES ARE REPORTED AS event/cens . 3 YOS AND 3YREC ENTRIES ARE REPORTED AS pos/neg AFTER EXCLUDING PATIENTS CENSORED BEFORE 3YEARS ;FOR 3YREC ,EXCLUDED CASES ARE THOSE CENSORED BEFORE 3YEARS WITHOUT A RECORDED EVENT .Cancer Ntri OS 3yOS 3yRec UCEC 499 80 / 419 62 / 203 99 / 176 LUAD 436 157 / 279 118 / 114 159 / 86 LGG 434 95 / 339 64 / 126 121 / 96 BRCA 855 116 / 739 56 / 357 69 / 340 BLCA 346 161 / 185 147 / 74 145 / 61
+
+3) Post-Fusion Consistency and Overall Objective: Both augmented views are then passed through the shared MoE fusion backbone F, producing contextualized tokens O(s) 
+
+> i
+
+=
+
+F(X(s) 
+
+> i
+
+) ∈ R3Tq ×D . To mitigate the direct contribution of synthetically filled or dropped tokens to the final patient rep-resentation, we apply a reliability-weighted pooling scheme. Specifically, we define a binary mask w(s) 
+
+> i,t
+
+∈ { 0, 1} that equals 1 only if token t belongs to a naturally observed modality and was retained during augmentation, and compute: 
+
+MaskedPool( O(s) 
+
+> i
+
+) = 
+
+P 
+
+> t
+
+w(s) 
+
+> i,t
+
+· O(s)
+
+> i,t
+
+P 
+
+> t
+
+w(s)
+
+> i,t
+
+(13) The pooled features are then mapped via a fusion projection head gf :
+
+h(s) 
+
+> i
+
+= norm( gf (MaskedPool( O(s) 
+
+> i
+
+))) ∈ RDd , s ∈ { 1, 2}
+
+(14) We enforce representation invariance via a symmetric inter-view InfoNCE loss: 
+
+Lfusion = InfoNCE 
+
+
+
+{h(1)  
+
+> i
+
+}i, {h(2)  
+
+> i
+
+}i
+
+
+
+(15) The overall self-supervised pretraining objective is formu-lated as a weighted sum: 
+
+Ltotal = λLalign + (1 − λ)Lfusion + λrouter Lrouter (16) where λ and λrouter are hyperparameters balancing the loss. IV. E XPERIMENTS 
+
+A. Dataset and Preprocessing 
+
+We curate a TCGA cohort spanning 32 cancer types with up to three modalities per patient from the TCGA repository 1:histopathology whole-slide images (WSI; Image ), bulk RNA sequencing ( RNA ), and pathology reports ( Text ). Modalities are aligned by TCGA identifiers, yielding 10,439 patients with at least one available modality. Among them, 7,675 patients have complete tri-modal data (Image+RNA+Text), while 2,764 patients are missing one or two modalities. We use the full pan-cancer cohort for self-supervised pretraining 
+
+without accessing any downstream labels. For downstream fine-tuning and evaluation, we focus on five cancer types with complete tri-modal data (UCEC, LUAD, LGG, BRCA, and BLCA). Cohort statistics are summarized in Table I. 
+
+> 1https://portal.gdc.cancer.gov/
+
+1) Image: We extract patch-level features using a Vi-sion Transformer (ViT) initialized with Marugoto pre-trained weights [30], [31]. Each WSI is tiled into non-overlapping 
+
+224 × 224 patches at a fixed magnification. Background/low-information patches are removed using an entropy-based crite-rion. The remaining patch features are aggregated into a fixed-length sequence of 128 tokens using per-WSI mini-batch k-means (128 cluster centroids); zero-padding is applied when fewer than 128 patches are available. 
+
+2) RNA: We encode bulk RNA-seq profiles using BulkRN-ABert initialized from published weights [32]. To reduce computation, we use a fixed 2,048-dimensional slice of the produced embeddings for downstream modeling. 
+
+3) Text: Pathology reports were downloaded from TCGA as PDF files and converted to text via AWS OCR, followed by standard cleaning. The text was tokenized and encoded using a BERT- base Transformer text encoder (BioClinicalBERT [33]; 768-d), and sequences were truncated/padded to 200 tokens for minibatch training. 
+
+B. Tasks and Evaluation Metrics 
+
+We evaluate models on three clinically relevant endpoints using TCGA annotations. (1) Overall survival (OS) time-to-event prediction. Each patient has an observed follow-up time ti (months) and a censoring indicator ci ∈ { 0, 1}, where 
+
+ci = 1 denotes right censoring and ci = 0 denotes an observed event (death). We adopt a discrete-time survival formulation by discretizing time into Ktime intervals and optimize a censoring-aware negative log-likelihood (NLL) loss. Performance is reported using the concordance index (C-index), computed from a scalar risk score derived from the predicted survival distribution. (2) 3-year survival classification. We formulate survival beyond 3 years as a binary task with label y(sur ) 
+
+> i
+
+∈{0, 1}. Patients censored before 3 years are excluded to ensure unambiguous labels. The model is trained with binary cross-entropy (BCE), and we report AUROC. (3) 3-year recurrence classification. Based on TCGA progression-free interval (PFI) annotations, we define y(rec ) 
+
+> i
+
+∈ {0, 1} indicating whether recurrence occurs within 3 years among patients. 
+
+C. Baselines and Implementation Details 1) Baselines: We compare PRIME against unimodal and multimodal baselines under identical downstream training pro-tocols. To ensure controlled comparisons, all models take the same precomputed modality embeddings as inputs and use the same prediction head design and optimization settings unless otherwise specified. This design isolates the contribution of multimodal fusion and pretraining while avoiding confounding effects from differing modality encoders. 
+
+Single-modality baselines. We evaluate unimodal baselines that use only one modality at a time. Specifically, Image-only ,
+
+RNA-only , and Text-only are implemented as single-modality variants of our model, sharing the same backbone, prediction head, and training protocol while restricting the input to the corresponding modality. We additionally include ABMIL [34] for images and SNN [35] for RNA. 6                                                                                                                                                                               
+
+> TABLE II TASK -1 OVERALL SURVIVAL PERFORMANCE (C-INDEX )ON FIVE CANCER COHORTS . V ALUES ARE MEAN ±STD OVER 5-FOLD CV WITHIN EACH COHORT ;AVG DENOTES THE MEAN ±STD ACROSS COHORTS . B EST AND SECOND -BEST RESULTS ARE HIGHLIGHTED IN BOLD AND UNDERLINE .Methods Modalities UCEC LUAD LGG BRCA BLCA Avg Img RNA Text Img-only ✓0.668 ±0.083 0.599 ±0.056 0.670 ±0.100 0.615 ±0.087 0.547 ±0.060 0.620 ±0.052 RNA-only ✓0.598 ±0.094 0.510 ±0.057 0.764 ±0.056 0.498 ±0.065 0.526 ±0.043 0.579 ±0.110 Text-only ✓0.676 ±0.066 0.553 ±0.028 0.703 ±0.097 0.556 ±0.030 0.532 ±0.025 0.604 ±0.079 ABMIL [34] ✓0.637 ±0.049 0.604 ±0.066 0.692 ±0.056 0.617 ±0.092 0.537 ±0.035 0.617 ±0.056 SNN [35] ✓0.571 ±0.070 0.520 ±0.065 0.719 ±0.073 0.466 ±0.103 0.536 ±0.053 0.563 ±0.096 Early ✓✓✓0.692 ±0.045 0.557 ±0.075 0.736 ±0.060 0.593 ±0.050 0.557 ±0.033 0.627 ±0.082 Late ✓✓✓0.686 ±0.068 0.575 ±0.088 0.709 ±0.048 0.594 ±0.024 0.528 ±0.022 0.618 ±0.076 CrossAttn ✓✓✓0.677 ±0.058 0.559 ±0.097 0.688 ±0.088 0.572 ±0.047 0.556 ±0.037 0.610 ±0.066 TensorFusion [16] ✓✓✓0.686 ±0.078 0.521 ±0.048 0.734 ±0.056 0.604 ±0.057 0.552 ±0.049 0.620 ±0.089 MAGGate [17] ✓✓✓0.698 ±0.049 0.553 ±0.079 0.713 ±0.053 0.616 ±0.035 0.538 ±0.034 0.624 ±0.080 MulT [18] ✓✓✓0.677 ±0.031 0.562 ±0.079 0.718 ±0.086 0.576 ±0.056 0.564 ±0.030 0.619 ±0.073 MCAT [19] ✓✓0.649 ±0.041 0.589 ±0.042 0.727 ±0.055 0.501 ±0.077 0.533 ±0.026 0.600 ±0.091 Porpoise [20] ✓✓0.663 ±0.088 0.631 ±0.067 0.633 ±0.059 0.603 ±0.068 0.559 ±0.025 0.618 ±0.039 PathOmics [21] ✓✓0.609 ±0.131 0.609 ±0.042 0.644 ±0.070 0.572 ±0.069 0.563 ±0.023 0.599 ±0.033 Song [22] ✓✓✓0.699 ±0.061 0.514 ±0.054 0.684 ±0.062 0.621 ±0.056 0.557 ±0.068 0.615 ±0.080 Scratch (FT) ✓✓✓0.684 ±0.039 0.574 ±0.056 0.716 ±0.064 0.573 ±0.028 0.565 ±0.038 0.623 ±0.072 Scratch (LP) ✓✓✓0.684 ±0.071 0.599 ±0.056 0.611 ±0.085 0.560 ±0.041 0.523 ±0.033 0.595 ±0.060 Pretrained (FT) ✓✓✓0.692 ±0.048 0.590 ±0.051 0.730 ±0.079 0.643 ±0.034 0.549 ±0.055 0.641 ±0.073 Pretrained (LP) ✓✓✓0.699 ±0.055 0.578 ±0.051 0.780 ±0.050 0.622 ±0.066 0.584 ±0.041 0.653 ±0.086
+
+Multimodal fusion baselines. We include representa-tive fusion strategies: Early fusion (feature concatena-tion followed by an encoder), Late fusion (decision-level combination), and Cross-attention (cross-modal atten-tion). We further compare with established fusion archi-tectures, including TensorFusion [16], MAGGate [17], and 
+
+MulT [18], as well as multimodal prognosis models includ-ing MCAT [19], Porpoise [20], PathOmics [21], and Song’s method [22]. For a controlled comparison, Early/Late/Cross-attention/TensorFusion/MAGGate/MulT share the same back-bone and differ only in the fusion mechanism. For Task-2/3 (binary classification), baselines originally proposed for survival prediction are adapted by replacing the survival-specific head with a binary classification head while keeping backbone and fusion modules unchanged. 
+
+Proposed method variants. To isolate the effect of pretrain-ing and adaptation strategy, we evaluate our model (i) from scratch (random initialization) and (ii) with self-supervised pretraining . For each initialization, we report two adaptation modes: full fine-tuning, FT (updating the backbone and task head) and linear probing, LP (freezing the backbone and training only the task head). 
+
+2) Implementation details: We implement all experiments in PyTorch and use identical data splits and task heads across methods for fair comparison. Pretraining is performed on the unlabeled pan-cancer TCGA cohort (32 cancer types) using AdamW [36] with learning rate 1 × 10 −5, weight decay 
+
+0.1, batch size 64 , and 200 epochs. We split samples within each cancer type into 80%/20% train/validation and select the checkpoint with the lowest validation loss for down-stream initialization. The pretraining stage does not access any downstream labels (OS/mortality/recurrence outcomes). Downstream experiments are conducted on five cancer types (UCEC, LUAD, LGG, BRCA, BLCA) with 5-fold cross-validation, performed within each cancer type. In each fold, patients are split into train/validation/test with a 70/10/20 ratio. We select the best checkpoint on the validation set and report its performance on the held-out test set. Downstream optimization uses AdamW with learning rate 5 × 10 −4 (FT) or 1 × 10 −4 (LP), batch size 16 , and 50 epochs. All results are reported as mean ±std across folds and macro-averaged across the five cohorts. Experiments are run on NVIDIA A100-SXM4-40GB GPUs. 
+
+D. Results and Analysis 1) Full-modality Performance: Table II and III summarize results across three tasks in the full-modality setting. Across all tasks, self-supervised pretraining consistently improves perfor-mance over training from scratch, and Pretrained+LP achieves the best macro-average results on Task-1 (C-index 0.653) and Task-2 (AUROC 0.689), while Pretrained+FT leads on Task-3 (AUROC 0.637). Both pretrained variants outperform all multimodal fusion baselines on the macro-average, indicating that pretraining yields transferable multimodal representations that can be effectively adapted with a lightweight task head. Notably, linear probing matches or surpasses full fine-tuning after pretraining, whereas the opposite holds when training from scratch (e.g., Task-1: Scratch+LP 0.595 vs. Scratch+FT 0.623; Pretrained+LP 0.653 vs. Pretrained+FT 0.641). This suggests that pretraining produces sufficiently structured rep-resentations for parameter-efficient adaptation. While cohort-level variation exists (e.g., Porpoise leads on LUAD for Task-1), our pretrained variants provide the most consistently strong performance across cancer types and endpoints. 
+
+2) Risk Stratification via Kaplan–Meier Analysis: Beyond rank-based evaluation (C-index), we assess whether the pre-dicted risk scores can stratify patients into clinically distinct survival groups. For each cancer cohort, we pool held-out test 7UCEC LUAD LGG BRCA BLCA                                                  
+
+> Fig. 2. Kaplan–Meier survival curves based on predicted risk scores for five TCGA cohorts. Each panel reports the log-rank p-value and the hazard ratio (HR) from a univariate Cox model comparing high-risk vs. low-risk groups. TABLE III AVERAGE AUROC ACROSS FIVE CANCER COHORTS FOR TASK -2 (3-YEAR MORTALITY )AND TASK -3 (3-YEAR RECURRENCE ). V ALUES ARE MEAN ±STD ACROSS COHORTS .BEST AND SECOND -BEST METHODS ARE HIGHLIGHTED WITHIN EACH TASK .Methods Task-2 Avg Task-3 Avg Img-only 0.640 ±0.070 0.572 ±0.087 RNA-only 0.587 ±0.099 0.561 ±0.117 Text-only 0.619 ±0.070 0.608 ±0.071 ABMIL [34] 0.638 ±0.064 0.591 ±0.080 SNN [35] 0.594 ±0.110 0.568 ±0.107 Early 0.655 ±0.082 0.609 ±0.060 Late 0.646 ±0.082 0.604 ±0.074 CrossAttn 0.661 ±0.063 0.628 ±0.078 TensorFusion [16] 0.645 ±0.064 0.587 ±0.045 MAGGate [17] 0.639 ±0.074 0.598 ±0.088 MulT [18] 0.650 ±0.082 0.611 ±0.073 MCAT [19] 0.626 ±0.105 0.579 ±0.091 Porpoise [20] 0.639 ±0.072 0.579 ±0.103 PathOmics [21] 0.621 ±0.092 0.593 ±0.074 Song [22] 0.672 ±0.108 0.626 ±0.092 Scratch (FT) 0.656 ±0.064 0.610 ±0.068 Scratch (LP) 0.636 ±0.072 0.595 ±0.081 Pretrained (FT) 0.669 ±0.077 0.637 ±0.056
+> Pretrained (LP) 0.689 ±0.110 0.629 ±0.098
+
+predictions across the 5-fold cross-validation splits and apply a median threshold on the predicted risk score to define high-risk 
+
+and low-risk groups. We plot Kaplan–Meier survival curves and report the log-rank test p-value. To quantify effect size, we fit a univariate Cox proportional hazards model with a binary covariate indicating the high-risk group and report the hazard ratio (HR) with 95% confidence intervals. As shown in Fig. 2, the predicted risk scores yield clear separation between the two survival curves in all five cohorts, with statistically significant log-rank tests and HR > 1 for the high-risk group. For example, on BRCA, the high-risk group exhibits significantly worse survival with HR = 2 .26 
+
+(95% CI 1.51 –3.39 ) and a significant log-rank test ( p =5.42 × 10 −5), demonstrating substantial effect size beyond statistical significance. These results indicate that the model learns clinically meaningful risk stratification signals rather than only improving a ranking metric. 
+
+3) Robustness to Missing Modalities: We evaluate robust-ness by introducing missingness at test time while training and validating on full tri-modal data (Table IV). This con-trolled setting isolates the model’s ability to operate under incomplete inputs at inference and avoids confounding effects from missingness during supervised training. Two settings are considered: leave-one-out (LI/LR/LT), where one modality is removed, and only-one (OI/OR/OT), where a single modality is available. We compare Scratch (FT), Pretrained (LP), and a variant Pretrained (LP+Missing) that applies modality dropout during downstream training. Across all three tasks and missingness patterns, pretrained representations substantially outperform scratch, with the largest gains in the only-one setting where Scratch (FT) degrades most severely. For instance, on Task-2 OR (RNA-only), Scratch achieves 0.486 while Pretrained (LP) reaches 0.618, a gap of over 0.13. In general, RNA-only (OR) causes the largest degradation, suggesting that RNA features benefit most from cross-modal pretraining. Introducing modality dropout at downstream training (LP+Missing) further improves robustness under missingness, sometimes at a small cost on the full-modality score. For example, on Task-3, LR improves from 0.611 to 0.632 and OT from 0.597 to 0.626, while full-modality performance decreases only marginally (0.629 to 0.622). This trade-off is generally favorable in clinical settings where modality completeness cannot be guaranteed. 
+
+4) Label Efficient Downstream Transfer: We further con-duct a label efficient transfer study on Task-1 by downsam-pling the labeled training set while keeping the validation/test splits unchanged. Specifically, for each fold we randomly re-tain {100%, 90%, 70%, 50% } of the labeled training samples with the same sampling indices across methods, and report the corresponding macro-averaged C-index. Fig. 3 summarizes the results. As shown in Fig. 3 (left), our method consistently outper-forms unimodal baselines ( Image-only , RNA-only , and Text-only ) across all label budgets and exhibits a noticeably smaller performance degradation as the training set shrinks. This indicates that the pretrained multimodal representation reduces sample complexity and remains effective even when supervi-sion is limited. Fig. 3 (right) further compares our method with representative fusion baselines and a scratch-trained FT baseline. Across all sampling ratios, our method achieves the best C-index and degrades more gracefully under reduced supervision, suggesting that self-supervised pretraining yields transferable cross-modal features that can be reliably adapted in the low-data regime. Overall, these results demonstrate the advantage of our pretraining-and-adaptation design for 8                                                                                  
+
+> TABLE IV ROBUSTNESS TO MISSING MODALITIES ON THREE DOWNSTREAM TASKS . M ODELS ARE TRAINED ON FULL TRI -MODAL DATA ,WITH MISSINGNESS INTRODUCED ONLY AT TEST TIME . F ULL DENOTES ALL MODALITIES ; LI/LR/LT AND OI/OR/OT DENOTE LEAVE -ONE -OUT AND ONLY -ONE SETTINGS FOR IMAGE /RNA/T EXT ,RESPECTIVELY . V ALUES ARE MEAN ±STD OVER 5-FOLD CV. Task Method Full LI LR LT OI OR OT Task-1 Scratch (FT) 0.623 ±0.072 0.608 ±0.069 0.631 ±0.068 0.607 ±0.051 0.607 ±0.050 0.540 ±0.085 0.606 ±0.066 Pretrained (LP) 0.653 ±0.086 0.612 ±0.086 0.641 ±0.086 0.619 ±0.090 0.603 ±0.058 0.564 ±0.084 0.611 ±0.077 Pretrained (LP+Missing) 0.653 ±0.089 0.623 ±0.085 0.639 ±0.085 0.636 ±0.087 0.611 ±0.055 0.571 ±0.063 0.610 ±0.089 Task-2 Scratch (FT) 0.656 ±0.064 0.611 ±0.052 0.666 ±0.064 0.621 ±0.073 0.620 ±0.072 0.486 ±0.051 0.611 ±0.052 Pretrained (LP) 0.689 ±0.110 0.670 ±0.118 0.671 ±0.097 0.665 ±0.088 0.638 ±0.077 0.618 ±0.112 0.641 ±0.101 Pretrained (LP+Missing) 0.679 ±0.117 0.679 ±0.118 0.670 ±0.104 0.676 ±0.089 0.642 ±0.077 0.627 ±0.118 0.646 ±0.107 Task-3 Scratch (FT) 0.610 ±0.068 0.587 ±0.076 0.624 ±0.052 0.584 ±0.071 0.585 ±0.071 0.524 ±0.097 0.587 ±0.075 Pretrained (LP) 0.629 ±0.098 0.612 ±0.078 0.611 ±0.090 0.620 ±0.114 0.594 ±0.097 0.577 ±0.108 0.597 ±0.064 Pretrained (LP+Missing) 0.622 ±0.100 0.624 ±0.084 0.632 ±0.096 0.612 ±0.115 0.609 ±0.095 0.574 ±0.109 0.626 ±0.070
+> Fig. 3. Label-efficient downstream transfer performance on Task-1 (overall survival; C-index). The x-axis denotes the fraction of labeled training samples retained from the full training split. Left: unimodal baselines. Right: multi-modal fusion baselines.
+
+practical settings where labeled outcomes are limited. 
+
+5) Parameter-Efficiency: Pretraining also improves parameter-efficient adaptation. While linear probing is weaker than full fine-tuning when trained from scratch, 
+
+Pretrained (LP) achieves strong downstream performance, attaining the best macro-average results on Task-1 (0.653) and Task-2 (0.689), and remaining competitive on Task-3 (0.629) compared with Pretrained (FT) (0.637). These results suggest that the learned multimodal representations are highly transferable and can be effectively adapted using lightweight task-specific heads, offering a favorable accuracy–efficiency trade-off. 
+
+6) Ablation Studies: We conduct ablation studies to quan-tify the contribution of key components in our pretraining framework. Table V summarizes the performance under a con-trolled setting where all variants share the same downstream protocol ( pretrained+LP ). We include the MoE router load-balancing regularizer Lrouter in all variants with the same value; thus it is held fixed and not ablated here. The full method 
+
+combines missing-aware pretraining, a learnable prototype bank, and the joint objective L = λL align + (1 − λ)Lfusion .
+
+Impact of prototypes and missing-aware pretraining. 
+
+Replacing prototype tokens with zeros (w/o prototypes) leads to consistent degradations, particularly on Task-2 and Task-3 (T1: 0.653 → 0.646 , T2: 0.689 → 0.669 , T3: 0.629 → 0.595 ), indicating that learnable prototypes provide informative shared tokens for imputing missing modalities and strengthening multimodal transfer. Disabling missing-aware pretraining (pre-     
+
+> Fig. 4. Sensitivity of the model to prototype bank size Kc(left) and loss weight coefficient λ(right).
+
+training only on full-modality samples) also reduces Task-1 and Task-2 (T1: 0.653 → 0.640 , T2: 0.689 → 0.656 ). In con-trast, Task-3 shows a negligible difference in the mean (both 
+
+0.629 ), suggesting that this endpoint may be less sensitive to exposure to missing-modality patterns during pretraining, or that the effect is masked by the relatively large cross-fold variance. 
+
+Role of the pretraining objective. Ablating either loss term yields a clear drop from the full objective, demonstrating that the two terms provide complementary supervision. Using only Lfusion (w/o Lalign , λ = 0 ) harms Task-1 and Task-2 (T1: 0.653 → 0.614 , T2: 0.689 → 0.625 ), highlighting the importance of explicit cross-modal alignment for learning transferable representations. Using only Lalign (w/o Lfusion ,
+
+λ = 1 ) further reduces Task-1 and notably impacts Task-3 (T1: 0.653 → 0.589 , T3: 0.629 → 0.609 ), suggesting that fusion-level consistency provides additional training signals beyond alignment and is important for exploiting cross-modal interactions. Overall, these ablations demonstrate that (i) the learnable prototype bank and missing-aware pretraining both contribute to robust transfer under modality incompleteness, and (ii) combining Lalign and Lfusion is necessary to obtain strong and balanced performance across tasks. 
+
+7) Sensitivity Analysis: We analyze sensitivity to two key hyperparameters: the learnable prototype bank size Kc and the loss weighting coefficient λ. All results follow the same eval-uation protocol as above. When varying one hyperparameter, we keep the other fixed (we use λ = 0 .5 for the Kc sweep and Kc = 128 for the λ sweep). 
+
+Prototype bank size Kc. Fig. 4 (left) reports an overall 9                                                                           
+
+> TABLE V ABLATION ON KEY COMPONENTS OF OUR PRETRAINING FRAMEWORK . A LL VARIANTS USE THE SAME DOWNSTREAM PROTOCOL (PRETRAINED + LP)
+> AND ARE EVALUATED ON THE FIVE -COHORT AVERAGE (MEAN ±STD OVER 5-FOLD CV). FULL METHOD USES MISSING -AWARE PRETRAINING ,
+> PROTOTYPES ,AND THE COMBINED OBJECTIVE L=λLalign + (1 −λ)Lfusion . “ W/OLalign ”CORRESPONDS TO λ= 0 ,AND “W/OLfusion ”
+> CORRESPONDS TO λ= 1 .Variant Components / Objective Downstream performance Pretrained Data (missing+full modality) Prototypes Lalign Lfusion T1 (C-index) T2 (AUROC) T3 (AUROC) w/o prototypes (token=0) ✓×✓✓0.646 ±0.082 0.669 ±0.123 0.595 ±0.108 w/o missing modality ×✓✓✓0.640 ±0.074 0.656 ±0.116 0.629 ±0.087 Full method (Pretrained LP) ✓✓✓✓0.653 ±0.086 0.689 ±0.110 0.629 ±0.098 w/o Lalign (λ= 0 )✓✓×✓0.614 ±0.072 0.625 ±0.087 0.626 ±0.065 w/o Lfusion (λ= 1 )✓✓✓×0.589 ±0.068 0.624 ±0.129 0.609 ±0.093
+
+score in task 1 under three input conditions: Full (all modali-ties), LOO avg (leave-one-out missing-modality average), and 
+
+Only-one avg (single-modality average), together with their mean ( AVG ). Performance remains stable across a wide range of Kc, while a moderate bank size yields the best trade-off. Increasing Kc from 32/64 to 128 improves robustness under missingness (LOO avg peaks 0.633 at Kc = 128 ; Only-one avg improves to 0.597 –0.598 at Kc = 128 –256 ), and the overall mean reaches its maximum at Kc = 128 (AVG 0.628 ). Further enlarging the bank to Kc = 512 provides diminishing returns and slightly degrades the single-modality case, likely due to redundancy and more difficult prototype retrieval. We therefore use Kc = 128 by default. 
+
+Loss weight λ. Fig. 4 (right) shows that balancing Lalign 
+
+and Lfusion is important. The best overall performance is achieved λ = 0 .5 (AVG 0.657 ), where Task-2 also peaks (AUROC 0.689 ) and Task-3 is strongest (AUROC 0.629 ). Moving away from this balance degrades performance, and the extremes are clearly suboptimal: using only fusion ( λ = 0 )reduces the average (AVG 0.622 ), while using only alignment (λ = 1 ) leads to the largest drop (AVG 0.607 ), with a notable decrease on Task-1 (C-index 0.589 ). These trends suggest that Lalign and Lfusion provide complementary supervision: 
+
+Lalign encourages modality-invariant representations for trans-fer, whereas Lfusion regularizes multimodal aggregation to better exploit cross-modal interactions, especially under miss-ingness. Overall, the model is not overly sensitive to hyperparameter choices, but both analyses favor moderate settings ( Kc = 128 
+
+and λ = 0.5) that yield consistently strong and balanced performance across tasks and missing-modality conditions. 
+
+8) Discussion and Limitations: Our results indicate that large-scale, label-free multimodal pretraining can provide a practical foundation for cancer outcome modeling from het-erogeneous clinical inputs. The prototype memory bank and missing-aware design consistently improve robustness when one modality is unavailable at inference, which is common in pathology workflows where genomics or complete reports may be missing. The strong performance of linear probing further suggests that the pretrained backbone captures transferable cross-modal structure, enabling accurate adaptation with mini-mal task-specific parameters. Ablation and sensitivity analyses also support that the alignment and fusion losses provide complementary supervision and that moderate hyperparameter choices lead to stable performance. This study has several limitations. First, we primarily eval-uate missingness by removing modalities at test time while training on complete tri-modal data; this isolates inference-time robustness but does not fully reflect settings where supervised training data are also incomplete. Second, we stan-dardize all methods to use precomputed modality embeddings to enable controlled comparisons of fusion and pretraining strategies, which may understate the potential benefits of end-to-end encoder fine-tuning. Third, recent multimodal pre-training frameworks such as mSTAR [5], POMP [26], and MICE [25] are not included as direct baselines because they differ from PRIME in pretraining design: MICE incorporates supervised survival objectives, mSTAR targets image-only inference via knowledge distillation with cancer-type supervi-sion, and POMP requires fully paired data without addressing missing modalities. All three are also tightly coupled with specific encoders, precluding controlled comparison under our unified protocol with shared frozen embeddings. Finally, additional validation on external cohorts is needed to assess robustness under domain shift and support deployment in safety-critical decision support. V. C ONCLUSION 
+
+We propose a large-scale multimodal pretraining framework for cancer prognosis on TCGA histopathology WSIs, RNA-seq, and pathology reports. By combining missing-modality-aware pretraining, a learnable prototype memory bank, and a joint objective, our method learns transferable representa-tions that support robust prediction under heterogeneous and incomplete clinical inputs. Across five cancer cohorts and three clinically relevant endpoints, self-supervised pretraining consistently improves downstream performance, while linear probing remains highly competitive with full fine-tuning using fewer trainable parameters. Robustness experiments, ablations, and sensitivity studies further validate the contributions of each component. Overall, our results highlight the promise of missing-aware multimodal foundation model pretraining as a practical basis for reliable prediction and decision support in safety-critical settings where modality incompleteness is common. Our code will publicly available at https://github. com/yukkai/PRIME. 10 
+
+REFERENCES [1] B. Zhang, H. Shi, and H. Wang, “Machine learning and AI in cancer prognosis, prediction, and treatment selection: A critical approach,” J. Multidiscip. Healthc. , vol. 16, pp. 1779–1791, Jun. 2023. [2] F. E. Harrell, Jr, K. L. Lee, and D. B. Mark, “Multivariable prognostic models: issues in developing models, evaluating assumptions and ade-quacy, and measuring and reducing errors,” Stat. Med. , vol. 15, no. 4, pp. 361–387, Feb. 1996. [3] K. M. Boehm, P. Khosravi, R. Vanguri, J. Gao, and S. P. Shah, “Harnessing multimodal data integration to advance precision oncology,” 
+
+Nat. Rev. Cancer , vol. 22, no. 2, pp. 114–126, Feb. 2022. [4] K. Tomczak, P. Czerwi´ nska, and M. Wiznerowicz, “Review the cancer genome atlas (TCGA): an immeasurable source of knowledge,” Con-temp. Oncol. (Pozn.) , vol. 19, no. 1A, pp. 68–77, Jan. 2015. [5] Y. Xu, Y. Wang, F. Zhou, J. Ma, C. Jin, S. Yang, J. Li, Z. Zhang, C. Zhao, H. Zhou, Z. Li, H. Lin, X. Wang, J. Wang, A. Han, R. C. K. Chan, L. Liang, X. Zhang, and H. Chen, “A multimodal knowledge-enhanced whole-slide pathology foundation model,” Nat. Commun. , vol. 16, no. 1, p. 11406, Dec. 2025. [6] F. Zhou and H. Chen, “Cross-modal translation and alignment for survival analysis,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) ,Sep. 2023, pp. 21 485–21 494. [7] M. Raza, A. Azam, T. Qaiser, and N. Rajpoot, “PS3: A multimodal transformer integrating pathology reports with histology images and biological pathways for cancer survival prediction,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , Sep. 2025, pp. 22 175–22 186. [8] F. Ruffini, C. M. Caruso, C. Tacconi, L. Nibid, F. Miccolis, M. Lovino, C. Greco, E. Ippolito, M. Fiore, A. Cortellini, B. B. Zobel, G. Perrone, B. Vincenzi, C. Marrocco, A. Bria, E. Ficarra, S. Ramella, V. Guarrasi, and P. Soda, “Handling missing modalities in multimodal survival prediction for non-small cell lung cancer,” arXiv [cs.CV] , Jan. 2026. [9] M. Qu, G. Yang, D. Di, Y. Gao, T. Su, Y. Song, and L. Fan, “Memory-augmented incomplete multimodal survival prediction via cross-slide and gene-attentive hypergraph learning,” in Proc. MICCAI , ser. Lecture Notes in Computer Science. Cham: Springer Nature Switzerland, 2026, pp. 318–327. [10] N. Nikolaou, D. Salazar, H. RaviPrakash, M. Gonc ¸alves, R. Mulla, N. Burlutskiy, N. Markuzon, and E. Jacob, “A machine learning ap-proach for multimodal data fusion for survival prediction in cancer patients,” NPJ Precis. Oncol. , vol. 9, no. 1, p. 128, May 2025. [11] S. Steyaert, Y. L. Qiu, Y. Zheng, P. Mukherjee, H. Vogel, and O. Gevaert, “Multimodal deep learning to predict prognosis in adult and pediatric brain tumors,” Commun. Med. (Lond.) , vol. 3, no. 1, p. 44, Mar. 2023. [12] L. Qu, C. Zhang, Y. Hou, F. Tang, W. Sheng, D. Huang, and Z. Song, “Foundation model-enabled multimodal deep learning for prognostic prediction in colorectal cancer with incomplete modalities: A multi-institutional retrospective study,” Adv. Sci. (Weinh.) , p. e10931, Jan. 2026. [13] L. A. Vale-Silva and K. Rohr, “Long-term cancer survival prediction using multimodal deep learning,” Sci. Rep. , vol. 11, no. 1, p. 13505, Jun. 2021. [14] D. Lahat, T. Adali, and C. Jutten, “Multimodal data fusion: An overview of methods, challenges, and prospects,” Proc. IEEE Inst. Electr. Electron. Eng. , vol. 103, no. 9, pp. 1449–1477, Sep. 2015. [15] J. Lipkova, R. J. Chen, B. Chen, M. Y. Lu, M. Barbieri, D. Shao, A. J. Vaidya, C. Chen, L. Zhuang, D. F. K. Williamson, M. Shaban, T. Y. Chen, and F. Mahmood, “Artificial intelligence for multimodal data integration in oncology,” Cancer Cell , vol. 40, no. 10, pp. 1095– 1110, Oct. 2022. [16] A. Zadeh, M. Chen, S. Poria, E. Cambria, and L.-P. Morency, “Tensor fusion network for multimodal sentiment analysis,” in Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing . Stroudsburg, PA, USA: Association for Computational Linguistics, 2017, pp. 1103–1114. [17] W. Rahman, M. K. Hasan, S. Lee, A. Zadeh, C. Mao, L.-P. Morency, and E. Hoque, “Integrating multimodal information in large pretrained transformers,” in Proc. Conf. Assoc. Comput. Linguist. Meet. , D. Juraf-sky, J. Chai, N. Schluter, and J. Tetreault, Eds., vol. 2020. Association for Computational Linguistics, Jul. 2020, pp. 2359–2369. [18] Y.-H. H. Tsai, S. Bai, P. Pu Liang, J. Z. Kolter, L.-P. Morency, and R. Salakhutdinov, “Multimodal transformer for unaligned multimodal language sequences,” in Proc. Conf. Assoc. Comput. Linguist. Meet. ,A. Korhonen, D. Traum, and L. M` arquez, Eds., vol. 2019. Association for Computational Linguistics, Jul. 2019, pp. 6558–6569. [19] R. J. Chen, M. Y. Lu, W.-H. Weng, T. Y. Chen, D. F. K. Williamson, T. Manz, M. Shady, and F. Mahmood, “Multimodal co-attention trans-former for survival prediction in gigapixel whole slide images,” in 
+
+2021 IEEE/CVF International Conference on Computer Vision (ICCV) .IEEE, Oct. 2021, pp. 4015–4025. [20] R. J. Chen, M. Y. Lu, D. F. K. Williamson, T. Y. Chen, J. Lipkova, Z. Noor, M. Shaban, M. Shady, M. Williams, B. Joo, and F. Mahmood, “Pan-cancer integrative histology-genomic analysis via multimodal deep learning,” Cancer Cell , vol. 40, no. 8, pp. 865–878.e6, Aug. 2022. [21] K. Ding, M. Zhou, D. N. Metaxas, and S. Zhang, “Pathology-and-genomics multimodal transformer for survival outcome prediction,” in 
+
+Proc. MICCAI , ser. Lecture Notes in Computer Science. Cham: Springer Nature Switzerland, 2023, pp. 622–631. [22] S. Song, M. Borjigin-Wang, I. R. Madejski, and R. L. Grossman, “Mul-timodal cancer modeling in the age of foundation model embeddings,” in Machine Learning for Health 2025 .[23] R. J. Chen, T. Ding, M. Y. Lu, D. F. K. Williamson, G. Jaume, A. H. Song, B. Chen, A. Zhang, D. Shao, M. Shaban, M. Williams, L. Oldenburg, L. L. Weishaupt, J. J. Wang, A. Vaidya, L. P. Le, G. Gerber, S. Sahai, W. Williams, and F. Mahmood, “Towards a general-purpose foundation model for computational pathology,” Nat. Med. ,vol. 30, no. 3, pp. 850–862, Mar. 2024. [24] M. Y. Lu, B. Chen, D. F. K. Williamson, R. J. Chen, I. Liang, T. Ding, G. Jaume, I. Odintsov, L. P. Le, G. Gerber, A. V. Parwani, A. Zhang, and F. Mahmood, “A visual-language foundation model for computational pathology,” Nat. Med. , vol. 30, no. 3, pp. 863–874, Mar. 2024. [25] H. Zhou, F. Zhou, J. Ma, Y. Xu, X. Wang, X. Zhang, L. Liang, Z. Li, and H. Chen, “A multimodal foundation model to enhance generalizability and data efficiency for pan-cancer prognosis prediction,” arXiv [cs.LG] ,Sep. 2025. [26] S. Wang, S. Zhang, H. Lai, W. Huo, and Q. Zhang, “POMP: Pathology-omics multimodal pre-training framework for cancer survival predic-tion,” in Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence . California: International Joint Conferences on Artificial Intelligence Organization, Sep. 2025, pp. 7813–7821. [27] J. Zhou, J. Tang, Y. Zuo, P. Wan, D. Zhang, and W. Shao, “Robust multimodal survival prediction with conditional latent differentiation variational AutoEncoder,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025, pp. 10 384–10 393. [28] H. Liu, D. Wei, D. Lu, J. Sun, L. Wang, and Y. Zheng, “M3AE: Multimodal representation learning for brain tumor segmentation with missing modalities,” Proc. Conf. AAAI Artif. Intell. , vol. 37, no. 2, pp. 1657–1665, Jun. 2023. [29] L. Robinet, A. Berjaoui, and E. C.-J. Moyal, “Multimodal masked autoencoder pre-training for 3D MRI-based brain tumor analysis with missing modalities,” arXiv [cs.CV] , Aug. 2025. [30] M. Angeloni, D. Rizzi, S. Schoen, A. Caputo, F. Merolla, A. Hartmann, F. Ferrazzi, and F. Fraggetta, “Closing the gap in the clinical adoption of computational pathology: a standardized, open-source framework to integrate deep-learning models into the laboratory information system,” 
+
+Genome Med. , vol. 17, no. 1, p. 60, May 2025. [31] O. L. Saldanha, C. M. L. Loeffler, J. M. Niehues, M. van Treeck, T. P. Seraphin, K. J. Hewitt, D. Cifci, G. P. Veldhuizen, S. Ramesh, A. T. Pearson, and J. N. Kather, “Self-supervised attention-based deep learning for pan-cancer mutation prediction from histopathology,” NPJ Precis. Oncol. , vol. 7, no. 1, p. 35, Mar. 2023. [32] M. G´ elard, G. Richard, T. Pierrot, and P.-H. Courn` ede, “BulkRNABert: Cancer prognosis from bulk RNA-seq based language models,” bioRxiv ,pp. 384–400, Jun. 2024. [33] E. Alsentzer, J. Murphy, W. Boag, W.-H. Weng, D. Jindi, T. Naumann, and M. McDermott, “Publicly available clinical BERT embeddings,” in 
+
+Proceedings of the 2nd Clinical Natural Language Processing Workshop ,A. Rumshisky, K. Roberts, S. Bethard, and T. Naumann, Eds. Strouds-burg, PA, USA: Association for Computational Linguistics, 2019, pp. 72–78. [34] M. Ilse, J. Tomczak, and M. Welling, “Attention-based deep multiple instance learning,” in Proceedings of the 35th International Conference on Machine Learning , ser. Proceedings of Machine Learning Research, J. Dy and A. Krause, Eds., vol. 80. PMLR, 2018, pp. 2127–2136. [35] G. Klambauer, T. Unterthiner, A. Mayr, and S. Hochreiter, “Self-normalizing neural networks,” in Advances in Neural Information Pro-cessing Systems , I. Guyon, U. V. Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett, Eds., vol. 30. Curran Associates, Inc., 2017. [36] I. Loshchilov and F. Hutter, “Decoupled weight decay regularization,” in Proc. Int. Conf. Learn. Represent. (ICLR) , 2019.

@@ -1,0 +1,731 @@
+Title: Needle in a Haystack: One-Class Representation Learning for Detecting Rare Malignant Cells in Computational Cytology
+
+URL Source: https://arxiv.org/pdf/2604.07722v2
+
+Published Time: Mon, 13 Apr 2026 00:38:11 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Needle in a Haystack: One-Class Representation Learning for Detecting Rare Malignant Cells in Computational Cytology 
+
+## Swarnadip Chatterjee a,∗, Vladimir Basic b, Arrigo Capitanio c, Orcun Goksel a and Joakim Lindblad a
+
+> a
+
+Department of Information Technology, Uppsala University, Sweden 
+
+> b
+
+Department of Clinical Diagnostics, School of Health Sciences, Jönköping University, Sweden 
+
+> c
+
+Department of Pathology, Linköping University Hospital, Sweden 
+
+A R T I C L E I N F O 
+
+Keywords :Cancer detection One-class classification Anomaly detection Whole slide imaging Multiple instance learning 
+
+A B S T R A C T 
+
+In computational cytology, detecting malignancy on whole-slide images is difficult because malignant cells are morphologically diverse yet vanishingly rare amid a vast background of normal cells. Accurate detection of these extremely rare malignant cells remains challenging due to large class imbalance and limited annotations. Conventional weakly supervised approaches, such as multiple instance learning (MIL), often fail to generalize at the instance level, especially when the fraction of malignant cells (witness rate) is exceedingly low. In this study, we explore the use of one-class representation learning techniques for detecting malignant cells in low-witness-rate scenarios. These methods are trained exclusively on slide-negative patches, without requiring any instance-level supervision. Specifically, we evaluate two one-class classification (OCC) approaches, Deep Support Vector Data Description (DSVDD) and Deep Representation One-class Classification (DROC), and compare them with fully supervised single-instance learning (FS-SIL), weakly supervised single-instance learning (WS-SIL), and the recent Iterative Self-Paced Supervised Contrastive Learning (ItS2CLR) method. The one-class methods learn compact representations of normality and detect deviations at test time. Experiments on a publicly available bone marrow cytomorphology dataset (TCIA) and an in-house oral cancer cytology dataset show that DSVDD achieves state-of-the-art performance in instance-level abnormality ranking, particularly in ultra-low witness-rate regimes ( ≤ 1% ) and, in some cases, even outperforming fully supervised learning, which is typically not a practical option in whole-slide cytology due to the infeasibility of exhaustive instance-level annotations. DROC is also competitive under extreme rarity, benefiting from distribution-augmented contrastive learning. These findings highlight one-class representation learning as a robust and interpretable superior choice to MIL for malignant cell detection under extreme rarity. 
+
+## 1. Introduction 
+
+Digital cytology [ 1, 2], i.e. , the high-resolution digitiza-tion of entire cytological slides, has become an important tool for early cancer screening, diagnosis, and longitudinal monitoring, enabling large-scale image analysis and AI-supported inspection of cellular morphology. Cytology is applied across multiple anatomical sites, including the oral cavity, bladder, cervix, breast, lung, and stomach, where diagnostic decisions often hinge on subtle changes in cell appearance and composition. The increasing availability of slide scanners, high-throughput acquisition systems, and cloud-based pathology archives has accelerated interest in computational cytology [ 3, 4 ] to support or automate parts of the diagnostic workflow to reduce workload, improve consistency, and aid earlier detection. However, reliable early malignancy detection remains very challenging, particularly when malignant cells are vanishingly rare within a vast background of normal cells. A major difficulty in digital cytology is the extreme class imbalance intrinsic to real-world specimens, with normal cells overwhelmingly predominant even in slides that contain malignancy. Numerous studies across cervical, oral, pleural, 
+
+> ∗
+
+Corresponding author  
+
+> swarnadip.chatterjee@it.uu.se
+
+(S. Chatterjee) 
+
+> ORCID
+
+(s): 
+
+and hematological cytology confirm that malignant or dys-plastic cells are exceedingly rare, even in confirmed positive slides. A typical Pap smear slide may contain 100,000 to 300,000 squamous epithelial cells, but often only 10–20 malignant cells are present, resulting in witness rates (WRs) (the proportion of abnormal instances in positive samples) of 0.01% or even lower [ 5, 6 ]. Median tumor cell loads of merely 0.23% have been observed in malignant pleural effusions assessed by flow cytometry [ 7]. In oral exfoliative cytology, neoplastic changes may need to be identified in oral smears that contain only a few abnormal cells [ 8 ]. In bone marrow aspirates, residual neoplastic cells can occur at minimal residual disease levels at around 0.05%, corresponding to roughly one leukemic cell per 10,000 background cells, creating a similarly extreme class-imbalance setting [9, 10]. Deep learning models, which are known to be datahungry and sensitive to class imbalance, often fail to generalize in these low WR regimes. Moreover, obtaining detailed cell-level annotations across an entire slide is prohibitively time-consuming and demands considerable cytological expertise (still only providing limited and subjective accuracy), render-ing strongly supervised pipelines infeasible at scale. To circumvent these limitations, weakly supervised learn-ing strategies such as Multiple Instance Learning (MIL) have gained traction in computational pathology [ 11 ]. In the MIL setting, a slide is treated as a bag of image patches (instances), and only the bag-level label (e.g., malignant or 
+
+Chatterjee et al.: Preprint submitted to Elsevier Page 1 of 15  
+
+> arXiv:2604.07722v2 [cs.CV] 10 Apr 2026 One-Class Representation Learning for Rare Malignant Cell Detection
+> Figure 1: Overview of the proposed pipeline for rare abnormal cell detection in whole-slide cytology images. For training the one-class classifier, only slide-negative patches are used, which are known to be negative without requiring any instance-level annotations. At inference, patches from test slides are assigned anomaly scores, enabling the ranking and retrieval of rare malignant cells.
+
+benign) is provided during training. Attention-based MIL (ABMIL) [ 12 ] and clustering-constrained-attention multiple-instance learning (CLAM) [ 13 , 14 ] learn to identify key instances that drive the bag label, typically using attention mechanisms to weight the contribution of each patch. While these approaches have achieved success in histology and moderately imbalanced cytology tasks, they falter in the face of low WRs. When fewer than 1% of patches are truly abnormal, attention mechanisms may converge on spurious patterns, leading to false positives or entirely missing the malignant cells. These limitations motivate approaches that do not rely on positive instances during training. In response, one-class classification (OCC) has emerged as a promising alternative. OCC methods [ 15 , 16 ] restrict training to only normal data and learn a compact representation of the normal class distribution. At inference, deviations from this normal manifold are flagged as anomalies. Deep Support Vector Data Description (DSVDD) [ 17 ] exemplifies this idea by mapping normal instances into a latent feature space and constraining their embeddings within a hypersphere. The method is conceptually simple, robust to imbalance, and effective in domains where abnormalities are rare, diverse, and poorly annotated. Complementing OCC, self-supervised learning (SSL) has transformed representation learning by removing the dependence on explicit labels. In particular, contrastive learning has gained prominence through frameworks such as SimCLR [ 18 ], which learn embeddings by pulling together representations of two augmented views of the same instance while pushing them apart from representations of other instances in the batch—implemented via a contrastive ob-jective whose denominator contrasts against many negatives. Recent work [ 19 ] has connected SSL to OCC through Deep Representation One-class Classification (DROC), which learns self-supervised representations from one-class data and introduces distribution-augmented contrastive learning, using strong augmentations of normal samples to expand the training distribution and sharpen the notion of normality for anomaly detection at deployment. In light of these methodological advances, our work aims to rigorously assess OCC approaches in real-world cytological settings, where the WR can drop below 0.1%. Specifically, we adapt two well-established OCC frameworks, DSVDD and DROC and, evaluate on their ability to detect rare abnormal cells under simulated very-low witness-rate regimes of 0.05% to 9% (Fig. 1). We perform experiments on two distinct whole slide cytology datasets: a publicly available bone marrow dataset [ 20 ] and an in-house curated dataset of oral cancer Whole Slide Cytology Images (WSCIs). These datasets differ in specimen type and acquisition conditions, including stain protocols and color distributions, background debris, and slide-specific imaging artifacts, providing a challenging testbed for generalization. To quantify how effectively each method identifies rare anomalies we compute top-𝐾 instance-retrieval and ranking metrics and area under the FROC curve (AUFROC). We choose 𝐾 = 400 for the performance metrics to provide a reasonably focused set of the most suspicious cells for cytopathologist review. We consider this a realistic clinical use scenario, in which the expert is presented with a distilled subset of 400 candidates from a whole-slide sample that may contain on the order of 10 5 cells. Unlike prior works   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 2 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+
+that focus on slide-level classification, our evaluation puts focus on the instance-level retrieval of abnormal patches. Accurate instance-level retrieval is an essential requirement for clinical interpretability and human-in-the-loop cytological assessment. In such a setting, experts can not only review high-scoring candidates but also refine the learned repre-sentations by confirming true abnormal cells or guiding the model through outlier exposure style feedback or other active learning approaches. This instance-first design provides a bottom-up path towards interpretable whole slide image analysis: per patch abnormality scores can be aggregated to derive reliable slide-level predictions, enabling a transparent and clinically viable approach that integrates algorithmic retrieval with expert-driven refinement and decision making. This study builds on our previous work [ 21 ], which was the first to introduce one-class classification for instance-level rare abnormal cell detection in whole-slide cytology, using DROC [ 19 ] for rare key instance detection. Here, we broaden the scope by considering controlled witness-rate regimes spanning 0.05%–9% and by benchmarking an additional OCC baseline, DSVDD [ 17 ], with task-specific adaptations, while keeping DROC consistent with our previous formulation. We further extend the evaluation to an oral cancer whole-slide cytology dataset to better assess robustness and generaliza-tion. Our study makes the following key contributions: 
+
+• We show that in realistic low witness-rate regimes (1% or below), weakly supervised MIL-style approaches degrade substantially for instance-level rare cell retrieval, whereas one-class approaches remain more robust and better re-cover rare key instances. 
+
+• Across both a publicly available bone marrow cytology dataset and an in-house oral cancer whole-slide cytology dataset, DSVDD emerges as the strongest and most consis-tent one-class method, particularly in the low witness-rate regime that is most relevant for practical screening. 
+
+• We validate our findings with blinded expert review by two cytology experts on the oral cancer dataset, demonstrating the practical relevance of top-ranked candidate retrieval for expert-facing analysis. In doing so, we aim to bridge the gap between algorithmic development in unsupervised learning and the practical de-mands of cytopathological diagnostics. Our findings suggest that OCC methods, particularly when equipped with strong representation learning, hold substantial promise for tackling the challenge of rare malignant cell detection in whole slide cytology. 
+
+## 2. Related Work 
+
+The analysis of WSCIs poses unique challenges due to the extreme class imbalance, heterogeneity, and noise often present in such data. Traditional supervised learning methods rely on large-scale, densely annotated datasets, which is infeasible in cytology due to the cost and expertise required for instance-level labeling. Consequently, a range of alter-native learning paradigms have emerged, including weakly supervised learning through multiple instance learning (MIL), self-supervised learning (SSL), and positive-unlabeled (PU) learning, which leverages a limited set of positive examples alongside abundant unlabeled data. When detailed and reliable (instance-level) annotations are feasible, fully supervised single-instance learning (FS-SIL) where a convolutional or transformer network is trained directly on densely annotated patches, remains a strong baseline in computational pathology. 
+
+2.1. MIL for Whole Slide Image Analysis 
+
+MIL has become a widely adopted weakly supervised approach for whole-slide image (WSI) analysis in computa-tional pathology. The central premise of MIL is that only bag-level (slide-level) labels are available, and the model must infer instance-level evidence while producing an accurate bag-level prediction. A WSI is treated as a bag composed of multiple small image patches (instances), and a positive bag indicates the presence of at least one abnormal patch. Early MIL approaches employed straightforward ag-gregation schemes such as max-pooling or mean-pooling across instance-level predictions. While computationally efficient, these methods lacked the capacity to distinguish truly informative patches. The introduction of ABMIL [ 12 ]brought greater interpretability by assigning learnable atten-tion weights to each instance, effectively highlighting poten-tially discriminative WSI regions. Subsequent work, such as CLAM [ 13 ], incorporated clustering constraints to encourage feature diversity among attended patches, improving the model’s ability to localize abnormal regions and learn robust representations. Dual-stream MIL (DSMIL) [ 22 ] further advanced MIL by introducing dual-stream processing of both instance-level and bag-level embeddings, incorporating contrastive objectives to improve feature discrimination. In histopathology, where connectivity and neighbourhoods are relevant, graph-based approaches [ 23 ] have also been explored for WSI analysis. A closely related but simpler family of methods are weakly supervised single-instance learning (WS-SIL) [ 24 , 25 ] approaches, where all patches extracted from a tumor slide inherit the positive slide label (and patches from slide-negative cases inherit the negative label), and a standard patch classifier is trained on these noisy labels. While WS-SIL is easy to implement and computation-ally convenient, it tends to overfit to slide-level biases and struggles to localize the truly abnormal cells when witness rates are very low. More advanced weakly supervised frame-works combine MIL with contrastive representation learning. For example, Iterative Self-paced Supervised Contrastive Learning (ItS2CLR) [ 26 ] iteratively refines pseudo-labels by selecting high-confidence instances using the aggregator’s instance-confidence scores and then optimizes a supervised contrastive objective on these pseudo-labels to highlight key instances within positive bags. Such methods aim to bridge the gap between coarse slide-level supervision and   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 3 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+
+fine-grained instance localization, but their performance still degrades when malignant cells constitute only a tiny fraction of all instances, as is typical in WSCIs. In [ 23 ], explainability scores of entity-based graph neural networks trained with WSI labels are used to generate instance-level weak labels. Such spatial connectivity information, however, is less relevant in cytology. Despite the above-mentioned innovations, MIL frame-works face a severe limitation in low WR settings. In cytology, where abnormal cells may represent less than 0.1% of all instances, slide-level supervision becomes extremely weak. In such scenarios, MIL models often fail to localize the few critical abnormal instances, instead they focus on spurious features or irrelevant patterns. Label noise resulting from assigning uniform labels to all instances within positive bags can further hinder performance. These limitations motivate the exploration of alternative approaches that can operate effectively without relying on bag-level supervision or assumptions about instance distributions. 
+
+2.2. SSL & SSL-OCC Approaches 
+
+SSL learns transferable representations from unlabeled data via surrogate training objectives, reducing reliance on costly manual annotations. A prominent family is contrastive learning , where representations of two augmented views of the same patch are pulled together while other patches are pushed apart. SimCLR [ 18 ] popularized this instance-discrimination formulation, MoCo [ 27 ] introduced a mo-mentum encoder with a queue of negatives, BYOL [ 28 ]removed explicit negatives via bootstrap prediction, and SwAV [ 29 ] leveraged prototype assignments to enforce view-consistent cluster predictions. In WSI analysis [ 30 , 31 ], SSL is commonly used to pretrain patch encoders on large collections of unlabeled patches, after which the learned embeddings can be used by weakly supervised aggregators for slide-level prediction and key instance retrieval. In cytology WSIs, where malignant cells are rare and appearance varies with staining differences and artifacts, SSL provides robust patch embeddings from abundant un-labeled data. Extensions to abnormality detection further use strong augmentations of normal samples to generate 
+
+pseudo-anomalies ; DROC [ 19 ] proposed this distribution-augmented contrastive strategy, tightening normal represen-tations and improving anomaly separability at inference. Although DROC was not originally trained or evaluated on medical images, our work adapts and evaluates it under realistic, cytology-relevant WR constraints to clarify its strengths and limitations in practical whole-slide cytology analysis. 
+
+2.3. OCC in Medical Image Computing 
+
+OCC methods [ 32 , 33 , 34 ] in medical image computing have emerged as a robust alternative for settings with extreme class imbalance or unavailable anomaly annotations. In OCC, the model is trained exclusively on normal samples and aims to learn a compact representation of the normal class. Deviations from this representation at test time are considered anomalies. A prominent method in this category is DSVDD [ 17 ]. DSVDD learns to embed normal samples into a latent space such that all embeddings lie within a minimal enclosing hypersphere. At inference time, samples falling far outside this hypersphere are identified as abnormal. DSVDD is particularly advantageous for cytology because obtaining a representative collection of abnormal cells across subtypes, staining conditions, and artifacts is challenging, while normal cells are abundant. This makes one-class methods especially suitable for scenarios in which malignant cells are extremely rare, sometimes accounting for far less than 1% of the cells in a whole-slide specimen. A recent study by Marta et al. [ 35 ]also explored anomaly detection for cytology images using benign-only training data. However, their objective differs substantially from ours: although patch-level anomalies are detected, the final task and evaluation are performed at the whole slide level, classifying a slide as malignant if at least one patch is anomalous, rather than retrieving rare abnormal cells at the instance level. In contrast, our work focuses on instance-level rare cell retrieval in whole-slide cytology under controlled low witness-rate settings, with ranking-based evaluation and expert review of top-ranked candidates. 
+
+## 3. Methods 
+
+We introduce the use of one-class classifier based rep-resentation learning for anomaly detection in whole slide cytology images (WSCIs); an overview of the pipeline is shown in Fig. 1. Unlike fully supervised or multiple-instance learning approaches, these frameworks are trained solely on slide-negative patches and identify abnormalities as deviations from the learned class manifold. We evaluate five methods in total, including two state-of-the-art one-class representation learning approaches: 
+
+DSVDD [17 ] and DROC [19 ], both used with task-specific adaptations. Both methods are trained exclusively on slide-negative patches and aim to assign higher anomaly scores to abnormal cells at test time. For comparison, we also include three reference methods: (i) FS-SIL [24 , 25 ], a fully supervised single-instance learning model trained on patch-level labels, (ii) WS-SIL [ 24 , 25 ], a weakly supervised single-instance learning baseline based on slide-to-patch label inheritance, and (iii) ItS2CLR [ 26 ] updates pseudo-labels using the aggregator’s instance-confidence scores and optimizes a supervised contrastive loss to emphasize key instances within positive bags. Together, these five methods span fully supervised, weakly supervised, and one-class anomaly detection paradigms. 
+
+3.1. DSVDD 
+
+Deep SVDD is a natural fit for our setting because it learns a compact representation of slide-negative (normal) cell-sized patches without requiring any abnormal training labels.   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 4 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+
+Classical DSVDD [ 17 ] learns a feature map 
+
+𝜑 ∶ ℝ𝐻 ×𝑊 ×𝐶 → ℝ𝑑 that embeds normal inputs 𝑥 𝑖 
+
+into a latent space where they are concentrated around a single center 𝑐 ∈ ℝ𝑑 . Given network parameters 𝜃 , the standard DSVDD objective is 
+
+DSVDD (𝜃 ) = 1
+
+𝑛 
+
+> 𝑛
+
+∑
+
+> 𝑖 =1
+
+‖𝜑 (𝑥 𝑖 ; 𝜃 ) − 𝑐 ‖22. (1) with the anomaly score for a test instance 𝑥 defined as 
+
+𝑠 DSVDD (𝑥 ) = ‖𝜑 (𝑥 ; 𝜃 ) − 𝑐 ‖22. (2) The center is typically initialized as the mean of the initial features, 
+
+𝑐 = 1
+
+𝑛 
+
+> 𝑛
+
+∑
+
+> 𝑖 =1
+
+𝜑 (𝑥 𝑖 ; 𝜃 0), (3) and kept fixed during optimization, while weight decay regu-larization is applied to the network parameters to discourage trivial solutions. 
+
+Autoencoder pretraining and center stabilisation. In our setting, we first pretrain an autoencoder (𝑓 enc , 𝑓 dec ) on normal patches using a reconstruction loss 
+
+AE (𝜃 enc , 𝜃 dec ) = 1
+
+𝑛 
+
+> 𝑛
+
+∑
+
+> 𝑖 =1
+
+‖‖‖𝑓 dec 
+
+(𝑓 enc (𝑎 (𝑥 𝑖 )); 𝜃 dec 
+
+) − 𝑎 (𝑥 𝑖 )‖‖‖
+
+> 22
+
+,
+
+(4) where 𝑎 (⋅) denotes an image-augmentation operator and 𝑓 enc 
+
+shares the same encoder architecture as the DSVDD network. After pretraining, we transfer the encoder weights and use 
+
+𝜑 (𝑥 ; 𝜃 ) = 𝑓 enc (𝑥 ; 𝜃 enc ) (5) as the DSVDD feature map. The DSVDD center is then estimated on deterministically preprocessed normals ̃ 𝑥 𝑖 = 𝑡 (𝑥 𝑖 ) using the pretrained encoder: 
+
+𝑐 = 1
+
+𝑛 
+
+> 𝑛
+
+∑
+
+> 𝑖 =1
+
+𝜑 (̃𝑥 𝑖 ; 𝜃 0), (6) where 𝑡 (⋅) applies resizing and tensor conversion but no random augmentation. To avoid coordinates of 𝑐 collapsing near zero, we apply an elementwise clamp 
+
+𝑐 𝑗 ← sign( 𝑐 𝑗 ) max (|𝑐 𝑗 |, 𝜀 ), 𝑗 = 1 , … , 𝑑, (7) with a small constant 𝜀 > 0. This fixed, non-degenerate center is used throughout DSVDD training. 
+
+DSVDD training objective. Given the fixed center 𝑐 , we train the encoder on augmented normals 𝑎 (𝑥 𝑖 ) using the DSVDD objective 
+
+DSVDD (𝜃 enc ) = 1
+
+𝑛 
+
+> 𝑛
+
+∑
+
+> 𝑖 =1
+
+‖‖‖𝜑 (𝑎 (𝑥 𝑖 ); 𝜃 enc 
+
+) − 𝑐 ‖‖‖
+
+> 22
+
++ 𝜆 ∑
+
+> 𝑙
+
+‖‖‖𝑊 (𝑙 )‖‖‖ 
+
+> 2
+> 𝐹
+
+.
+
+(8) where the second term is 𝓁 2 weight regularization on the encoder weights {𝑊 (𝑙 )}𝑙 with coefficient 𝜆 . The center 𝑐 is not updated during this stage. To make the method robust given the comparatively small normal training set (9,185 patches) in the bone-marrow experiments, we use multi-seed ensembling and mild test-time augmentation to reduce variance in the anomaly ranking. For the oral-cancer dataset, the much larger pool of slide-negative training patches ( ∼640k) stabilizes representation learning, so we keep DSVDD deterministic and avoid the extra cost of multi-seed and multi-view inference. 
+
+Seed ensemble and mild test-time augmentation. To reduce variance, we train 𝑆 independent DSVDD models (seeds) with parameters {( 𝜃 (𝑠 )
+
+> enc
+
+, 𝑐 (𝑠 ))} 𝑆 𝑠 =1 , obtained by repeating the pretraining, center estimation, and DSVDD training with different random initializations and data shuffles. We employ test-time augmentation [ 36 , 37 , 38 ], where at test-time, each image 𝑥 is optionally evaluated under a small set of deterministic views 
+
+(𝑥 ) = { 𝑣 0(𝑥 ), 𝑣 1(𝑥 ), … , 𝑣 𝐾 −1 (𝑥 )} . (9) where 𝑣 0 is the original view and the remaining 𝑣 𝑘 are mild transformations (horizontal flip and small rotations). For seed 
+
+𝑠 we define the per-view distances 
+
+𝑑 (𝑠 ) 
+
+> 𝑘
+
+(𝑥 ) = ‖‖‖𝜑 (𝑣 𝑘 (𝑥 ); 𝜃 (𝑠 )
+
+> enc
+
+) − 𝑐 (𝑠 )‖‖‖
+
+> 22
+
+, 𝑘 = 0 , … , 𝐾 − 1 .
+
+(10) Rather than averaging over all views, we form a convex blend between the original view and the most suspicious view: ̃𝑠 (𝑠 )(𝑥 ) = 𝑑 (𝑠 )0 (𝑥 ) + 𝜆 blend 
+
+(
+
+max  
+
+> 𝑘
+
+𝑑 (𝑠 ) 
+
+> 𝑘
+
+(𝑥 ) − 𝑑 (𝑠 )0 (𝑥 )
+
+)
+
+, (11) where 𝜆 blend ∈ [0 , 1] controls how strongly we emphasize the most abnormal-looking transform. Finally, the ensemble anomaly score aggregates across seeds by averaging:   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 5 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+
+𝑠 (𝑥 ) = 1
+
+𝑆 
+
+> 𝑆
+
+∑
+
+> 𝑠 =1
+
+̃𝑠 (𝑠 )(𝑥 ). (12) This procedure combines robust representation learning (via autoencoder pretraining and strong data augmentation) with a stabilised center, multiple random restarts, and a view-aware scoring rule that favors any transformation that reveals abnormal morphology, while still anchoring scores to the original cell appearance. 
+
+3.2. DROC 
+
+We evaluate DROC [ 19 ], a SimCLR-style contrastive strategy adapted for one-class anomaly detection. The method does not require abnormal training examples; instead, it gener-ates pseudo-abnormal variants of normal instances via strong augmentations. In the distribution-augmented formulation of DROC, these variants are treated as separate instances 
+
+and therefore enter the contrastive denominator as additional negatives, encouraging compact normal representations while pushing apart strongly distorted views. Let 𝑓 (⋅) be an image encoder and 𝑔 (⋅) a projection head, and define the projected embedding 
+
+𝜙 (𝑥 ) = 𝑔 (𝑓 (𝑥 )) 
+
+‖𝑔 (𝑓 (𝑥 )) ‖2
+
+. (13) Given an input 𝑥 𝑖 , we sample two stochastic augmentations 
+
+𝐴 and 𝐴 ′ to obtain two views 𝑥 𝐴 𝑖 = 𝐴 (𝑥 𝑖 ) and 𝑥 𝐴 ′ 
+
+> 𝑖
+
+= 𝐴 ′(𝑥 𝑖 ).Using a contrastive loss, the objective for anchor 𝑥 𝐴 𝑖 is 
+
+clr = − log exp 
+
+(
+
+𝜙 (𝑥 𝐴 𝑖 )⊤𝜙 (𝑥 𝐴 ′ 
+
+> 𝑖
+
+)∕ 𝜏 
+
+)⎡⎢⎢⎢⎢⎢⎣
+
+exp 
+
+(
+
+𝜙 (𝑥 𝐴 𝑖 )⊤𝜙 (𝑥 𝐴 ′ 
+
+> 𝑖
+
+)∕ 𝜏 
+
+)
+
++
+
+> 𝑛
+
+∑
+
+> 𝑗 =1
+> 𝑗 ≠𝑖
+
+exp 
+
+(
+
+𝜙 (𝑥 𝐴 𝑖 )⊤𝜙 (𝑥 𝐴 𝑗 )∕ 𝜏 
+
+)⎤⎥⎥⎥⎥⎥⎦
+
+, (14) where 𝜏 is a temperature parameter and 𝑛 is the batch size. 
+
+Distribution augmentation and pseudo-abnormals. To strengthen one-class separability, we augment the training distribution using a set of strong transformations 𝐷 that produce pseudo-abnormal variants. Concretely, for each 𝑥 𝑖 
+
+we sample 𝐷 ∼ 𝐷 and form a pseudo-abnormal view 
+
+𝑥 𝐷 𝑖 = 𝐷 (𝑥 𝑖 ). Following [ 19 ], these pseudo-abnormal views are considered separate instances and are contrasted against the anchor by including them as additional negatives: 
+
+DA = − log exp 
+
+(
+
+𝜙 (𝑥 𝐴 𝑖 )⊤𝜙 (𝑥 𝐴 ′ 
+
+> 𝑖
+
+)∕ 𝜏 
+
+)⎡⎢⎢⎢⎢⎢⎢⎢⎢⎣
+
+exp 
+
+(
+
+𝜙 (𝑥 𝐴 𝑖 )⊤𝜙 (𝑥 𝐴 ′ 
+
+> 𝑖
+
+)∕ 𝜏 
+
+)
+
++
+
+> 𝑛
+
+∑
+
+> 𝑗 =1
+> 𝑗 ≠𝑖
+
+exp 
+
+(
+
+𝜙 (𝑥 𝐴 𝑖 )⊤𝜙 (𝑥 𝐴 𝑗 )∕ 𝜏 
+
+)
+
++
+
+> 𝑛
+
+∑
+
+> 𝑗 =1
+
+exp 
+
+(
+
+𝜙 (𝑥 𝐴 𝑖 )⊤𝜙 (𝑥 𝐷 𝑗 )∕ 𝜏 
+
+)⎤⎥⎥⎥⎥⎥⎥⎥⎥⎦
+
+. (15) In our cytology adaptation, 𝐷 comprises: 
+
+• CenterCropResize : CenterCrop(height=180, width=180, p=1) ,
+
+• ColorJitter (p=1 ), 
+
+• GridDistortion (p=1 ), and 
+
+• ElasticTransform (p=1 ), which generate pseudo-abnormal variants by perturbing morphology and appearance. The final training objective is 
+
+DROC = clr + 𝛼 DA , (16) where 𝛼 controls the contribution of distribution augmenta-tion. 
+
+One-class detector on learned representations. After contrastive pretraining, we discard the projection head 𝑔 (⋅)
+
+and extract representations 𝑧 𝑖 = 𝑓 (𝑥 𝑖 ) for all normal training instances. We then fit a one-class SVM with a radial basis function (RBF) kernel, using 𝜈 = 0 .1 and 𝛾 = auto , on 
+
+{𝑧 𝑖 } to model the inlier distribution. At test time, the SVM decision function provides an anomaly score that we use to rank candidate abnormal cells. 
+
+3.3. Reference Methods 
+
+To contextualize the performance of one-class repre-sentation learning approaches, we compare them against the following baseline methods based on different levels of supervision: 
+
+• FS-SIL: A fully supervised single-instance learning base-line trained using true instance-level labels (normal vs. abnormal), optimized with standard cross-entropy (op-tionally class-weighted). This method assumes exhaustive cell-level annotations and therefore serves as an upper-bound reference, although it is typically impractical in whole-slide cytology due to annotation cost and extreme abnormal-cell rarity. 
+
+• WS-SIL via Label Inheritance: A weakly supervised single-instance learning baseline [ 24 , 25 ] where each patch inherits its slide/bag label. Consequently, normal cells extracted from slide-positive specimens are treated as abnormal during training, yielding noisy instance labels. The model is trained with standard binary cross-entropy on these inherited labels. While commonly used as a simple baseline in WSI pipelines, its precision and generalization degrade substantially under low-WR regimes. 
+
+• ItS2CLR: Iterative Self-paced Supervised Contrastive Learning [ 26 ] is a weakly supervised contrastive frame-work for key-instance discovery under bag-level super-vision. During an initial warm-up phase, negatives are drawn from slide-negative bags, while candidate pos-itives are selected from slide-positive bags using the aggregator’s instance-confidence scores. After warm-up,   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 6 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+
+ItS2CLR performs self-paced pseudo-labeling within slide-positive bags by selecting the top 𝑟 % most confident instances as pseudo-positives and the bottom 𝑟 % least confident instances as pseudo-negatives, with 𝑟 gradually increased over training in a self-paced setting. The method alternates between (i) updating these pseudo-label sets via confidence-based selection and (ii) refining the encoder using a supervised contrastive objective defined on the resulting pseudo-labels, progressively sharpening instance-level supervision across iterations. 
+
+## 4. Datasets 
+
+To evaluate the effectiveness and generalizability of our proposed framework, we conduct experiments on two cytology datasets: one having bone marrow smears [ 20 ]and another with oral liquid brush cytology slides. These datasets vary in terms of cell morphology, label granularity, and visual artifacts, providing complementary testbeds for benchmarking rare abnormal cell detection. 
+
+4.1. Bone Marrow Cytomorphology Dataset 
+
+The bone marrow dataset [20 , 39 ] contains high-resolution single-cell images extracted from digitized bone marrow smears. Each cell is annotated by expert hematolo-gists into one of 21 morphological categories. In our study, we make a task-specific choice to treat the Lymphocyte (LYT) category as the normal class, and we define an abnormal class by pooling seven minority categories: Abnormal eosinophil (ABE), Basophil (BAS), Faggott cell (FGC), Hairy cell (HAC), Smudge cell (KSC), Immature lymphocyte (LYI), and Other cell (OTH). This construction intentionally in-creases abnormal-class diversity (e.g., LYI reflects immature lymphocytes), providing a heterogeneous set of atypical morphologies for evaluating rare-cell detection. For anomaly detection, only LYT cells are used to train the one-class models, while the pooled seven-class abnormal set is used exclusively for evaluation. We further vary the abnormal instance frequency to simulate different witness rates (WRs). Notably, this abnormal-class construction differs from our previous setup in [ 21 ], which used a different class grouping and split configuration. Table 1 summarizes the resulting cell-type counts and train-test split. 
+
+4.2. Oral Cancer Cytology Dataset 
+
+We also evaluate on an in-house oral cancer whole-slide cytology dataset [ 24 , 25 ] comprising liquid-based cytology (LBC) brush specimens prepared as Papanicolaou (Pap) stained slides. All samples were collected at the Department of Orofacial Medicine, Folktandvården Stockholms län AB, where for each patient a brush was used to scrape cells from clinically relevant areas of the oral cavity. Slide-level ground-truth labels (normal vs. malignant) were obtained via conventional gold-standard histopathological examinations. The slides were digitized using a NanoZoomer S60 digital slide scanner (40 ×, 0.75 NA objective) with multi-focus acquisition at 11 z-offsets ( ±2 𝜇 m, step size 0.4 𝜇 m), yielding                                         
+
+> Table 1
+> Cell-level statistics for the bone marrow dataset [ 20 ]. All abnormal classes are merged into a single abnormal group for anomaly detection.
+> Cell type Total Train Test
+> LYT (normal) 26,242 18,369 7,873 BAS (abnormal) 441 308 133 HAC (abnormal) 409 286 123 OTH (abnormal) 294 205 89 LYI (abnormal) 65 45 20 FGC (abnormal) 47 32 15 KSC (abnormal) 42 29 13 ABE (abnormal) 853
+> Table 2
+> Number of nuclei per slide in each partition (sorted in decreasing order). Bold indicates the two slides shown later in Fig. 7a and Fig. 7b.
+> Category Number of patches (per slide)
+> Train Normal 137 646, 115 382, 85 149, 73 573, 71 033, 64 455, 45 155, 20 016, 15 901, 12 795 Train Tumor 64 483, 37 206, 34 765, 33 766, 30 397, 26 879, 16 726, 7 793, 5 743, 4 452 Test Normal 75 155, 73 759, 44 545, 28 466 Test Tumor 49 534, 23 257 , 15 403, 9 445
+
+RGB whole-slide images of size 103 ,936 × 107 ,520 × 3 at 
+
+0.23 𝜇 m/pixel. For our study, we selected 28 labeled WSCIs: 20 for training (10 normal, 10 malignant) and 8 for testing (4 normal, 4 malignant). To obtain cell-level instances, we first detect nuclei locations and then extract cell-sized RGB patches of size 192×192 pixels centered at each detected nucleus, chosen to capture a single cell with most of its cytoplasm as well as the nucleus. Since each slide is available as a z-stack at the maximum magnification, we estimate focus across the focal levels and retain the best-focused patch per nucleus. Table 2 summarizes the number of patches extracted from each slide across the training and testing partitions. 
+
+## 5. Experimental Setup 
+
+5.1. Training and Evaluation Protocols 
+
+We report experiments on two datasets with distinct supervision availability: (i) a bone marrow dataset[ 20 ] with patch-level labels, and (ii) an in-house oral cancer whole-slide cytology dataset with slide-level labels only. Below we describe the training and evaluation protocols used for each dataset and baselines. 
+
+Bone marrow dataset We use the 18,369 normal and 910 abnormal training images (Table 1) to construct consistent supervision regimes for fully supervised, weakly supervised, and one-class methods. Fully supervised experiments (FS-SIL) are trained directly on these instance-level labels.   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 7 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+
+To ensure a controlled and comparable setup across weakly supervised and one-class baselines, we first partition the 18,369 training instances into 10 bags of equal size and keep this partition fixed for all such experiments (WS-SIL, ItS2CLR, DSVDD, and DROC). We then simulate different witness rates (WRs) by injecting controlled fractions of abnormal instances into 5 of the bags, while keeping the remaining 5 bags strictly normal (i.e., no injection). The one-class methods (DSVDD and DROC) are trained exclusively on these 5 normal bags, which together contain 9,185 images and are treated as the normal training set; the mixed bags are included along with the normal bags to support weakly supervised training (WS-SIL and ItS2CLR) under bag-level labels. For evaluation, we use the full test set (7,873 normal and 396 abnormal instances) as a single evaluation pool (treat like one large merged bag). We compute anomaly scores (softmax scores or attention scores for FS-SIL, WS-SIL and ItS2CLR) for all instances and rank them in decreasing order. For FS-SIL, WS-SIL, DSVDD, and DROC, evaluation is performed purely in terms of instance ranking/retrieval within this pool (i.e., identifying highly suspicious cells). For ItS2CLR, the same pool is used to assess its instance selection and ranking performance under the bag-based formulation. 
+
+Oral cancer dataset For the oral cancer dataset, only slide-level ground truth is available; therefore, FS-SIL is not applicable. We use 28 slides in total: 20 slides for training (10 healthy, 10 malignant) and 8 slides for testing (4 healthy, 4 malignant). In all experiments on this dataset, we operate only with bag-level labels at the slide level. For DSVDD and DROC, we train exclusively on patches extracted from the 10 healthy training slides. At test time, we apply the trained models to all patches extracted from each of the 8 test slides, producing per-patch anomaly scores that are ranked in decreasing order within each slide. To support expert review, we present the top-100 most anomalous patches per test slide to a cytologist and a cytotechnologist for qualitative assessment. For WS-SIL, we train a patch classifier using slide-to-patch label inheritance at the slide level (healthy vs. malignant) and then rank all test patches by their predicted abnormal softmax scores, again extracting the top-100 per test slide for expert review. For ItS2CLR, we focus expert inspection on predicted-positive (malignant) test slides: we present the top-100 patches (based on the attention scores) for those test slides that are both slide-positive and predicted malignant by the model, reflecting the intended clinical use where attention is directed to slides flagged as suspicious. 
+
+5.2. Bone marrow dataset: WR Variation 
+
+We define the witness rate (WR) as the fraction of abnor-mal instances in the (weakly labeled) mixed training bags and evaluate performance across {0 .05 , 0.1, 0.5, 1, 5, 9}% . For each WR, we fix the corresponding number of abnormal instances used for training and for evaluation as summarized in Table 3.               
+
+> Table 3
+> Number of abnormal cells used for training and evaluation at each witness rate (WR).
+> WR (%) Train abnormal cells Test abnormal cells
+> 9910 396 5455 198 190 40 0.5 45 20 0.1 10 40.05 52
+
+Training WR control. Within a given WR setting, we distribute the WR-specific abnormal count across the mixed training bags such that no bag contains a substantially higher abnormal fraction than the others. This uniformity prevents an 
+
+easier bag from inadvertently revealing a stronger supervision signal and allows us to assess how well each method learns when supervision is consistently weak across all mixed bags. 
+
+Test construction and merged evaluation. At evaluation time, we sample the WR-specific number of abnormal instances from the test pool (Table 3), but we rank all instances on a single merged evaluation set. Concretely, the test set can be viewed as two bags: (i) a normal bag containing roughly half of 7,873 normal instances, and (ii) a second bag containing the remaining half of 7,873 normal instances plus the sampled abnormal instances (e.g., 396 for WR=9%, and proportionally fewer at lower WRs). We do not evaluate these bags separately; instead, we merge them and compute a global instance ranking over all test instances. Because this merged pool contains a large fixed normal background, the effective abnormal prevalence in the ranked test set is typically lower than the nominal training WR, making evaluation intentionally more challenging while keeping the abnormal counts matched to the target WR . To reduce variance at ultra-low WRs, we generate 10 random test trials per WR by resampling the abnormal subset and report results aggregated across these trials. 
+
+Why WR variation is not performed for the oral cancer dataset. Unlike the bone marrow dataset, the oral cancer slides provide only slide-level ground truth (normal vs. malignant) and do not include exhaustive cell-level anno-tations identifying which specific patches correspond to malignant cells. Without knowing the abnormal instances explicitly within malignant slides, it is not possible to inject or subsample malignant cells in a controlled manner to realize targeted WR levels. Moreover, as a real-world clinical dataset, it is natural that different malignant slides (in both train and test) exhibit different, unknown witness rates, making controlled WR matching impractical and comparisons to the bone marrow WR-sweep setting inherently non-identical. 
+
+5.3. Evaluation Metrics 
+
+Our evaluation is motivated by a practical screening workflow: a whole-slide cytology image can contain on the order of 10 5 detected cells (Table 2), making reliable exhaustive manual review infeasible. We therefore treat   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 8 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+
+instance scoring primarily as a retrieval problem, where the goal is to surface a small set of highly suspicious candidates for expert inspection. Below we describe the evaluation protocol for each dataset. 
+
+Bone marrow dataset (top-K retrieval). Let  ={( 𝑥 𝑖 , 𝑦 𝑖 )} 𝑁 𝑖 =1 denote the test instances with labels 𝑦 𝑖 ∈ {0 , 1} 
+
+(normal/abnormal), and let ̂𝑠 𝑖 be the predicted abnormality score for instance 𝑥 𝑖 . We rank all instances by ̂𝑠 𝑖 and evaluate performance in the top-𝐾 retrieved set, with 𝐾 = 400 .Because presenting the retrieved candidates in ranked order can influence human reviewers toward the topmost positions, we use an unordered presentation for the qualitative expert evaluation in this paper, so that the assessment reflects only how well the model is able to surface suspicious cells within the top-𝐾 set. Accordingly, we emphasize Recall@ 𝐾 
+
+as our primary measure of effectiveness. In practical de-ployment, however, we envision the top-𝐾 candidates being presented in ranked order according to the model score, allowing cytologists or pathologists to inspect the most suspicious cells first. Using TP 𝐾 and FN 𝐾 computed within the top-𝐾 list, 
+
+Recall@ 𝐾 = TP 𝐾 
+
+TP 𝐾 + FN 𝐾 
+
+. (17) As secondary analyses, we also report ranking-sensitive met-rics that probe how early true abnormal cells appear among the highest-scoring candidates. Specifically, we compute 
+
+AUTK@ K (area under the top-𝐾 curve), 
+
+AUTK@ 𝐾 =
+
+> 𝐾
+
+∑
+
+> 𝑘 =1
+
+TP ≤𝑘 
+
+𝑇 , (18) where 𝑇 is the total number of abnormal instances in the test set and TP ≤𝑘 is the number of true positives within the top-𝑘 
+
+ranked instances; DCG@ K (discounted cumulative gain), 
+
+DCG@ 𝐾 =
+
+> 𝐾
+
+∑
+
+> 𝑖 =1
+
+2𝑦 𝑖 − 1 log 2(𝑖 + 1) , (19) and nDCG@ K (normalized discounted cumulative gain), 
+
+nDCG@ 𝐾 = DCG@ 𝐾 
+
+IDCG@ 𝐾 , (20) where IDCG@ 𝐾 is the ideal DCG achieved by ranking all positives first; and the area under the free-response ROC curve ( normalized AUFROC ), computed over the top-𝐾 ranked candidates. We sort instances by increasing abnormality score and sweep the cutoff 𝑘 = 1 , … , 𝐾 , treating the top-𝑘 as predicted positives. At each cutoff, 
+
+TPR( 𝑘 ) = TP( 𝑘 )
+
+𝑇 max 
+
+, FPI( 𝑘 ) = FP( 𝑘 )
+
+𝐾 , (21) where TP( 𝑘 ) and FP( 𝑘 ) are the numbers of true/false positives within the top-𝑘 list, 𝑇 max is the maximum number of positives for that witness rate, and 𝐾 is the evaluation list size (here 𝐾 =400 , or 𝐾 = min(400 , 𝑁 ) if fewer predictions are available). The normalized AUFROC is then computed by trapezoidal integration of TPR as a function of FPI over 
+
+𝑘 ≤ 𝐾 .
+
+Oral cancer dataset (expert review of top candidates). For the oral cancer dataset, cell-level ground truth is unavailable; therefore, we evaluate performance via blinded expert review of retrieved candidates. For each test slide, we rank all extracted 192 × 192 cell patches by the model score and present only the top-100 candidates. To mitigate positional and contextual bias, we anonymize case identifiers, random-ize the order of slides (normal vs. malignant) presented to the experts, and shuffle the order of the 100 patches within each slide (i.e., patches are not shown in model-ranked order). Two experts (a cytologist and a cytotechnologist) independently review the candidate sets and click on patches they deem suspicious/malignant. We summarize results as the number of expert-selected patches per set of 100 candidates and report these outcomes for malignant test slides. 
+
+5.4. Implementation Details 
+
+5.4.1. Bone marrow dataset 
+
+Across all methods, we use a ResNet18 backbone and train/evaluate at the instance (cell-patch) level. Input patches are processed with standard resizing/cropping and ImageNet-style normalization where applicable. 
+
+FS-SIL. We train a ResNet18 classifier with cross-entropy on patch-level ground-truth labels using SGD (learning rate 10 −3 , batch size 64 ). Training uses the same weak color/geometry augmentations as the other patch-based baselines (e.g., RGBShift and RandomResizedCrop ), followed by standard normalization. 
+
+WS-SIL. We train the same ResNet18 architecture under slide-to-patch label inheritance using the same optimizer family and data pipeline as FS-SIL (SGD, learning rate 10 −3 ,batch size 64 ), but with inherited (noisy) instance labels. 
+
+DSVDD (task-specific adaptation). We follow an autoencoder-pretraining pipeline before one-class training. The autoencoder is trained on normal patches for 100 epochs using Adam (learning rate 10 −4 , batch size 64 ). We then initialize the DSVDD center from pretrained features and apply an elementwise center clamp with 𝜀 = 0 .1 to avoid near-zero collapse. DSVDD training is performed for 200 
+
+epochs with Adam (learning rate 10 −4 , batch size 64 ) and 
+
+𝓁 2 weight decay regularization. At test time, we use mild test-time augmentation (horizontal flip and small rotations) and aggregate view scores using a view-aware rule (blending the original-view score with the maximum-view score; blend weight 0.35 ). Unless stated otherwise, we report ensemble results by averaging scores across multiple random seeds. 
+
+DROC (cytology adaptation). We train a SimCLR-style encoder with a 2-layer projection head (projection dimension 
+
+256 ) for 100 epochs using Adam (learning rate 10 −3 , batch size 64 ) and temperature 𝜏 = 2. Pseudo-abnormals are generated via strong augmentations (our cytology adaptation), while both normal and pseudo-abnormal views receive   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 9 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+
+weak SimCLR-style augmentations (including RGBShift and  
+
+> RandomResizedCrop
+
+to 224 × 224 , followed by normalization). After contrastive pretraining, we discard the projection head, extract encoder embeddings for the normal training set, and fit a one-class SVM with RBF kernel ( 𝜈 = 0 .1, 𝛾 = auto ). Test anomaly scores are obtained from the SVM decision function on encoder embeddings. For efficiency, we reuse the pretrained encoder + SVM from higher witness-rate settings when running the lowest witness-rate variants. 
+
+ItS2CLR. We use the official ItS2CLR training recipe with a ResNet18 encoder (output dimension 256 ), batch size 512 ,and 100 epochs of training using SGD (learning rate 0.01 ,weight decay 10 −4 ) with cosine annealing. The supervised contrastive temperature is set to 0.07 . The self-paced curricu-lum uses a warm-up of 10 epochs; after warm-up, pseudo-positives and pseudo-negatives are selected from slide-positive bags using the aggregator’s instance-confidence scores by taking the top-𝑟 % and bottom-𝑟 % instances, re-spectively, where 𝑟 is gradually increased over training (self-paced schedule). MIL refinement is run periodically (every 10 
+
+epochs), and the MIL module is trained with Adam (learning rate 2 × 10 −4 , weight decay 10 −4 ) for up to 200 epochs per refinement stage. 
+
+5.4.2. Oral cancer dataset 
+
+All oral-cancer experiments use a ResNet18 backbone and operate on cell-centered RGB patches of size 192 × 192 
+
+pixels. Where required by the training pipeline, patches are resized to 224 × 224 .
+
+WS-SIL (label inheritance). We train a ResNet18 patch classifier using slide-to-patch label inheritance with SGD (learning rate 10 −3 , batch size 256 ) for 60 epochs, and save checkpoints at epochs 30 and 60. 
+
+DSVDD. We train DSVDD using an autoencoder-pretraining stage followed by one-class training with Adam (learning rate 
+
+10 −4 , batch size 512 ) and latent dimension 𝑑 =32 ; both stages are run for 150 epochs. For the bone marrow experiments, the effective normal training set used by the one-class methods is comparatively small (only 9185 patches) and the ultra-low witness-rate regimes can be sensitive to initialization and minor appearance variations, so we use a seed ensemble and mild test-time augmentation (TTA) there to reduce variance and improve robustness of the anomaly ranking. In contrast, for the oral cytology dataset we train on a substantially larger pool of slide-negative patches (on the order of ∼640k), which stabilizes representation learning and makes the additional computational cost of multi-seed training and multi-view inference less beneficial; we therefore keep DSVDD training and inference deterministic and lightweight for large-scale slide-wise scoring. 
+
+DROC We train a SimCLR-style ResNet18 encoder with a 2-layer projection head (projection dimension 256) for 100 epochs using Adam (learning rate 10 −3 , batch size 64 ,temperature 𝜏 =2 ). We generate pseudo-abnormal variants using strong augmentations (our oral-cytology adaptation:  
+
+> Figure 2: Mean Recall@400 on the bone marrow dataset across witness rates (log-log scale).
+
+CENTER CROP RESIZE , G RID DISTORTION , and C OLOR JIT -
+
+> TER
+
+). After pretraining, we discard the projection head, extract encoder embeddings for the healthy training patches, and fit a one-class SVM (RBF kernel, 𝜈 =0 .1, 𝛾 =auto ). Slide-wise rankings are produced by sorting patch scores within each test slide. 
+
+ItS2CLR. We use the same ItS2CLR configuration as in the bone marrow experiments and apply it under slide-level bag supervision on the oral dataset, producing patch scores used for top-100 retrieval and expert review. 
+
+## 6. Results 
+
+6.1. Bone marrow dataset 
+
+Primary metric: Recall@400 (top-𝐾 retrieval). Our evalua-tion targets a clinically motivated workflow where a cytologist reviews only a small shortlist of top-ranked candidates rather than the full cell population. We therefore emphasize 
+
+Recall@400 as the primary measure of effectiveness. For the qualitative evaluation in this study, we treat the top-𝐾 
+
+predictions as an unordered set to avoid positional bias toward the highest-ranked items and to assess how effectively the model surfaces suspicious cells within the retrieved set. In practical use, however, these candidates would naturally be presented in ranked order according to the model score. As shown in Fig. 2, performance degrades with decreas-ing witness rate (WR) for methods that rely on weak or noisy positive supervision, whereas one-class approaches remain comparatively stable. In the very-low WR regime (WR ≤ 1% ), DSVDD consistently provides the strongest retrieval among the weak/one-class baselines, highlighting the benefit of explicitly learning a compact representation of normality when malignant cells are exceedingly rare. While the fully supervised upper bound (FS-SIL) remains strongest when exhaustive instance labels are available, our main focus is the behavior of weak/one-class methods under extreme rarity. To make these trends directly interpretable in terms of retrieved instances, Table 4 reports the mean number of true positives retrieved in the top-400 (TP@400).                                      
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 10 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+> Table 4
+> Mean true positives in the top-400 (TP@400) on the bone marrow dataset (mean ±std). Bold values indicate the top values across witness rates. The fully supervised FS-SIL is not considered a realistic option (and is therefore grayed out) since it relies on instance level annotations, and is included only to indicate an expected upper bound of performance. WR FS-SIL WS-SIL DSVDD DROC ItS2CLR 9% 223.0 ±0.0 121.0 ±0.0 49.0 ±0.0 11.0 ±0.0 27.0 ±0.0 5% 84.2 ±3.6 38.6 ±2.6 24.1 ±2.5 5.8 ±1.3 7.7 ±4.2 1% 10.0 ±2.3 2.5 ±2.1 5.3 ±1.6 2.1 ±1.3 1.0 ±0.9 0.5% 4.4 ±2.2 1.3 ±1.0 2.7 ±1.5 0.8 ±1.0 0.5 ±0.5 0.1% 0.5 ±0.7 0.4 ±0.5 0.7 ±0.6 0.2 ±0.4 0.6 ±0.7 0.05% 0.1 ±0.3 0.2 ±0.4 0.3 ±0.5 0.2 ±0.6 0.0 ±0.0
+
+Secondary metrics: nDCG@400, AUTK@400, and nor-malized AUFROC@400. To analyze where true positives appear within the top-400 (earlier vs. later ranks), we ad-ditionally report nDCG@400 and AUTK@400 (Figs. 3 and 4). We further report the normalized AUFROC@400 (Fig. 5), which summarizes the retrieval trade-off between true-positive discovery and false positives within the top-𝐾 
+
+list.   
+
+> Figure 3: Mean nDCG@400 on the bone marrow dataset across witness rates (log-log scale).
+> Figure 4: Mean AUTK@400 on the bone marrow dataset across witness rates (log-log scale).
+
+These ranking-sensitive measures broadly mirror the recall trend: performance typically decreases as WR drops  
+
+> Figure 5: Mean normalized AUFROC on the bone marrow dataset across witness rates (log-log scale).
+
+for methods relying on weak positive supervision, while one-class approaches remain comparatively stable. In particular, AUTK and normalized AUFROC highlight that DSVDD 
+
+maintains a favorable early-retrieval trade-off across low-WR regimes, whereas WS-SIL and FS-SIL tend to degrade as the shortlist becomes dominated by false positives. We also observe an apparent jump for ItS2CLR at WR = 0 .1% ,followed by a collapse at WR = 0 .05% (consistent with its failure to identify predicted-positive bags in this extreme setting). We do not over-interpret such behavior at ultra-low WRs, where results can be dominated by stochastic effects (e.g., the particular abnormal instances sampled and their visual similarity to normal cells). Overall, our primary conclusion is stable: in the low-WR regime ( WR ≤ 1% ), 
+
+DSVDD provides the most consistent instance retrieval among the weak/one-class methods, which is the main focus of this study. 
+
+High-WR regime (5% and 9%). At higher witness rates, WS-SIL and ItS2CLR benefit from increased exposure to abnormal instances via weak supervision and therefore improve their retrieval performance. However, our central objective is to assess one-class representation learning for the realistic screening regime where abnormal cells are exceedingly rare ( WR ≤ 1% ), and under this condition DSVDD is the strongest and most stable weak/one-class baseline. 
+
+Example grid for expert review Figure 6 illustrates the intended expert-facing output of these frameworks: for each slide (or merged evaluation pool), the model assigns an abnormality score to every detected cell and returns a small set of the highest-scoring candidates for rapid inspection. As a concrete demonstration, we show a sample 10 × 10 
+
+grid assembled from the bone marrow dataset by arranging the top-100 ranked patches. This visualization provides a compact, human-readable summary that a cytologist can review quickly. In whole-slide cytology, where a single sample can contain on the order of 10 5 cells, presenting only the top-𝐾 candidates can substantially reduce workload while preserving transparency, the expert directly inspects the specific cells that the model considers most suspicious.      
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 11 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+> Figure 6: Example mosaic for the bone marrow dataset at 10% WR. Shown are the top 100 patches (unordered) using DSVDD anomaly scores and arranged in a 10 × 10 grid. A small white square in the top-right corner of a patch indicates that the underlying instance is annotated as non-LYT (i.e. abnormal or suspicious); within this box, ‘ ×’ marks such non-LYT cells. Patches without a white box correspond to LYT (normal) cells. For this mosaic, 25 of the top 100 predictions were true positives (non-LYT).
+
+6.2. Oral cancer dataset 
+
+Unlike the bone marrow dataset, the oral cancer WSCI dataset provides only slide-level ground truth (healthy vs. ma-lignant) and does not include exhaustive cell-level annotations indicating which nuclei-centered patches are truly malignant. Moreover, a single oral slide can contain on the order of 
+
+10 5 detected nuclei (Table 2), making exhaustive expert verification infeasible even for one slide. For these reasons, we do not report rank-based retrieval metrics (e.g., Recall@ 𝐾 ,nDCG@ 𝐾 , AUTK@ 𝐾 , normalized AUFROC@ 𝐾 ) on this dataset. Instead, we evaluate clinical utility via blinded expert review of the model-selected top-100 candidates per ma-lignant test slide, presented as an unordered 10 × 10 grid (randomized order) to minimize positional bias. For each of the four malignant test slides, we rank all extracted 192 × 192 
+
+patches by the method’s abnormality score and present only the top-100 candidates to two experts (a cytologist and a cytotechnologist). The experts independently inspect the 100-patch set and mark patches they deem suspicious/malignant. Table 5 summarizes the number of expert-marked patches among the top-100 candidates for each method and malignant slide (reported as a tuple of counts from the two experts). Overall, DSVDD yields the most consistent expert-confirmed relevance across slides—showing higher total (and average) 
+
+> Table 5
+> Expert assessment of top-100 patches on the four malignant oral-cancer test slides. Tuples report the number of patches marked as suspicious by the cytologist and cytotechnologist (in this order). Bold indicates the slides visualized in Fig. 7.
+
+Type WS-SIL DSVDD DROC ItS2CLR Malignant 1 (0,0) (0,0) (0,2) (1,2) 
+
+Malignant 2 (25,93) (18,63) (2,65) (2,47) Malignant 3 (7,46) (9,52) (18,19) (4,19) Malignant 4 (8,11) (4,22) (9,16) (2,10) 
+
+expert markings on multiple malignant cases compared to the other methods in Table 5. We also note that, even on healthy test slides, the models frequently surface patches that trained experts consider visually concerning (e.g., suspicious-looking but benign nuclei, poor/degenerate morphology, or cells in slides with a strong inflammatory component). This suggests that the learned “abnormality” scores capture broader deviations from typical healthy appearance, not only overt malignancy. To illustrate how our one-class framework could support cytologists on oral cytology WSCIs, we visualize the top-100 
+
+DSVDD candidates for two malignant test slides as unordered 
+
+10 × 10 grids (Figure 7). Since the goal is to provide a compact set of suspicious patches for rapid inspection (rather than to force attention to a specific rank order), we present these candidates in randomized order within each grid and overlay the independent markings from a cytologist and a cytotechnologist. 
+
+## 7. Discussion 
+
+Detecting rare malignant cells in whole-slide cytol-ogy is challenging because positives are extremely low in number, morphology is heterogeneous, and dense instance-level annotation is impractical. Our results show that one-class representation learning, trained only on slide-negative patches, is a strong alternative to weakly supervised learning when witness rates are very low and when instance-level localization (rather than only slide-level classification) is the primary goal. Our findings across the bone marrow and oral-cancer datasets suggest the following: 
+
+One-class learning is robust under extreme rarity. In the low-WR regime ( WR ≤ 1% ), DSVDD consistently produced stronger and more stable retrieval behavior than weakly supervised baselines, as reflected by Recall@400 and the ranking-sensitive metrics (nDCG@400, AUTK@400, and normalized AUFROC@400). This supports the premise that learning a compact normality manifold can be more reliable than learning from weak slide-level supervision when abnormal instances are vanishingly rare. 
+
+Seed ensembling + mild TTA stabilize anomaly ranking in the small-data regime. For bone marrow, the effective normal training set for one-class learning is comparatively       
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 12 of 15 One-Class Representation Learning for Rare Malignant Cell Detection
+> (a) Malignant slide 3: 9 patches were marked by both experts. (b) Malignant slide 4: 3 patches were marked by both experts.
+> Figure 7: DSVDD-selected top-100 expert-review grids for two malignant test slides (shown in randomized order). For each slide, we show the unordered top-100 patches (arranged as a 10 × 10 grid). A white square in the top-right corner of a patch indicates that at least one expert marked it as suspicious. Within the square, a red backslash ‘ \’ denotes a mark by one expert, an blue forward slash ‘ /’ denotes a mark by the other, and a full cross indicates agreement (both experts).
+
+small (9,185 patches) and the lowest-WR settings are sensitive to initialization and minor appearance variation; multi-seed ensembling and mild test-time augmentation reduce variance in the anomaly ranking. In contrast, the oral-cancer setting offers a much larger pool of slide-negative patches (on the order of ∼640k), which stabilizes representation learning and makes multi-seed/multi-view inference less beneficial relative to its added computational cost. 
+
+DROC is competitive but augmentation design matters. 
+
+DROC provides a principled way to couple self-supervised contrastive learning with one-class detection via distribution augmentation. Its performance depends on how well pseudo-abnormal augmentations reflect meaningful departures from normal cytology; overly aggressive or misaligned transforms can reduce separability between true abnormalities and hard normal variants. 
+
+Expert-facing utility on oral cancer can be assessed without exhaustive labels. Because cell-level ground truth is unavailable for oral slides, we evaluated clinical utility via blinded expert review of the model-selected top-100 candidates per malignant slide (presented as an unordered grid to reduce positional bias). In this setting, DSVDD yielded higher expert-marked counts on average across malignant slides than the other weak/one-class baselines, suggesting that one-class scoring can produce practically useful candidate sets even when quantitative retrieval metrics cannot be computed. 
+
+Weak supervision alone is brittle at ultra-low WR. Slide-to-patch label inheritance (WS-SIL) and bag-supervised se-lection methods can be dominated by label noise and spurious slide-level cues when only a tiny fraction of instances are truly abnormal. This can lead to unstable instance rankings and reduced early retrieval quality, particularly as WR decreases. 
+
+Choosing 𝐾 and handling high-burden slides. The review budget 𝐾 is clinically consequential: while we use 𝐾 =400 to reflect a practical inspection limit, advanced-stage malignant slides may contain far more than 𝐾 malignant cells, so any fixed-𝐾 protocol caps achievable recall by design. A practical extension is to complement top-𝐾 visualization with an adaptive rule that thresholds the anomaly score to estimate how many instances on a slide are likely malignant, while still displaying only the top-𝐾 most suspicious patches for rapid expert confirmation. 
+
+## 8. Limitations and future work. 
+
+We highlight key directions to strengthen robustness and clinical utility: 
+
+Cytology-aware pseudo-abnormals. DROC depends on heuristic pseudo-abnormal augmentations; future work should design stain-/morphology-aware perturbations that better reflect clinically meaningful deviations. 
+
+Domain shift + hard normals. OCC methods can degrade under scanner/stain/focus/debris variation and in the presence of “suspicious but benign” nuclei; domain-invariant pretrain-ing, normalization, and explicit handling of hard normal variants are important. 
+
+Oral-cancer evaluation scale. Oral-cancer results rely on blinded expert review rather than exhaustive instance labels; larger cohorts, prospective studies, and structured partial   
+
+> Chatterjee et al.: Preprint submitted to Elsevier Page 13 of 15
+
+One-Class Representation Learning for Rare Malignant Cell Detection 
+
+verification (including hard negatives) would enable more quantitative assessment. 
+
+Choosing 𝐾 on high-burden slides. A fixed review budget caps achievable recall when malignant burden exceeds 𝐾 ; a practical extension is to combine top-𝐾 visualization with adaptive score-thresholding to estimate burden while still showing only the most suspicious patches. 
+
+Expert-in-the-loop refinement. Iterative top-𝐾 review with feedback from multiple experts (active learning) can refine rankings over rounds without requiring dense slide-wide annotation. 
+
+## 9. Conclusion 
+
+We study rare malignant-cell localization in whole-slide cytology under an expert-facing top-𝐾 review setting. On the fully annotated bone-marrow benchmark, one-class learning with DSVDD is the most consistent method in the low-witness regime ( WR ≤ 1% ), improving Recall@400 and ranking-sensitive metrics (AUTK@400, and normalized AUFROC@400) over weakly supervised baselines. On oral cancer, where cell-level ground truth is unavailable, blinded expert review suggests that one-class scoring can surface clinically relevant candidates for inspection. Importantly, the output of all methods is naturally interpretable (in a bottom-up approach) as a small set of visual candidates (expert-review grids), supporting practical triage without requiring dense annotations. Future work includes cytology-aware pseudo-abnormal generation, reducing domain shift, and developing fine-grained instance-level explanations to further strengthen clinical trust. 
+
+## Acknowledgements 
+
+Expert support. We sincerely thank the participating cy-tologist and cytotechnologist for their invaluable support, including multiple rounds of expert review and annotation of the oral-cancer test slides. 
+
+Funding. This work is supported by Sweden’s Inno-vation Agency (VINNOVA) projects 2017-02447, 2020-03611, 2021-01420, Swedish Cancer Society (Cancerfonden) projects 22 2353 Pj and 222357 Pj., and the Centre for Interdisciplinary Mathematics (CIM), Uppsala University. 
+
+Figure asset credits. Icons used in the TikZ pipeline illus-tration are credited as follows: “computer screen” by Vectors Point (The Noun Project, CC BY 3.0); “Doctor” by Hanbai (The Noun Project, CC BY 3.0); “slide scanner” by Sukjun Kim (The Noun Project, CC BY 3.0); “open mouth” icon designed by Smashicons / Freepik (Asset ID: 1471596); and “blood” (test tube) icon designed by Smashicons / Freepik (Asset ID: 1856969). 
+
+Declaration of generative AI and AI-assisted technologies in the manuscript preparation process. During the prepara-tion of this work the author(s) used ChatGPT in order to refine or edit manuscript language. After using this tool/service, the author(s) reviewed and edited the content as needed and take(s) full responsibility for the content of the published article. 
+
+Ethics statement 
+
+This retrospective study used already collected and fully de-identified data; no new human data were collected for this work. Single-cell image patches do not allow patient-specific identification or tracking. The study was conducted in accordance with the Declaration of Helsinki and the Swedish Ethical Review Act. Use of the oral cytology dataset is covered by ethical approvals from the Swedish Ethical Review Authority (permit 2015/1213-31, with addenda 2016/1263-32 and 2017/1535-32, and permit 2019-00349). All included subjects received written and oral participant information and provided informed consent. The bone-marrow dataset is based on publicly available, de-identified data; its use was approved by the MLL Munich Leukemia Laboratory internal institutional review board, and all patients provided written informed consent for use of clinical data in accordance with the Declaration of Helsinki. No animal experiments were performed. 
+
+## References                      
+
+> [1] David Kim, Kaitlin E Sundling, Renu Virk, Michael J Thrall, Susan Alperstein, Marilyn M Bui, Heather Chen-Yost, Amber D Donnelly, Oscar Lin, Xiaoying Liu, et al. Digital cytology part 1: digital cytology implementation for practice: a concept paper with review and recommendations from the american society of cytopathology digital cytology task force. Journal of the American Society of Cytopathology ,13(2):86–96, 2024. [2] David Kim, Kaitlin E Sundling, Renu Virk, Michael J Thrall, Susan Alperstein, Marilyn M Bui, Heather Chen-Yost, Amber D Donnelly, Oscar Lin, Xiaoying Liu, et al. Digital cytology part 2: artificial intelligence in cytology: a concept paper with review and recommen-dations from the american society of cytopathology digital cytology task force. Journal of the American Society of Cytopathology , 13(2): 97–110, 2024. [3] Hao Jiang, Yanning Zhou, Yi Lin, Ronald CK Chan, Jiang Liu, and Hao Chen. Deep learning for computational cytology: A survey. Medical Image Analysis , 84:102691, 2023. [4] Michael S Landau and Liron Pantanowitz. Artificial intelligence in cytopathology: a review of the literature and overview of commercial landscape. Journal of the American Society of Cytopathology , 8(4): 230–241, 2019. [5] Ewert Bengtsson and Patrik Malm. Screening for cervical cancer using automated analysis of pap-smears. Computational and mathematical methods in medicine , 2014(1):842037, 2014. [6] Shenghua Cheng, Sibo Liu, Jingya Yu, Gong Rao, Yuwei Xiao, Wei Han, Wenjie Zhu, Xiaohua Lv, Ning Li, Jing Cai, et al. Robust whole slide image analysis for cervical cancer screening using deep learning.
+> Nature communications , 12(1):5639, 2021. [7] Dolores Subirá, Fabiola Barriopedro, Jesús Fernández, Ruth Martínez, Luis Chara, Jorge Castelao, and Eugenia García. High sensitivity flow cytometry immunophenotyping increases the diagnostic yield of malignant pleural effusions. Clinical & Experimental Metastasis , 40 (6):505–515, 2023. [8] Clàudia Carreras-Torras and Cosme Gay-Escoda. Techniques for early diagnosis of oral squamous cell carcinoma: Systematic review.
+> Medicina oral, patologia oral y cirugia bucal , 20(3):e305, 2015. [9] Aaron Kruse, Nour Abdel-Azim, Hye Na Kim, Yongsheng Ruan, Valerie Phan, Heather Ogana, William Wang, Rachel Lee, Eun Ji Gang, Sajad Khazal, et al. Minimal residual disease detection in acute lymphoblastic leukemia. International journal of molecular sciences ,21(3):1054, 2020. [10] Elaine Coustan-Smith, Guangchun Song, Christopher Clark, Laura Key, Peixin Liu, Mohammad Mehrpooya, Patricia Stow, Xiaoping Su, Sheila Shurtleff, Ching-Hon Pui, et al. New markers for minimal
+
+Chatterjee et al.: Preprint submitted to Elsevier Page 14 of 15 One-Class Representation Learning for Rare Malignant Cell Detection 
+
+residual disease detection in acute lymphoblastic leukemia. Blood, The Journal of the American Society of Hematology , 117(23):6267–6276, 2011. [11] Gabriele Campanella, Michael G Hanna, Levi Geneslaw, Antonio Miraflor, Victor Werneck Krauss Silva, Klaus J Busam, Edi Brogi, Victor E Reuter, David S Klimstra, and Thomas J Fuchs. Clinical-grade computational pathology using weakly supervised deep learning on whole slide images. Nature medicine , 25(8):1301–1309, 2019. [12] Maximilian Ilse, Jakub Tomczak, and Max Welling. Attention-based deep multiple instance learning. In International conference on machine learning , pages 2127–2136. PMLR, 2018. [13] Ming Y Lu, Drew F K Williamson, Tiffany Y Chen, Richard J Chen, Milena Barbieri, and Faisal Mahmood. Clam: Clustering-constrained attention multiple instance learning for whole slide image classification. In Conference on Computer Vision and Pattern Recognition (CVPR) ,2021. [14] Ming Y Lu, Drew FK Williamson, Tiffany Y Chen, Richard J Chen, Matteo Barbieri, and Faisal Mahmood. Data-efficient and weakly supervised computational pathology on whole-slide images. Nature biomedical engineering , 5(6):555–570, 2021. [15] Pramuditha Perera and Vishal M Patel. One-class classification: A survey. IEEE Transactions on Knowledge and Data Engineering , 2020. [16] Lukas Ruff, Jacob R Kauffmann, Robert A Vandermeulen, Grégoire Montavon, Wojciech Samek, Marius Kloft, Thomas G Dietterich, and Klaus-Robert Müller. A unifying review of deep and shallow anomaly detection. Proceedings of the IEEE , 109(5):756–795, 2021. [17] Lukas Ruff, Robert A Vandermeulen, Nico Görnitz, Lucas Deecke, Shoaib A Siddiqui, Alexander Binder, Emmanuel Müller, and Marius Kloft. Deep one-class classification. In International conference on machine learning , pages 4393–4402. PMLR, 2018. [18] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework for contrastive learning of visual representations. In International conference on machine learning ,pages 1597–1607. PMLR, 2020. [19] Kihyuk Sohn, Chun-Liang Li, Jinsung Yoon, Minho Jin, and Tomas Pfister. Learning and evaluating representations for deep one-class clas-sification. In International Conference on Learning Representations ,2021. URL https://openreview.net/forum?id=HCSgyPUfeDj .[20] Christian Matek, Sebastian Krappe, Christian Münzenmayer, Torsten Haferlach, and Carsten Marr. An expert-annotated dataset of bone marrow cytology in hematologic malignancies. The Cancer Imaging Archive , 2021. [21] Swarnadip Chatterjee, Orcun Göksel, Nataša Sladoje, and Joakim Lindblad. Detection of extremely sparse key instances in whole slide cytology images via self-supervised one-class representation learning. In International Conference on Pattern Recognition , pages 408–421. Springer, 2024. [22] Yuexiang Li, Yunzhi Liu, Yufei Xu, Liangqiong Zhang, Lei Xing, and Junzhou Huang. Dual-stream multiple instance learning network for whole slide image classification with self-supervised contrastive learning. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 14318–14327, 2021. [23] Pushpak Pati, Guillaume Jaume, Zeineb Ayadi, Kevin Thandiackal, Behzad Bozorgtabar, Maria Gabrani, and Orcun Goksel. Weakly supervised joint whole-slide segmentation and classification in prostate cancer. Medical Image Analysis , 89:102915, 2023. [24] Nadezhda Koriakina, Nataša Sladoje, Vladimir Bašić, and Joakim Lindblad. Deep multiple instance learning versus conventional deep single instance learning for interpretable oral cancer detection. Plos one , 19(4):e0302169, 2024. [25] Jiahao Lu, Nataša Sladoje, Christina Runow Stark, Eva Darai Ramqvist, Jan-Michaél Hirsch, and Joakim Lindblad. A deep learning based pipeline for efficient oral cancer screening on whole slide images. In 
+
+International Conference on Image Analysis and Recognition , pages 249–261. Springer, 2020. [26] Kangning Liu, Weicheng Zhu, Yiqiu Shen, Sheng Liu, Narges Raza-vian, Krzysztof J Geras, and Carlos Fernandez-Granda. Multiple in-stance learning via iterative self-paced supervised contrastive learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 3355–3365, 2023. [27] Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick. Momentum contrast for unsupervised visual representation learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2020. [28] Jean-Bastien Grill, Florian Strub, Florent Altché, Corentin Tallec, Pierre H. Richemond, Elena Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Guo, Mohammad Gheshlaghi Azar, Bilal Piot, Koray Kavukcuoglu, Rémi Munos, and Michal Valko. Bootstrap your own latent: A new approach to self-supervised learning. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. [29] Mathilde Caron, Ishan Misra, Julien Mairal, Priya Goyal, Piotr Bojanowski, and Armand Joulin. Unsupervised learning of visual features by contrasting cluster assignments. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. [30] Yoni Schirris, Efstratios Gavves, Iris Nederlof, Hugo Mark Horlings, and Jonas Teuwen. Deepsmile: Contrastive self-supervised pre-training benefits msi and hrd classification directly from h&e whole-slide images in colorectal and breast cancer. Medical image analysis , 79: 102464, 2022. [31] David Torpey and Richard Klein. Deepset simclr: Self-supervised deep sets for improved pathology representation learning. Pattern Recognition Letters , 186:64–70, 2024. [32] Tharindu Fernando, Harshala Gammulle, Simon Denman, Sridha Sridharan, and Clinton Fookes. Deep learning for medical anomaly detection–a survey. ACM Computing Surveys (CSUR) , 54(7):1–37, 2021. [33] Maximilian E Tschuchnig and Michael Gadermayr. Anomaly detection in medical imaging-a mini review. In International Data Science Conference , pages 33–38. Springer, 2021. [34] Qi Wei, Yinhao Ren, Rui Hou, Bibo Shi, Joseph Y Lo, and Lawrence Carin. Anomaly detection for medical images based on a one-class classification. In Medical Imaging 2018: Computer-Aided Diagnosis ,volume 10575, pages 375–380. SPIE, 2018. [35] Carlo Bruno Marta, Manuel Doblare, Jonathan Heras, Gadea Mata, and Teresa Ramirez. Anomaly detection applied to the classification of cytology images. Biomedical Signal Processing and Control , 105: 107625, 2025. [36] Divya Shanmugam, Davis Blalock, Guha Balakrishnan, and John Guttag. Better aggregation in test-time augmentation. In Proceedings of the IEEE/CVF international conference on computer vision , pages 1214–1223, 2021. [37] Masanari Kimura. Understanding test-time augmentation. In 
+
+International Conference on Neural Information Processing , pages 558–569. Springer, 2021. [38] Seffi Cohen, Niv Goldshlager, Lior Rokach, and Bracha Shapira. Boosting anomaly detection using unsupervised diverse test-time augmentation. Information Sciences , 626:821–836, 2023. [39] Christian Matek, Sebastian Krappe, Christian Münzenmayer, Torsten Haferlach, and Carsten Marr. Highly accurate differentiation of bone marrow cell morphologies using deep neural networks on a large image data set. Blood, The Journal of the American Society of Hematology ,138(20):1917–1927, 2021. 
+
+Chatterjee et al.: Preprint submitted to Elsevier Page 15 of 15
