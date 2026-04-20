@@ -6,76 +6,82 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-19
-- 运行时间：2026-04-19 19:40:31 UTC
+- 最新运行日期：2026-04-11 ~ 2026-04-20
+- 运行时间：2026-04-20 11:00:45 UTC
 - 运行状态：成功
-- 本次总论文数：18
-- 精读区：6
+- 本次总论文数：20
+- 精读区：8
 - 速读区：12
 
 ### 今日简报（AI）
-聚焦医学影像智能标注与肿瘤微环境数据集建设，今日共研读 18 篇论文。  
-最值得关注的方向是开放式病理标注框架与大规模 AI 肿瘤微环境数据集的结合，为精准诊断提供可复用基础。  
-建议读者持续关注开源医学数据与模型验证赛道的最新动向，掌握工具化趋势。
-- 详情：[/202604/19/README](/202604/19/README)
+深入研读 20 篇论文，聚焦肿瘤微环境开放数据与全视图病理分析的最新突破。  
+重点关注 OpenTME 数据集的开放潜力与 MambaBack 模型在全切片特征融合上的创新。  
+建议普通读者留意医疗影像中人工智能从模型到数据开放化的趋势。
+- 详情：[/20260411-20260420/README](/20260411-20260420/README)
 
 ### 精读区论文标签
-1. [OpenTME: An Open Dataset of AI-powered H&E Tumor Microenvironment Profiles from TCGA](/202604/19/2604.12075v1-opentme-an-open-dataset-of-ai-powered-he-tumor-microenvironment-profiles-from-tcga)  
+1. [OpenTME: An Open Dataset of AI-powered H&E Tumor Microenvironment Profiles from TCGA](/20260411-20260420/2604.12075v1-opentme-an-open-dataset-of-ai-powered-he-tumor-microenvironment-profiles-from-tcga)  
    标签：评分：10.0/10、query:pathseg
-   evidence：基于AI的H&E肿瘤微环境分析，包含全切片图像上的组织分割、细胞检测与分类
-2. [AnnotateAnyCell: Open-Source AI Framework for Efficient Annotation in Digital Pathology](/202604/19/biorxiv-10-1101-2025-11-02-686114-v3-annotateanycell-open-source-ai-framework-for-efficient-annotation-in-digital-pathology)  
+   evidence：基于AI的H&E肿瘤微环境分析，包含组织分割与细胞检测
+2. [MambaBack: Bridging Local Features and Global Contexts in Whole Slide Image Analysis](/20260411-20260420/2604.15729v1-mambaback-bridging-local-features-and-global-contexts-in-whole-slide-image-analysis)  
    标签：评分：10.0/10、query:cellrep
-   evidence：利用潜空间可视化在数字病理中进行高效的细胞标注与分类
-3. [A Multi-Stage Optimization Pipeline for Bethesda Cell Detection in Pap Smear Cytology](/202604/19/2604.13939v1-a-multi-stage-optimization-pipeline-for-bethesda-cell-detection-in-pap-smear-cytology)  
+   evidence：基于Mamba的多实例学习用于WSI分析，聚焦局部细胞结构
+3. [SegMix:Shuffle-based Feedback Learning for Semantic Segmentation of Pathology Images](/20260411-20260420/2604.15777v1-segmixshuffle-based-feedback-learning-for-semantic-segmentation-of-pathology-images)  
+   标签：评分：10.0/10、query:pathseg
+   evidence：利用图像级标签和反馈学习进行病理图像的语义分割
+4. [AnnotateAnyCell: Open-Source AI Framework for Efficient Annotation in Digital Pathology](/20260411-20260420/biorxiv-10-1101-2025-11-02-686114-v3-annotateanycell-open-source-ai-framework-for-efficient-annotation-in-digital-pathology)  
+   标签：评分：10.0/10、query:cellrep
+   evidence：利用对比学习和嵌入进行细胞标注与分类的半监督框架
+5. [SSMamba: A Self-Supervised Hybrid State Space Model for Pathological Image Classification](/20260411-20260420/2604.15711v1-ssmamba-a-self-supervised-hybrid-state-space-model-for-pathological-image-classification)  
+   标签：评分：9.0/10、query:cellrep
+   evidence：病理图像分类和ROI分析的自监督学习
+6. [Early Detection of Acute Myeloid Leukemia (AML) Using YOLOv12 Deep Learning Model](/20260411-20260420/2604.16082v1-early-detection-of-acute-myeloid-leukemia-aml-using-yolov12-deep-learning-model)  
    标签：评分：9.0/10、query:pathseg
-   evidence：巴氏涂片细胞学图像中的细胞检测与分类
-4. [SIMPLER: H&E-Informed Representation Learning for Structured Illumination Microscopy](/202604/19/2604.10334v1-simpler-he-informed-representation-learning-for-structured-illumination-microscopy)  
-   标签：评分：8.5/10、query:cellrep
-   evidence：针对数字病理学和显微镜的H&E信息表征学习
-5. [Artificial intelligence application in lymphoma diagnosis with Vision Transformer using weakly supervised training](/202604/19/2604.13795v1-artificial-intelligence-application-in-lymphoma-diagnosis-with-vision-transformer-using-weakly-supervised-training)  
-   标签：评分：8.0/10、query:pathseg
-   evidence：用于病理图像中淋巴瘤形态学分类的Vision Transformer
-6. [Virtual multiplex staining of the pancreatic islets across type 1 diabetes progression using a Schroedinger bridge](/202604/19/biorxiv-10-64898-2026-04-14-718559-v1-virtual-multiplex-staining-of-the-pancreatic-islets-across-type-1-diabetes-progression-using-a-schroedinger-bridge)  
-   标签：评分：8.0/10、query:pathseg
-   evidence：利用生成式AI将H&E图像进行虚拟染色以进行组织形态学分析。
+   evidence：使用 YOLOv12 进行 AML 分类的细胞和细胞核分割
+7. [Dual-Modal Lung Cancer AI: Interpretable Radiology and Microscopy with Clinical Risk Integration](/20260411-20260420/2604.16104v1-dual-modal-lung-cancer-ai-interpretable-radiology-and-microscopy-with-clinical-risk-integration)  
+   标签：评分：9.0/10、query:pathseg
+   evidence：整合 H&E 组织病理学用于肺癌诊断和亚型分类
+8. [MICRON learns outcome-associated representations of spatial immune microenvironments](/20260411-20260420/biorxiv-10-64898-2026-04-14-718488-v1-micron-learns-outcome-associated-representations-of-spatial-immune-microenvironments)  
+   标签：评分：9.0/10、query:cellrep
+   evidence：用于结果相关免疫微环境的无分割多实例学习
 
 ### 速读区论文标签
-1. [MedVeriSeg: Teaching MLLM-Based Medical Segmentation Models to Verify Query Validity Without Extra Training](/202604/19/2604.10242v2-medveriseg-teaching-mllm-based-medical-segmentation-models-to-verify-query-validity-without-extra-training)  
+1. [Artificial intelligence application in lymphoma diagnosis with Vision Transformer using weakly supervised training](/20260411-20260420/2604.13795v1-artificial-intelligence-application-in-lymphoma-diagnosis-with-vision-transformer-using-weakly-supervised-training)  
+   标签：评分：8.0/10、query:pathseg
+   evidence：用于病理学淋巴瘤形态学分类的Vision Transformer
+2. [SwinTextUNet: Integrating CLIP-Based Text Guidance into Swin Transformer U-Nets for Medical Image Segmentation](/20260411-20260420/2604.10000v1-swintextunet-integrating-clip-based-text-guidance-into-swin-transformer-u-nets-for-medical-image-segmentation)  
    标签：评分：7.0/10、query:pathseg
-   evidence：基于多模态大模型的医学图像分割与查询验证
-2. [WBCBench 2026: A Challenge for Robust White Blood Cell Classification Under Class Imbalance](/202604/19/2604.10797v1-wbcbench-2026-a-challenge-for-robust-white-blood-cell-classification-under-class-imbalance)  
+   evidence：基于Transformer的使用文本引导的医学图像分割框架
+3. [TAMISeg: Text-Aligned Multi-scale Medical Image Segmentation with Semantic Encoder Distillation](/20260411-20260420/2604.10912v1-tamiseg-text-aligned-multi-scale-medical-image-segmentation-with-semantic-encoder-distillation)  
    标签：评分：7.0/10、query:pathseg
-   evidence：自动化白细胞分类基准
-3. [TAMISeg: Text-Aligned Multi-scale Medical Image Segmentation with Semantic Encoder Distillation](/202604/19/2604.10912v1-tamiseg-text-aligned-multi-scale-medical-image-segmentation-with-semantic-encoder-distillation)  
+   evidence：带有语义蒸馏的文本引导医学图像分割
+4. [Delving Aleatoric Uncertainty in Medical Image Segmentation via Vision Foundation Models](/20260411-20260420/2604.10963v1-delving-aleatoric-uncertainty-in-medical-image-segmentation-via-vision-foundation-models)  
    标签：评分：7.0/10、query:pathseg
-   evidence：利用语义蒸馏和多尺度特征的文本引导医学图像分割框架。
-4. [Using Deep Learning Models Pretrained by Self-Supervised Learning for Protein Localization](/202604/19/2604.10970v1-using-deep-learning-models-pretrained-by-self-supervised-learning-for-protein-localization)  
+   evidence：通过视觉基础模型和表征能力进行医学图像分割
+5. [A unified spatial transcriptome profiling of ten mouse organs](/20260411-20260420/biorxiv-10-64898-2026-04-08-715765-v1-a-unified-spatial-transcriptome-profiling-of-ten-mouse-organs)  
+   标签：评分：7.0/10、query:pathseg
+   evidence：具有匹配H&E染色图像和细胞标注的空间转录组数据集
+6. [A transcriptomics-native foundation model for universal cell representation and virtual cell synthesis](/20260411-20260420/biorxiv-10-64898-2026-04-12-718016-v1-a-transcriptomics-native-foundation-model-for-universal-cell-representation-and-virtual-cell-synthesis)  
    标签：评分：7.0/10、query:cellrep
-   evidence：在显微镜数据集上分析单细胞嵌入
-5. [Data Synthesis Improves 3D Myotube Instance Segmentation](/202604/19/2604.14720v1-data-synthesis-improves-3d-myotube-instance-segmentation)  
+   evidence：通用细胞表征的基础模型
+7. [Automated extraction of primary cilia-based biomarkers reveals ageing of cells.](/20260411-20260420/biorxiv-10-64898-2026-04-14-718373-v1-automated-extraction-of-primary-cilia-based-biomarkers-reveals-ageing-of-cells)  
    标签：评分：7.0/10、query:pathseg
-   evidence：显微镜下多核肌纤维的3D实例分割
-6. [Efficient Search of Implantable Adaptive Cells for Medical Image Segmentation](/202604/19/2604.14849v1-efficient-search-of-implantable-adaptive-cells-for-medical-image-segmentation)  
-   标签：评分：7.0/10、query:pathseg
-   evidence：为医学图像分割架构高效搜索自适应单元。
-7. [MApLe: Multi-instance Alignment of Diagnostic Reports and Large Medical Images](/202604/19/2604.13970v1-maple-multi-instance-alignment-of-diagnostic-reports-and-large-medical-images)  
-   标签：评分：6.5/10、query:cellrep
-   evidence：医学图像中病理发现的多实例视觉语言对齐
-8. [Delving Aleatoric Uncertainty in Medical Image Segmentation via Vision Foundation Models](/202604/19/2604.10963v1-delving-aleatoric-uncertainty-in-medical-image-segmentation-via-vision-foundation-models)  
+   evidence：基于深度学习的人类原代成纤维细胞核分割
+8. [Single-cell hit calling in high-content imaging screens with Buscar](/20260411-20260420/biorxiv-10-64898-2026-04-15-718737-v1-single-cell-hit-calling-in-high-content-imaging-screens-with-buscar)  
+   标签：评分：7.0/10、query:cellrep
+   evidence：基于单细胞图像的分析和形态特征量化
+9. [MedVeriSeg: Teaching MLLM-Based Medical Segmentation Models to Verify Query Validity Without Extra Training](/20260411-20260420/2604.10242v2-medveriseg-teaching-mllm-based-medical-segmentation-models-to-verify-query-validity-without-extra-training)  
    标签：评分：6.0/10、query:pathseg
-   evidence：使用视觉基础模型进行医学图像分割
-9. [MedP-CLIP: Medical CLIP with Region-Aware Prompt Integration](/202604/19/2604.11197v1-medp-clip-medical-clip-with-region-aware-prompt-integration)  
-   标签：评分：6.0/10、query:pathseg
-   evidence：用于细粒度理解的区域感知医学视觉语言模型
-10. [Seeing Through the Tool: A Controlled Benchmark for Occlusion Robustness in Foundation Segmentation Models](/202604/19/2604.11711v1-seeing-through-the-tool-a-controlled-benchmark-for-occlusion-robustness-in-foundation-segmentation-models)  
-   标签：评分：6.0/10、query:pathseg
-   evidence：对SAM系列模型在医学分割中的评估
-11. [A 3D SAM-Based Progressive Prompting Framework for Multi-Task Segmentation of Radiotherapy-induced Normal Tissue Injuries in Limited-Data Settings](/202604/19/2604.13367v1-a-3d-sam-based-progressive-prompting-framework-for-multi-task-segmentation-of-radiotherapy-induced-normal-tissue-injuries-in-limited-data-settings)  
-   标签：评分：6.0/10、query:pathseg
-   evidence：基于SAM的医学影像多任务分割
-12. [Co-distilled attention guided masked image modeling with noisy teacher for self-supervised learning on medical images](/202604/19/2604.14506v1-co-distilled-attention-guided-masked-image-modeling-with-noisy-teacher-for-self-supervised-learning-on-medical-images)  
+   evidence：基于多模态大模型的医学分割与查询验证
+10. [AC-MIL: Weakly Supervised Atrial LGE-MRI Quality Assessment via Adversarial Concept Disentanglement](/20260411-20260420/2604.10303v1-ac-mil-weakly-supervised-atrial-lge-mri-quality-assessment-via-adversarial-concept-disentanglement)  
    标签：评分：6.0/10、query:cellrep
-   evidence：使用Swin Transformer进行医学图像的自监督表征学习
+   evidence：用于医学影像自动化质量评估的多实例学习（MIL）
+11. [Parameter Efficient Fine-tuning for Domain-specific Gastrointestinal Disease Recognition](/20260411-20260420/2604.10451v1-parameter-efficient-fine-tuning-for-domain-specific-gastrointestinal-disease-recognition)  
+   标签：评分：6.0/10、query:cellrep
+   evidence：医学图像分析与胃肠道疾病识别
+12. [FGML-DG: Feynman-Inspired Cognitive Science Paradigm for Cross-Domain Medical Image Segmentation](/20260411-20260420/2604.10524v1-fgml-dg-feynman-inspired-cognitive-science-paradigm-for-cross-domain-medical-image-segmentation)  
+   标签：评分：6.0/10、query:pathseg
+   evidence：跨域医学图像分割框架
 
 
 <div class="dpr-home-promo-card">
