@@ -1,0 +1,671 @@
+Title: PR-MaGIC: Prompt Refinement Via Mask Decoder Gradient Flow For In-Context Segmentation
+
+URL Source: https://arxiv.org/pdf/2604.12113v1
+
+Published Time: Wed, 15 Apr 2026 00:34:19 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# PR-MaGIC: Prompt Refinement Via Mask Decoder Gradient Flow For In-Context Segmentation 
+
+Minjae Lee *, Sungwoo Hur *, Soojin Hwang, Won Hwa Kim Pohang University of Science and Technology, Pohang, South Korea 
+
+{lalswo010,hursungwoo,soojin0622,wonhwa}@postech.ac.kr 
+
+https://postech-minjaelee.github.io/PR-MaGIC/ 
+
+Abstract 
+
+Visual Foundation Models (VFMs) such as the Segment Any-thing Model (SAM) have significantly advanced broad use of image segmentation. However, SAM and its variants ne-cessitate substantial manual effort for prompt generation and additional training for specific applications. Recent approaches address these limitations by integrating SAM into in-context (one/few shot) segmentation, enabling auto-prompting through semantic alignment between query and support images. Despite these efforts, they still generate sub-optimal prompts that degrade segmentation quality due to visual inconsistencies between support and query images. To tackle this limitation, we introduce PR-MaGIC ( Prompt 
+
+Refinement via Ma sk Decoder Gradient Flow for In-Context Segmentation), a training-free test-time framework that re-fines prompts via gradient flow derived from SAM’s mask decoder. PR-MaGIC seamlessly integrates into in-context segmentation frameworks, being theoretically grounded yet practically stabilized through a simple top-1 selection strat-egy that ensures robust performance across samples. Exten-sive evaluations demonstrate that PR-MaGIC consistently improves segmentation quality across various benchmarks, effectively mitigating inadequate prompts without requiring additional training or architectural modifications. 
+
+1. Introduction 
+
+Large models have paved a new era of foundation models, e.g., Large Language Models (LLMs) [ 2 , 27 , 29 ], demon-strating exceptional versatility and generality across vari-ous tasks. In computer vision, Visual Foundation Models (VFMs) are transforming tasks such as image classification [ 7, 26 ], object detection [ 3, 15 ], and segmentation [ 6, 23 ]by leveraging large-scale data and advanced architectures. Specifically in segmentation, the Segment Anything Model (SAM) [ 11 ] addresses the challenges of segmenting objects with diverse appearance by taking prompts such as points, bounding boxes, and coarse masks. 
+
+> *Equal contribution.
+
+Figure 1. Illustration of PR-MaGIC. PR-MaGIC iteratively re-fines prompts for segmentation by updating the embedding vector distribution ρt with mask decoder gradient flow. This process min-imizes the KL divergence between ρt and the target embedding vector distribution μ from the ground truth mask. At each iteration 
+
+t, given an initial set of prompts and their corresponding segmenta-tion masks, the embedding vector zt is updated along the gradient flow derived from the mask decoder, which in turn updates ρt.
+
+While SAM is highly versatile, it often produces im-precise boundaries and small holes under complex condi-tions, as it was trained for general object segmentation at relatively low resolution. Initial efforts fine-tuned SAM to improve segmentation precision across various scenarios [ 4, 10 , 28 ]. However, these methods still substantially de-pend on additional parameters, extra curated data, and man-ual effort to obtain suitable prompts. Recent works integrate VFMs into one/few-shot (in-context) segmentation to enable auto-prompting via support–query semantic alignment. Per-SAM [ 32 ] uses a single support image with a rough mask to build similarity-based prompts, and PerSAM-F [32] further fine-tunes SAM to linearly combine hierarchical masks to 1      
+
+> arXiv:2604.12113v1 [cs.CV] 13 Apr 2026 (a) Support Image (b) PerSAM-F (c) Matcher (d) PR-MaGIC (e) Ground Truth
+> Figure 2. Example of prompts (green dots) and segmentation results (red masks). (a) Support Image (elephant), (b) and (c) Misaligned prompts and segmentation results from PerSAM-F and Matcher, (d) Result from Matcher refined by PR-MaGIC, (e) Ground Truth.
+
+reduce ambiguity. Matcher [ 14 ] assembles existing VFMs with sophisticated prompt sampling to solve one/few-shot segmentation without extra training. Although the methods mentioned above have been successful, variations in appearance (e.g., color, view-point, and shape) between query and support images of-ten lead to misleading similarity maps. This causes auto-prompting segmentation frameworks (e.g., PerSAM-F [ 32 ]and Matcher [ 14 ]) to generate inadequate prompts, e.g., false-positive, semantically ambiguous, or semantically insuffi-cient prompts, that confuse the SAM’s decoder in capturing the target object, thereby compromising the quality of the segmentation mask. This challenge motivates us to explore a refinement strat-egy that updates the initial suboptimal prompts produced by existing auto-prompting segmentation frameworks using mask decoder gradient flow. Such an approach leverages the rich information embedded in the decoder, which has been jointly trained with the encoder during SAM’s large-scale pretraining. In this regime, we propose Prompt Refinement via Ma sk Decoder Gradient Flow for In-Context Segmenta-tion (PR-MaGIC). PR-MaGIC is a training-free , inference-time framework that updates the query embedding via a mask–decoder–driven gradient flow, resamples prompts, and thereby improves the segmentation quality. The update is motivated by finding the distribution that yields the highest mask quality under the VFM’s mask decoder, which aligns the query embedding with the target object’s semantics dur-ing inference. Fig. 1 overviews the gradient flow, where the query embedding distribution is progressively refined. Our theoretical analysis shows exponential convergence of the gradient flow under a proximity assumption : the initial embedding distribution lies near a decoder-optimal neighbor-hood. For the initial auto-prompts that do not comply with the assumption, we explore multiple refinement steps and adaptively select the most reliable mask to achieve stable performance across samples. The key contributions of this work are as follows: • Training-free test-time refinement via gradient flow. 
+
+We introduce a novel, training-free refinement method that updates the query embedding with a mask–decoder–driven gradient flow and resamples prompts, improving segmen-tation quality without learnable parameters, architectural changes, or extra data. • Segmentation mask selection for robustness. We gen-erate candidate masks across T iterations and propose a simple top-1 support–query similarity selection to choose the final mask, which safeguards against step-size sensitiv-ity and sample-dependent instability. • Convergence analysis under a proximity assumption. 
+
+We provide a theoretical analysis showing that, when the initial embedding distribution is near a decoder-optimal neighborhood , the entropy-regularized KL gradient flow drives exponential convergence of the query embeddings. We further complement this with a sensitivity study in-dicating that the assumption can be fragile in practice, motivating our segmentation mask selection step. We validate PR-MaGIC on six datasets and two tasks (semantic and part segmentation), demonstrating consistent gains as a plug-and-play module, particularly when the se-mantic gap between support and query is not excessive. A comparative exemplar result is given in Fig. 2, which illus-trates that PR-MaGIC produces better prompts and more precise masks successfully capturing the complete target objects, unlike PerSAM-F and Matcher which tend to yield less effective prompts. 
+
+2. Related Works 
+
+2.1. One/Few-shot segmentation 
+
+Few-shot segmentation aims to develop models capable of segmenting new classes using only a few annotated samples [22 ], making it particularly useful in scenarios where acquir-ing large annotated data is difficult. Typically, these models use a pre-trained feature extractor to process both support and query images, combining information from support im-ages to perform segmentation [9, 31]. Recently, several approaches leveraging SAM as a pre-trained model have been proposed. PerSAM relies solely on one-shot data, comprising a support image and a rough mask of the target object. It utilizes a similarity map be-tween a query and target object embeddings to locate the target object precisely, facilitating prompt generation. How-2ever, PerSAM faces challenges when there is large visual ambiguity, such as objects with visually distinct subparts or hierarchical structures [ 32 ]. PerSAM-F, fine-tuning variant of PerSAM, addresses this problem by introducing learnable parameters to fine-tune SAM, producing a linear combina-tion of potential segmentation masks of different hierarchical levels to resolve ambiguity [ 32 ]. This approach improves segmentation accuracy and prevents overfitting on one-shot data, demonstrating enhanced performance in challenging scenarios. Similarly, Matcher [ 14 ], effectively combines pre-existing VFMs to tackle one/few-shot segmentation tasks without additional training. Matcher utilizes DINOv2 [ 17 ]as an encoder to compute a similarity map with semantic understanding to accurately identify the location of a target object in the query image. It then employs SAM as a seg-menter to obtain segmentation masks, benefiting from the zero-shot segmentation performance of the SAM. 
+
+2.2. Fine-tuning variants of SAM 
+
+For efficient adaptation of SAM to various downstream tasks, a range of fine-tuning variants has emerged. HQ-SAM [ 10 ], for instance, adds a high-quality output token and trains on the HQSeg-44K dataset to improve mask preci-sion. VRP-SAM [ 25 ] implements a visual reference prompt encoder, requiring specific reference images and detailed training. SAM-Adapter [ 4 ] modifies the architecture by adding lightweight adapter layers while keeping most of SAM’s original parameters frozen, reducing training effort. MobileSAM [ 30 ] replaces the heavy ViT-H encoder with Tiny-ViT, reducing the model size and complexity while still requiring adaptation. All of these methods, however, necessitate additional training data and structural changes to the model architecture. These fine-tuning strategies still heavily depend on manual prompts, with training datasets requiring carefully crafted prompt annotations alongside segmentation data. This re-liance on curated prompts limits their applicability in real-world settings, where obtaining accurate prompts and con-sistent user interaction may be challenging. 
+
+3. Method 
+
+This section presents PR-MaGIC, a training-free, test-time refinement framework for promptable segmentation. Start-ing from support and query embeddings, we run a mask-decoder–driven gradient flow that iteratively updates the query embedding and resamples prompts to produce a set of candidate masks; we then apply Segmentation Mask Selec-tion via Top-1 support–query similarity to choose the final mask (Fig. 3). Below, we introduce the entropy-regularized KL gradi-ent flow, detail the refinement with the segmentation mask decoder and the segmentation mask selection, and conclude with the motivation grounded in a convergence analysis. 
+
+3.1. Gradient flow of entropy-regularized KL-divergences 
+
+This subsection briefly describes the construction of the gra-dient flow of entropy-regularized KL-divergences for mask decoder-driven gradient flow. More details can be found in the overview in [ 21 ] and discriminator gradient flow [ 1 ] that forms the basis of our research. Let v be a vector of interest (e.g., a latent vector of a query image), and let ρ(v) and μ(v) be the candidate and target (ideal) probability density functions (pdf) over v, re-spectively, assuming that the optimal segmentation mask is distributed over μ in the latent space. For simplicity, we restrict our discussion to pdfs defined on v that belongs to the 2-Wasserstein space W2.We now employ the gradient flow to update v in order to make the candidate distribution ρ approximate the target distribution μ. Specifically, our focus lies in minimizing the entropy-regularized KL-divergence Fμ(ρ) between the target distribution μ and its candidate distribution ρ as: 
+
+min  
+
+> ρ
+
+Fμ(ρ) = min 
+
+> ρ
+
+n
+
+KL( μ∥ρ) − γ H( ρ)
+
+o
+
+= min 
+
+> v
+
+Z
+
+log 
+
+ μ(v)
+
+ρ(v)
+
+
+
+μ(v) dv
+
++ γ
+
+Z
+
+ρ(v) log  ρ(v) dv
+
+
+
+,
+
+(1) where KL( μ∥ρ) represents the KL-divergence between two distributions μ and ρ, H( ·) denotes the entropy function, and γ > 0 is a hyperparmeter that controls the strength of the entropy regularization. Then, the gradient flow of the functional Fμ(ρ) is given by: 
+
+∂ρ ∂t = −∇ Fμ(ρt), (2) where the subscript t refers to the time (iteration) index throughout this work. Equivalently, Eq. (1) follows a partial differential equation as: 
+
+∂tρt(v) − ∇ v · (ρt(v)∇v log( ρt(v)/μ (v))) 
+
+− γ∆vv ρt(v) = 0 , (3) where ∇v and ∆vv denote the divergence and the Laplace operators, respectively [ 1 ]. The Eq. (3), which is a type of Fokker-Plank equation [ 20 ], can be rewritten as an equivalent stochastic differential equation (SDE) defined as: 
+
+dvt = −∇ v log( ρt(v)/μ (v)) dt + p2γd wt, (4) where wt follows a standard Wiener process [20]. We can simulate a sample v0 ∼ ρ0 = ρ using Eq. (4) to obtain a sample close to μ. In practice, this simulation is approximated using the Euler-Maruyama method [12]: 
+
+vt+1 = vt − η∇v log( ρt(v)/μ (v)) + p2γηξ t, (5) 3Figure 3. Overview of PR-MaGIC . Encoder box denotes image encoder ( Eθ ), sim box denotes similarity computing module, and Mask Decoder box denotes SAM’s mask decoder. SAM’s prompt encoder is omitted here to show the clear flow of our method, and green boxes denote our core method. 1) Image Embedding : Encoder maps the support and query images to embeddings zs 
+
+> 0
+
+and zq
+
+> 0
+
+, with zs
+
+> 0
+
+selected using the given support mask. 2) Prompt Refinement via Gradient Flow : Using Mask Decoder ’s logit dϕ, we update the query embeddings by the mask decoder driven gradient flow, resample prompts Pt+1 from St+1 , and iterate for t=0 . . .T −1 to form a candidate set of masks { ˆmt}Tt=1 . 3) Segmentation Mask Selection (Top-1 similarity selection) : Among the generated masks, we select the one whose mask-aware query embedding z′qt exhibits the highest similarity to the support embedding z′s.
+
+where η > 0 is the step size, ξt ∼ N (0, I), and t ∈ [0 , T ] for the predefined number of iterations T . Furthermore, we can address intractability of μ(v) in Eq. (5) by approximating the density ratio ρt(v) 
+
+> μ(v)
+
+as ρ0v) 
+
+> μ(v)
+
+, as ρt(v) 
+
+> μ(v)
+
+≈ ρ0(v) 
+
+> μ(v)
+
+for small t and 
+
+η → 0. Given a prediction head Dϕ(v) (e.g., mask decoder parameterized by ϕ) that represents the conditional proba-bility of v being a sample from μ, the following expression provides an approximation for the density ratio [24]: 
+
+ρ0(v)
+
+μ(v) = 1 − Dϕ(v)
+
+Dϕ(v) = exp ( −dϕ(v)) . (6) Substituting Eq. (6) into Eq. (5) yields the following results: 
+
+vt+1 = vt − η∇v log 
+
+ 1 − Dϕ(v)
+
+Dϕ(v)
+
+
+
++ p2γηξ t
+
+= vt + η∇vdϕ(v) + p2γηξ t,
+
+(7) where dϕ(v) = − log((1 − Dϕ)/D ϕ) is the logit output of the predictor Dϕ1.In this work, ρ and μ denote the distributions of query em-beddings from the VFM encoder and optimal embeddings for the mask decoder, respectively, with Dϕ representing SAM’s mask decoder (a pixel-wise classifier). While a dedicated discriminator would be more principled for Dϕ, we employ this lightweight proxy to enable a training-free framework. 
+
+3.2. Prompt refinement via gradient flow 
+
+In this section, we elaborate how gradient flow can be adopted for refining predicted masks. We describe the gen-eral framework of few-shot segmentation using promptable    
+
+> 1Although the Dϕtakes prompts such as bounding boxes and prompt points as inputs in addition to v, we omitted them in Eq. (6) and Eq. (7) for clarity.
+
+segmentation models, and then discuss our method for im-proving mask quality using mask decoder gradient flow. As illustrated in Fig. 3, the first step is to extract image em-beddings of a support image Is and a query image Iq by an image encoder Eθ as 
+
+zs 
+
+> 0
+
+= Eθ (Is) , zq 
+
+> 0
+
+= Eθ (Iq ), (8) where zs 
+
+> 0
+
+and zq 
+
+> 0
+
+are initial image embeddings of Is and Iq ,respectively. Across the two images, Eq. (8) yields two embedding sets, {zs
+
+> 0,i
+
+}Ns 
+
+> i=1
+
+and {zq 
+
+> 0,j
+
+}Nj=1 , where Ns is the number of pixels within the support mask and N is the total number of pixels in the embedding space. Then, we compute the initial similarity matrix S0 between the query embeddings and the support embeddings. The i-th row and j-th column of the S0 is computed as: 
+
+S0[i, j ] = sim (zs
+
+> 0,i
+
+, zq 
+
+> 0,j
+
+), (9) where sim (·, ·) denotes a similarity function between the two vectors, representing the similarity computation module of the few-shot segmentation model. Finally, we sample prompts P0 representing the position of the target object, and obtain an initially predicted mask ˆm0 using a mask decoder Dbin ϕ :
+
+P0 = prompt_sampler (S0), (10) 
+
+ˆm0 = Dbin ϕ (zq
+
+> 0
+
+; P0), (11) where P0 is a set of prompts obtained from the similarity map S0, and examples of prompt_sampler include top-k
+
+sampling [ 32 ] and robust sampler [ 14 ]. During this pro-cess, some prompts in the set P0 may be false positives or semantically confusing, and several methods have been pro-posed to address this issue, such as cascaded refinement, 4(a) Source (b) Baseline (c) t = 1 (d) t = 5 (e) GT   
+
+> Figure 4. Refinement process of PR-MaGIC. Curated illustra-tions of refinement process with PerSAM-F as the baseline. a) Target objects in the support images with blue masks (bear (top) and airplane (bottom)), b) Segmentation results from PerSAM-F with point prompts in green dots. c), d) Refined prompt and segmentation after one and five iterations, e) Ground truth (G.T.).
+
+mask filtering, and robust sampling [ 14 , 32 ]. While these approaches yield reasonably refined masks, the results still remain suboptimal (see Fig. 2). Thus, we propose our process for aligning prompts Pt
+
+with the query image semantics zqt using the gradient flow derived from the mask decoder using Eq. (7). In particular, we seek to enhance mask quality by iteratively updating the query embeddings, encouraging that predicted masks are more closely aligned with samples from the true mask distribution. Formally, we have the following process in the embedding space: 
+
+zqt+1 = zqt + η∇zqt dϕ(zqt , P t) + p2γηξ t, (12) 
+
+St+1 [i, j ] = sim (zs
+
+> 0,i
+
+, zqt+1 ,j ), (13) 
+
+Pt+1 = prompt_sampler (St+1 ), (14) 
+
+ˆmt+1 = Dbin ϕ (zq
+
+> 0
+
+; Pt+1 ). (15) At the t-th iteration, we refine the query embedding zqt
+
+via the mask-decoder driven gradient flow in Eq. (12), up-date the similarity St+1 as in Eq. (13), and resample prompts 
+
+Pt+1 from St+1 per Eq. (14). We then decode a candidate segmentation mask ˆmt+1 using Dbin ϕ as in Eq. (15). Re-peating this procedure for t = 0 , . . . , T −1 yields a set of candidates M = { ˆmt}Tt=0 .Restricting the refinement to the prompt space preserves the generality of our method across different visual-prompt frameworks, where feature-level updates could easily depend on architecture-specific representations. Furthermore, the near-optimal assumption of the embedding space does not necessarily hold in practice, and direct modifications of the embedding may introduce instability. To achieve a balanced trade-off between robustness and adaptability, we use the refined embedding zqt only for prompt resampling, while decoding is performed with the stable representation zq 
+
+> 0
+
+.
+
+3.3. Segmentation mask selection 
+
+For selecting the best segmentation mask, we compute a similarity score st between the support embedding and the 
+
+Algorithm 1 PR-MaGIC: Gradient-Flow Prompt Refinement with Top-1 Similarity Selection 
+
+Require: image encoder Eθ , mask decoder Dϕ, similarity 
+
+sim , prompt sampler, iterations T
+
+Init: Encode support/query → (zs
+
+> 0
+
+, zq
+
+> 0
+
+); compute S0; sam-ple P0.Initialize candidate masks M ← ∅ , scores S ← ∅ .
+
+for t = 0 to T − 1 do Gradient Flow: update query embedding (Eq. (12)). Recompute similarity St+1 ; resample prompts Pt+1 .Decode mask ˆmt+1 ← Dbin ϕ (zq
+
+> 0
+
+; Pt+1 ).Append ˆmt+1 to M.Score st+1 ← sim (support , query masked by ˆmt+1 ).Append st+1 to S.
+
+end for Best Mask Selection: t⋆ ← arg max st;
+
+return ˆm⋆ ← ˆmt⋆
+
+query embedding aggregated inside ˆmt (e.g., masked aver-age pooling), and choose the final mask by top-1 similarity. Let ms ∈ { 0, 1}N be the given support mask and ˆmt ∈{0, 1}N be the candidate mask at iteration t. We obtain embeddings inside a mask, z′s and z′q , using 
+
+z′s = Eθ (Is ⊙ ms), z′qt = Eθ (Iq ⊙ ˆmt). (16) We then form the support and query representatives 
+
+¯z′s = 1
+
+|N |
+
+> N
+
+X
+
+> i=1
+
+z′s, ¯z′qt = 1
+
+|N |
+
+> N
+
+X
+
+> i=1
+
+z′qt . (17) Given a similarity function sim (·, ·), e.g., cosine similarity, we score each candidate by 
+
+st = sim  ¯z′s, ¯z′qt
+
+ , t = 0 , . . . , T. (18) Finally, we select the best iteration t∗ via top-1 similarity: 
+
+t⋆ = arg max t∈{ 0,...,T }st. (19) Accordingly, the final mask ˆm⋆ is obtained as ˆm⋆ = ˆ mt⋆ .Our overall algorithm is summarized in Alg. 1, and Fig. 4 il-lustrates the progressive refinement process where the points located at the same position are pruned. 
+
+3.4. Motivation for the gradient flow and top-1 sim-ilarity selection 
+
+Our goal is to refine prompts by updating the query em-bedding via a gradient flow, and then to select a reliable mask among the candidates generated across iterations. The design is motivated by a convergence perspective. 
+
+Motivation for gradient-flow updates. First of all, we demonstrate theoretical convergence of PR-MaGIC in the following proposition, whose proof is given in Appendix A. 5Proposition 1. Let ρt be a candidate pdf in 2-Wasserstein space W2 being updated according to the gradient flow of the entropy-regularized KL-divergence Fμ(ρ) with local minimum μ∗. If the initial pdf ρ0 lies in a neighborhood of 
+
+μ∗, then ρt converges to μ∗ exponentially as t → ∞ .
+
+Now let ρt denote the distribution of query embeddings at iteration t and let μ⋆ be a (local) optimum that is most consistent with the mask decoder. Under the proximity as-sumption that the initial embedding distribution ρ0 lies in a neighborhood of μ⋆ (which is a plausible scenario for a pre-trained VFM), the entropy-regularized KL gradient flow drives ρt toward μ⋆ at an exponential rate (Proposition 2). Hence, even a small number of iterations improves the mask quality, which justifies our use of gradient flow refinement. 
+
+Motivation for top-1 similarity selection. The proximity assumption does not always hold in practice (Sec. 4.4). We empirically observe cases where ρ0 is not sufficiently close to 
+
+μ⋆, leading to suboptimal or unstable refinements. To cope with such violations, we record a set of candidate masks over T iterations and introduce a simple yet effective top-1 similarity selection: among the candidates, we choose the mask whose corresponding query embedding is most similar to the support embedding. This selection step acts as a practical safeguard, retaining gains when the assumption holds while improving robustness when it does not (see sensitivity analysis and convergence failure cases in Sec. 4.3 and Sec. 4.4, respectively). 
+
+4. Experiments 
+
+We evaluate PR-MaGIC across six benchmark datasets for two separate segmentation tasks. All experiments are con-ducted under identical protocols to assess segmentation qual-ity and generalization. 
+
+4.1. Experiment setup 
+
+Datasets. We evaluated PR-MaGIC through two tasks: 1) semantic segmentation to assess overall object understand-ing, and 2) part segmentation to evaluate detailed context understanding. Semantic segmentation performance was assessed on three datasets: FSS-1000 [13 ], LVIS-92 i [14 ]and COCO-20 i [ 16 ]. For part segmentation, we used an-other three datasets: PASCAL-Part [5, 8 , 13 ], PACO-Part 
+
+[ 14 , 19 ], and DIS5K [ 18 ]. We strictly followed the data preprocessing and evaluation protocols outlined in [14]. 
+
+Baselines. We utilize PerSAM-F and Matcher as our base-line methods and demonstrate that PR-MaGIC enhances the segmentation mask quality for both methods. PerSAM-F uses SAM as its backbone model, fully leveraging it to cap-ture visual clues of target objects in the support images. In contrast, Matcher employs DINOv2 [17] with the ViT-L/14 architecture [ 7] as an image encoder to extract embeddings from both query and support images, and uses SAM’s de-coder as the segmenter. 
+
+Evaluation. To assess the refinement procedure, we report both top-1 selection and oracle mean Intersection over Union (mIoU) gain of PR-MaGIC over baselines. Oracle results are achieved by selecting the most accurate segmentation mask among T =5 refinement steps. The oracle selection is structurally similar to test-time refinement, providing a meaningful upper bound that highlights the capacity of PR-MaGIC. We provide one-shot segmentation performance and additionally provide few-shot (5-shot) results. To fur-ther justify our result, we conducted sensitivity analysis on hyperparameters η and T in Sec. 4.3. 
+
+Setup of PR-MaGIC. Across all the datasets, we set the number of iterations T = 5 . The γ for entropy regularization was set as 0.1 without any tuning, and the η for semantic segmentation was 0.001, and that of part segmentation was 0.0001. These η were determined from 10 randomly sam-pled images from left-aside validation sets of COCO-20 i and PACO-part. The number of points for each method was em-pirically chosen: For semantic segmentation, Matcher used 8 points and PerSAM-F extracted 5 points as prompts. For part segmentation, the number of points was set to 5 for the Matcher and to 3 for the PerSAM-F, so that they better local-ize smaller objects. The similarity function sim () for Eq. (14) was adopted according to individual baselines [ 14 , 32 ]. Fi-nally, the gradients from PR-MaGIC were clipped to ensure stability throughout the overall process. All experiments were conducted with an NVIDIA RTX 6000 ada generation. 
+
+4.2. Experiment results 
+
+We present experiments on semantic and part segmentation, sensitivity analysis with respect to step size and iteration count, and a sample-wise analysis of optimal step variabil-ity. To evaluate the effectiveness of our iterative refinement process, we report three types of results: the baseline (B) ,PR-MaGIC with Top-1 similarity selection (T) , and PR-MaGIC with Oracle selection (O) . The oracle provides the best achievable mIoU across all iterations of PR-MaGIC, serving as an empirical upper bound of our model. Due to space limitations, the average mIoU progression with a fixed number of iterations is shown in Appendix B and 1-shot segmentation results across random seeds are provided in Appendix C. Furthermore, qualitative results are provided in Appendix D and E. 
+
+4.2.1. Semantic segmentation 
+
+The semantic segmentation results evaluate how effectively our refinement process enhances object-level segmentation quality across different datasets. As summarized in Tab. 1, our method consistently improves mIoU on COCO-20 i, FSS-1000, and LVIS-92 i. The PR-MaGIC improves the baseline by +8.8%p on FSS, +2.2%p on COCO, and +2.1%p on LVIS for PerSAM-F, confirming that the refinement process effectively boosts segmentation accuracy at the object level. A small gain observed on FSS-1000 for Matcher(1-shot) is 6(a) Semantic Segmentation       
+
+> Support Image Baseline Refined (Ours) Ground Truth (b) Part Segmentation
+> Support Image Baseline Refined (Ours) Ground Truth
+
+Figure 5. Qualitative results for semantic and part segmentation. Baselines from top to bottom: PerSAM-F, Matcher. a) : Semantic segmentation. Target objects in support images are highlighted with blue masks, and point prompts are denoted by green dots. b) : Part segmentation. Here, target objects are highlighted with blue masks in green boxes, and point prompts are similarly marked and emphasized. Refinement with PR-MaGIC (3 rd columns) improves the segmentation over the baselines (2 nd columns). Table 1. mIoU (%) on six datasets. B = baseline, O = PR-MaGIC with Oracle selection ( ∗), T = PR-MaGIC with Top-1 selection. Bold indicates T values that improve over baseline.                                                                               
+
+> (a) Semantic (b) Part / Fine-grained FSS COCO LVIS PACO Pascal DIS Method BTO∗BTO∗BTO∗BTO∗BTO∗BTO∗
+> PerSAM-F 58.41 67.19 72.45 44.64 46.83 51.74 42.37 44.48 47.29 39.60 40.72 43.39 42.72 43.87 46.43 46.82 49.99 53.46 Matcher(1-shot) 92.08 92.06 93.55 69.53 71.23 76.14 59.39 61.52 64.75 50.27 54.08 56.71 54.76 58.28 61.13 46.65 55.08 58.10 Matcher(5-shot) 93.26 93.41 94.32 67.69 70.74 74.88 57.14 60.79 63.88 48.66 53.15 55.30 54.54 59.27 61.55 –––
+
+mainly due to its already saturated baseline performance. In contrast, the refinement yields a pronounced gain for PerSAM-F, showing that our method provides substantial benefits when the initial prediction is less optimal. Qualitative results in Fig. 5(a) show that baseline predic-tions often miss object regions or include background noise (e.g., the fire hydrant ( 1st row) or cupcakes ( 2nd row)). After refinement, our method captures more precise boundaries and complete object shapes, demonstrating that the proposed refinement process provides consistent improvements with-out additional training or supervision. 
+
+4.2.2. Part segmentation 
+
+Part segmentation focuses on assessing whether the refine-ment process can capture fine-grained object structures and precisely delineate relatively small but semantic parts of objects. Unlike semantic segmentation, which evaluates holistic object understanding, this task emphasizes local boundaries and subtle structural variations within a single object, which is a more sensitive measure of effectiveness of refinement process with PR-MaGIC. As shown in the right columns of Tab. 1, our method produces consistent and often larger improvements com-pared to the baseline results. The PR-MaGIC improves the baseline by +3.8%p on PACO and +8.4%p on DIS for Matcher(1-shot), and by +1.1%p, +1.2%p, and +3.2%p on PACO, Pascal, and DIS for PerSAM-F, respectively. These gains indicate improved recovery of fine, part-level regions by our refinement method, especially when baseline predic-tions lack fine structure or show local fragmentation. Qualitative results in Fig. 5(b) support these observations. When baseline outputs are misaligned or partially miss ob-ject parts (e.g., the wheels or handles of a bicycle ( 1st row) and the tail of a poodle ( 2nd row)), the refined predictions yield accurate and continuous part boundaries. Overall, the stronger relative improvement in part and semantic segmen-tation suggests that the proposed iterative updates preserve local spatial precision while maintaining global consistency. 
+
+4.3. Sensitivity analysis 
+
+We randomly sampled 100 examples from the set-aside dataset (COCO-20 i training dataset) to conduct the sensitiv-ity analysis on the step size ( η) and the number of iterations (T ). For the analysis, we evaluated the mIoU over iterations, testing up to 30 iterations with step sizes of 10 −2, 10 −3,
+
+10 −4, and 10 −5. Fig. 6 shows a moving average with a window size of 2 to better identify overall trends. 
+
+Findings. The result demonstrates that the proximity as-sumption ρ0 ≈ μ⋆ is not reliably met in realistic conditions. If the initial embedding distribution ρ0 were consistently close to the decoder-optimal μ⋆, performance should im-prove monotonically with small T (Proposition 2). However, our sensitivity results reveal frequent dependency on η and 
+
+T , and non-monotonic mIoU trajectories. For instance, • η = 10 −2 yields rapid early gains but degrades with more iterations (instability), 7Table 2. Mean ± std of the optimal iterations in PR-MaGIC under Oracle and Top-1 selection across various datasets and baselines.                                                                                                                          
+
+> Model FSS COCO LVIS PACO-Part Pascal-Part DIS
+> Oracle Top-1 Oracle Top-1 Oracle Top-1 Oracle Top-1 Oracle Top-1 Oracle Top-1 PerSAM 2.49 ±1.74 2.49 ±1.78 2.42 ±1.76 2.45 ±1.76 2.42 ±1.76 2.44 ±1.77 2.44 ±1.78 2.47 ±1.76 2.36 ±1.79 2.48 ±1.76 2.45 ±1.76 2.51 ±1.80 Matcher (1shot) 2.45 ±1.72 2.55 ±1.71 2.47 ±1.74 2.47 ±1.72 2.05 ±1.80 2.05 ±1.81 2.44 ±1.73 2.46 ±1.73 2.44 ±1.73 2.42 ±1.72 2.51 ±1.73 2.52 ±1.70 Matcher (5shot) 2.50 ±1.72 2.50 ±1.73 2.41 ±1.71 2.45 ±1.74 2.29 ±1.77 2.29 ±1.77 2.49 ±1.71 2.48 ±1.71 2.48 ±1.72 2.47 ±1.72 ––
+
+Figure 6. Sensitivity analysis on the step size η and iterations T
+
+shows that the gradient flow can substantially improve segmentation performance but may exhibit instability under certain conditions, which motivates top-1 mask selection. 
+
+• η ∈ { 10 −4, 10 −5} converges slowly and often saturates below the best achievable mIoU (under-refinement). 
+
+Implication and design choice. Given this practical diffi-culty in convergence, mask selection was introduced as in Sec. 3.3. We run the flow for T iterations, collect the mask from each step as a candidate, and apply top-1 support–query similarity to choose the final output. This selection preserves improvements when refinement helps and mitigates degrada-tion when the flow drifts (see Sec. 4.4). 
+
+4.4. Sample-wise optimal step variability and con-vergence challenges 
+
+We analyze the refinement process by measuring the average iteration (with corresponding standard deviation) at which the optimal performance was achieved (Tab. 2) for both the oracle and top-1 results. The optimal iteration typically occurred around the third refinement step, suggesting that 5 iterations were sufficient to obtain refined outputs. However, as shown by the relatively large standard deviations, the optimal iteration varied considerably across samples. This variability highlights the necessity of the top-1 selection step, which plays a crucial role in stabilizing and enhancing the overall refinement process. 
+
+Limitation. We also highlight challenging scenarios in which PR-MaGIC struggles to converge. When the visual semantics of the support and query images differ substan-tially (e.g., the 1st and 4th rows of Fig. 7), prompt refinement becomes particularly difficult and often leads to performance degradation. Convergence is also fragile when the visual clues in the support image are ambiguous. As illustrated in Fig. 7, PR-MaGIC fails to localize fine-grained parts of a bi-cycle ( 2nd row) and underperforms when the support shows a generic tray while the query target is a specific boundary region ( 3rd row). These observations collectively emphasize         
+
+> (a) Support (b) Baseline (c) t= 1 (d) t= 5 (e) GT
+
+Figure 7. Convergence failure cases of PR-MaGIC. Each column represents: (a) Support Image, (b) Baseline output, (c) PR-MaGIC (t = 1 ), (d) PR-MaGIC ( t = 5 ), and (e) Ground Truth. The top two rows compare PR-MaGIC with PerSAM-F as the baseline, while the bottom two rows compare PR-MaGIC with Matcher. In this case, PR-MaGIC selects the top-1 mask from the iterations. 
+
+that the top-1 selection serves as a practical safeguard against such convergence failures—preserving the fully automatic advantage of PerSAM and Matcher while enhancing robust-ness and bridging the gap between theoretical convergence and real-world applicability. 
+
+5. Conclusion 
+
+We present a training-free refinement method that im-proves segmentation quality using a promptable segmen-tation model, broadly applicable to auto-prompting frame-works and validated by extensive quantitative and qualita-tive studies. PR-MaGIC refines the visual clues for SAM’s mask decoder via a gradient-flow update in the query embed-ding space, enabling better alignment with target semantics. Our analysis shows that, under a proximity assumption, the entropy-regularized KL gradient flow yields rapid improve-ments with few iterations. While sensitivity analyses suggest that our underlying assumption may be fragile in certain cases, the proposed top-1 support–query similarity–based mask selection effectively mitigates this limitation. Impor-tantly, PR-MaGIC remains fully training-free, introducing no learnable parameters, architectural changes, or additional data requirements, yet it achieves consistent improvements in segmentation quality with minimal computational overhead. 8Acknowledgment. This research was supported by RS-2025-02216257 (70%), RS-2022-II220290 (20%), and RS-2019-II191906 (AI Graduate Program at POSTECH, 10%). 
+
+References 
+
+[1] Abdul Fatir Ansari, Ming Liang Ang, and Harold Soh. Refin-ing deep generative models via discriminator gradient flow. In 
+
+International Conference on Learning Representations , 2021. 3[2] Tom Brown, Benjamin Mann, Nick Ryder, Melanie Sub-biah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Lan-guage models are few-shot learners. Advances in Neural Information Processing Systems , 33:1877–1901, 2020. 1 [3] Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In European con-ference on computer vision , pages 213–229. Springer, 2020. 1[4] Tianrun Chen, Lanyun Zhu, Chaotao Deng, Runlong Cao, Yan Wang, Shangzhan Zhang, Zejian Li, Lingyun Sun, Ying Zang, and Papa Mao. Sam-adapter: Adapting segment any-thing in underperformed scenes. In IEEE/CVF International Conference on Computer Vision , pages 3367–3375, 2023. 1, 3[5] Xianjie Chen, Roozbeh Mottaghi, Xiaobai Liu, Sanja Fidler, Raquel Urtasun, and Alan Yuille. Detect what you can: De-tecting and representing objects using holistic models and body parts. In IEEE conference on computer vision and pattern recognition , pages 1971–1978, 2014. 6 [6] Bowen Cheng, Alex Schwing, and Alexander Kirillov. Per-pixel classification is not all you need for semantic segmen-tation. Advances in Neural Information Processing Systems ,34:17864–17875, 2021. 1 [7] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale, 2021. 1, 6 [8] Mark Everingham, Luc Van Gool, Christopher KI Williams, John Winn, and Andrew Zisserman. The pascal visual object classes (voc) challenge. International journal of computer vision , 88:303–338, 2010. 6 [9] Sunghwan Hong, Seokju Cho, Jisu Nam, Stephen Lin, and Seungryong Kim. Cost aggregation with 4d convolutional swin transformer for few-shot segmentation. In European Conference on Computer Vision , pages 108–126. Springer, 2022. 2 [10] Lei Ke, Mingqiao Ye, Martin Danelljan, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu, et al. Segment anything in high quality. Advances in Neural Information Processing Systems ,36, 2024. 1, 3 [11] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-thing. In IEEE/CVF International Conference on Computer Vision , pages 4015–4026, 2023. 1 [12] Peter E Kloeden, Eckhard Platen, Peter E Kloeden, and Eck-hard Platen. Stochastic differential equations . Springer, 1992. 3[13] Xiang Li, Tianhan Wei, Yau Pun Chen, Yu-Wing Tai, and Chi-Keung Tang. Fss-1000: A 1000-class dataset for few-shot segmentation. In IEEE/CVF conference on computer vision and pattern recognition , pages 2869–2878, 2020. 6 [14] Yang Liu, Muzhi Zhu, Hengtao Li, Hao Chen, Xinlong Wang, and Chunhua Shen. Matcher: Segment anything with one shot using all-purpose feature matching. In International Conference on Learning Representations , 2024. 2, 3, 4, 5, 6 [15] Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo. Swin transformer: Hierarchical vision transformer using shifted windows. In 
+
+IEEE/CVF international conference on computer vision ,pages 10012–10022, 2021. 1 [16] Khoi Nguyen and Sinisa Todorovic. Feature weighting and boosting for few-shot segmentation. In IEEE/CVF Interna-tional Conference on Computer Vision , pages 622–631, 2019. 6[17] Maxime Oquab, Timothée Darcet, Theo Moutakanni, Huy V. Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, Russell Howes, Po-Yao Huang, Hu Xu, Vasu Sharma, Shang-Wen Li, Wojciech Galuba, Mike Rabbat, Mido Assran, Nicolas Ballas, Gabriel Synnaeve, Ishan Misra, Herve Jegou, Julien Mairal, Patrick Labatut, Armand Joulin, and Piotr Bojanowski. Di-nov2: Learning robust visual features without supervision, 2023. 3, 6 [18] Xuebin Qin, Hang Dai, Xiaobin Hu, Deng-Ping Fan, Ling Shao, and Luc Van Gool. Highly accurate dichotomous image segmentation. In ECCV , 2022. 6 [19] Vignesh Ramanathan, Anmol Kalia, Vladan Petrovic, Yi Wen, Baixue Zheng, Baishan Guo, Rui Wang, Aaron Marquez, Rama Kovvuri, Abhishek Kadian, et al. Paco: Parts and attributes of common objects. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 7141–7151, 2023. 6 [20] H Risken. The fokker-planck equation, 1996. 3 [21] Filippo Santambrogio. {Euclidean, metric, and Wasserstein }
+
+gradient flows: an overview. Bulletin of Mathematical Sci-ences , 7:87–154, 2017. 3 [22] Amirreza Shaban, Shray Bansal, Zhen Liu, Irfan Essa, and Byron Boots. One-shot learning for semantic segmentation. 
+
+arXiv preprint arXiv:1709.03410 , 2017. 2 [23] Robin Strudel, Ricardo Garcia, Ivan Laptev, and Cordelia Schmid. Segmenter: Transformer for semantic segmentation. In IEEE/CVF international conference on computer vision ,pages 7262–7272, 2021. 1 [24] Masashi Sugiyama, Taiji Suzuki, and Takafumi Kanamori. 
+
+Density ratio estimation in machine learning . Cambridge University Press, 2012. 4 [25] Yanpeng Sun, Jiahui Chen, Shan Zhang, Xinyu Zhang, Qiang Chen, Gang Zhang, Errui Ding, Jingdong Wang, and Zechao Li. Vrp-sam: Sam with visual reference prompt. In IEEE/CVF 
+
+9Conference on Computer Vision and Pattern Recognition ,pages 23565–23574, 2024. 3 [26] Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre Sablayrolles, and Hervé Jégou. Training data-efficient image transformers & distillation through atten-tion. In International conference on machine learning , pages 10347–10357. PMLR, 2021. 1 [27] Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Mar-tinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Roz-ière, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and efficient foundation language models. arXiv preprint arXiv:2302.13971 , 2023. 1 [28] Junde Wu, Wei Ji, Yuanpei Liu, Huazhu Fu, Min Xu, Yanwu Xu, and Yueming Jin. Medical sam adapter: Adapting seg-ment anything model for medical image segmentation. arXiv preprint arXiv:2304.12620 , 2023. 1 [29] Aohan Zeng, Xiao Liu, Zhengxiao Du, Zihan Wang, Hanyu Lai, Ming Ding, Zhuoyi Yang, Yifan Xu, Wendi Zheng, Xiao Xia, et al. Glm-130b: An open bilingual pre-trained model. 
+
+arXiv preprint arXiv:2210.02414 , 2022. 1 [30] Chaoning Zhang, Dongshen Han, Yu Qiao, Jung Uk Kim, Sung-Ho Bae, Seungkyu Lee, and Choong Seon Hong. Faster segment anything: Towards lightweight sam for mobile appli-cations. arXiv preprint arXiv:2306.14289 , 2023. 3 [31] Jian-Wei Zhang, Yifan Sun, Yi Yang, and Wei Chen. Feature-proxy transformer for few-shot segmentation. In Advances in Neural Information Processing Systems , 2022. 2 [32] Renrui Zhang, Zhengkai Jiang, Ziyu Guo, Shilin Yan, Junt-ing Pan, Hao Dong, Yu Qiao, Peng Gao, and Hongsheng Li. Personalize segment anything model with one shot. In 
+
+International Conference on Learning Representations , 2024. 1, 2, 3, 4, 5, 6 
+
+10 PR-MaGIC: Prompt Refinement Via Mask Decoder Gradient Flow For In-Context Segmentation 
+
+> Supplementary Material
+
+A. Proof of Proposition 1 Proposition 2. Let ρt be a candidate pdf in 2-Wasserstein space W2 being updated according to the gradient flow of the entropy-regularized KL-divergence Fμ(ρ) with local minimum μ∗. If the initial pdf ρ0
+
+lies in a neighborhood of μ∗, then ρt converges to μ∗ exponentially as t → ∞ .Proof. To prove proposition Proposition 1, We begin by the assumption that ρ0 is a neighborhood of μ∗,and approximate Fμ(ρ) near μ∗ by the second Taylor expansion as: 
+
+Fμ(ρ) = Fμ(μ∗) + ∇Fμ(μ∗)( ρ − μ∗) + 12
+
+D
+
+F ′′  
+
+> μ
+
+(μ∗)( ρ − μ∗), ρ − μ∗
+
+E
+
++ O  ∥ρt − μ∗∥3
+
+= Fμ(μ∗) + 12
+
+D
+
+F ′′  
+
+> μ
+
+(μ∗)( ρ − μ∗), ρ − μ∗
+
+E
+
+,
+
+(20) where ⟨ , ⟩ is an inner product operator, O is the big-O notation, and the second line of Eq. (20) holds because μ∗ is the minimizer of Fμ (i.e. ∇Fμ(μ∗) = 0 ). Furthermore, since μ∗ is the minimizer of the functional Fμ, the Hessian F ′′  
+
+> μ
+
+is positive definite. Differentiating Fμ(ρt) with respective to ρt in Eq. (20), we obtain the following approximation for 
+
+∇Fμ(ρt):
+
+∇Fμ(ρt) ≈ F ′′  
+
+> μ
+
+(μ∗)( ρt − μ∗). (21) The above approximation reduces equation (2) to: 
+
+∂ρ t
+
+∂t = −F ′′  
+
+> μ
+
+(μ∗)( ρt − μ∗). (22) To show that Eq. (22) describes a linear system with exponential convergence, consider the following differential equation: 
+
+ddt ∥ρτ − μ∗∥2 = 2 
+
+
+
+ρτ − μ∗, ∂ρ τ
+
+∂τ 
+
+
+
+= 2 
+
+D
+
+ρτ − μ∗, −F ′′  
+
+> μ
+
+(μ∗)( ρτ − μ∗)
+
+E
+
+, (23) where τ ≥ 0. The second line of the above equation holds by Eq. (21). Using the positive definiteness of 
+
+F ′′  
+
+> μ
+
+(μ∗), the following equation holds for the minimal eigenvalue λmin of F ′′  
+
+> μ
+
+(μ∗),
+
+D
+
+ρτ − μ∗, F ′′  
+
+> μ
+
+(μ∗)( ρτ − μ∗)
+
+E
+
+> λ min ∥ρτ − μ∗∥2. (24) Considering Eq. (23) and Eq. (24), we obtain: 
+
+ddt ∥ρτ − μ∗∥2 < −2λmin ∥ρτ − μ∗∥2. (25) By dividing both sides of Eq. (24) by ∥ρτ − μ∗∥2 and integrating from τ = 0 to τ = t, we have: 
+
+log ∥ρt − μ∗∥2 < −2λmin t + log ∥ρ0 − μ∗∥2. (26) Exponentiating both sides yield: 
+
+∥ρt − μ∗∥2 < e −2λmin t∥ρ0 − μ∗∥2, (27) which implies that ρt converges to μ∗ exponentially as t → ∞ when ρ0 is a neighborhood of μ∗.
+
+> 11
+
+B. MIoU Progression 
+
+Tab. 3 reports how mIoU changes across refinement iterations and how these results compare with the Top-1 and Oracle selections. When examining the per-iteration gains, most datasets show only small improvements at fixed iteration counts, and in several cases the refinement even yields slight negative changes. For example, on COCO-20i and LVIS-92i, both Matcher and PerSAM-F frequently exhibit mixed signs across the five iterations, indicating that a fixed number of updates does not reliably improve segmentation quality. In contrast, Top-1 selection consistently improves upon the baselines across nearly all settings. For instance, Top-1 gains reach +3.05%p for Matcher 5-shot on COCO-20i, +8.78%p for PerSAM-F on FSS-1000, and +8.43%p for Matcher on DIS5K. This improvement comes from selecting the iteration with the highest similarity score for each query–support pair and avoiding the negative effects occasionally introduced by later steps. The Oracle gains are substantially larger than the Top-1 gains across all datasets, often exceeding +5%p and reaching up to +14.04%p for PerSAM-F on FSS-1000. The gap between Top-1 and Oracle stems from the limitation of using support–query similarity as a surrogate for true mask quality. Because this similarity signal can be imperfect, Top-1 sometimes chooses suboptimal iterations even when a better refinement step exists. Overall, the table indicates three consistent patterns: (1) fixed iteration counts provide inconsistent improvements, (2) Top-1 reliably stabilizes performance across datasets by selecting favorable iterations on a per-sample basis, and (3) Oracle results reveal substantial room for improvement, suggesting that further gains may be achievable with more accurate or robust refinement-selection strategies.                                                                                                                                                   
+
+> Dataset Baselines (#-shot) Baseline mIoU Iterations (PR-MaGIC Gain) Oracle Gain Top-1 Gain
+> 12345COCO-20i Matcher (1shot) 69.53 -0.15 0.21 0.07 0.31 0.66 +6.61 +1.70 Matcher (5shot) 67.69 0.17 -0.20 -0.05 0.50 0.88 +7.19 +3.05 PerSAM-F (1shot) 44.64 0.61 0.75 0.47 0.20 -0.21 +7.10 +2.19 FSS-1000 Matcher (1shot) 92.08 -0.19 -0.10 0.02 -0.05 -0.05 +1.47 -0.02 Matcher (5shot) 93.26 0.11 0.01 0.09 0.00 -0.01 +1.06 +0.15 PerSAM-F (1shot) 58.41 0.54 1.61 1.48 2.35 3.07 +14.04 +8.78 LVIS-92i Matcher (1shot) 59.39 -0.06 -0.24 -0.12 0.31 0.40 +5.36 +2.13 Matcher (5shot) 57.14 -0.05 -0.04 0.17 0.54 0.97 +6.74 +3.65 PerSAM-F (1shot) 42.37 -0.05 -0.01 -0.12 -0.30 -0.45 +4.92 +2.11 PACO-Part Matcher (1shot) 50.27 0.07 0.08 -0.03 -0.14 -0.20 +6.44 +3.81 Matcher (5shot) 48.66 0.07 0.08 -0.03 -0.14 -0.20 +6.64 +4.49 PerSAM-F (1shot) 39.60 0.00 -0.11 -0.09 -0.09 0.03 +3.79 +1.12 Pascal-Part Matcher (1shot) 54.76 0.05 0.00 0.30 0.04 -0.04 +6.37 +3.52 Matcher (5shot) 54.54 -0.21 0.17 0.04 -0.08 -0.26 +7.01 +4.73 PerSAM-F (1shot) 42.72 0.16 0.13 0.21 0.20 0.12 +3.71 +1.15 DIS5K Matcher (1shot) 46.65 -0.29 0.14 -0.19 -0.23 0.14 +11.45 +8.43 PerSAM-F (1shot) 46.82 0.12 0.16 0.04 0.39 -0.25 +6.64 +3.17
+> Table 3. Average mIoU progression and Oracle/Top-1 improvements across datasets. Gains computed as (Metric - Baseline).
+> 12
+
+C. One-shot segmentation results across random seeds 
+
+Due to space limitations, we provide additional results across random seeds in the appendix. Tab. 4 reports the 1-shot segmentation results when PerSAM-F is fixed as the baseline across all evaluated datasets. As shown in the Top-1 row, PR-MaGIC consistently improves the mean mIoU over the baseline on every dataset, while maintaining a level of variability comparable to that of the baseline. This indicates that the performance gains of PR-MaGIC are achieved in a stable and reliable manner, without introducing substantial seed sensitivity. Tab. 5 further examines this behavior on the DIS5K dataset using two different baselines, PerSAM-F and Matcher. In both cases, PR-MaGIC consistently improves performance over the corresponding baseline, showing that its effectiveness is not tied to a particular baseline method. Overall, these results demonstrate that PR-MaGIC provides stable gains across random seeds and generalizes well across different 1-shot segmentation settings.                                                                                
+
+> FSS COCO LVIS PACO-Part Pascal-Part DIS5K Baseline 58.89 ±0.38 44.74 ±0.10 42.43 ±0.05 39.64 ±0.06 43.61 ±0.09 46.81 ±0.20
+> Top-1 67 .57 ±0.21 46 .94 ±0.11 44 .57 ±0.06 40 .72 ±0.04 44 .97 ±0.07 49 .57 ±0.30
+> Oracle 73.18 ±0.45 51.88 ±0.08 47.35 ±0.06 43.37 ±0.09 47.70 ±0.05 53.05 ±0.27 Table 4. Variance of mIoU for PerSAM-F + PR-MaGIC across datasets. Baseline Top-1 Oracle PerSAM-F + PR-MaGIC 46.81 ±0.20 49 .57 ±0.30 53.05 ±0.27 Matcher + PR-MaGIC 47.82 ±0.85 55 .82 ±0.64 59.28 ±0.86 Table 5. Variance of mIoU for DIS5K dataset (1-shot segmentation)
+
+13 D. Qualitative results for top-1 selection 
+
+D.1. Top-1 selection of PR-MaGIC (Matcher)                   
+
+> Support Image 012
+> 34 (Top-1, Oracle) 5Ground Truth
+> Support Image 012
+> 34 (Top-1) 5 (Oracle) Ground Truth
+> Support Image 012 (Top-1, Oracle)
+> 345Ground Truth
+
+Figure 8. Iterative refinement behavior of PR-MaGIC for Matcher. Each example shows the support image, refinement outputs from iterations 0(baseline) – 5, and the ground truth. The blue-boxed output denotes the step selected by our top-1 selection module. Although the selection is not guaranteed to be globally optimal, it prevents degradation by choosing the final step when refinement converges and an earlier, more stable step when it becomes unstable. 
+
+14 D.2. Top-1 selection of PR-MaGIC (PerSAM-F)                   
+
+> Support Image 012
+> 345 (Top-1, Oracle) Ground Truth
+> Support Image 012
+> 345 (Top-1, Oracle) Ground Truth
+> Support Image 012 (Top-1)
+> 3 (Oracle) 45Ground Truth
+
+Figure 9. Iterative refinement behavior of PR-MaGIC for PerSAM. Each example shows the support image, refinement outputs from iterations 0(baseline) – 5, and the ground truth. The blue-boxed output denotes the step selected by our top-1 selection module. Although the selection is not guaranteed to be globally optimal, it prevents degradation by choosing the final step when refinement converges and an earlier, more stable step when it becomes unstable. 
+
+15 E. Additional Qualitative Results 
+
+E.1. One shot semantic segmentation 
+
+(a) Support Image (b) Baseline (c) Refined (Ours) (d) Ground Truth 
+
+Figure 10. Qualitative result of PR-MaGIC with PerSAM-F in semantic segmentation. 
+
+(a) Support Image (b) Baseline (c) Refined (Ours) (d) Ground Truth 
+
+Figure 11. Qualitative result of PR-MaGIC with Matcher in semantic segmentation. 
+
+16 E.2. One shot part segmentation 
+
+(a) Support Image (b) Baseline (c) Refined (Ours) (d) Ground Truth 
+
+Figure 12. Qualitative result of PR-MaGIC with PerSAM-F in part segmentation. 
+
+(a) Support Image (b) Baseline (c) Refined (Ours) (d) Ground Truth 
+
+Figure 13. Qualitative result of PR-MaGIC with Matcher in part segmentation. 
+
+17 E.3. Five shot semantic segmentation (Matcher) 
+
+Figure 14. Qualitative result of five shot semantic segmentation (Matcher). The test samples are separated by dividers. For each sample, the upper row shows the support images, while the lower row displays, from left to right, the baseline result, the result of PR-MaGIC across iterations, and the ground truth. 
+
+18 E.4. Five shot part segmentation (Matcher) 
+
+Figure 15. Qualitative result of five shot part segmentation (Matcher). The test samples are separated by dividers. For each sample, the upper row shows the support images, while the lower row displays, from left to right, the baseline result, the result of PR-MaGIC across iterations, and the ground truth. 
+
+19 E.5. Comparison of the effects of PR-MaGIC across different baselines. 
+
+Comparing the impact of PR-MaGIC across different baselines on the same image, as shown in Fig. 16, provides a more comprehensive understanding of our method’s effectiveness. For PerSAM-F (Figs. 16b and 16e), prompts are selected by top-k sampling. PR-MaGIC addresses the issue of congested prompts, resolving object ambiguity. For Matcher (Figs. 16c and 16f), the robust sampler distributes the prompts more widely. However, PR-MaGIC further fine-tunes them, enhancing precision and producing more accurate segmentation masks.     
+
+> (a) Support Image (b) PerSAM-F (c) Matcher
+> (d) Ground Truth (e) PerSAM-F+PR-MaGIC (f) Matcher+PR-MaGIC
+> Figure 16. Illustration of prompt refinement of PR-MaGIC
+
+20 F. Sensitivity analysis of γ and η across object categories. 
+
+η1 = 1 e−2 η2 = 1 e−3 η3 = 1 e−4
+
+ci Metric Base ∗ γ1 γ2 γ3 γ1 γ2 γ3 γ1 γ2 γ3
+
+c1
+
+Mean 55.02 58.64 70.32 64.18 65.20 62.88 63.77 62.90 63.77 58.48 Std (30.65) (24.37) (27.82) (28.14) (26.94) (27.90) (27.89) (27.87) (27.89) (27.51) 
+
+c2
+
+Mean 40.34 52.95 56.67 50.19 50.13 46.96 45.62 46.96 48.54 48.64 Std (38.56) (33.21) (37.06) (37.36) (34.19) (36.87) (37.56) (36.87) (38.20) (38.26) 
+
+c3
+
+Mean 45.89 79.55 70.07 57.45 69.37 56.56 54.41 54.47 54.41 53.90 Std (33.48) (24.49) (28.62) (29.46) (28.16) (31.82) (31.94) (32.49) (31.94) (32.83) 
+
+c4
+
+Mean 64.14 74.22 71.94 67.82 72.86 67.63 68.55 67.49 68.55 70.68 Std (29.81) (23.77) (27.50) (24.99) (24.41) (24.80) (26.26) (24.73) (26.26) (25.00) 
+
+c5
+
+Mean 73.16 73.74 80.14 74.46 74.24 74.23 84.07 74.25 74.88 78.56 Std (27.60) (25.10) (24.29) (22.70) (26.55) (26.46) (17.85) (26.46) (20.93) (22.42) 
+
+c6
+
+Mean 92.51 89.62 95.99 89.70 95.99 89.70 90.39 89.71 90.39 90.76 Std (10.59) (19.79) (0.97) (13.40) (0.97) (13.40) (17.28) (13.41) (17.28) (16.02) 
+
+c7
+
+Mean 35.94 72.44 72.82 59.56 74.76 63.74 46.88 63.74 49.13 47.00 Std (31.90) (28.90) (23.68) (29.49) (20.44) (20.72) (26.31) (20.73) (25.40) (28.95) 
+
+c8
+
+Mean 49.35 72.80 71.34 66.13 71.34 70.63 65.43 70.63 64.04 53.30 Std (27.27) (21.90) (22.20) (25.94) (22.20) (22.83) (28.07) (22.83) (28.15) (27.41) 
+
+c9
+
+Mean 72.78 77.23 69.07 74.76 67.77 75.48 64.41 74.85 64.42 64.48 Std (33.33) (31.84) (34.11) (31.18) (35.45) (31.19) (36.73) (31.06) (36.73) (36.62) 
+
+γ-Avg (avg. over η and classes): γ1=70 .29 , γ 2=68 .31 , γ 3=64 .95 
+
+η-Avg (avg. over γ and classes): η1=70 .88 , η 2=67 .89 , η 3=64 .78 
+
+Table 6. Overall mIoU(%) results of PR-MaGIC across η, γ and classes ( ci) configurations. Base ∗: PerSAM-F. Each ci includes 10 samples per class: 
+
+{gas_pump , indian_cobra , cocktail_shaker , golfcart , teddy , garbage_truck , stapler , children_slide , studio_couch }.
+
+γ1 = 1 , γ2 = 10 −1, γ3 = 10 −2.
+
+As shown in Tab. 6, sensitivity analysis on γ and η across randomly selected 9 classes was conducted. PR-MaGIC consistently improves mIoU across most classes regardless of hyperparameter settings, demonstrating class-agnostic gains despite minor exceptions in c6 and c9. The η-averaged results (η1=70 .88 > η 2=67 .89 > η 3=64 .78 ) show that larger step sizes generally lead to better performance, suggesting that the refinement gradients are well aligned with the intended update direction. Likewise, the γ-averaged trend ( γ1=70 .29 > γ 2=68 .31 > γ 3=64 .95 ) indicates that stronger entropy regularization results in more robust refinement behavior. As our method targets test-time scaling, we adopt a conservative and minimal hyperparameter tuning strategy to assess overall performance gains. While the additional analysis in this appendix is conducted on a limited subset, the configuration used in our main experiments already achieves strong and consistent results, with other settings yielding even higher performance in some cases. We expect that this class-wise tuning would be valuable for practical deployment. 
+
+21
