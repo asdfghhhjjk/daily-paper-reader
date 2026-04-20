@@ -1,0 +1,517 @@
+Title: LEMON: a foundation model for nuclear morphology in Computational Pathology
+
+URL Source: https://arxiv.org/pdf/2603.25802v1
+
+Published Time: Mon, 30 Mar 2026 00:08:00 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# LEMON: A FOUNDATION MODEL FOR NUCLEAR MORPHOLOGY IN COMPUTATIONAL PATHOLOGY 
+
+A P REPRINT 
+
+Loïc Chadoutaud 1,2,3 ∗
+
+loic.chadoutaud@curie.fr 
+
+Alice Blondel 1,2,3,* 
+
+alice.blondel@minesparis.psl.eu 
+
+Hana Feki 1,2,3 
+
+Jacqueline Fontugne 4,5 
+
+jacqueline.fontugne@curie.fr 
+
+Emmanuel Barillot 1,2,3 
+
+emmanuel.barillot@curie.fr 
+
+Thomas Walter 1,2,3 †
+
+thomas.walter@minesparis.psl.eu  
+
+> 1
+
+Institut Curie, F-75005 Paris  
+
+> 2
+
+Mines Paris PSL, Centre for Computational Biology (CBIO), F-75006 Paris  
+
+> 3
+
+INSERM, U1331, F-75005 Paris  
+
+> 4
+
+Institut Curie, U1353/UMR9029 IRIS, Equipe IMPACT, F-75006 Paris  
+
+> 5
+
+Department of Pathology, Université Paris-Saclay, UVSQ, Institut Curie, Saint-Cloud, France 
+
+## ABSTRACT 
+
+Representation learning is a central challenge in Computational Pathology (CP), with direct im-plications for cancer research and precision medicine. While Self-Supervised Learning (SSL) has advanced patch and slide-level analysis of Whole-Slide Images (WSIs), single-cell representation learning has remained underexplored, despite its importance for characterizing cell types and pheno-types. We introduce LEMON (Learning Embeddings from Morphology Of Nuclei), a self-supervised foundation model for scalable single-cell image representation. Trained on millions of cell im-ages spanning diverse tissues and cancer types, LEMON provides versatile and robust morphology representations that enable large-scale single-cell studies in pathology. We demonstrate its effec-tiveness across diverse prediction tasks on five benchmark datasets, establishing LEMON as a new paradigm for cell-level computational pathology. The weights of our model can be accessed at 
+
+https://huggingface.co/aliceblondel/LEMON .
+
+## 1 Introduction 
+
+The proper function of tissue depends on coordinated interactions of diverse cell types, whose spatial organization is essential for maintaining tissue architecture and whose disruption often signals disease. The composition and interactions of individual cells can influence disease development, and in some cases be predictive of treatment response, providing biomarkers of high clinical value, a prominent example being the Tumor Microenvironment (TME)[ 1– 3]. Computational methods for the analysis of tissues at single-cell resolution are therefore important, both for mechanistic research and for clinical applications. Recent advances in imaging technologies allow molecular characterization of cells in their spatial context at the transcriptional or protein level.However, these techniques remain costly, and datasets are limited in scale. By contrast, Hematoxylin and Eosin (H&E) staining - the most widely used modality in pathology - provides rich morphological and spatial information and has generated large-scale image datasets, fueling the development of computational pathology. 
+
+> ∗
+
+Equal contribution 
+
+> †
+
+Corresponding author 
+
+> arXiv:2603.25802v1 [cs.CV] 26 Mar 2026
+
+LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+Self-supervised learning (SSL) has been instrumental for computational pathology, as large amounts of unlabeled data are available, while labeled data are often scarce. Because WSIs are extremely large (often exceeding 50,000 pixels in width), most SSL approaches operate at the patch level, learning embeddings from small tiles cropped from WSIs [ 4– 7]. More recent work integrates the aggregation of patch features within the SSL framework to produce slide-level representations [8–11]. To date, however, work on cell-level representation learning remains sparse. Notable examples include DinoBloom, which was designed for hematology cell images from blood smears [ 12 ], and Volta [ 13 ], a self-supervised contrastive learning model trained on a limited set of tissue-derived cell images. These pioneering works are, however, limited by either their domain specificity or the scale and diversity of their training data. A prerequisite for training powerful, general-purpose SSL models for cells is the assembly of a large-scale, diverse datasets of cell images from WSIs. Recent advances in nucleus segmentation have made large-scale cell extraction feasible. Models like Hover-Net [ 14 ] and CellViT [ 15 , 16 ], along with highly optimized implementations [ 17 ], can now segment millions of cells across various tissue types in a reasonable amount of time. This development opens the door to leveraging state-of-the-art SSL paradigms, such as DINOv2 [ 18 ] and MoCov3 [ 19 ], which are known to benefit significantly from larger and more diverse training datasets both for natural images [ 20 ] and for pathology images [ 21 ]. In this work, we capitalize on these advancements to address the gap in cell-level representation learning. We introduce LEMON (Learning Embeddings from Morphology Of Nuclei), a new family of SSL models for cell images. Our work not only sets a new state of the art for cell representation learning but also provides a comprehensive blueprint for creating and training such models on this particular type of images. Our main contributions are: • We introduce a family of models trained with several contrastive and non-contrastive SSL paradigms to learn powerful representations of nuclear morphology. • We conduct an extensive benchmark evaluation showing that LEMON significantly outperforms prior ap-proaches, including both tile-level and cell-level models, on five distinct downstream tasks, encompassing both cell classification and regression challenges of varying difficulty. • We curate several large-scale cell datasets derived from a diverse cohort of WSIs, and we systematically study the impact of dataset scale and composition (number of cells, slides, and organs) on downstream performance. • We validate the utility of the learned embeddings by demonstrating improved robustness to staining variability and show that they capture gene-expression patterns as measured by Spatial Transcriptomics (ST). 
+
+1.1 Self-Supervised Learning Contrastive Learning. The objective of contrastive learning is to learn an embedding space where different augmented views of the same image (a positive pair) are pulled together, while views from different images (negative pairs) are pushed apart. This is often formalized using the InfoNCE loss [ 22 ]. Given a query view q and a set of key views 
+
+{k0, k 1, ..., k N }, where k0 is the positive key corresponding to q and {ki}Ni=1 are negative keys, the loss is defined as: 
+
+Lq = − log exp( sim (q, k 0)/τ )
+
+PNi=0 exp( sim (q, k i)/τ ) (1) Here, sim (·, ·) is a similarity function (e.g., cosine similarity) and τ is a temperature hyperparameter. While early methods struggled with strategies for sourcing effective negative pairs [ 23 ], modern approaches like MoCov3 [19 ] have streamlined this process. MoCov3 simplifies its predecessors by using a large batch of in-flight samples for the negative keys, removing the need for a dedicated memory bank. It retains the teacher-student framework, where the student network (which produces the query q) is trained via backpropagation, and the teacher network (which produces the key 
+
+k) is an Exponential Moving Average (EMA) of the student’s weights. This momentum-based update ensures the keys remain consistent, which is crucial for stable training. 
+
+Non-Contrastive Learning. Non-contrastive methods learn representations by matching the outputs for different views of the same image, thereby avoiding the need for explicit negative pairs. To prevent representational collapse, they employ a teacher-student architecture where the teacher’s weights θt are an EMA of the student’s weights θs. The state-of-the-art DINOv2 [18 ] model advances this paradigm by composing three distinct loss functions: an image-level matching loss (from DINO) [ 24 ], a patch-level masked-image modeling loss (from iBOT) [ 25 ], and a regularization loss (KoLeo). The core objective, inherited from DINO [ 24 ], operates on multiple views of an image generated by a multi-crop augmentation strategy. This strategy produces a set of high-resolution "global" views ( Vg ) and a set of lower-resolution "local" views ( Vl). The teacher network processes only the global views, while the student network processes all views. 2LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+The goal is for the student’s output distribution Ps to match the teacher’s sharpened and centered distribution Pt. The loss is composed of two cross-entropy terms: • Global-to-Global Matching: The student’s output for one global view is matched against the teacher’s output for the other global view. 
+
+Lg↔g = − X 
+
+> v,v ′∈V g
+> v̸=v′
+
+Pt(v′) log Ps(v) (2) • Local-to-Global Matching: The student’s output for each local view is matched against the teacher’s output for all global views. 
+
+Ll↔g = − X
+
+> vl∈V l
+
+X 
+
+> vg∈V g
+
+Pt(vg ) log Ps(vl) (3) The total image-level loss is LDINO = Lg↔g + Ll↔g .To encourage the learning of fine-grained local features, DINOv2 integrates the masked-image modeling objective from iBOT [25 ]. For an input image, a random subset of its patches M is masked. The teacher receives the full, unmasked image, while the student receives the masked image. The student is then tasked with predicting the teacher’s output tokens for the masked patches. The loss is a cross-entropy between the student’s predictions and the teacher’s distribution for the masked patches: 
+
+LiBOT = − X
+
+> xm∈M
+
+Pt(xm) log Ps(xm) (4) To further prevent feature collapse and promote feature space uniformity, DINOv2 adds the KoLeo regularizer. This loss acts on the batch of embeddings produced by the teacher network. It encourages diversity by penalizing similarity between distinct images by maximizing the distance between an embedding zi and its nearest neighbor zN N (i) in the batch. The loss is formulated as: 
+
+LKoLeo = X
+
+> zi∈batch
+
+− log ∥zi − zN N (i)∥22 (5) This pushes embeddings apart, ensuring the feature space does not collapse to a small volume. The final DINOv2 loss is a weighted sum of these three components: L = LDINO + αLiBOT + βLKoLeo .
+
+1.2 SSL in Histopathology 
+
+The paradigms of self-supervised learning, proven effective on natural images, have been widely adapted for computa-tional pathology, predominantly at the level of image tiles or patches. These methods can be broadly categorized by their core SSL strategy and their operational scale. 
+
+Tile-Level Representation Learning. Early successes in pathology SSL often involved adapting contrastive learning frameworks. For instance, CTransPath [ 4 ] modified the MoCo framework by defining positives not only as augmented views of the same tile, but also as other tiles with high cosine similarity, which reflects the idea that tiles are much more similar to each other than natural images. More recently, the field has shifted towards non contrastive methods. Inspired by the success of DINOv2, models like UNI [7], H-Optimus-0 [ 6 ], and Virchow2 [ 5] have demonstrated the benefits of pre-training Vision Transformers on massive, curated datasets comprising millions of histopathology tiles. The primary contribution of these works lies in meticulous data curation and demonstrating remarkable scaling laws, where model performance on diverse downstream tasks consistently improves with the scale of the pre-training data. 
+
+Cell-Level Representation Learning. In contrast to the extensive work at the tile level, research on single-cell level representations remains limited. To our knowledge, Volta [ 13 ] is the only SSL model specifically designed for this task in the context of histopathology. Volta introduces a novel dual-contrastive learning objective. The first objective is a standard instance-discrimination task, where augmented views of the same cell are pulled together in the embedding space. The second objective contrasts the cell’s representation against a representation of its local tissue microenvironment, which is obtained from the surrounding background patch after masking cell nuclei. 
+
+## 2 Methods 
+
+2.1 A large-Scale Cell Dataset 
+
+To train our models, we generated a large-scale dataset of cell images from The Cancer Genome Atlas (TCGA) database [ 26 ]. We processed around 10,000 WSIs scanned at 40X resolution spanning 10 distinct cancer types. To perform 3LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 2. Model Training    
+
+> MoCo v3
+> DINO v2
+> OR
+> SSL Frameworks Cell image dataset
+> 40 pixels / 10 μm
+> Vector encoding
+> Embeddings in
+> 3. Downstream tasks
+> 1. Dataset Creation
+> Nuclei
+> Segmenter
+> (Hoverfast)
+> WSIS
+> Cell images
+> TCGA
+> 10,000 WSIs
+> (10 organs)
+> a. C ell type classification
+> Cell type 1
+> NuCLS / PanNuke
+> (breast / 19 tissue types)
+> Cell type 3 Cell type 2
+> MIDOG25
+> (10 organs, 3 species)
+> b. Mitosis classification
+> Abnormal Normal
+> c. gene expression prediction
+> Gene 1
+> Gene 2
+> Gene 3
+> Gene 4
+> HEST
+> (3 organs, ~300 genes)
+> Expression
+
+Figure 1: Overview of the LEMON framework. cell segmentation at this scale, we employed HoverFast [ 17 ], a highly optimized implementation of the Hover-Net architecture that provides a 20x speed-up, making slide-level segmentation computationally tractable. For each detected nucleus, we extracted a 40 × 40 pixel patch centered on the nucleus centroid. After that we selected random nuclei from each WSI. This process yielded a pre-training dataset of several hundred million cell instances. The small patch size, a key characteristic of this domain, contrasts with the larger resolutions (e.g., 224 × 224 ) common in natural images, necessitating adaptations in both model architecture and training methodology. 
+
+2.2 SSL for cell images 
+
+We adapted and compared the two leading SSL paradigms, contrastive learning ( MoCov3 [ 19 ]) and non-contrastive learning ( DINOv2 [18]), tailoring them to the specific properties of our cell image data. 
+
+Architectural and Framework Adaptations. Given the small input resolution of our cell patches, we utilized smaller model backbones than those typically used for SSL in natural images. For the contrastive approach with MoCov3, we experimented with Vision Transformer (ViT) [ 27 ], ViTs refers to the small architecture and ViTb to the base architecture. We used a patch size of 8 pixels in our experiments which we indicate with ViTs8 for a small architecture. For the DINOv2 framework, we made two critical modifications to the loss function. First, we removed the local-to-global matching component of the DINO loss, as local crops of an already small 40 × 40 patch carry insufficient information to be meaningful. Second, consistent with observations in other pathology applications [ 5 ], we found the effect of the KoLeo regularizer to be excessively strong , potentially leading to numerical errors in the loss. We therefore replaced it with a more moderate Kernel Density Estimation (KDE) based loss, which encourages global feature uniformity without excessively penalizing local neighborhoods in the embedding space: 
+
+LKDE = X
+
+> z
+
+log X
+
+> z′
+
+k(z, z ′) (6) where k is a kernel function measuring similarity between embeddings. 
+
+Domain-Specific Data Augmentations. We designed two custom augmentations to address the unique characteristics of cellular images. First, to enforce rotational invariance, a critical prior for cell morphology, which has no canonical orientation, we implemented a full random rotation from 0◦ to 360 ◦ similar to [ 28 ]. To avoid edge artifacts (e.g., black corners), we implemented this by extracting a larger 60 × 60 patch, performing the rotation, and then taking a central 40 × 40 crop. Second, we evaluated a random stain augmentation [ 29 ] based on Macenko’s method [ 30 ]. This simulates the variability in H&E staining that arises from different slide preparation protocols, training the model to learn features that are invariant to color and intensity shifts and thus more robust for downstream applications. 4LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+2.3 Benchmarking datasets 
+
+To comprehensively evaluate the quality of the learned cell representations, we benchmarked our models on nine distinct downstream tasks, encompassing six classification tasks and three regression tasks on various types. These benchmarks were selected to test various aspects of the embeddings, including fine-grained cell type discrimination, generalization across different domains, and the ability to predict molecular features from morphology. • NuCLS [31 ]: A multi-class classification dataset of single-cell images from breast cancer H&E slides. Its key feature is a hierarchical annotation scheme, with labels reviewed and confirmed by pathologists. This structure allows us to evaluate the representative power of our embeddings on both fine-grained (e.g., distinguishing immune cell types) and coarse-grained (e.g., tumor vs. stromal) classification tasks. We refer to them as NuCLS (super) for broad categories, NuCLS (main) for main cell type categories and NuCLS (raw) for fine-grained type and subtype classifications. It is derived from TCGA WSIs and can be considered an in-domain dataset for LEMON. • PanNuke [ 32 ]: A large-scale, multi-organ dataset of segmented and labeled nuclei from diverse tissue types. It contains a broad range of nuclear morphologies and cell types across multiple cancer and non-cancer tissues, making it well suited for evaluating generalization across organs and histological contexts. Here, we use PanNuke for single-cell classification, assessing the robustness of learned representations in a heterogeneous, multi-domain setting. It is primarily an out-of-domain (OOD) dataset for LEMON, although some images may originate from TCGA. • MIDOG25 (track 2, training dataset)[ 33 ]: A dataset for binary classification of mitotic figures (atypical vs. normal). It is specifically designed to test model robustness and generalization, as it contains cell images sourced from multiple species (human and canine), diverse organs, and various digital slide scanners. It is an OOD dataset for LEMON. • HEST-derived Gene Expression Regression [ 34 ]: To assess the capacity of our embeddings to capture morpho-molecular relationships, we curated a novel regression dataset from the HEST database. We created 3 datasets by using slides originating from breast cancer (HEST-breast), lung pulmonary fibrosis (HEST-lung) and bowel cancer (HEST-bowel). It is an OOD dataset for LEMON. Further details on each dataset and preprocessing are provided in the supplementary materials. 
+
+2.4 Embedding evaluation 
+
+To assess the quality and discriminative power of the features learned by our SSL models, we followed the standard 
+
+linear probing protocol. This evaluation involves training a simple linear model on fixed embeddings obtained from the pretrained model to perform a specific downstream task. The rationale for this approach is that a powerful feature extractor should produce representations that are linearly separable. Consequently, the performance of a simple linear model serves as a direct and reliable proxy for the quality of the learned embeddings. Alternative protocols like full fine-tuning, parameter-efficient fine-tuning or few shot learning also exist, but these methods generally produce similar conclusions about relative model performance [ 35 ]. In our experiments, we trained a logistic regression classifier on the embeddings for the classification tasks (NuCLS, PanNuke and MIDOG25) and a ridge regression model for the gene expression prediction task (HEST). The performance of these linear models is used both to directly compare our approach against competing methods and to motivate key design choices, including methodological decisions and the composition of the pretraining dataset. Second, we conducted an additional comparative analysis to assess how different representations behave under domain shift. To this end, we simulated staining variations [ 30 ], and evaluated the changes induced in the latent space across the different SSL strategies. In addition, we measured the impact of this staining-induced domain shift on downstream classification performance on NuCLS and MIDOG25. Third, we evaluated how well our embeddings capture biological differences by comparing the morphology-driven structure of the latent space with the expression patterns of well-known marker genes. 5LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+## 3 Results 
+
+3.1 Experimental setup 
+
+Unless stated otherwise, we used a dataset of 10M cell images from 10 organs. All the models using the MoCo v3 pretraining strategy are trained for 150 epochs with an epoch length of 1M images. The batch size is set to 4096. For the augmentations, we used the best-performing configuration identified through ablation (see Appendix D). 
+
+3.2 Full benchmarking 
+
+To assess performance, we benchmarked our model against strong baselines based on pre-trained representations, organized into four families: (1) transfer learning from ImageNet [ 36 ]; (2) SSL approaches trained on natural images such as DINOv2 [ 18 ]; (3) histopathology foundation models pre-trained on WSI tiles, including UNI [ 7 ], H-Optimus-0 [ 6], and Virchow2 [ 5]; and (4) cell-level representations, including Volta [ 13 ], the current state of the art. For transfer learning [ 37 ], we extracted embeddings from each model’s penultimate layer. Because most baselines (except Volta) require 224×224 inputs, we resized nuclei images to the correct size. Results are reported in Table 1. Our method decisively outperformed models pre-trained on natural images across all datasets. On MIDOG25, for instance, it achieves a balanced accuracy of 0.746 ± 0.015 , compared with 0.604 ± 0.005 for an ImageNet-pretrained ResNet-50 and 0.654 ± 0.007 for the best DINOv2 variant. These gaps underline the limits of natural-image features and the importance of domain-specific pre-training for cellular morphology. Against contemporary tile-level Foundation Models (FMs) (UNI, H-Optimus-0, Virchow2), our approach performs significantly better on MIDOG25 and NuCLS, and remains highly competitive on PanNuke and HEST gene-expression prediction tasks. Gains are particularly pronounced on MIDOG25, which depends on fine-grained cellular cues that tile-level FMs tend to overlook. In order to check that this result is not entirely due to domain shift introduced by feeding nucleus images to tile-level FM, we further investigated alternative strategies to extract cell-level encodings from tile-level FM applied to larger fields of view matching the FM training distribution (see below). Compared to Volta, the only other cell-level baseline, our model held a clear advantage across all tasks. It surpassed Volta on MIDOG25, NuCLS and PanNuke classification tasks and delivered stronger results on HEST gene-expression prediction, indicating more robust and generalizable cellular representations for downstream computational pathology. Additional evaluation metrics for MIDOG25, NuCLS and PanNuke are provided in the supplementary materials. Table 1: Performance of pretraining strategy on downstream tasks. We report balanced accuracy for MIDOG25 (majority), NuCLS (super) and PanNuke (classification) and Pearson Correlation Coefficient for HEST (breast, lung, bowel). Values are mean (s.d.) over folds, best values are highlighted in bold. MIDOG25 NuCLS PanNuke HEST-Bowel HEST-Breast HEST-Lung bal acc bal acc bal acc pcc pcc pcc Embeddings                                                                         
+
+> Natural images TL
+> Imagenet (ResNet-18) 0.577 (0.008) 0.693 (0.005) 0.56 (0.004) 0.114 (0.023) 0.113 (0.023) 0.083 (0.021) Imagenet (ResNet-50) 0.603 (0.012) 0.711 (0.005) 0.587 (0.005) 0.12 (0.035) 0.124 (0.023) 0.091 (0.013)
+> Natural images FM
+> DINOv2 (ViT-s/14) 0.643 (0.004) 0.732 (0.003) 0.635 (0.009) 0.146 (0.016) 0.157 (0.029) 0.116 (0.028) DINOv2 (ViT-b/14) 0.653 (0.013) 0.732 (0.003) 0.627 (0.01) 0.145 (0.022) 0.156 (0.026) 0.118 (0.028) DINOv2 (ViT-l/14) 0.647 (0.01) 0.721 (0.004) 0.619 (0.008) 0.142 (0.016) 0.153 (0.026) 0.117 (0.029) DINOv2 (ViT-g/14) 0.654 (0.01) 0.733 (0.008) 0.631 (0.007) 0.153 (0.021) 0.164 (0.025) 0.118 (0.029)
+> Tile level FM
+> UNI (ViT-l/16) 0.623 (0.008) 0.733 (0.007) 0.643 (0.008) 0.15 (0.035) 0.151 (0.029) 0.118 (0.029) Virchow2 (ViT-h/14) 0.618 (0.016) 0.753 (0.008) 0.645 (0.009) 0.148 (0.034) 0.154 (0.029) 0.11 (0.029) H-Optimus-0 (ViT-g/14) 0.631 (0.012) 0.752 (0.006) 0.648 (0.007) 0.159 (0.029) 0.157 (0.029) 0.119 (0.029)
+> Cell level FM
+> Volta (ResNet-18) 0.726 (0.01) 0.736 (0.003) 0.571 (0.007) 0.148 (0.025) 0.115 (0.028) 0.118 (0.025) LEMON-MoCov3 (ViT-s/8) 0.741 (0.02) 0.779 (0.005) 0.641 (0.008) 0.16 (0.027) 0.156 (0.021) 0.128 (0.028)
+
+6LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+3.3 Comparison of cell embedding strategies from tile-level FMs 
+
+Single cells correspond to regions of roughly 40 × 40 pixels. To use tile-level FMs trained on 224 × 224 (tiles) for single-cell representation, the standard approach is to resize nuclei images to 224 × 224 , which may deviate substantially from the original training distribution. Here, we investigate the direct use of FM token encodings as an alternative. For this, we focus on MIDOG25, as for this task, the cell labels are independent from spatial context. We extracted 
+
+128 × 128 crops at 40 × magnification centered on each nucleus and resized them to 224 × 224 to match the expected input size. Because we did not have access to the full slides, using 224 × 224 crops directly would have led to many exclusions due to border effects. With this procedure, we retained 9,115 nuclei out of the original 11 ,939 . The label distribution is provided in the supplementary material. To obtain embeddings from tile-level FM, we investigated two approaches to derive the embeddings used in the downstream task. In the class token approach, we used the class token embedding as the representation. In the center tokens approach, we used the mean embedding of the 4 × 4 centered patch tokens of the full image. With our setting, these patches correspond to roughly 8 μm × 8 μm in the center of the images, which should contain all the relevant information for the mitosis classification task. We report the results in Table 2. Across all tile-level FMs, patch tokens consistently outperform the class token approach. Our model surpasses all competing methods, further confirming the relevance of our cell-level FM for cell-level tasks. Table 2: Evaluation of representations from larger images ( 128 × 128 pixel crop size) with patch level foundation models on the MIDOG25 dataset Target MIDOG25 (majority) Metric bal acc f1 (weighted) Embeddings 
+
+UNI-class (ViT-l/16) 0.539 (0.007) 0.834 (0.004) 
+
+UNI-center (ViT-l/16) 0.645 (0.019) 0.876 (0.007) 
+
+Virchow2-class (ViT-h/14) 0.538 (0.005) 0.833 (0.002) 
+
+Virchow2-center (ViT-h/14) 0.673 (0.017) 0.886 (0.006) 
+
+H-Optimus-0-class (ViT-g/14) 0.524 (0.009) 0.826 (0.005) 
+
+H-Optimus-0-center (ViT-g/14) 0.644 (0.011) 0.875 (0.004) 
+
+LEMON-MoCov3 (ViT-s/8) 0.727 (0.02) 0.905 (0.007) 
+
+3.4 Floating point operations (FLOPs) comparison 
+
+Computational efficiency is crucial in the single-cell setting, where a single whole-slide image may contain millions of nuclei, making large-scale embedding extraction prohibitively expensive with heavyweight architectures. Tile-level foundation models typically rely on very large backbones (e.g., ViT-H/14, ViT-g/14) with high computational footprints, whereas LEMON leverages a lightweight ViT-S/8 backbone, operating with orders of magnitude fewer FLOPs. To evaluate the trade-off between performance and computational cost, we compared different pretraining strategies by plotting downstream performance against the number of FLOPs required during inference (Figure 2). Our cell-level models achieve state-of-the-art performance while striking an optimal balance between representational power and efficiency. Histology FMs outperform natural image pretraining at comparable FLOPs. Interestingly, for classification tasks, histopathology tile-level models generally exhibit improved performance as model size and FLOPs increase. In contrast, LEMON breaks this trend, achieving the highest overall accuracy (NuCLS super: 0.779; MIDOG25: 0.741) with only 0.5G FLOPs, compared to 295.9G FLOPs for H-Optimus-0, the second-best performing model. For gene expression prediction, a more challenging task, the overall trends remain consistent. 
+
+3.5 Choice of SSL framework 
+
+We compared two state-of-the-art SSL methods, MoCov3 [ 19 ] and DINOv2 [ 18 ], as pretraining strategies for cell patches, given their strong performance in tile-level pathology foundation models. While DINOv2 is among the most powerful SSL frameworks, we observed limitations when applied to small 40×40 images. To address these, we introduced - as detailed in section 2.2 - two modifications to the loss function: (i) removing the local-to-global matching 7LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 10 0 10 1 10 2 10 3   
+
+> FLOPs (G, log scale)
+> 0.48
+> 0.50
+> 0.52
+> 0.54
+> 0.56
+> 0.58
+> Balanced Accuracy
+> Imagenet (ResNet-18)
+> Imagenet (ResNet-50)
+> DINOv2 (ViT-s/14)
+> DINOv2 (ViT-b/14)
+> DINOv2 (ViT-l/14)
+> DINOv2 (ViT-g/14)
+> UNI (ViT-l/16)
+> Virchow2 (ViT-h/14)
+> H-Optimus-0 (ViT-g/14)
+> Volta (ResNet-18)
+> LEMON (ViT-s/8)
+> Classification Performance
+> 10 010 110 210 3
+> FLOPs (G, log scale)
+> 0.11
+> 0.12
+> 0.13
+> 0.14
+> 0.15
+> PCC
+> Imagenet (ResNet-18)
+> Imagenet (ResNet-50)
+> DINOv2 (ViT-s/14)
+> DINOv2 (ViT-b/14)
+> DINOv2 (ViT-l/14)
+> DINOv2 (ViT-g/14)
+> UNI (ViT-l/16)
+> Virchow2 (ViT-h/14)
+> H-Optimus-0 (ViT-g/14)
+> Volta (ResNet-18)
+> LEMON (ViT-s/8)
+> Gene Expression Performance
+> #Params
+> 10M
+> 100M
+> 1B
+> Pretraining Categories
+> Natural images TL
+> Natural images FM
+> Tile level FM
+> Cell level FM
+> Pretraining Categories
+> Natural images TL
+> Natural images FM
+> Tile level FM
+> Cell level FM
+> #Params
+> 10M
+> 100M
+> 1B
+
+Figure 2: Performance of pretraining strategies versus FLOPs. Left: mean balanced accuracy across NuCLS (super, main, raw), MIDOG25 and PanNuke for classification. Right: mean Pearson Correlation Coefficient across breast, lung, and bowel datasets for regression. Marker size indicates model parameter count; color indicates pretraining category. term, which is ill-suited for such small patches, and (ii) replacing the strong KoLeo regularizer with a milder KDE-based loss. These modifications improved performance across all classification benchmark datasets (see Appendix B). Despite these adjustments, MoCov3 consistently outperformed DINOv2, suggesting that contrastive SSL is more robust in low-resolution pathology scenarios. We hypothesize that DINOv2’s strength largely stems from its challenging local–global objective, which enforces structural understanding but becomes ill-posed for very small patches, thereby limiting its effectiveness and favoring the global contrastive objective of MoCov3. Consequently, we focused the remainder of the study on MoCov3, and LEMON refers to LEMON-MoCov3. 
+
+3.6 Dataset Composition 
+
+We first examined how dataset scale affects benchmark classification. As shown in the top row of Figure 3, balanced accuracy increases consistently as the dataset grows, before saturating around 1M images for both ViT-S/8 and ViT-B/8. We kept ViT-S/8 as increasing the model sizes did not lead to significantly better results with our training scheme. We then isolated the role of data diversity, motivated by evidence that training set diversity can strongly influence downstream performance [ 18 , 20 ]. Fixing the dataset size to 1M images, we varied the number of WSIs and the number of source organs from which cell images were extracted. To select representative slides, we used a K-medoids strategy based on TITAN-derived embeddings [ 38 ]. As shown in the bottom row of Figure 3, gains are driven primarily by increasing the number of slides, while performance remained relatively stable with respect to the number of organs, provided that the number of slides is sufficiently high. This suggests the model does not require organ-specific pretraining for effective application across organs. 
+
+3.7 Robustness to Staining Variation 
+
+Histopathology images exhibit substantial staining variability across acquisition centers, inducing embedding shifts unrelated to biological content. Learning stain-invariant representations is therefore essential and strongly depends on training-time color augmentations. To assess staining robustness, we applied Macenko-based stain normalization using six reference images from TCGA breast samples spanning six distinct centers (see Appendix E). We encoded MIDOG25 under each reference stain and quantified embedding shifts using root mean squared error (RMSE), cosine similarity, and k-nearest neighbor overlap (k=100), averaged across stains. Metrics were computed in PCA space after L2 normalization to ensure a fair comparison across models. Results are reported in Table 3. LEMON shows the highest stability across all metrics. Volta exhibits intermediate robustness, while H-Optimus-0 is the most sensitive to staining variation, demonstrating larger embedding shifts than the cell-level encoders. 8LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+Figure 3: Performance of models vs. training data composition. Mean balanced accuracy (error bars represents standard errors) across MIDOG25 and the three NuCLS classification tasks. Top: Performance by training dataset size; models improve with larger datasets and level off near 1M images. Bottom: With the total number of images held constant, models perform better as diversity increases (more organs of origin and more slides). Importantly, this robustness does not compromise discriminative power: under all six staining conditions on MIDOG25 and NuCLS, LEMON still consistently outperforms both Volta and H-Optimus-0 in terms of balanced accuracy (see Table 3 and supplementary materials). Table 3: Robustness to Macenko stain normalization across 6 TCGA reference images. Embedding robustness metrics measure the shift in embedding space between original and stain-normalized cells. Biological tasks report balanced accuracy on stain-normalized embeddings. Best in bold. LEMON-MoCov3 Volta H-Optimus-0 (ViT-s/8) (ResNet-18) (ViT-g/14) 
+
+Embedding Robustness 
+
+RMSE ( ↓) 0.777 (0.150) 0.879 (0.266) 1.311 (0.076) Cosine Similariy ( ↑) 0.687 (0.116) 0.579 (0.246) 0.138 (0.099) Neightborhood Overlap ( ↑) 0.398 (0.067) 0.297 (0.059) 0.154 (0.014) 
+
+Biological tasks 
+
+MIDOG - bal acc ( ↑) 0.734 (0.011) 0.699 (0.015) 0.618 (0.011) NuCLS - bal acc ( ↑) 0.755 (0.006) 0.718 (0.004) 0.736 (0.004) 
+
+3.8 Latent space organization reflects biological identity 
+
+We examined whether the learned cell embeddings capture biological structure by projecting them into two dimensions using t-SNE (Figure 4). The latent space exhibited a coherent and continuous organization: epithelial cells were predominantly located on the right, while the left side displayed structured variation, with elongated cells in the upper region and smaller round-nuclei cells in the lower region. To assess biological relevance, we compared the organization of the embedding space with the expression of marker genes associated with major cell types (epithelial, stromal, and immune) in a Xenium tissue section. Although the model was not trained on gene expression data, marker expression concentrated in distinct regions of the embedding space (Figure 4). We quantified this correspondence using Moran’s I computed on the k-nearest-neighbour graph in embedding space, which measures autocorrelation of expression values among neighboring cells. All markers showed positive autocorrelation, and genes associated with the same cell types exhibited similar spatial patterns, indicating that transcriptionally related cells occupy nearby regions in the morphology-derived manifold. This analysis can be extend to any whole-slide images. On a TCGA sample, independent pathologist annotations confirmed the coherence of the latent space and its alignment with cell types (see Appendix F). 9LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT t-SNE 1 t-SNE 2 
+
+Figure 4: Alignment between morphological embeddings and marker-gene expression in a bowel Xenium tissue section (HEST id: TENX147). Left: t-SNE projection of LEMON morphological embeddings. Right: normalized expression maps for marker genes, showing their spatial distribution within the morphology-derived manifold. 
+
+## 4 Conclusion 
+
+In this paper, we introduce LEMON, a self-supervised model for nuclei image representation learning. We build a large-scale dataset of nucleus crops and show that our approach achieves state-of-the-art performance across five downstream tasks. Notably, we demonstrate that self-supervised learning can be effectively applied to very small images (40×40) with minor adaptations to existing frameworks. By carefully tuning training schemes and augmentations, LEMON produces stable and meaningful embeddings that capture nuclear morphology and chromatin organization, reducing the need for manual labels and enabling new explorations of the morphological landscape of cell images. Furthermore, we show that our representations are robust to staining-induced domain shifts and truly capture biological signals, as they correlate with the expression of well-known marker genes. Finally, we make the dataset of all nuclei detection, the pretext task targets and our foundation model publicly available to the scientific community. Beyond CP, these results suggest that SSL could be extended to other domains where only small image patches are available. In future work, an interesting avenue is to compare representations learned at different physical scales (nucleus, tissue and slide level views) to optimally integrate multi-scale information. Finally, our representations provide an excellent starting point for in-depth spatial modeling and tissue architecture analysis. We deliberately chose not to incorporate the spatial distribution of cells into this foundation model, so that future work on spatial analyses can remain disentangled from single-cell morphological representations, which we consider an important asset for future developments. 
+
+## Acknowledgements 
+
+This work was funded by the French government under the management of Agence Nationale de la Recherche as part of the “Investissements d’avenir” program, reference ANR-19-P3IA-0001 (PRAIRIE 3IA Institute) and ANR-23-IACL-0008 (PRAIRIE-PSAI). Furthermore, this work was supported by a government grant managed by the Agence Nationale de la Recherche under the France 2030 program, with the reference numbers ANR-24-EXCI-0001, ANR-24-EXCI-0002, ANR-24-EXCI-0003, ANR-24-EXCI-0004, ANR-24-EXCI-0005. This work was granted access to the HPC resources of IDRIS under the allocation 2025-AD011016560 made by GENCI. 
+
+## References 
+
+[1] Karin E. de Visser and Johanna A. Joyce. The evolving tumor microenvironment: From can-cer initiation to metastatic outgrowth. Cancer Cell , 41(3):374–403, March 2023. ISSN 1535-6108. doi:10.1016/j.ccell.2023.02.016. URL https://www.sciencedirect.com/science/article/pii/ S1535610823000442 .10 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+[2] Nicolas A. Giraldo, Rafael Sanchez-Salas, J. David Peske, Yann Vano, Etienne Becht, Florent Petitprez, Pierre Validire, Alexandre Ingels, Xavier Cathelineau, Wolf Herman Fridman, and Catherine Sautès-Fridman. The clinical role of the TME in solid cancer. British Journal of Cancer , 120(1):45–53, January 2019. ISSN 0007-0920, 1532-1827. doi:10.1038/s41416-018-0327-z. URL https://www.nature.com/articles/s41416-018-0327-z .[3] Qingjing Wang, Xueting Shao, Yuxuan Zhang, Miaojin Zhu, Frederick X. C. Wang, Jianjian Mu, Jiaxuan Li, Hangping Yao, and Keda Chen. Role of tumor microenvironment in cancer pro-gression and therapeutic strategy. Cancer Medicine , 12(10):11149–11165, 2023. ISSN 2045-7634. doi:10.1002/cam4.5698. URL https://onlinelibrary.wiley.com/doi/abs/10.1002/cam4.5698 ._eprint: https://onlinelibrary.wiley.com/doi/pdf/10.1002/cam4.5698. [4] Xiyue Wang, Sen Yang, Jun Zhang, Minghui Wang, Jing Zhang, Wei Yang, Junzhou Huang, and Xiao Han. Transformer-based unsupervised contrastive learning for histopathological image classification. Medical Image Analysis , 81:102559, October 2022. ISSN 1361-8415. doi:10.1016/j.media.2022.102559. URL https://www. sciencedirect.com/science/article/pii/S1361841522002043 .[5] Eric Zimmermann, Eugene Vorontsov, Julian Viret, Adam Casson, Michal Zelechowski, George Shaikovski, Neil Tenenholtz, James Hall, David Klimstra, Razik Yousfi, Thomas Fuchs, Nicolo Fusi, Siqi Liu, and Kristen Severson. Virchow2: Scaling Self-Supervised Mixed Magnification Models in Pathology, August 2024. URL 
+
+http://arxiv.org/abs/2408.00738 . arXiv:2408.00738 [cs]. [6] Charlie Saillard, Rodolphe Jenatton, Felipe Llinares-López, Zelda Mariet, Cahané, David, Durand, Eric, and Vert, Jean-Philippe. H-optimus-0, 2024. URL https://github.com/bioptimus/releases/tree/main/models/ h-optimus/v0 .[7] Richard J. Chen, Tong Ding, Ming Y. Lu, Drew F. K. Williamson, Guillaume Jaume, Andrew H. Song, Bowen Chen, Andrew Zhang, Daniel Shao, Muhammad Shaban, Mane Williams, Lukas Oldenburg, Luca L. Weishaupt, Judy J. Wang, Anurag Vaidya, Long Phi Le, Georg Gerber, Sharifa Sahai, Walt Williams, and Faisal Mahmood. Towards a general-purpose foundation model for computational pathology. Nature Medicine , 30(3):850–862, March 2024. ISSN 1546-170X. doi:10.1038/s41591-024-02857-3. URL https://www.nature.com/articles/ s41591-024-02857-3 . Publisher: Nature Publishing Group. [8] Tristan Lazard, Marvin Lerousseau, Etienne Decencière, and Thomas Walter. Giga-SSL: Self-Supervised Learning for Gigapixel Images, December 2022. URL https://arxiv.org/abs/2212.03273v1 .[9] Guillaume Jaume, Anurag Vaidya, Andrew Zhang, Andrew H. Song, Richard J. Chen, Sharifa Sahai, Dandan Mo, Emilio Madrigal, Long Phi Le, and Faisal Mahmood. Multistain Pretraining for Slide Representation Learning in Pathology, August 2024. URL http://arxiv.org/abs/2408.02859 . arXiv:2408.02859 [cs, eess]. [10] Tong Ding, Sophia J. Wagner, Andrew H. Song, Richard J. Chen, Ming Y. Lu, Andrew Zhang, Anurag J. Vaidya, Guillaume Jaume, Muhammad Shaban, Ahrong Kim, Drew F. K. Williamson, Bowen Chen, Cristina Almagro-Perez, Paul Doucet, Sharifa Sahai, Chengkuan Chen, Daisuke Komura, Akihiro Kawabe, Shumpei Ishikawa, Georg Gerber, Tingying Peng, Long Phi Le, and Faisal Mahmood. Multimodal Whole Slide Foundation Model for Pathology, November 2024. URL http://arxiv.org/abs/2411.19666 . arXiv:2411.19666 [eess]. [11] Anurag Vaidya, Andrew Zhang, Guillaume Jaume, Andrew H. Song, Tong Ding, Sophia J. Wagner, Ming Y. Lu, Paul Doucet, Harry Robertson, Cristina Almagro-Perez, Richard J. Chen, Dina ElHarouni, Georges Ayoub, Connor Bossi, Keith L. Ligon, Georg Gerber, Long Phi Le, and Faisal Mahmood. Molecular-driven Foundation Model for Oncologic Pathology, January 2025. URL http://arxiv.org/abs/2501.16652 . arXiv:2501.16652 [cs]. [12] Valentin Koch, Sophia J. Wagner, Salome Kazeminia, Ece Sancar, Matthias Hehr, Julia Schnabel, Tingying Peng, and Carsten Marr. DinoBloom: A Foundation Model for Generalizable Cell Embeddings in Hematology, April 2024. URL http://arxiv.org/abs/2404.05022 . arXiv:2404.05022 [cs]. [13] Ramin Nakhli, Katherine Rich, Allen Zhang, Amirali Darbandsari, Elahe Shenasa, Amir Hadjifaradji, Sidney Thiessen, Katy Milne, Steven J. M. Jones, Jessica N. McAlpine, Brad H. Nelson, C. Blake Gilks, Hossein Farahani, and Ali Bashashati. VOLTA: an enVironment-aware cOntrastive ceLl represenTation leArning for histopathology. 
+
+Nature Communications , 15(1):3942, May 2024. ISSN 2041-1723. doi:10.1038/s41467-024-48062-1. URL 
+
+https://www.nature.com/articles/s41467-024-48062-1 . Publisher: Nature Publishing Group. [14] Simon Graham, Quoc Dang Vu, Shan E. Ahmed Raza, Ayesha Azam, Yee Wah Tsang, Jin Tae Kwak, and Nasir Rajpoot. HoVer-Net: Simultaneous Segmentation and Classification of Nuclei in Multi-Tissue Histology Images, November 2019. URL http://arxiv.org/abs/1812.06499 . arXiv:1812.06499 [cs]. [15] Fabian Hörst, Moritz Rempe, Lukas Heine, Constantin Seibold, Julius Keyl, Giulia Baldini, Selma Ugurel, Jens Siveke, Barbara Grünwald, Jan Egger, and Jens Kleesiek. CellViT: Vision Transformers for Precise Cell 11 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+Segmentation and Classification, October 2023. URL http://arxiv.org/abs/2306.15350 . arXiv:2306.15350 [cs, eess]. [16] Fabian Hörst, Moritz Rempe, Helmut Becker, Lukas Heine, Julius Keyl, and Jens Kleesiek. CellViT++: Energy-Efficient and Adaptive Cell Segmentation and Classification Using Foundation Models, January 2025. URL 
+
+http://arxiv.org/abs/2501.05269 . arXiv:2501.05269 [cs]. [17] Petros Liakopoulos, Julien Massonnet, Jonatan Bonjour, Medya Tekes Mizrakli, Simon Graham, Michel A. Cuendet, Amanda H. Seipel, Olivier Michielin, Doron Merkler, and Andrew Janowczyk. HoverFast: an accurate, high-throughput, clinically deployable nuclear segmentation tool for brightfield digital pathology images, May 2024. URL http://arxiv.org/abs/2405.14028 . arXiv:2405.14028 [q-bio]. [18] Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, Mahmoud Assran, Nicolas Ballas, Wojciech Galuba, Russell Howes, Po-Yao Huang, Shang-Wen Li, Ishan Misra, Michael Rabbat, Vasu Sharma, Gabriel Synnaeve, Hu Xu, Hervé Jegou, Julien Mairal, Patrick Labatut, Armand Joulin, and Piotr Bojanowski. DINOv2: Learning Robust Visual Features without Supervision, February 2024. URL http://arxiv.org/abs/2304.07193 .arXiv:2304.07193 [cs]. [19] Xinlei Chen, Saining Xie, and Kaiming He. An Empirical Study of Training Self-Supervised Vision Transformers, August 2021. URL http://arxiv.org/abs/2104.02057 . arXiv:2104.02057 [cs]. [20] Huy V. Vo, Vasil Khalidov, Timothée Darcet, Théo Moutakanni, Nikita Smetanin, Marc Szafraniec, Hugo Touvron, Camille Couprie, Maxime Oquab, Armand Joulin, Hervé Jégou, Patrick Labatut, and Piotr Bojanowski. Automatic Data Curation for Self-Supervised Learning: A Clustering-Based Approach, June 2024. URL http: //arxiv.org/abs/2405.15613 . arXiv:2405.15613 [cs]. [21] Boqi Chen, Cédric Vincent-Cuaz, Lydia A. Schoenpflug, Manuel Madeira, Lisa Fournier, Vaishnavi Subramanian, Sonali Andani, Samuel Ruiperez-Campillo, Julia E. Vogt, Raphaëlle Luisier, Dorina Thanou, Viktor H. Koelzer, Pascal Frossard, Gabriele Campanella, and Gunnar Rätsch. Revisiting Automatic Data Curation for Vision Founda-tion Models in Digital Pathology, March 2025. URL http://arxiv.org/abs/2503.18709 . arXiv:2503.18709 [cs]. [22] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Representation Learning with Contrastive Predictive Coding, January 2019. URL http://arxiv.org/abs/1807.03748 . arXiv:1807.03748 [cs]. [23] Lanling Xu, Jianxun Lian, Wayne Xin Zhao, Ming Gong, Linjun Shou, Daxin Jiang, Xing Xie, and Ji-Rong Wen. Negative Sampling for Contrastive Representation Learning: A Review, June 2022. URL http://arxiv.org/ abs/2206.00212 . arXiv:2206.00212 [cs]. [24] Mathilde Caron, Hugo Touvron, Ishan Misra, Hervé Jégou, Julien Mairal, Piotr Bojanowski, and Armand Joulin. Emerging Properties in Self-Supervised Vision Transformers, May 2021. URL http://arxiv.org/abs/2104. 14294 . arXiv:2104.14294 [cs]. [25] Jinghao Zhou, Chen Wei, Huiyu Wang, Wei Shen, Cihang Xie, Alan Yuille, and Tao Kong. iBOT: Image BERT Pre-Training with Online Tokenizer, January 2022. URL http://arxiv.org/abs/2111.07832 . arXiv:2111.07832 [cs]. [26] John N. Weinstein, Eric A. Collisson, Gordon B. Mills, Kenna M. Shaw, Brad A. Ozenberger, Kyle Ellrott, Ilya Shmulevich, Chris Sander, and Joshua M. Stuart. The Cancer Genome Atlas Pan-Cancer Analysis Project. 
+
+Nature genetics , 45(10):1113–1120, October 2013. ISSN 1061-4036. doi:10.1038/ng.2764. URL https: //www.ncbi.nlm.nih.gov/pmc/articles/PMC3919969/ .[27] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale, June 2021. URL http: //arxiv.org/abs/2010.11929 . arXiv:2010.11929 [cs]. [28] Saghir Alfasly, Abubakr Shafique, Peyman Nejat, Jibran Khan, Areej Alsaafin, Ghazal Alabtah, and H.R. Tizhoosh. Rotation-Agnostic Image Representation Learning for Digital Pathology. In 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 11683–11693, Seattle, WA, USA, June 2024. IEEE. ISBN 9798350353006. doi:10.1109/CVPR52733.2024.01110. URL https://ieeexplore.ieee.org/document/ 10655793/ .[29] Yiqing Shen, Yulin Luo, Dinggang Shen, and Jing Ke. RandStainNA: Learning Stain-Agnostic Features from Histology Slides by Bridging Stain Augmentation and Normalization. volume 13432, pages 212–221. 2022. doi:10.1007/978-3-031-16434-7_21. URL http://arxiv.org/abs/2206.12694 . arXiv:2206.12694 [cs]. 12 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+[30] Marc Macenko, Marc Niethammer, J. S. Marron, David Borland, John T. Woosley, Xiaojun Guan, Charles Schmitt, and Nancy E. Thomas. A method for normalizing histology slides for quantitative analysis. In 2009 IEEE International Symposium on Biomedical Imaging: From Nano to Macro , pages 1107–1110, Boston, MA, USA, June 2009. IEEE. ISBN 978-1-4244-3931-7. doi:10.1109/ISBI.2009.5193250. URL http://ieeexplore. ieee.org/document/5193250/ .[31] Mohamed Amgad, Lamees A. Atteya, Hagar Hussein, Kareem Hosny Mohammed, Ehab Hafiz, Maha A. T. Elsebaie, Ahmed M. Alhusseiny, Mohamed Atef AlMoslemany, Abdelmagid M. Elmatboly, Philip A. Pappalardo, Rokia Adel Sakr, Pooya Mobadersany, Ahmad Rachid, Anas M. Saad, Ahmad M. Alkashash, Inas A. Ruhban, Anas Alrefai, Nada M. Elgazar, Ali Abdulkarim, Abo-Alela Farag, Amira Etman, Ahmed G. Elsaeed, Yahya Alagha, Yomna A. Amer, Ahmed M. Raslan, Menatalla K. Nadim, Mai A. T. Elsebaie, Ahmed Ayad, Liza E. Hanna, Ahmed Gadallah, Mohamed Elkady, Bradley Drumheller, David Jaye, David Manthey, David A. Gutman, Habiba Elfandy, and Lee A. D. Cooper. NuCLS: A scalable crowdsourcing, deep learning approach and dataset for nucleus classification, localization and segmentation. GigaScience , 11:giac037, May 2022. ISSN 2047-217X. doi:10.1093/gigascience/giac037. URL http://arxiv.org/abs/2102.09099 . arXiv:2102.09099 [eess]. [32] Jevgenij Gamper, Navid Alemi Koohbanani, Simon Graham, Mostafa Jahanifar, Syed Ali Khurram, Ayesha Azam, Katherine Hewitt, and Nasir Rajpoot. Pannuke dataset extension, insights and baselines. arXiv preprint arXiv:2003.10778 , 2020. [33] Viktoria Weiss, Sweta Banerjee, Taryn Donovan, Thomas Conrad, Robert Klopfleisch, Jonas Ammeling, Christo-pher Kaltenecker, Dominik Hirling, Mitko Veta, Nikolas Stathonikos, Peter Horvath, Katharina Breininger, Marc Aubreville, and Christof Bertram. A dataset of atypical vs normal mitoses classification for MIDOG - 2025, July 2025. URL https://zenodo.org/records/16044804 .[34] Guillaume Jaume, Paul Doucet, Andrew H. Song, Ming Y. Lu, Cristina Almagro-Pérez, Sophia J. Wagner, Anurag J. Vaidya, Richard J. Chen, Drew F. K. Williamson, Ahrong Kim, and Faisal Mahmood. HEST-1k: A Dataset for Spatial Transcriptomics and Histology Image Analysis, November 2024. URL http://arxiv.org/ abs/2406.16192 . arXiv:2406.16192 [cs]. [35] Markus Marks, Manuel Knott, Neehar Kondapaneni, Elijah Cole, Thijs Defraeye, Fernando Perez-Cruz, and Pietro Perona. A Closer Look at Benchmarking Self-Supervised Pre-training with Image Classification, July 2024. URL http://arxiv.org/abs/2407.12210 . arXiv:2407.12210 [cs] version: 1. [36] Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein, Alexander C. Berg, and Li Fei-Fei. ImageNet Large Scale Visual Recognition Challenge, January 2015. URL http://arxiv.org/abs/1409.0575 . arXiv:1409.0575 [cs]. [37] Fuzhen Zhuang, Zhiyuan Qi, Keyu Duan, Dongbo Xi, Yongchun Zhu, Hengshu Zhu, Hui Xiong, and Qing He. A Comprehensive Survey on Transfer Learning, June 2020. URL http://arxiv.org/abs/1911.02685 .arXiv:1911.02685 [cs]. [38] Tong Ding, Sophia J. Wagner, Andrew H. Song, Richard J. Chen, Ming Y. Lu, Andrew Zhang, Anurag J. Vaidya, Guillaume Jaume, Muhammad Shaban, Ahrong Kim, Drew F. K. Williamson, Harry Robertson, Bowen Chen, Cristina Almagro-Pérez, Paul Doucet, Sharifa Sahai, Chengkuan Chen, Christina S. Chen, Daisuke Komura, Akihiro Kawabe, Mieko Ochi, Shinya Sato, Tomoyuki Yokose, Yohei Miyagi, Shumpei Ishikawa, Georg Gerber, Tingying Peng, Long Phi Le, and Faisal Mahmood. A multimodal whole-slide foundation model for pathology. 
+
+Nature Medicine , 31(11):3749–3761, November 2025. ISSN 1546-170X. doi:10.1038/s41591-025-03982-3. URL 
+
+https://www.nature.com/articles/s41591-025-03982-3 . Publisher: Nature Publishing Group. [39] TorchVision maintainers and contributors. TorchVision: PyTorch’s Computer Vision library, November 2016. URL https://github.com/pytorch/vision . original-date: 2016-11-09T23:11:43Z. [40] Warren Morningstar, Alex Bijamov, Chris Duvarney, Luke Friedman, Neha Kalibhat, Luyang Liu, Philip Mans-field, Renan Rojas-Gomez, Karan Singhal, Bradley Green, and Sushant Prakash. Augmentations vs Algo-rithms: What Works in Self-Supervised Learning, March 2024. URL http://arxiv.org/abs/2403.05726 .arXiv:2403.05726 [cs]. [41] Mingu Kang, Heon Song, Seonwook Park, Donggeun Yoo, and Sérgio Pereira. Benchmarking Self-Supervised Learning on Diverse Pathology Datasets, April 2023. URL http://arxiv.org/abs/2212.04690 .arXiv:2212.04690 [cs]. 13 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+## A Benchmarking datasets 
+
+NuCLS dataset: a dataset of images from slides originating from breast cancer of annotated cell type images, composed of three classification tasks with increased cell type resolution super , main , raw . The label distribution is shown in Table S1. Table S1: NuCLS dataset with different annotation levels 
+
+> (a) NuCLS (super)
+
+Cell type Number of images tumor_any 16052 sTIL 13642 nonTIL_stromal 7613                   
+
+> (b) NuCLS (main)
+> Cell type Number of images tumor_nonMitotic 15874 lymphocyte 9617 nonTILnonMQ_stromal 6634 plasma_cell 4025 macrophage 979 tumor_mitotic 178
+> (c) NuCLS (raw)
+> Cell type Number of images tumor 15874 lymphocyte 9617 fibroblast 6258 plasma_cell 4025 macrophage 979 ductal_epithelium 399 vascular_endothelium 376 apoptotic_body 293 mitotic_figure 178 neutrophil 35 myoepithelium 33 eosinophil 2
+
+MIDOG25 dataset: a dataset of images from slides originating from multiple organs and species with mytotic figure annotations. We did not use any of the metadata to create our splits except for labels to generate stratified splits. The label distribution is shown in Table S2. Table S2: MIDOG25 dataset. Class Number of images NMF 10191 AMF 1748 For the comparison of LEMON to tile-level FM on larger images (matching tile tile-level input dimension), we extracted crops of size 128 × 128 pixels at 40X magnification, centered on each nucleus, which were then resized to 224 × 224 
+
+to match the expected image size. We selected a crop size of 128 × 128 pixels to avoid border effects, as the MIDOG25 dataset did not consist of full WSI. This size therefore allowed us to maximize the number of usable nuclei while remaining compatible with the image distribution used to train the tile-level FM models. With this setting, we retained 
+
+9115 nuclei out of the original 11939 . The label distribution can be seen in Table S3. Table S3: MIDOG25 dataset with 128 × 128 crop images Class Number of images NMF 7955 AMF 1160 
+
+PanNuke dataset: a dataset of images from slides originating from multiple organs and species with broad cell type annotations. We extracted cell images for cells whose associated images of size 60 by 60 fall within the full crops with the annotations to make sure that all the part of the cell is in the images. It resulted in the following dataset. The dataset was originally published in [ 32 ], we downloaded the data from https://huggingface.co/datasets/RationAI/ PanNuke . The classes are 0: Neoplastic, 1: Inflammatory, 2: Connective, 3: Dead and 4: Epithelial. 
+
+HEST dataset: This dataset is built from Xenium slides, a technology for Imaging-based Spatial Transcriptomics (IST) that measures up to hundreds of distinct messenger RNA (mRNA) species while preserving their spatial localisation. After cell segmentation, we construct cell–count matrices in which each row corresponds to a cell, each column to a gene, and each entry to the number of transcripts detected in that cell. We use the segmentation provided by the Xenium software. The platform also provides a co-registered H&E slide aligned with the cell–count matrix, enabling extraction of cell images that are spatially aligned with the transcriptomic measurements. The prediction task is to identify the top 50 highly expressed genes, defined as follows. For every slide, we compute the mean expression per gene, rank genes within the slide, combine the ranks across slides, and retain the 50 highest-ranked 14 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+genes. To standardize sample size, we subsample 10 000 cells per slide uniformly at random. We report performances with a leave-one-out slide evaluation strategy. We accessed the Xenium slides through the HEST database [34]. The slide IDs used for each subset are: • HEST-bowel : TENX149, TENX148, TENX147, TENX139, TENX111 • HEST-breast : NCBI783, NCBI785, TENX94, TENX95, TENX98 • HEST-lung : NCBI856, NCBI857, NCBI858, NCBI859, NCBI860, NCBI861, NCBI864, NCBI865, NCBI866, NCBI867, NCBI870, NCBI873, NCBI875, NCBI876, NCBI879, NCBI880, NCBI881, NCBI882, NCBI883, NCBI884 We note that LEMON was pretrained on whole-slide images originating from TCGA. Consequently, NuCLS, which is derived from TCGA WSIs, can be considered an in-domain dataset for LEMON. PanNuke aggregates data from multiple sources, including TCGA. Therefore, it can be seen primarily as an OOD dataset for LEMON, although a subset of the data may be in-domain. Conversely, MIDOG25, and HEST do not overlap with LEMON’s pretraining sources and can therefore be seen as OOD. 
+
+## B Comparison of SSL Methods 
+
+We evaluated two state-of-the-art SSL methods, MoCo v3 and DINOv2, on small cell histopathology patches (40×40). As discussed in section 2.2, we tested several variants of DINOv2, including the original baseline and modified versions where (i) the local-to-global matching term was removed, and (ii) the KoLeo regularizer was replaced with a KDE-based loss. The KDE loss employs a von Mises–Fisher kernel: 
+
+kvM F (x, y ) = exp (κx T y) (7) where κ controls the concentration of the kernel around the mean direction. In our experiments, we set κ to 5 and KDE loss weight to 0.05. This encourages global feature uniformity while avoiding excessive penalties on local neighborhoods. Table S5 summarizes the performance of MoCo v3 and DINOv2 variants across the five benchmark datasets. MoCov3 consistently achieves the best results, outperforming all DINOv2 variants on NuCLS (0.779 vs 0.767), MIDOG (0.746 vs 0.670–0.678), and HEST Bowel (0.160 vs 0.117–0.142), which demonstrates its robustness for small 40×40 patches. The ablations on DINOv2 indicate incremental improvements: removing the local-to-global matching term slightly improves performances on most dataset (e.g,: Nucls: 0.703 vs 0.681, HEST-Breast 0.129 vs 0.119). Replacing the KoLeo regularizer with the KDE-based loss yields the best DINOv2 variant, improving NuCLS (0.767), HEST Breast (0.143), HEST Lung (0.147) and HEST Bowel (0.142) relative to the baseline. 
+
+## C Augmentation strategies 
+
+We here detail the augmentation strategies that we used to train our models. For MoCov3, we used the augmentations that we found in the pytorch implementation https://github.com/facebookresearch/moco-v3 . We used torchvision [39] implementations. For a0 (MoCo) :• RandomResizedCrop with scale=(0.08, 1.0) • RandomHorizontalFlip 
+
+• ColorJitter with parameters = (0.4, 0.4, 0.2, 0.1) and p=0.8 • RandomGrayscale with p=0.2 • GaussianBlur with sigma=(0.1, 2.0) Table S4: PanNuke dataset. Class Number of images 0 39222 1 26108 2 17258 3 13457 4 1582 15 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT Original 
+
+> a0 (MoCo) (0)
+> a0 (MoCo) (1)
+> a0 (MoCo) (2)
+> a1+gray (0)
+> a1+gray (1)
+> a1+gray (2)
+
+Figure S1: Examples of nuclei images with different augmentation strategies with three random augmentations from either the MoCo v3 augmentation or ours 
+
+## D Domain-specific augmentations 
+
+Augmentation policy strongly affects SSL performance [ 40 ]. We revised the pipeline with stronger color jitter, random patch masking, and a customized rotation protocol without padding ( a1 ), which improved both classification (NuCLS, MIDOG25) and gene-expression prediction (HEST) with respect to the standard augmentation scheme ( a0 (MoCo) ). Imposing robustness to color variations is important in digital pathology, as staining protocols and scanners may vary between hostpitals. Adding grayscale augmentations ( a1+gray ) [ 41 ] yielded the best MIDOG25 score and competitive NuCLS results, though HEST effects were mixed. Surprisingly, RandstainNA color perturbations [ 29 ] mimicking realistic color variations helped HEST when using a single color template ( a1+gmm1 ) but reduced classification accuracy, and the multi-template variant ( a1+gmm10 ) underperformed overall. Balancing these trade-offs, we adopted a1+gray as our default, as it combines the strongest classification gains with good HEST performance. The results are summarized in Table S6. For a1 :• RotationCrop with degree=360 (our implementation which prevent black pixel padding) • RandomResizedCrop with scale=(0.32, 1.0) • RandomHorizontalFlip 
+
+Table S5: Effect of architectural and framework adaptations on downstream tasks. We report balanced accuracy for NuCLS (super) and MIDOG25 (majority) and PCC for HEST datasets. Values are mean (s.d.), best values are highlighted in bold. MIDOG25 NuCLS HEST-Bowel HEST-Breast HEST-Lung bal acc bal acc pcc pcc pcc Model DINOv2-Baseline (vits8) 0.678 (0.011) 0.681 (0.002) 0.117 (0.014) 0.119 (0.023) 0.106 (0.015) DINOv2-No local-to-global (vits8) 0.673 (0.012) 0.703 (0.003) 0.131 (0.016) 0.129 (0.021) 0.110 (0.018) DINOv2-No local-to-global + KDE (vits8) 0.67 (0.011) 0.767 (0.007) 0.142 (0.024) 0.143 (0.024) 0.147 (0.02) MoCov3 (vits8) 0.741 (0.02) 0.779 (0.005) 0.16 (0.027) 0.156 (0.021) 0.128 (0.028) 16 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT Original Data - MIDOG25     
+
+> Macenko : TCGA-3C-AALI Macenko : TCGA-A1-A0SF Macenko : TCGA-A2-A3XY
+> Macenko : TCGA-A8-A08C Macenko : TCGA-B6-A0RE Macenko : TCGA-D8-A13Y
+
+Figure S2: Visualization of Macenko stain augmentation. The first panel shows a subset of original MIDOG25 cell images, while the remaining panels display the same images after Macenko augmentation using six different reference stains. • ColorJitter with parameters = (0.6, 0.7, 0.5, 0.2) and p=0.8 • RandomGrayscale with p=0.2 • RandomErasing with scale=(0.1, 0.3), ratio=(0.8, 1.2) and p=0.3 • GaussianBlur with sigma=(0.1, 2.0) For a1+gray , we added RandomGrayscale with p=0.2 to the a1 augmentations. For stain-specific augmentations, we first computed stain statistics on the training dataset with either 1 or 10 mixtures and then sample a new staining to augment the images. a1-gmm1 and a1-gmm10 correspond to a1 with these additional augmenations. 
+
+## E Additional Robustness to Staining Variability 
+
+To provide additional insight into the robustness of learned representations under staining variability, we visualize representative examples of Macenko-based stain normalization applied using six TCGA reference images to MIDOG25 dataset (Figure S2). We further provide detailed performance comparisons across staining conditions for NuCLS and MIDOG25 (see Figure S3). These results confirm that LEMON-MoCov3 maintains consistent downstream classification performance across stain perturbations, outperforming Volta and H-Optimus-0. Table S6: Effect of augmentation policy on downstream tasks. We report balanced accuracy for NuCLS (supervised) and MIDOG25 (majority), and Pearson Correlation Coefficient for HEST (breast, lung, bowel). Values are mean (s.d.) over folds, best values are highlighted in bold. MIDOG25 NuCLS HEST-Bowel HEST-Breast HEST-Lung bal acc bal acc pcc pcc pcc Augmentations a0 (MoCo) 0.682 (0.013) 0.771 (0.003) 0.154 (0.03) 0.148 (0.023) 0.116 (0.027) a1 0.715 (0.021) 0.784 (0.003) 0.161 (0.028) 0.155 (0.025) 0.133 (0.032) a1+gray 0.746 (0.015) 0.779 (0.005) 0.16 (0.027) 0.156 (0.021) 0.128 (0.028) a1+gmm1 0.736 (0.018) 0.768 (0.005) 0.164 (0.019) 0.162 (0.021) 0.126 (0.029) a1+gmm10 0.725 (0.014) 0.765 (0.003) 0.160 (0.027) 0.156 (0.021) 0.128 (0.028) 17 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+Figure S3: Benchmark of performances under different Macenko staining augmentations. Balanced accuracy of three models (H-optimus-0, LEMON, and Volta) on the NuCLS (left) and MIDOG25 (right) datasets. For each dataset, results are shown for the original images, six Macenko-stained augmentation conditions, as well as the mean across these six augmentations. 
+
+## F Representation Analysis 
+
+We further examined the learned cell embeddings on a TCGA Whole Slide Image (WSI) to assess whether they capture meaningful biological structure. For this, we projected the embeddings into two dimensions using t-distributed Stochastic Neighbor Embedding (t-SNE) (Figure S4). The spatial organization of the latent space revealed clear biological structure. Along the first dimension, cells located on the far left (1) were predominantly epithelial. Within this region, we identified a subpopulation in the central left area (2) characterized by large, rounded nuclei with irregular borders and prominent nucleoli, suggestive of neoplastic epithelial cells. In the upper right corner (3), we observed clusters of cells with small, round nuclei, consistent with lymphocytes. An adjacent cluster (4) likely corresponded to plasma cells, with eccentric nuclei. Finally, the lower right region (5) contained elongated, spindle-shaped nuclei, suggestive of fibroblasts or myofibroblasts. These observations highlight that the model captures not only broad cell-type distinctions but also finer-grained morphological and pathological variations directly from the learned representations. 
+
+## G Additional classification metrics for benchmarks 
+
+Table S7: Evaluation on the NuCLS dataset - task super Target NuCLS (super) Metric auc aupr bal acc f1 (macro) f1 (weighted) Embeddings 
+
+Imagenet (ResNet-18) 0.876 (0.003) 0.757 (0.005) 0.693 (0.005) 0.698 (0.006) 0.74 (0.005) 
+
+Imagenet (ResNet-50) 0.891 (0.004) 0.777 (0.006) 0.711 (0.005) 0.717 (0.005) 0.756 (0.004) 
+
+DINOv2 (ViT-s/14) 0.905 (0.001) 0.794 (0.002) 0.732 (0.003) 0.738 (0.004) 0.775 (0.004) 
+
+DINOv2 (ViT-b/14) 0.903 (0.003) 0.792 (0.006) 0.732 (0.003) 0.738 (0.004) 0.775 (0.003) 
+
+DINOv2 (ViT-l/14) 0.897 (0.003) 0.775 (0.005) 0.721 (0.004) 0.726 (0.005) 0.767 (0.003) 
+
+DINOv2 (ViT-g/14) 0.905 (0.004) 0.786 (0.007) 0.733 (0.008) 0.739 (0.008) 0.777 (0.007) 
+
+UNI (ViT-l/16) 0.905 (0.004) 0.789 (0.006) 0.733 (0.007) 0.738 (0.007) 0.777 (0.006) 
+
+Virchow2 (ViT-h/14) 0.915 (0.004) 0.807 (0.007) 0.753 (0.008) 0.759 (0.008) 0.794 (0.007) 
+
+H-Optimus-0 (ViT-g/14) 0.917 (0.002) 0.812 (0.003) 0.752 (0.006) 0.757 (0.007) 0.794 (0.006) 
+
+Volta (ResNet-18) 0.905 (0.003) 0.795 (0.002) 0.736 (0.003) 0.74 (0.003) 0.776 (0.002) 
+
+LEMON-MoCov3 (ViT-s/8) 0.932 (0.003) 0.831 (0.004) 0.779 (0.005) 0.785 (0.005) 0.816 (0.005) 
+
+18 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 31245t-SNE 1 t-SNE 2 
+
+Figure S4: Morphological map of learned cell representations. A t-SNE projection of 100,000 cells randomly sampled from a breast cancer whole-slide image (TCGA) is shown. A regular grid of cell images visualizes the embedding space, revealing a smooth continuum of latent morphologies. Five representative regions were annotated by an expert pathologist, corresponding to distinct cellular phenotypes: (1) epithelial cells, (2) neoplastic epithelial cells with large, irregular nuclei, (3) small lymphocytes, (4) plasma cells, and (5) fibroblasts. 
+
+## H Use of Large Language Models (LLMs) 
+
+We used LLMs to aid and polish writing. Table S8: Evaluation on the MIDOG25 dataset Target MIDOG25 (majority) Metric auc aupr bal acc f1 (macro) f1 (weighted) Embeddings 
+
+Imagenet (ResNet-18) 0.781 (0.01) 0.948 (0.001) 0.577 (0.008) 0.597 (0.012) 0.829 (0.004) 
+
+Imagenet (ResNet-50) 0.805 (0.014) 0.955 (0.003) 0.603 (0.012) 0.632 (0.016) 0.84 (0.006) 
+
+DINOv2 (ViT-s/14) 0.832 (0.011) 0.961 (0.003) 0.643 (0.004) 0.677 (0.004) 0.856 (0.002) 
+
+DINOv2 (ViT-b/14) 0.842 (0.007) 0.964 (0.001) 0.653 (0.013) 0.688 (0.013) 0.86 (0.004) 
+
+DINOv2 (ViT-l/14) 0.833 (0.012) 0.961 (0.003) 0.647 (0.01) 0.682 (0.009) 0.858 (0.003) 
+
+DINOv2 (ViT-g/14) 0.844 (0.01) 0.964 (0.003) 0.654 (0.01) 0.69 (0.009) 0.861 (0.003) 
+
+UNI (ViT-l/16) 0.804 (0.012) 0.953 (0.005) 0.623 (0.008) 0.656 (0.01) 0.849 (0.005) 
+
+Virchow2 (ViT-h/14) 0.799 (0.013) 0.95 (0.006) 0.618 (0.016) 0.65 (0.02) 0.848 (0.007) 
+
+H-Optimus-0 (ViT-g/14) 0.812 (0.011) 0.954 (0.003) 0.631 (0.012) 0.665 (0.015) 0.852 (0.006) 
+
+Volta (ResNet-18) 0.849 (0.014) 0.963 (0.005) 0.726 (0.01) 0.742 (0.006) 0.876 (0.004) 
+
+LEMON-MoCov3 (ViT-s/8) 0.911 (0.01) 0.981 (0.003) 0.741 (0.02) 0.778 (0.019) 0.897 (0.008) 
+
+19 LEMON: a foundation model for nuclear morphology in Computational Pathology A P REPRINT 
+
+Table S9: Evaluation on the PanNuke dataset Target PanNuke (classification) Metric auc aupr bal acc f1 (macro) f1 (weighted) Embeddings 
+
+Imagenet (ResNet-18) 0.873 (0.002) 0.589 (0.007) 0.56 (0.004) 0.583 (0.005) 0.643 (0.003) 
+
+Imagenet (ResNet-50) 0.885 (0.002) 0.622 (0.005) 0.587 (0.005) 0.608 (0.005) 0.663 (0.003) 
+
+DINOv2 (ViT-s/14) 0.904 (0.002) 0.661 (0.006) 0.635 (0.009) 0.653 (0.008) 0.7 (0.003) 
+
+DINOv2 (ViT-b/14) 0.901 (0.001) 0.655 (0.005) 0.627 (0.01) 0.646 (0.008) 0.691 (0.003) 
+
+DINOv2 (ViT-l/14) 0.899 (0.003) 0.644 (0.009) 0.619 (0.008) 0.639 (0.007) 0.691 (0.003) 
+
+DINOv2 (ViT-g/14) 0.904 (0.002) 0.652 (0.006) 0.631 (0.007) 0.651 (0.006) 0.701 (0.002) 
+
+UNI (ViT-l/16) 0.91 (0.002) 0.689 (0.005) 0.643 (0.008) 0.663 (0.007) 0.704 (0.003) 
+
+Virchow2 (ViT-h/14) 0.914 (0.002) 0.685 (0.007) 0.645 (0.009) 0.666 (0.008) 0.708 (0.004) 
+
+H-Optimus-0 (ViT-g/14) 0.915 (0.002) 0.691 (0.005) 0.648 (0.007) 0.665 (0.006) 0.71 (0.002) 
+
+Volta (ResNet-18) 0.876 (0.002) 0.565 (0.002) 0.571 (0.007) 0.581 (0.007) 0.669 (0.002) 
+
+LEMON-MoCov3 (ViT-s/8) 0.912 (0.001) 0.643 (0.005) 0.641 (0.008) 0.66 (0.007) 0.712 (0.003) 
+
+20
