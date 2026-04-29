@@ -1,0 +1,896 @@
+Title: Semi supervised GAN for smart microscopy, fast and data efficient cell cycle classification
+
+URL Source: https://arxiv.org/pdf/2604.20615v1
+
+Published Time: Thu, 23 Apr 2026 01:18:54 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Semi supervised GAN for smart microscopy, fast and data efficient cell cycle classification 
+
+Rajeev Manick a, Youssef El Habouz ∗a, Maëlle Guillout a, Celia Martin b, Julia Bonnet a, Louis Ruel a, Sylvain Pastezeur a, Olivier Chanteux b, Otmane Bouchareb b, Marc Tramier a,c , Jacques Pécréaux a
+
+> aCNRS, Univ. Rennes, IGDR, UMR 6290, F-35043 Rennes, France
+> bInscoper SAS, F-35510, Cesson-Sévigné, France
+> cUniv. Rennes, BIOSIT, UMS CNRS 3840, US INSERM 018, F-35000 Rennes, France
+
+Abstract 
+
+Modern optical microscopes are fully motorised; however, transforming them into truly smart systems requires real-time adjustment of acquisition settings in response to detected objects and dynamic biological events. At the core are classification algorithms that commonly depend on customised softwares and are generally designed for narrowly-defined biological applications. In addition, they often require substantial annotated datasets for effective training. We introduce a semi-supervised generative adversarial network (SGAN) for robust cell-cycle stage classification under low-resource conditions, adaptable to diverse cellular structures. The framework combines unlabelled microscopy images with synthetically generated samples to mitigate limited annotation, while preserving stable performance even when the unlabelled subset is class-imbalanced. Tested on the Mitocheck dataset, which features five mitosis classes, the model achieved 93 ± 2% accuracy using only 80 labelled per class and 600 unlabelled images. The proposed algorithm is generic and can be readily adapted to new labeling schemes, classification targets, cell lines, or microscopy modalities through transfer learning. SGAN is well suited for integration into automated microscopes, enabling efficient and adaptable image analysis across diverse biological and microscopy applications. 
+
+Keywords: semi supervised learning, generative adversarial network, microscopy, mitosis classification, smart microscope 
+
+1. Introduction 
+
+Through its diverse modalities, optical microscopy en-ables unparalleled approaches to investigate the living. Beyond gaining an in-depth understanding of cell biol-ogy, it is widely used in high-content screening (HCS) to test new drugs (Balasubramanian et al., 2023; Daetwyler and Fiolka, 2023; Renz, 2013). The progress in biology is now tightly linked to progress in imaging, leading to a vast range of modalities beyond the bare observation (Daetwyler and Fiolka, 2023; Lelek et al., 2021; Mangeat et al., 2021; Prakash et al., 2022). Fluorescence microscopy can also capture functional aspects, such as the dynamics of labelled proteins, through high-frame-rate movies and so-called F-techniques, which are based primarily on fluo-rescence recovery after photobleaching (FRAP), photocon-version, and fluorescence correlation spectroscopy (FCS, Ishikawa-Ankerhold et al. (2012). Such techniques also enable access to interactions between proteins, e.g., us-ing Förster Resonance Energy Transfer (FRET) or fluo-rescence lifetime imaging microscopy (FLIM), and even 
+
+> ∗Co-first author.
+> ∗∗ Corresponding authors: rajeev.manick@univ-rennes.fr, jacques.pecreaux@univ-rennes.fr
+
+allow for the perturbation of the sample through light to observe its adapt (de Medeiros et al., 2020; Khamo et al., 2017; Shakoor et al., 2022). While tremendous progress in optics and electronics supported this evolution, these experiments often remain tour-de-force, requiring dual ex-pertise in biology to identify events and objects of interest, and in microscopy to tweak ever more complex imaging systems. To address this limitation, smart microscopy emerged, aiming at condensing some expertise in the accompany-ing software, which partly stands in for the experimenter (Daetwyler and Fiolka, 2023; Eisenstein, 2020, 2023; Hin-derling et al., 2026; Scherf and Huisken, 2015). Such soft-ware is tasked with finding the, often rare, objects of inter-est by an automaton in the so-called generic event-driven acquisition (Almada et al., 2019; Andre et al., 2023; Bon-net et al., 2024; Conrad et al., 2011; Durand et al., 2018; Fox et al., 2022; Mahecic et al., 2022; Royer et al., 2016; Shi et al., 2024; Stepp et al., 2025). Most smart micro-scopes are used to grab a first round of images, a so-called screening sequence, and analyse them to find objects of interest, then to instruct the microscope to grab these ob-jects in further detail with different imaging modalities (Carro et al., 2015; Conrad et al., 2011; Meng et al., 2022; Stepp et al., 2025). The analysis could be performed by 
+
+> arXiv:2604.20615v1 [q-bio.QM] 22 Apr 2026
+
+the computer gathering the images or by a dedicated de-vice inserted between this computer and the camera. In all cases, it runs an image processing workflow to identify and localise the objects of interest. To capture very transient and dynamic events, we set out to analyse images from the screening sequence on the fly and interrupt it when finding an object or event of interest (Balluet et al., 2022; Bonnet et al., 2024). Pivotal to smart microscopes is the algorithm analysing the images. The first implementations aimed at using on-the-fly analysis to improve the quality of a specific experi-ment or tune one of the devices attached to the microscope. For instance, to improve acquisition, it enables adjusting automatically adaptive optics to correct aberrations (Hu et al., 2023), performing an acquisition only at the place or time of interest, saving sample illumination and thus photobleaching, phototoxicity and time (Abouakil et al., 2021; Lang et al., 2012; Wenus et al., 2009), or drive laser micro-dissection (Meng et al., 2022). Alternatively, it may also directly take part in the experiment, for instance, by analysing live cell fluorescence as a readout of intracellu-lar activity and either (i) drive a microfluidic device to subject cells to chemicals promoting or repressing specific gene expression (Lugagne et al., 2017; Perrino et al., 2019), or (ii) control light that in turn control gene expression through optogenetic (Chait et al., 2017; Toettcher et al., 2011). However, a common trait of these approaches is the hard-coded analysis of the images. Modern deep Learning approaches have been a game changer and offer a highly promising alternative for enabling users to design a wide range of experiments. To ensure fast-enough detection of objects or events of interest, phenotype classification by deep learning network proved to be highly efficient (Kensert et al., 2019; Krentzel et al., 2023; Nguyen et al., 2021; Yao et al., 2019; Zarit-sky et al., 2021). When it comes to embedding classifi-cation into a microscope automation, most designs were specific to microscopes/devices, both in light and electron microscopy (Bouvette et al., 2022; Hermann et al., 2011; Mahecic et al., 2022; Shi et al., 2023). Alternatively, one can let the user code the automaton that links the im-age processing and microscope driving using established frameworks (Fox et al., 2022; Pinkard et al., 2016, 2021). A standard limitation of microscopy imaging when it comes to deep learning is the small size of the avail-able training dataset (Chai et al., 2023; Dou et al., 2023; Shaikhina and Khovanova, 2017). Beyond using a domain transfer from a pre-trained model, such a challenge may be addressed by reducing the burden of annotating using non-labelled images, including semi-supervised, unsuper-vised, or self-supervised approaches (Lu et al., 2019; Moen et al., 2019; Nguyen et al., 2021; Van Valen et al., 2016; Wu et al., 2022; Yao et al., 2019). This work is motivated by the practical constraints of many AI-assisted real-time microscopy applications, where classifiers must learn from very limited annotation while remaining fast and reliable enough to support adap-tive acquisition and autonomous decision-making. We therefore investigate a semi-supervised generative adver-sarial network (SGAN) as a data-efficient framework for microscopy-based cell-phase classification. Specifically, we assess the behaviour of semi-supervised learning (SSL) across a range of labelled and unlabelled data budgets, compare it with competing supervised and semi-supervised methods, and examine its potential for integration into smart microscopy workflows requiring robust, transferable, and computationally efficient image analysis. 
+
+2. Related works 
+
+SSL methods have been extensively studied in the litera-ture in recent years. A comprehensive review by Van Enge-len and Hoos (2020) categorizes SSL methodologies into in-ductive methods, which aim to build classifiers that gener-alise to unseen data, and transductive methods, which di-rectly optimize predictions over a fixed unlabelled dataset. Inductive strategies differ mainly in how they exploit un-labelled data, including approaches based on iterative pseudo-label generation, unsupervised or self-supervised feature learning, and methods that integrate unlabelled samples explicitly into the training objective. Building upon this inductive perspective, our proposed approach adopts a generative adversarial network (GAN) formulation. Accordingly, this section focuses on seminal and recent GAN-based SSL models developed across var-ious application domains, with emphasis on architectural mechanisms that incorporate unlabelled data directly into representation learning. Broader surveys of alternative SSL paradigms can be found in a review by Sajun and Zualkernan (2023). Fundamentally, SSL relies on the assumption that the geometric structure of the data manifold encodes infor-mation about underlying class distributions. In this con-text, GANs are particularly well suited due to their capac-ity to model complex, high-dimensional data distributions, thereby enabling effective feature learning and classifica-tion in regimes where annotated data are scarce. One of the earliest works applying GANs to SSL was the Semi-Supervised GAN proposed by Odena (2016). Their approach modifies the discriminator into an N + 1 -class classifier that jointly performs discrimination and class prediction, allowing unlabelled data to directly in-form feature learning. Experiments by Ouriha et al. (2024) demonstrated that SSL approach significantly out-performs conventional CNN classifiers in low-label set-tings, while its advantage diminishes as supervision in-creases, with performance converging to standard super-vised CNN baselines. These results highlighted a partic-ularly data-efficient strategy in label-scarce environments, motivating its adoption in subsequent studies. Later work extended semi- and self-supervised GANs from classification to large-scale image generation. Lucic et al. (2019) introduced S 2GAN and S 3GAN, combining self-supervised rotation prediction with semi-supervised 2label learning to produce high-quality conditional images. Evaluated on ImageNet ((1.3 million images, 1,000 classes at 128 × 128 resolution), their approach demonstrated strong label efficiency: the unsupervised variant achieved state-of-the-art generation quality, while S 3GAN matched and even surpassed fully supervised BigGAN (Brock et al., 2018) using only a small fraction ( ∼10–20%) of labelled data. Recent efforts of using GAN-based SSL in the classifi-cation domain has been the Triple-GAN framework pro-posed by Li et al. (2017), which formulates learning as a three-player minimax game between a generator, a classi-fier, and a discriminator, thereby decoupling classification and discrimination objectives. Evaluated on datasets in-cluding CIFAR-10 (Krizhevsky and Hinton, 2009), SVHN (Netzer et al., 2011), Tiny ImageNet (Deng et al., 2009), and STL-10 (Coates et al., 2011) with only a small fraction of labelled data (typically 250 to 4,000 labelled images), Triple-GAN substantially reduced classification error rela-tive to prior SSL techniques and strong baselines such as Mean Teacher (Tarvainen and Valpola, 2018); for example, on CIFAR-10 with 4,000 labels, the error decreased from approximately 16 to 18% to ≈ 12% without data augmen-tation and to ≈ 10% with augmentation, while maintain-ing competitive conditional image generation quality. Complementary work in the medical field by Haque (2021) introduced EC-GAN for low-sample supervised classification. On SVHN (73,257 training images), ex-periments using only 10–30% of annotated data ( ∼7k–22k samples) achieved accuracies up to ∼94.3%, outperforming both standard CNN classifiers and shared discriminator-classifier GAN architectures. On a pediatric chest X-ray dataset comprising 5,863 labelled images, EC-GAN reached ∼98% accuracy using the full dataset and main-tained strong performance in extreme low-data regimes as well. More recently, Manni et al. (2026) introduced the SPARSE framework, a GAN-based semi-supervised learn-ing approach specifically designed for extremely low labelled-data regimes. The method was evaluated on eleven datasets from the MedMNIST (Yang et al., 2023) benchmark under few-shot settings of 5, 10, 20, and 50 labelled samples per class. In their experimental proto-col, all remaining training samples were treated as un-labelled, resulting in substantially large unlabelled pools that often ranged from 10 4 to 10 5 images depending on the dataset.Mean per-class accuracy averaged across datasets reached 66.22%, 70.95%, 75.71%, and 78.28% for SPARSE ens in the 5-, 10-, 20-, and 50-shot settings, re-spectively, with the non-ensemble SPARSE model showing slightly lower performance. Overall, these studies indicate that high classification performance with semi-supervised GANs, often exceed-ing ∼85–90% is generally reported in experimental set-tings based on relatively large datasets comprising sub-stantial numbers of labelled and/or unlabelled samples. These dataset scales remain one to two orders of magni-tude larger than those typically encountered in real-world bio-imaging applications, where acquisition time, exper-imental throughput, and annotation costs severely con-strain data availability. 
+
+3. Dataset and splits 
+
+3.1. Mitocheck Dataset 
+
+For consistency with our earlier work, we used the Mi-tocheck dataset assembled by Balluet et al. (2022) and derived from the original data of Neumann et al. (2010). It consisted of wide-field fluorescence time-lapses of HeLa Kyoto cells, expressing chromatin Green Fluorescent Pro-tein (GFP) marker. Images of this dataset were acquired with a 10 × dry objective on an Olympus ScanR micro-scope. 
+
+3.1.1. Labelled Data 
+
+All labelled images were manually annotated by biol-ogy experts to assign ground-truth cell-cycle phase labels across five classes: Interphase, Prometaphase, Metaphase, Anaphase, and Apoptosis. Importantly, the cropped cell images were sourced from independent static microscopy snapshots rather than time-lapse sequences, ensuring that each image represents a unique cell observation with no temporal correlation between samples. We split the la-belled sets with varying sizes of 20, 40, 60, and 80 images per class to systematically evaluate our model performance across different label budgets. One representative example from each class is shown in Figure 1.   
+
+> Figure 1: Representative examples of the five classes used for SGAN model. From left to right: Interphase, Prometaphase, Metaphase, Anaphase, and Apoptosis.
+
+A separate held-out test set of 100 images (20 labelled images per class, balanced across all five phases) was re-served for final model evaluation and was never used dur-ing training or validation. All labelled images under-went identical preprocessing: they were loaded as 8-bit grayscale, resized to 64 ×64 pixels, and normalized to the range [-1, 1]. 
+
+3.1.2. Unlabelled Data 
+
+While semi-supervised learning typically assumes aregime where the number of unlabelled samples ( NU ) is much larger than the number of labelled samples ( NL), i.e., NU ≫ NL, (e.g. Wang et al. 2021; Yuan et al. 2023; Zhong et al. 2025, real-world biomedical imaging research often operate under severe data scarcity constraints. To reflect this practical reality and evaluate SGAN robustness 3Cluster 3 Cluster 0 Cluster 2 Cluster 4 Cluster 1       
+
+> Clusters
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> Number of Images
+> 259±24
+> (43.2%)
+> 153±21
+> (25.5%)
+> 85±17
+> (14.2%) 73±16
+> (12.2%)
+> 30±10
+> (5.0%) 10123
+> PC1 (9.3%)
+> 2
+> 1
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> PC2 (6.8%)
+> Cluster 3 (259 images)
+> Cluster 0 (153 images)
+> Cluster 2 (85 images)
+> Cluster 4 (73 images)
+> Cluster 1 (30 images) Figure 2: Unsupervised clustering analysis of 600 unlabelled cell images using Blob detection features reveals natural five-cluster decomposition with pronounced class imbalance. (Left) Bar chart showing cluster distribution sorted by descending size: Cluster 3 dominates (43.2%, ∼259 images, likely interphase), while Cluster 1 comprises only 5% ( ∼30 images, likely apoptosis). (Right) PCA projection of feature space, coloured by cluster assignment, demonstrating substantial inter-cluster overlap.
+
+in low-data regimes, we constrain the unlabelled pool to a total of NU = 600 images. Prior to performing detailed analyses, we considered it essential to characterise the intrinsic structure and distri-bution of the full pool of available unlabelled data. We performed an unsupervised clustering analysis on NU to better understand the intrinsic morphological distribution of the images. We evaluated multiple conventional fea-ture extraction approaches and a blob detection feature extraction method (e.g. Meijering et al., 2012) provided robust cluster separation. This method segments the cells using Otsu thresholding (Otsu, 1979), identifies individual cell regions via connected-component and contour detec-tion, and extracts shape-based statistics including object count, area, perimeter, and fill ratio. Cluster quality is then evaluated using the Silhouette score, which measures how similar each sample is to its assigned cluster relative to the nearest neighbouring cluster, with values ranging from 0 to 1 and higher scores indicating better-defined cluster separation. Using this metric, we obtained a Silhouette score of 0.382, suggesting moderate cluster structure in the data. The resulting cluster distribution (Figure 2) ex-hibits class imbalance consistent with expected biological variability in cell-cycle phase durations. These features were projected into a lower-dimensional space using PCA and colour-coded for visualization, while k-means cluster-ing was performed with k = 5 .Although this unsupervised approach provides a global overview of the data organisation, substantial overlap be-tween clusters is observed. This overlap likely reflects gradual biological transitions between cell-cycle stages, which complicate discrete separation and highlights the intrinsic difficulty of the classification task. 
+
+3.1.3. Transfer Learning Data 
+
+CellCognition dataset: To facilitate comparison with Balluet et al. (2022), we used a dataset derived from the CellCognition software demonstration images Held et al. (2010). The data consist of wide-field fluorescence time-lapse recordings of human HeLa Kyoto cells expressing his-tone H2B and α-tubulin markers, visualising chromosomes and microtubules, respectively. Images were acquired at three distinct positions using a 20 × dry objective with a temporal resolution of 4.6 minutes. We retained only the histone channel for analysis. The dataset comprises 1,011 images of size with most common dimension being 
+
+44 × 51 pixels, annotated across eight cell-cycle phases. The dataset spans eight cell-cycle phases with the fol-lowing sample counts: Interphase (251), Prophase (112), Prometaphase (80), Metaphase (110), Early anaphase (40), Late anaphase (83), Telophase (136), and Apopto-sis (199) (Fig. E.11). 
+
+Homemade dataset: From the perspective of embed-ding our algorithm in our smart microscope prototype, we prepared a dataset as detailed in Bonnet et al. (2024). We used Hela Kyoto cells, whose DNA was labelled with Hoechst. Cells were imaged with a Zeiss inverted axio ob-server with a 20 × dry objective. A double thymidine block synchronised the cells to get enough transient classes and equilibrate the dataset. We here selected contains 1281 cell images of size 72 ×72 belonging to 7 different classes: inter-phase (108 images), prophase (156), prometaphase (279), metaphase (255), anaphase (96), telophase (274) and Junk (113) (Figure E.12). 
+
+RHC dataset : We tested the generalisability by test-ing our network using published datasets in other contexts (Nagao et al., 2020). It features mouse retinal pigment ep-ithelium cells (RPE1) with Hoechst (DNA) and CENP-F 4(centromeres) labellings. Cells were imaged with an Olym-pus IXplore SpinSR, equipped with a 60 × oil-immersion objective. We summed up both channels before normal-ising. This dataset contains 461 original images of size 150 ×150 belonging to 2 cell cycle phases: G2 (230 images, class 0) and non-G2 (231 images, class 1) Figure E.13. 
+
+HHG dataset : It features human cervical cancer cells (HeLa) with Hoechst (DNA) and GM130 (Golgi) la-bellings. Cells were imaged with an Olympus IXplore SpinSR, equipped with a 60 × oil-immersion objective. We summed up both channels before normalising. This dataset contains 491 original images of size 135 ×135 be-longing to 2 cell cycle phases: G2 (239 images, class 0) and non-G2 (252 images, class 1) Figure E.13. 
+
+HHE dataset : It features human cervical cancer cells (HeLa) with Hoechst (DNA) and EB1 (microtubules plus-ends) labellings. Cells were imaged with an Olympus IX-plore SpinSR, equipped with a 60 × oil-immersion objec-tive. We summed up both channels before normalising. This dataset contains 501 original images of size 128 ×128 belonging to 2 cell cycle phases: G2 (258 images, class 0) and non-G2 (243 images, class 1) Figure E.13. 
+
+Ciliated cells dataset : To further challenge our al-gorithm, we use an entirely distinct biological question, moreover using fixed cells. This dataset features mouse embryonic fibroblasts NIH3T3 with Hoechst (DNA) and acetylated-tubulin (cilium) labellings. Cells were imaged with an Olympus IXplore SpinSR, equipped with a 60 ×
+
+oil-immersion objective. We summed up both channels before normalising. This dataset contains 558 original im-ages of size 135 ×135 belonging to 2 states: ciliated (279 images, class 0) and non-ciliated cells (279 images, class 1) (Figure E.14). 
+
+DIC dataset: We further challenged the model on a non-fluorescence imaging modality: differential interfer-ence contrast (DIC). In DIC images, class-discriminative information is conveyed less by intensity than by optical path length gradients, producing edge-enhanced, relief-like patterns that emphasise texture and subtle morphologi-cal transitions rather than fluorescent signal localisation. We assembled a set of nematode one-cell embryos imaged during mitosis by using a Zeiss Axio-imager microscope. It features 169 original images of size 512 ×512 belonging to 3 different classes: before nuclear envelope breakdown (NEBD, 57 images), metaphase (57), and anaphase (55) (Figure E.15). 
+
+4. Method 
+
+We introduce SGAN, a semi-supervised deep learning framework for cell-cycle classification that exploits limited labelled data, abundant unlabelled data, and generated samples to improve decision-boundary optimisation. An overview of the proposed SGAN architecture is illustrated in Figure 3. We consider a classification task on cell microscopy im-ages. Let x ∈ RH×W ×C denote a single microscopy image of size H × W pixels with C channels (in our case, C = 1 ), representing one of five cell cycle phases. The classification target is denoted as y ∈ { 1, 2, ..., K } where K = 5 rep-resents the five cell cycle phases: Anaphase, Interphase, Apoptosis, Metaphase, and Prometaphase from the Mi-tocheck data. During training of SGAN, labelled images provided ground-truth phase annotations, enabling the discriminator to learn class-conditional decision bound-aries for the classification task, expressed as the posterior probability P (y|x). For a given training dataset, we have: 1. labelled samples : L = {(xi, y i)}NL 
+
+> i=1
+
+where we evaluate four labelled data budgets: 
+
+NL ∈ {100 , 200 , 300 , 400 } samples corresponding to {20 , 40 , 60 , 80 } images per class across five cell cycle phases 2. unlabelled samples : U = {xj }NU 
+
+> j=1
+
+where NU = 600 
+
+represents the total pool of unlabelled images. 3. Validation set : V = {(xk, y k)}NV 
+
+> k=1
+
+where NV = 0 .2×
+
+NL (20% stratified split). 4. Test set : T = {(xm, y m)}NT 
+
+> m=1
+
+where NT = 100 (fixed to 20 images per class) reserved for final evaluation. 
+
+4.1. Semi-Supervised GAN Architecture 
+
+The SGAN couples supervised classification with unsu-pervised feature learning through a dual-head discrimina-tor. A shared convolutional backbone extracts features from input images, which are then fed into (1) a super-vised head performing multi-class cell-cycle phase classi-fication using a softmax activation and sparse categorical cross-entropy loss, and (2) an unsupervised head that dis-tinguishes real from generator-synthesized samples using a custom activation function (equation 3, Salimans et al. 2016) and binary cross-entropy loss. This joint training encourages the emergence of a unified feature space that is both discriminative for classification and sensitive to the realism of generated data. Unlike conventional GANs, where the adversarial objec-tive is limited to real-versus-fake discrimination (Goodfel-low et al., 2014), SGAN leverages this process to shape classification decision boundaries. As the generator pro-gressively produces more realistic samples, it effectively explores the periphery of the true data distribution. In response, the discriminator, through its shared feature ex-tractor, must learn increasingly refined representations to distinguish genuine data from synthetic samples. This in-teraction drives the model to identify low-density regions between class clusters, where class boundaries are most naturally defined. Consequently, the adversarial dynamics guide the feature space toward well-separated, generalis-able decision boundaries, enabling SGAN to use generative competition not only for data synthesis but as a principled mechanism for semi-supervised classification. Figure 3 il-lustrates the complete architecture. 5Custom 
+
+> Activation
+> Zx/(Zx+1)
+> Real/Fake(0-1)
+> REAL
+> FAKE
+
+Softmax 
+
+Anaphase 
+
+Interphase 
+
+Apoptosis 
+
+Metaphase 
+
+Prometaphase       
+
+> 256
+> 8
+> Dense
+> (16384)
+> 256
+> 8
+> Reshape 128
+> 16
+> DeConv1
+> (128) 64
+> 32
+> DeConv2
+> (64) 32
+> 64
+> DeConv3
+> (32)
+> 1
+> 64
+> Output
+> (1)
+> 32
+> 64
+> Conv1
+> (32) 64
+> 32
+> Conv2
+> (64) 128
+> 16
+> Conv3
+> (128) 256
+> 8
+> Conv4
+> (256)
+> 4096
+> 4
+> Flatten
+> 5
+> 5
+> Logits
+> (5)
+> Labelled
+> Un abelled
+
+Generator   
+
+> Discriminator /Classi fi er
+> Generated
+> Noise
+
+Figure 3: Architecture of the proposed Semi-Supervised GAN (SGAN). The generator maps random noise through dense and transposed convolutional layers to produce synthetic cell images. The discriminator/classifier receives real (labelled and unlabelled) and generated images, processes them through successive convolutional layers, and outputs (i) class probabilities via a softmax layer for multi-class cell-cycle classification and (ii) a real/fake prediction through a custom activation for adversarial training. 
+
+4.1.1. Discriminator Architecture 
+
+The discriminator consists of a shared feature extractor 
+
+Dbase (·; θd) followed by two task-specific heads: (i) a su-pervised classifier trained on labelled data and (ii) an unsu-pervised real/fake discriminator trained on unlabelled and generated samples. The shared backbone comprises four convolutional blocks that progressively reduce spatial res-olution while increasing channel depth, yielding a compact feature representation used by both heads. Joint optimisa-tion of supervised and unsupervised objectives encourages the backbone to learn morphological features that are both discriminative for the five cell-cycle classes and effective for real/fake discrimination. The supervised head maps shared features to class prob-abilities: 
+
+P (y | x; θd) = Dsup (x) = softmax (Dbase (x)) ∈ RK , (1) where K denotes the number of classes. It is trained on labelled images using sparse categorical cross-entropy loss: 
+
+ℓsup = −
+
+NLX
+
+i=1 
+
+log P (yi | xi; θd), (2) where {(xi, y i)}NL
+
+i=1 denotes the labelled training set. The unsupervised head follows the formulation intro-duced by Salimans et al. (2016), converting the shared logits into a scalar real/fake probability: 
+
+Dunsup (x; θd) = σcustom (Dbase (x)) = Zx
+
+Zx + 1 , (3) with 
+
+Zx =
+
+KX
+
+k=1 
+
+exp( Dbase (x)k) .
+
+This transformation maps the multi-class logits to the in-terval (0 , 1) while preserving the structure of the shared feature representation. The unsupervised discriminator is trained using bi-nary cross-entropy loss on real unlabelled samples and generator-produced fake images: 
+
+ℓd, real = −
+
+NUX
+
+j=1 
+
+log Dunsup (xreal 
+
+j ; θd),ℓd, fake = −
+
+NUX
+
+j=1 
+
+log  1 − Dunsup (xfake 
+
+j ; θd) ,
+
+(4) The generator and discriminator are trained using batch size 
+
+NB = min 
+
+
+
+100 ,
+
+ Nlabelled 
+
+2
+
+ 
+
+,
+
+where Nlabelled is the total number of labelled training samples. The unsupervised discriminator head processes 6mini-batches of size NU = NB /2, alternating between real unlabelled and generated samples in sequential forward-backward passes. The supervised head uses batch size 
+
+NS = NB on labelled data. This sequential training ap-proach ensures both real and generated distributions con-tribute to the shared feature extractor through consecutive gradient updates, while maintaining clean signal separa-tion per data type. 
+
+4.1.2. Generator Architecture 
+
+The generator G(·; θg ) learns the feature distribution in the real images by transforming latent vectors into syn-thetic samples: 
+
+˜x = G(z; θg ) = tanh  f4 ◦ f3 ◦ f2 ◦ f1(z), (5) The generator consists of four transposed-convolution (stride-2) upsampling blocks fi, which progressively in-crease the spatial resolution of the feature maps, fol-lowed by a final tanh activation constraining the output to [−1, 1] . At each training iteration, a mini-batch of la-tent vectors z ∼ N (0 , I d) with dimensionality d = 500 is independently sampled and fed to the generator. Resam-pling at every iteration ensures optimisation over the full latent support, promoting stable training and preventing overfitting to a fixed subset of latent inputs. Both the generator and discriminator include intermediate dropout layers ( p = 0 .25 ) to reduce overfitting and improve gener-alisation. 
+
+4.2. Multi-Task Learning 
+
+During each training iteration, the shared feature ex-tractor Dbase is updated under three complementary ob-jectives arising from the dual-head discriminator. Gradi-ents from the supervised classification loss and from both unsupervised real and fake discrimination losses are ap-plied successively to the same parameter set θd. The ef-fective update can be expressed as: 
+
+∇θd Ltotal = ∇θd Lsup + ∇θd Ld,real + ∇θd Ld,fake . (6) This multi-task formulation enforces that the shared fea-tures simultaneously optimise three objectives: (1) dis-criminating between the five cell-cycle phases using limited labelled data, (2) separating real unlabelled cell images from generator-produced samples, and (3) progressively refining the classification decision boundaries in response to the evolving distribution of increasingly realistic syn-thetic images generated during adversarial training. As a result, the shared feature space is shaped by both supervised labels and the broader structure present in the unlabelled data, enabling the model to capture morpho-logical patterns that extend beyond the limited labelled dataset. 
+
+5. Experimental Setup and Data Budget Analysis 
+
+We conducted a grid-search experiment to assess model accuracy across varying amounts of labelled and unlabelled data. The study evaluated all pairwise combinations of la-belled data budgets (20, 40, 60, and 80 images per class) and unlabelled data pools (100, 185, 200, 300, 400, 500, and 600 images), yielding 28 distinct experimental config-urations. We note that the 185-image unlabelled subset was stratified to maintain approximately equal class rep-resentation ( ∼37 images per class). Each configuration was trained using a standardised protocol. Models were trained for Nepochs ranging from 800 to 1500, with larger budgets assigned to lower-data regimes to compensate for increased training instability when fewer samples are available. The early-stopping pa-tience was set adaptively between 10% and 20% of Nepochs ,depending on the data regime. This choice reflects the in-herently unstable early dynamics of SGAN training, dur-ing which the generator and discriminator progressively reach equilibrium. Data augmentation was performed on the fly during training using rotations up to ±30 ◦, trans-lations up to 10% of image width and height, brightness scaling in [1 .0, 1.3] , and zoom factors between 0.9 and 1.1. These settings were kept identical across all datasets and experiments, including the transfer-learning analyses in Section 6.3.2. Model checkpoints exceeding 75% validation accuracy were automatically saved to enable post hoc selection of the best-performing model. The selected model was then evaluated on a held-out test set. To further assess ro-bustness and estimate confidence intervals, performance was additionally examined using 5-fold stratified cross-validation on the labelled data. All experiments were conducted on an internal high-performance computing server equipped with dual Intel Xeon Gold 6326 processors (64 cores, 128 threads total) and 256 GB RAM. SGAN training used the Adam opti-miser with learning rate η = 6 × 10 −4 and momentum parameter β = 0 .5, requiring a median training time of approximately 17 min per configuration. 
+
+6. Results 
+
+6.1. SGAN Model Results 
+
+We recently proposed the Roboscope, an autonomous microscope designed to capture rare and transient events (Bonnet et al., 2024). At its core is an image-analysis pipeline that detects objects of interest in real time. De-veloping such a smart microscopy system required ad-dressing three key challenges: the scarcity of annotated training data, domain discrepancies between training and testing image distributions, and the need for lightweight models compatible with real-time decision-making on em-bedded hardware. Reported human expert accuracy in 7microscopy-based image classification is strongly task-dependent, ranging from approximately 50% in challeng-ing phenotype-recognition settings to around 70–75% in more structured expert-driven classification tasks (e.g., Buetti-Dinh et al., 2019; Shpilman et al., 2017). On this basis, we set a target performance of at least 80%, with the aim of matching or exceeding typical human expert performance in related applications. Inference was computationally efficient. Single-cell patches of size 64 ×64 pixels were classified in a mean time of 109.7 ms, corresponding to a throughput of 8.9 cells per second. On the complete test set of 100 images, classifica-tion required 11.2 seconds while achieving 93 ±2% accuracy in the best case (Figure 4). In a practical deployment sce-nario, processing a full 2048 ×2048 pixel Roboscope field of view containing approximately 250 cells would require about 28 seconds on standard CPU hardware, and this la-tency could be reduced even further with GPU accelera-tion. 
+
+6.1.1. Impact of Labelled and Unlabelled Data 
+
+To assess SGAN robustness under limited supervision, we systematically varied the numbers of labelled and un-labelled training samples. As shown in Figure 4, perfor-mance improved monotonically with both, but gains from labelled data were markedly larger. Increasing the num-ber of labelled samples per class yielded substantial ac-curacy improvements ( ∼20–40%), whereas enlarging the unlabelled pool produced more modest gains ( ∼5–10%), except in the most extreme low-label regime. These re-sults suggest that labelled data primarily define class-discriminative decision boundaries, while unlabelled data mainly regularise the representation by capturing the global data structure. Consistent with this interpretation, explicit class stratification of the unlabelled subset did not systematically improve performance. Representative training curves are shown in Figure A.7 for four configurations spanning low- and high-unlabelled-data regimes. These examples illustrate how sample avail-ability affects convergence behaviour, training stability, and the balance between discriminator and generator dy-namics during optimisation. 
+
+6.1.2. Class Balance Effects In Unlabelled Data 
+
+Comparison between the 185-image class-balanced sub-set and unstructured unlabelled pools of comparable size did not reveal a consistent performance benefit from ex-plicit class stratification. For instance, with 80 labelled images per class, the stratified 185-image subset achieved an accuracy of 82 ± 9% , which is slightly lower than that obtained with a 200-image unstructured pool ( 85 ± 3% ). While this difference remains within the associated un-certainty, these results suggest that, in this regime, the SGAN learning objective is relatively robust to moderate class imbalance in the unlabelled data, provided that suffi-cient labelled samples are available to guide the supervised component. Labeled-20 Labeled-40 Labeled-60 Labeled-80                        
+
+> Number of Labeled Training Samples
+> 100
+> 185
+> 200
+> 300
+> 400
+> 500
+> 600
+> Number of Unlabeled Training Samples
+> 47±8% 75±3% 74±6% 84±4%
+> 53±10% 75±3% 79±6% 82±9%
+> 61±7% 78±9% 85±5% 85±3%
+> 57±9% 83±7% 81±10% 90±3%
+> 63±8% 78±9% 89±4% 89±2%
+> 65±5% 80±7% 86±7% 90±4%
+> 73±10% 83±2% 92±3% 93±2%
+> 60
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> Confidence-Weighted Accuracy (%)
+> Figure 4: SGAN Grid Search: labelled-unlabelled data Trade-off Matrix showing mean test accuracy for all 28 configurations. Colors denote confidence-weighted accuracy.
+
+6.2. Comparison To Other Methods 6.2.1. Transfer learning With Pretrained CNNs 
+
+Deep CNNs have shown strong performance for cell-cycle phase classification in fluorescence microscopy, par-ticularly with nuclear, Golgi, or microtubule staining (Acharya et al., 2024; Nagao et al., 2020). However, their performance generally depends on the availability of suf-ficiently large annotated datasets, which are often limited in bio-imaging. Transfer learning from models pre-trained on large-scale image datasets offers a common strategy to alleviate this constraint (Bayramoglu and Heikkilä; von Chamier et al., 2021; Yosinski et al., 2014). To benchmark our SGAN framework, we implemented transfer learning by fine-tuning two ImageNet-pretrained architectures: MobileNetV2 (3.37M parameters; Sandler et al., 2018) and InceptionV3 (27M parameters; Szegedy et al., 2016). These models were selected to represent dif-ferent model sizes relevant to computational microscopy applications. Both were fine-tuned on our cell-cycle classi-fication task using progressively smaller labelled subsets of 20, 40, 60, and 80 images per class (100, 200, 300, and 400 images in total) and evaluated on the same independent test set of 100 images used for SGAN. Among these baselines, MobileNetV2 showed progres-sively improving performance with increasing supervision, reaching 87 ± 6% with 80 labelled images per class (Fig-ure 5). In contrast, InceptionV3 showed higher variance and earlier performance saturation, peaking at 79 ± 3% .820 40 60 80 
+
+> Num. labeled per class
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+> Accuracy
+> Uncertainty (marker size)
+> ±2% (low uncertainty)
+> ±13% (high uncertainty)
+> SGAN
+> Inception V3
+> Scatt Network
+> MobileNet V2
+> SCNN
+> Siamese Network Figure 5: Performance comparison of different learning strategies on the Mitocheck dataset, including a few-shot learning Siamese net-work, a CNN trained from scratch, a scattering network, transfer learning with pre-trained models (InceptionV3 and MobileNetV2), and our proposed SGAN. The figure reports accuracy on the test set of 100 images as a function of the number of labelled training images
+
+6.2.2. Low-Depth CNN Trained From Scratch 
+
+We next considered a smaller convolutional network to reduce the number of parameters and thus data greedi-ness. Such a trivial solution also promised fast classifica-tion from the perspective of smart microscopy. The low-depth CNN implementation employs a lightweight three-block convolutional architecture trained from scratch on the Mitocheck data set. The model architecture consists of three convolutional blocks, each containing 3 × 3 convo-lutions with ReLU activations, batch normalization, 2 × 2
+
+max-pooling with stride-2, and dropout ( p = 0 .25 ) for reg-ularisation, progressively downsampling from input reso-lution 75 ×75 ×3 to 4×4×128 feature maps. The flattened features pass through two fully-connected layers (256 and 128 units, dropout p = 0 .5) before the softmax classifi-cation layer outputting five cell cycle phase probabilities. The model is trained with categorical cross-entropy loss and Adam optimizer ( η = 0 .0005 , β1 = 0 .9, β2 = 0 .999 )for up to 1000 epochs. The training dataset is split into 80% training and 20% validation with stratified random sampling to maintain class distributions, while test sam-ples from a completely separate folder (20 images per class) remain held-out for unbiased evaluation. Figure 5 displays the model performance compared to rest. 
+
+6.2.3. Scattering Network 
+
+Wavelet scattering networks, proposed by Mallat and colleagues (Bruna and Mallat, 2013), extract features via cascaded wavelet decompositions without learned weights, addressing data scarcity by directly implementing invari-ances typically achieved through augmentation. Early applications in medical imaging (Rakotomamonjy et al., 2014) achieved > 80% accuracy on 10-class lung cancer de-tection with < 100 images per class. Our scattering base-line employs Kymatio (PyTorch) with J = 2 scales and 
+
+L = 8 orientations, generating ∼1280-dimensional scat-tering coefficients per 64 × 64 image via Morlet wavelets with guaranteed Lipschitz stability. These invariant fea-tures feed into a shallow classifier (two fully-connected lay-ers: 512 and 256 units with ReLU, batch normalization, dropout p = 0 .3) trained with categorical cross-entropy loss and Adam optimizer ( η = 0 .0005 , early stopping, pa-tience=100 epochs). The model achieves a 81% performance in the best case for 80 labelled images per class, while only 68% accuracy in the worst with 20 labelled images per class, where it outperforms the SCNN and Siamese model (Figure 5). 
+
+6.2.4. Siamese Network 
+
+Siamese networks (Koch et al., 2015) provide an alterna-tive strategy for classification with limited labelled data. Our implementation used triplet inputs consisting of an anchor, a positive sample from the same class, and a neg-ative sample from a different class, with shared weights across the three branches. Training was performed by op-timising a triplet loss with margin m = 1 .0:
+
+Ltriplet = max( dpos − dneg + 1 .0, 0) , (7) where dpos = P(a − p)2 and dneg = P(a − n)2 denote the squared Euclidean distances between anchor-positive and anchor-negative embeddings, respectively. The embedding network produced 150-dimensional rep-resentations through four fully connected layers with L2 regularization, dropout, and final L2 normalization. Mod-els were trained with Adam ( η = 10 −4, β = 0 .5) for up to 200 epochs. Training was performed on the different labelled subsets, each containing 20, 40, 60, and 80 im-ages per class, using an 80/20 train-validation split, with triplets generated dynamically. Learned embeddings were evaluated on the test set using a k-nearest neighbors clas-sifier ( k = 3 ). Performance remained limited, increasing only from 52% with 20 labelled images per class to 65% with 80 im-ages per class (Figure 5). This lower performance likely reflects the difficulty of learning sufficiently discriminative embeddings from small labelled datasets, together with the fact that, unlike SGAN, the Siamese framework does not exploit unlabelled data. 
+
+6.2.5. Comparison With Other Studies 
+
+We compared SGAN with two recent semi-supervised GAN-based methods, SPARSE (Manni et al., 2026) and Triple-GAN (Li et al., 2017), under identical experimental conditions. All models were trained with the same labelled subsets (20, 40, 60, and 80 images per class) and 600 un-labelled images. The labelled data were split into 80% for training and 20% for validation for early stopping, and fi-nal performance was evaluated on a fully held-out test set of 100 images (20 per class). Uncertainty was estimated using five-fold stratified cross-validation, with results re-ported as standard deviations and 95% confidence inter-vals. 920 40 60 80        
+
+> Number of Labeled Images per Class
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+> Test Accuracy (%)
+> Models
+> SGAN
+> SPARSE
+> Triple-GAN
+> Marker Size = Uncertainty
+> Low uncertainty (±1-2%)
+> Medium uncertainty (±3-5%)
+> High uncertainty (±10%)
+> Marker Size = Uncertainty
+> Low uncertainty (±1-2%)
+> Medium uncertainty (±3-5%)
+> High uncertainty (±10%) Figure 6: Comparative accuracy of semi-supervised cell phase classification models (SGAN, SPARSE, Triple-GAN) with varying amounts of labelled training data. All models used 600 unlabelled im-ages. Marker sizes represent uncertainty from 5-fold cross-validation.
+
+The three methods differ in their semi-supervised strate-gies. SPARSE uses pseudo-labelling with image-to-image translation, whereas Triple-GAN relies on a three-network architecture trained in separate stages. In contrast, SGAN performs implicit semi-supervised learning through a shared discriminator-based feature extractor jointly op-timised with three losses, allowing the classifier to directly benefit from adversarially learned representations without explicit pseudo-labelling. As shown in Figure 6, SGAN generally provides the best or near-best performance across the evaluated data regimes, with the clearest advantage observed in the low-data setting where label efficiency is most important. SPARSE remains competitive and narrows the gap as more labelled data become available, whereas Triple-GAN tends to perform below both methods in the tested set-tings. Taken together, these findings suggest that SGAN is well suited to limited-supervision scenarios while retain-ing competitive performance at higher label budgets. 
+
+6.3. Transfer Learning: Generalisability Of SGAN 
+
+We also assessed the generalisability of SGAN across several cell classification tasks. Cell images are often visu-ally similar, with only subtle differences between strains. Moreover, distinct imaged structures may still support classification (Nagao et al., 2020), since different proteins involved in the same process can equally reflect its progres-sion. Some features may also be biologically redundant (Balluet et al., 2022). We therefore tested whether do-main adaptation is feasible with SGAN despite its limited depth, using transfer learning, fine-tuning, and full retrain-ing. To reflect realistic smart-microscopy applications, we considered shifts of increasing visual difference: strain, labelling, biological question (i.e. class meaning), and imaging modality (DIC). Concretely, we used the super-vised component trained on Mitocheck to classify images from the CellCognition dataset, our homemade dataset, the datasets of Nagao et al. (2020), and the DIC dataset. 
+
+6.3.1. Data Preparation For Transfer Learning 
+
+To improve robustness and generalisation across datasets, we applied the same augmentation pipeline used during SGAN training on Mitocheck data (Section 5). For most datasets (Cell_cog_5, Homemade Zeiss, HHE, HHG, RHC, and Cilia), this yielded an effective augmenta-tion factor (= total images after augmentation/total num-ber of original images) of 3.8× to 4.0×.Stronger augmentation was used for the 8-class CellCog-nition dataset because finer class granularity reduced the number of images per class and destabilised training; here, the augmentation factor was ∼4.5 ×. The DIC dataset re-quired the most aggressive augmentation because of its limited size (169 original images) and stronger morpholog-ical shift, with an augmentation factor of 11 ×. Table E.4 summarises the augmentation strategy across transfer-learning datasets. 
+
+6.3.2. Transfer Learning On The CellCognition Dataset 
+
+We evaluated the transferability of the SGAN-pretrained five-class discriminator on the five-class CellCognition dataset (Cell_cog_5) (Held et al., 2010). Transfer learning was performed in two stages: first, a newly initialised classification head was trained with the convolutional backbone frozen; second, the last two to three convolutional layers were selectively fine-tuned using a reduced learning rate ( η = 5 × 10 −5). Class-weighted losses were used throughout to compensate for residual class imbalance. Performance was assessed using stratified 5-fold cross-validation. In each fold, 20% of the data were held out for testing, while the remaining 80% were split into train-ing (64% of total) and validation (16%) subsets. A fresh classification head was initialised for each fold to avoid weight leakage. In the five-class setting, this yielded a test accuracy of 95 .68 ± 1.33% (Table 1). Per-class re-sults were consistently high, with F1-scores above 0.95 for Interphase, Metaphase, and Apoptosis, and somewhat lower but still strong performance for Prometaphase and Anaphase. The low standard deviations across classes in-dicate stable transfer performance. Confusion matrices are shown in Figure B.8. To assess fine-grained transferability, we extended the task to eight classes (Cell_cog_8) by subdividing Anaphase into early and late stages, separating Inter-phase into Class I and Junk, and adding Prophase and Telophase while excluding Apoptosis. Despite the in-creased task complexity, the model retained strong per-formance, reaching a test accuracy of 92 .73% . This adap-tation also remained computationally lightweight, with transfer learning requiring only ∼2 min per fold for the five-class CellCognition dataset and ∼5 min per fold for the eight-class variant. Overall, these results indicate that SGAN-learned features transfer effectively to an indepen-dent cell-cycle dataset, with only a modest drop in perfor-mance from five to eight classes, suggesting that the model captures generalisable morphological features. 10 5-Class CellCognition 8-Class CellCognition Class F1-Score Precision Recall Class F1-Score Precision Recall 
+
+Anaphase 0.922 0.938 0.912 Early Ana. 0.958 0.960 0.958 
+
+Apoptosis 0.995 0.991 1.000 Late Ana. 0.839 0.826 0.858 
+
+Interphase 0.968 0.953 0.986 Class I 0.894 0.883 0.907 
+
+Metaphase 0.957 0.972 0.944 Junk (J) 0.976 1.000 0.953 
+
+Prometaphase 0.928 0.928 0.928 Metaphase 0.805 0.831 0.783 
+
+Prometaphase 0.959 0.995 0.927 
+
+Prophase 0.863 0.861 0.867 
+
+Telophase 0.866 0.838 0.898 
+
+Test Acc: 95 .68 ± 1.33% Test Acc: 89 .42 ± 2.82%          
+
+> Table 1: Per-class performance metrics comparison between 5-class and 8-class Cell Cognition datasets across 5-fold stratified cross-validation. The 5-class dataset achieved superior performance with 95 .68 ±1.33% test accuracy, while the 8-class dataset demonstrated robust transfer learning to expanded cell cycle phases with 89 .42 ±2.82% test accuracy. Error bars shown only for test accuracy; per-class metrics report mean values across folds.
+
+6.3.3. Classification On Homemade Dataset 
+
+We also evaluated transfer learning on a local 7-class dataset of homemade Zeiss microscopy images. The dataset contained 1,281 original images across seven cell cycle phases: early anaphase, interphase (Class I), Junk (Class J), metaphase, prophase, prometaphase, and telophase. For the classification architecture, we leveraged the frozen pre-trained SGAN discriminator as a feature extractor, appended with a trainable classification head consisting of three dense layers (512, 256, and 128 neurons with ReLU activation and batch normalisation) followed by a softmax output layer for seven classes. The model was trained using the Adam optimiser ( η = 0 .0003 , β1 = 0 .9,
+
+β2 = 0 .999 ) with class-balanced weights. These hyperpa-rameters were selected to provide adaptive per-parameter learning rates while maintaining stable convergence on the limited transfer learning dataset. 
+
+Class F1-Score Precision Recall 
+
+Early Anaphase 0.957 0.980 0.936 
+
+Interphase (I) 0.962 0.961 0.964 
+
+Metaphase 0.951 0.937 0.966 
+
+Prophase 0.928 0.933 0.925 
+
+Prometaphase 0.932 0.928 0.937 
+
+Telophase 0.929 0.938 0.921 
+
+Junk (J) 0.956 0.947 0.966 
+
+Test Acc: 94 .45 ± 0.49%  
+
+> Table 2: Per-class performance metrics on the 7-class Zeiss home-made microscopy dataset across 5-fold stratified cross-validation.
+
+Following 5-fold stratified cross-validation, transfer learning yielded a mean test accuracy of 94 .45 ± 0.49% ,with a training time of approximately 4 min 30 s per fold. This result reflects strong generalisation and balanced per-formance across all cell-cycle phases, with per-class F1-scores ranging from 0.928 to 0.962 (Table 2). The corre-sponding confusion matrix is presented in Figure B.8. 
+
+6.3.4. Classification Under Alternative Cell-Cycle Labels 
+
+Nagao Binary Classification: To assess generalis-ability beyond the Mitocheck dataset, we evaluated trans-fer learning on previously published microscopy datasets with alternative binary labelling schemes (Nagao et al., 2020). Unlike Mitocheck, which primarily annotates mi-totic stages, three datasets (HHG, RHC, and HHE) fo-cus on G2 versus non-G2 classification, corresponding to a subphase-specific distinction within interphase. The Cilia dataset is biologically distinct, as it targets cilia-related status rather than cell-cycle phase, and was therefore con-sidered as a complementary transfer task. The four binary datasets (HHG, Cilia, RHC, and HHE) were constructed by combining two fluorescence chan-nels per sample. After augmentation, each dataset con-tained 1,857–2,234 images (Table E.4) and was split into 
+
+∼60/20/20 train/validation/test sets with near-balanced classes (48.7–51.3%). Transfer-learning results are re-ported in Table 3. 
+
+Dataset Class F1 Prec. Recall Test Acc. 
+
+HHG Class 0 0.896 0.870 0.926 89 .60 ± 0.75% 
+
+Class 1 0.895 0.926 0.868 
+
+Cilia Class 0 0.884 0.887 0.882 88 .45 ± 0.71% 
+
+Class 1 0.885 0.883 0.887 
+
+RHC Class 0 0.860 0.895 0.829 86 .65 ± 0.86% 
+
+Class 1 0.872 0.843 0.904 
+
+HHE Class 0 0.802 0.868 0.748 81 .09 ± 4.91% 
+
+Class 1 0.819 0.769 0.878 
+
+DIC Aan 0.873 0.926 0.826 84 .13 ± 7.42% M 0.870 0.812 0.936 
+
+NEBD 0.967 0.992 0.944         
+
+> Table 3: Transfer learning performance (5-fold stratified cross-validation). DIC results correspond to fine-tuned transfer learning on the three-class DIC dataset.
+
+Performance depended on marker morphology and lo-calisation stability. Among these binary transfer-learning 11 tasks, HHE was the most challenging, reaching 81 .09 ±
+
+4.91% test accuracy and showing the highest variability across folds, likely reflecting weaker structural detail and less distinctive morphological patterns (see Figure E.13). By contrast, HHG achieved 89 .60 ± 0.75% , consistent with the stable localisation pattern of the Golgi marker, while RHC reached 86 .02% balanced accuracy with moderate variability. The Cilia dataset achieved 88 .45 ± 0.71% , in-dicating that the transferred features remain effective even in a related but non-cell-cycle binary classification setting. Across the four datasets, transfer learning required on av-erage only 3 min 30 s per fold. Overall, performance was largely driven by the distinctness and stability of marker-specific morphological features. Comparison with Nagao et al. (2020) provides useful context. Nagao et al. used supervised CNNs to classify in-terphase cell-cycle states from fluorescence microscopy, re-porting 90% accuracy for G1/S versus G2 discrimination with informative channels (Hoechst, nuclear area, DNA intensity, Golgi organisation). In contrast, our frame-work was trained in a semi-supervised, low-label setting via SGAN and adapted through transfer learning. Despite this more challenging setting, our transferred representa-tion remained highly competitive across all four datasets from Nagao et al. (2020), demonstrating the generalisabil-ity of the learned feature space beyond the original Mi-tocheck task. 
+
+Classification on the DIC dataset: To further assess generalisation, we evaluated the model on a markedly dif-ferent imaging modality, differential interference contrast (DIC) microscopy. This setting introduces a pronounced domain shift: differences in resolution, imaging physics, contrast formation, and morphological cues challenge the feature representations learned from fluorescence-based Mitocheck data. We employed a custom C. elegans em-bryo dataset comprising three classes (169 original images in total). Each image was augmented with ten variants and the dataset was split into stratified training, valida-tion, and test sets following a 60/20/20 protocol. Direct transfer learning from the Mitocheck pre-trained model yielded limited performance. By contrast, full re-training initialised from the Mitocheck weights substan-tially improved performance (Table 3). This improvement was achieved at a substantially greater computational cost, with retraining requiring approximately 1 h per fold (Fig-ure D.10). 
+
+7. Discussion 
+
+We previously developed a cell-classification approach based on hand-crafted features and a machine-learning classifier (Balluet et al., 2022), fast enough for on-the-fly use in automated microscopy, but requiring full retraining and feature re-selection when imaging conditions changed. Here, we addressed these limitations using a semi-supervised GAN framework that combines automatic fea-ture extraction with strong data efficiency under limited supervision. SGAN achieved competitive accuracies of 
+
+90 –93% using only tens of labelled samples per class, sub-stantially fewer than typically required by fully supervised approaches (Haque, 2021; Manni et al., 2026; Zhong et al., 2025). Varying the amounts of labelled and unlabelled data showed that labelled samples are the main driver of classification performance, while unlabelled data provide a complementary regularising effect, particularly in the low-label regime. The narrow variance bands in the cross-validation errors indicate stable and consistent behaviour across runs. Benchmarking confirmed the strength of the ap-proach. Under the same experimental setting, SGAN outperformed alternative methods, including pre-trained ImageNet-based models, InceptionV3, Siamese, scattering-based, and standard CNN baselines. It also compared favourably with recent semi-supervised GAN-based classi-fiers from the literature under matched experimental set-tings. Transfer-learning experiments further showed that the SGAN discriminator learns representations that generalise well beyond the original Mitocheck domain. Strong per-formance on CellCognition and the 7-class Zeiss dataset suggests that the learned features capture morphological primitives that remain informative across microscopy set-ups and labelling schemes. In most fluorescence-based transfer tasks, fine-tuning only the final convolutional lay-ers was sufficient, consistent with early layers encoding generic morphological features and deeper layers capturing more task-specific abstractions; this adaptation remained computationally lightweight, requiring on average only ∼4min 40 s across datasets. The decrease in performance from the five-class to the eight-class CellCognition setting is expected, as finer an-notation granularity introduces less separable class bound-aries, particularly for biologically transitional stages. By contrast, the DIC experiments revealed the limits of this transferability, since the fundamentally different image-formation physics reduced the effectiveness of direct trans-fer and required broader retraining. The Nagao binary datasets provided an additional test of generalisability across cell type, marker, and biological question. Accu-racies above 86% in most cases indicate that the SGAN backbone captures sufficiently rich cell-cycle related mor-phology even when the target task differs from the source labels. The lower and more variable performance on HHE suggests that transfer also depends on the visual distinct-ness and stability of marker-specific patterns. A key strength is achieving these results with a rela-tively compact architecture. Unlike large pre-trained back-bones, the SGAN discriminator remains lightweight while retaining strong transferability across domains. This com-bination of high accuracy (93%), compact model size, and fast classification inference (109.7 ms per cell) makes the method particularly well-suited for real-time automated cell cycle classification on resource-constrained platforms such as the Roboscope. 12 8. Conclusion 
+
+We present a semi-supervised generative adversarial framework for cell-cycle classification under limited an-notation constraints. SGAN enables accurate and data-efficient learning from microscopy images, while remain-ing lightweight and fast enough for real-time embedded deployment in autonomous imaging systems. Beyond its performance on the source task, the method showed good transferability across multiple fluorescence datasets, although the DIC experiments highlighted the remaining challenge of stronger modality shifts in image-formation physics. These results support SGAN as a ro-bust and adaptable foundation for intelligent microscopy and event-driven acquisition. Future work could further improve cross-domain robust-ness through domain-invariant representation learning, for example by using domain-adversarial objectives to reduce sensitivity to modality-specific cues. Better alignment be-tween the generative and classification objectives, includ-ing adaptive or reward-based training schemes (e.g. Li et al., 2024), may also improve stability and discrimina-tive performance. In addition, large-scale self-supervised pre-training on unlabelled microscopy images could fur-ther enhance generalisation across cell types and imaging modalities while preserving data efficiency. 
+
+Data Availability 
+
+The trained sGAN model is available via a GitHub repository (XYZ), archived on Zenodo (DOI: XYZ). Datasets generated within the framework of this project that are not yet publicly released can be made available upon reasonable request. 
+
+Acknowledgements 
+
+We acknowledge Prof. Thomas Walter for providing ac-cess to the Mitocheck dataset. This project was supported by Région Bretagne (AAP PME 2018–2019 – Roboscope; iDémo 2024 – Roboscope) and the Agence Nationale de la Recherche (PRCE project SAMIC, ANR-19-CE45-0011). Some microscopy imaging was performed at the Mi-croscopy Rennes Imaging Center (UMS 3480 CNRS/US 18 INSERM/University of Rennes). We acknowledge the France-BioImaging infrastructure supported by the French National Research Agency (ANR-10-INBS-04). We also thank all members of the CeDRE, MFC teams, and Dr. Remy Torro for valuable discussions. 
+
+CRediT authorship contribution statement 
+
+Conceptualization: RM, YEH, JP, MT. Methodology: RM, YEH, MG, JP, CM, OB. Software: RM, YEH, CM, JP. Validation: RM, MG, CM, JP, MT. Formal analysis: RM, YEH, CM, JP. Investigation: RM, YEH, MG, CM, JB, LR, SP, JP. Resources: JB, LR, SP. Data curation: RM, JB, LR, JP, MT. Writing – Original Draft: YEH, JP. Writing – Review & Editing: RM, JP, MT, CM. Visual-ization: RM, YEH, JP. Supervision: JP, MT. Project ad-ministration: JP, MT, OB. Funding acquisition: JP, MT, OB, OC. 
+
+Declaration of Competing Interest 
+
+CM is employed by Inscoper, SAS, OC is the Chief Exec-utive Officer and OB serves as the company’s Chief Techni-cal Officer. The Roul et al. (2014) patent on optimal driv-ing is exclusively licensed to Inscoper, SAS. The company also co-owns, with CNRS and the University of Rennes, the Balluet et al. (2020) patent cited in this paper. JP and MT serve as scientific advisors to the company. The funders had no role in the study design, data col-lection and analysis, decision to publish, or preparation of the manuscript. 
+
+References 
+
+Abouakil, F., Meng, H., Burcklen, M.A., Rigneault, H., Galland, F., LeGoff, L., 2021. An adaptive microscope for the imaging of biological surfaces. Light Sci Appl 10, 210. doi: 10.1038/s41377-021-00649-9 .Acharya, S., Ganguly, A., Sarkar, R., Jose, A., 2024. Cell cycle state prediction using graph neural networks. bioRxiv , 2024.01.30.577893doi: 10.1101/2024.01.30. 577893 .Almada, P., Pereira, P.M., Culley, S., Caillol, G., Boroni-Rueda, F., Dix, C.L., Charras, G., Baum, B., Laine, R.F., Leterrier, C., Henriques, R., 2019. Automating multimodal microscopy with nanoj-fluidics. Nat Com-mun 10, 1223. doi: 10.1038/s41467-019-09231-9 .Andre, O., Kumra Ahnlide, J., Norlin, N., Swaminathan, V., Nordenfelt, P., 2023. Data-driven microscopy al-lows for automated context-specific acquisition of high-fidelity image data. Cell Rep Methods 3, 100419. doi: 10.1016/j.crmeth.2023.100419 .Balasubramanian, H., Hobson, C.M., Chew, T.L., Aaron, J.S., 2023. Imagining the future of optical microscopy: everything, everywhere, all at once. Commun Biol 6, 1096. doi: 10.1038/s42003-023-05468-9 .Balluet, M., Sizaire, F., El Habouz, Y., Walter, T., Pont, J., Giroux, B., Bouchareb, O., Tramier, M., Pecreaux, J., 2022. Neural network fast-classifies biological im-ages through features selecting to power automated mi-croscopy. J Microsc 285, 3–19. doi: 10.1111/jmi.13062 .Bayramoglu, N., Heikkilä, J., . Transfer learning for cell nuclei classification in histopathology images, in: Hua, G., Jégou, H. (Eds.), Computer Vision – ECCV 2016 Workshops, Springer International Publishing. pp. 532– 539. doi: 10.1007/978-3-319-49409-8_46 .13 Bonnet, J., El Habouz, Y., Martin, C., Guillout, M., Ruel, L., Giroux, B., Demeautis, C., Mercat, B., Bouchareb, O., Pecreaux, J., Tramier, M., 2024. The roboscope: Smart and fast microscopy for generic event-driven acquisition. bioRxiv , 2024.09.24.614735doi: 10.1101/ 2024.09.24.614735 .Bouvette, J., Huang, Q., Riccio, A.A., Copeland, W.C., Bartesaghi, A., Borgnia, M.J., 2022. Automated system-atic evaluation of cryo-em specimens with smartscope. Elife 11. doi: 10.7554/eLife.80047 .Brock, A., Donahue, J., Simonyan, K., 2018. Large Scale GAN Training for High Fidelity Natural Image Synthe-sis. arXiv doi: 10.48550/arXiv.1809.11096 .Bruna, J., Mallat, S., 2013. Invariant scattering convolu-tion networks. IEEE Trans Pattern Anal Mach Intell 35, 1872–86. doi: 10.1109/TPAMI.2012.230 .Buetti-Dinh, A., Galli, V., Bellenberg, S., Ilie, O., Herold, M., Christel, S., Boretska, M., Pivkin, I.V., Wilmes, P., Sand, W., Vera, M., Dopson, M., 2019. Deep neural net-works outperform human expert’s capacity in character-izing bioleaching bacterial biofilm composition. Biotech-nology Reports 22, e00321. doi: 10.1016/j.btre.2019. e00321 .Carro, A., Perez-Martinez, M., Soriano, J., Pisano, D.G., Megias, D., 2015. imsrc: converting a standard auto-mated microscope into an intelligent screening platform. Sci Rep 5, 10502. doi: 10.1038/srep10502 .Chai, B., Efstathiou, C., Yue, H., Draviam, V.M., 2023. Opportunities and challenges for deep learning in cell dynamics research. Trends in Cell Biology doi: 10.1016/ j.tcb.2023.10.010 .Chait, R., Ruess, J., Bergmiller, T., Tkacik, G., Guet, C.C., 2017. Shaping bacterial population behav-ior through computer-interfaced control of individ-ual cells. Nat Commun 8, 1535. doi: 10.1038/ s41467-017-01683-1 .von Chamier, L., Laine, R.F., Jukkala, J., Spahn, C., Krentzel, D., Nehme, E., Lerche, M., Hernandez-Perez, S., Mattila, P.K., Karinou, E., Holden, S., Solak, A.C., Krull, A., Buchholz, T.O., Jones, M.L., Royer, L.A., Leterrier, C., Shechtman, Y., Jug, F., Heilemann, M., Jacquemet, G., Henriques, R., 2021. Democratising deep learning for microscopy with zerocostdl4mic. Nat Commun 12, 2276. doi: 10.1038/s41467-021-22518-0 .Coates, A., Ng, A., Lee, H., 2011. An analysis of single-layer networks in unsupervised feature learning, in: Gor-don, G., Dunson, D., Dudík, M. (Eds.), Proceedings of the Fourteenth International Conference on Artificial In-telligence and Statistics, PMLR, Fort Lauderdale, FL, USA. pp. 215–223. Conrad, C., Wunsche, A., Tan, T.H., Bulkescher, J., Sieck-mann, F., Verissimo, F., Edelstein, A., Walter, T., Liebel, U., Pepperkok, R., Ellenberg, J., 2011. Mi-cropilot: automation of fluorescence microscopy-based imaging for systems biology. Nat Methods 8, 246–9. doi: 10.1038/nmeth.1558 .Daetwyler, S., Fiolka, R.P., 2023. Light-sheets and smart microscopy, an exciting future is dawning. Commun Biol 6, 502. doi: 10.1038/s42003-023-04857-4 .Deng, J., Dong, W., Socher, R., Li, L.J., Li, K., Fei-Fei, L., 2009. Imagenet: A large-scale hierarchical image database, in: CVPR, pp. 248–255. Dou, B., Zhu, Z., Merkurjev, E., Ke, L., Chen, L., Jiang, J., Zhu, Y., Liu, J., Zhang, B., Wei, G.W., 2023. Machine learning methods for small data chal-lenges in molecular science. Chem Rev 123, 8736–8780. doi: 10.1021/acs.chemrev.3c00189 .Durand, A., Wiesner, T., Gardner, M.A., Robitaille, L.E., Bilodeau, A., Gagne, C., De Koninck, P., Lavoie-Cardinal, F., 2018. A machine learning approach for online automated optimization of super-resolution op-tical microscopy. Nat Commun 9, 5247. doi: 10.1038/ s41467-018-07668-y .Eisenstein, M., 2020. Smart solutions for automated imaging. Nat Methods 17, 1075–1079. doi: 10.1038/ s41592-020-00988-2 .Eisenstein, M., 2023. Ai under the microscope: the algo-rithms powering the search for cells. Nature 623, 1095– 1097. doi: 10.1038/d41586-023-03722-y .Fox, Z.R., Fletcher, S., Fraisse, A., Aditya, C., Sosa-Carrillo, S., Petit, J., Gilles, S., Bertaux, F., Ruess, J., Batt, G., 2022. Enabling reactive microscopy with micromator. Nat Commun 13, 2199. doi: 10.1038/ s41467-022-29888-z .Goodfellow, I.J., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., Courville, A., Bengio, Y., 2014. Generative adversarial networks. ArXiv , 1406.2661doi: 10.48550/arXiv.1406.2661 .Haque, A., 2021. Ec-gan: Low-sample classification using semi-supervised algorithms and gans (student abstract). Proceedings of the AAAI Conference on Artificial In-telligence 35, 15797–15798. doi: 10.1609/aaai.v35i18. 17895 .Held, M., Schmitz, M.H., Fischer, B., Walter, T., Neu-mann, B., Olma, M.H., Peter, M., Ellenberg, J., Ger-lich, D.W., 2010. Cellcognition: time-resolved pheno-type annotation in high-throughput live cell imaging. Nat Methods 7, 747–54. doi: 10.1038/nmeth.1486 .14 Hermann, G., Coudray, N., Buessler, J.L., Caujolle-Bert, D., Rémigy, H.W., Urban, J.P., 2011. Animated-tem: a toolbox for electron microscope automation based on image analysis. Machine Vision and Applications 23, 691–711. doi: 10.1007/s00138-011-0357-5 .Hinderling, L., Heil, H.S., Rates, A., Seidel, P., Kesa-van, P., Gunkel, M., Diederich, B., Guilbert, T., Torro, R., Bouchareb, O., Demeautis, C., Martin, C., Brooks, S., Sisamakis, E., Grandgirard, E., Mutterer, J., Oat-man, H., Toettcher, J., Rogov, A., Antonovaite, N., Jo-hansson, K., Ahnlinde, J.K., André, O., Nordenfelt, P., Nordenfelt, P., Pfander, C., Reymann, J., Lambert, T., Cosenza, M.R., Korbel, J.O., Pepperkok, R., Kapitein, L.C., Pertz, O., Norlin, N., Halavatyi, A., Camacho, R., 2026. Smart microscopy: current implementations and a roadmap for interoperability. Methods in Microscopy doi: 10.1515/mim-2025-0029 .Hu, Q., Hailstone, M., Wang, J., Wincott, M., Stoychev, D., Atilgan, H., Gala, D., Chaiamarit, T., Parton, R.M., Antonello, J., Packer, A.M., Davis, I., Booth, M.J., 2023. Universal adaptive optics for microscopy through embedded neural network control. Light Sci Appl 12, 270. doi: 10.1038/s41377-023-01297-x .Ishikawa-Ankerhold, H.C., Ankerhold, R., Drummen, G.P., 2012. Advanced fluorescence microscopy techniques–frap, flip, flap, fret and flim. Molecules 17, 4047–132. doi: 10.3390/molecules17044047 .Kensert, A., Harrison, P.J., Spjuth, O., 2019. Transfer learning with deep convolutional neural networks for classifying cellular morphological changes. SLAS Dis-cov 24, 466–475. doi: 10.1177/2472555218818756 .Khamo, J.S., Krishnamurthy, V.V., Sharum, S.R., Mon-dal, P., Zhang, K., 2017. Applications of optobiology in intact cells and multicellular organisms. J Mol Biol 429, 2999–3017. doi: 10.1016/j.jmb.2017.08.015 .Koch, G., Zemel, R., Salakhutdinov, R., 2015. Siamese neural networks for one-shot image recognition, in: 32nd International Conference on Machine Learning, ICML, PMLR. Krentzel, D., Shorte, S.L., Zimmer, C., 2023. Deep learn-ing in image-based phenotypic drug discovery. Trends Cell Biol doi: 10.1016/j.tcb.2022.11.011 .Krizhevsky, A., Hinton, G., 2009. Learning multiple lay-ers of features from tiny images. Technical Report 0. University of Toronto. Toronto, Ontario. Lang, M., Rudolf, F., Stelling, J., 2012. Use of yous-cope to implement systematic microscopy protocols. Curr Protoc Mol Biol Chapter 14, Unit 14 21 1–23. doi: 10.1002/0471142727.mb1421s98 .Lelek, M., Gyparaki, M.T., Beliu, G., Schueder, F., Griffie, J., Manley, S., Jungmann, R., Sauer, M., Lakadamyali, M., Zimmer, C., 2021. Single-molecule localization mi-croscopy. Nat Rev Methods Primers 1. doi: 10.1038/ s43586-021-00038-x .Li, C., Xu, K., Zhu, J., Zhang, B., 2017. Triple Genera-tive Adversarial Nets. arXiv , 1703.02291doi: 10.48550/ arXiv.1703.02291 .Li, H., Horns, F., Wu, B., Xie, Q., Li, J., Li, T., Luginbuhl, D.J., Quake, S.R., Luo, L., 2017. Classifying drosophila olfactory projection neuron subtypes by single-cell rna sequencing. Cell 171, 1206–1220 e22. doi: 10.1016/j. cell.2017.10.019 .Li, S., Jin, W., Wang, Z., Wu, F., Liu, Z., Tan, C., Li, S.Z., 2024. Semireward: A general reward model for semi-supervised learning, in: International Conference on Learning Representations. Lu, A.X., Kraus, O.Z., Cooper, S., Moses, A.M., 2019. Learning unsupervised feature representations for sin-gle cell microscopy images with paired cell inpaint-ing. PLoS Comput Biol 15, e1007348. doi: 10.1371/ journal.pcbi.1007348 .Lucic, M., Tschannen, M., Ritter, M., Zhai, X., Bachem, O., Gelly, S., 2019. High-fidelity image generation with fewer labels. CoRR abs/1903.02271. 
+
+arXiv:1903.02271 .Lugagne, J.B., Sosa Carrillo, S., Kirch, M., Kohler, A., Batt, G., Hersen, P., 2017. Balancing a genetic toggle switch by real-time feedback control and peri-odic forcing. Nat Commun 8, 1671. doi: 10.1038/ s41467-017-01498-0 .Mahecic, D., Stepp, W.L., Zhang, C., Griffie, J., Weigert, M., Manley, S., 2022. Event-driven acquisition for content-enriched microscopy. Nat Methods 19, 1262– 1267. doi: 10.1038/s41592-022-01589-x .Mangeat, T., Labouesse, S., Allain, M., Negash, A., Mar-tin, E., Guenole, A., Poincloux, R., Estibal, C., Bouis-sou, A., Cantaloube, S., Vega, E., Li, T., Rouviere, C., Allart, S., Keller, D., Debarnot, V., Wang, X.B., Michaux, G., Pinot, M., Le Borgne, R., Tournier, S., Suzanne, M., Idier, J., Sentenac, A., 2021. Super-resolved live-cell imaging using random illumination mi-croscopy. Cell Rep Methods 1, 100009. doi: 10.1016/j. crmeth.2021.100009 .Manni, G., Lauretti, C., Zollo, L., Soda, P., 2026. Sparse data, rich results: Few-shot semi-supervised learning via class-conditioned image translation. Computerized Medical Imaging and Graphics 128, 102705. doi: 10. 1016/j.compmedimag.2026.102705 .15 de Medeiros, G., Kromm, D., Balazs, B., Norlin, N., Gun-ther, S., Izquierdo, E., Ronchi, P., Komoto, S., Krzic, U., Schwab, Y., Peri, F., de Renzis, S., Leptin, M., Rauzi, M., Hufnagel, L., 2020. Cell and tissue ma-nipulation with ultrashort infrared laser pulses in light-sheet microscopy. Sci Rep 10, 1942. doi: 10.1038/ s41598-019-54349-x .Meijering, E., Dzyubachyk, O., Smal, I., 2012. Methods for cell and particle tracking. Methods in enzymology 504, 183–200. doi: 10.1016/B978-0-12-391857-4.00009-4 .Meng, H., Nuzhdin, D., Sison, M., Galland, F., LeGoff, L., 2022. Adaptive scans allow targeted cell-ablations on curved cell sheets. bioRxiv , 2022.01.30.478374doi: 10. 1101/2022.01.30.478374 .Moen, E., Bannon, D., Kudo, T., Graf, W., Covert, M., Van Valen, D., 2019. Deep learning for cellular image analysis. Nat Methods 16, 1233–1246. doi: 10.1038/ s41592-019-0403-1 .Nagao, Y., Sakamoto, M., Chinen, T., Okada, Y., Takao, D., 2020. Robust classification of cell cycle phase and biological feature extraction by image-based deep learn-ing. Mol Biol Cell 31, 1346–1354. doi: 10.1091/mbc. E20-03-0187 .Netzer, Y., Wang, T., Coates, A., Bissacco, A., Wu, B., Ng, A., 2011. Reading digits in natural images with unsupervised feature learning. NIPS . Neumann, B., Walter, T., Heriche, J.K., Bulkescher, J., Erfle, H., Conrad, C., Rogers, P., Poser, I., Held, M., Liebel, U., Cetin, C., Sieckmann, F., Pau, G., Kabbe, R., Wunsche, A., Satagopam, V., Schmitz, M.H., Cha-puis, C., Gerlich, D.W., Schneider, R., Eils, R., Huber, W., Peters, J.M., Hyman, A.A., Durbin, R., Pepperkok, R., Ellenberg, J., 2010. Phenotypic profiling of the hu-man genome by time-lapse microscopy reveals cell divi-sion genes. Nature 464, 721–7. doi: nature08869[pii] 10.1038/nature08869 .Nguyen, P., Chien, S., Dai, J., Monnat, R. J., J., Becker, P.S., Kueh, H.Y., 2021. Unsupervised discovery of dynamic cell phenotypic states from transmitted light movies. PLoS Comput Biol 17, e1009626. doi: 10.1371/ journal.pcbi.1009626 .Odena, A., 2016. Semi-supervised learning with generative adversarial networks. arXiv , 1606.01583doi: 10.48550/ arXiv.1606.01583 .Otsu, N., 1979. A Threshold Selection Method from Gray-Level Histograms. IEEE Transactions on Systems, Man, and Cybernetics 9, 62–66. doi: 10.1109/TSMC.1979. 4310076 .Ouriha, M., El Mansouri, O., Wadiai, Y., Nassiri, B., El Mourabit, Y., El Habouz, Y., 2024. Leveraging Semi-Supervised Generative Adversarial Networks to Address Data Scarcity Using Decision Boundary Analysis. In-ternational journal of advanced computer science and applications (IJACSA) 15, 1148–1155. doi: 10.14569/ ijacsa.2024.01511112 .Perrino, G., Wilson, C., Santorelli, M., di Bernardo, D., 2019. Quantitative characterization of alpha-synuclein aggregation in living cells through automated microflu-idics feedback control. Cell Rep 27, 916–927 e5. doi: 10. 1016/j.celrep.2019.03.081 .Pinkard, H., Stuurman, N., Corbin, K., Vale, R., Krum-mel, M.F., 2016. Micro-magellan: open-source, sample-adaptive, acquisition software for optical microscopy. Nat Methods 13, 807–809. doi: 10.1038/nmeth.3991 .Pinkard, H., Stuurman, N., Ivanov, I.E., Anthony, N.M., Ouyang, W., Li, B., Yang, B., Tsuchida, M.A., Chhun, B., Zhang, G., Mei, R., Anderson, M., Shepherd, D.P., Hunt-Isaak, I., Dunn, R.L., Jahr, W., Kato, S., Royer, L.A., Thiagarajah, J.R., Eliceiri, K.W., Lundberg, E., Mehta, S.B., Waller, L., 2021. Pycro-manager: open-source software for customized and reproducible micro-scope control. Nat Methods 18, 226–228. doi: 10.1038/ s41592-021-01087-6 .Prakash, K., Diederich, B., Heintzmann, R., Schermelleh, L., 2022. Super-resolution microscopy: a brief history and new avenues. Philos Trans A Math Phys Eng Sci 380, 20210110. doi: 10.1098/rsta.2021.0110 .Renz, M., 2013. Fluorescence microscopy-a historical and technical perspective. Cytometry A 83, 767–79. doi: 10. 1002/cyto.a.22295 .Royer, L.A., Lemon, W.C., Chhetri, R.K., Wan, Y., Cole-man, M., Myers, E.W., Keller, P.J., 2016. Adaptive light-sheet microscopy for long-term, high-resolution imaging in living organisms. Nat Biotechnol 34, 1267– 1278. doi: 10.1038/nbt.3708 .Sajun, A.R., Zualkernan, I., 2023. Exploring semi-supervised learning for camera trap images from the wild, in: Proceedings of the 2022 5th Artificial Intel-ligence and Cloud Computing Conference, Association for Computing Machinery, New York, NY, USA. pp. 143–149. doi: 10.1145/3582099.3582122 .Salimans, T., Goodfellow, I., Zaremba, W., Cheung, V., Radford, A., Chen, X., Chen, X., 2016. Improved tech-niques for training gans, in: Lee, D., Sugiyama, M., Luxburg, U., Guyon, I., Garnett, R. (Eds.), Advances in Neural Information Processing Systems, Curran As-sociates, Inc. Sandler, M., Howard, A., Zhu, M., Zhmoginov, A., Chen, L.C., 2018. Mobilenetv2: Inverted residuals and linear bottlenecks. arXiv , 1801.04381doi: 10.48550/arXiv. 1801.04381 .16 Scherf, N., Huisken, J., 2015. The smart and gentle mi-croscope. Nat Biotechnol 33, 815–8. doi: 10.1038/nbt. 3310 .Shaikhina, T., Khovanova, N.A., 2017. Handling limited datasets with neural networks in medical applications: A small-data approach. Artif Intell Med 75, 51–63. doi: 10.1016/j.artmed.2016.12.003 .Shakoor, A., Gao, W., Zhao, L., Jiang, Z., Sun, D., 2022. Advanced tools and methods for single-cell surgery. Microsyst Nanoeng 8, 47. doi: 10.1038/ s41378-022-00376-0 .Shi, Y., Tabet, J.S., Milkie, D.E., Daugird, T.A., Yang, C.Q., Giovannucci, A., Legant, W.R., 2023. Smart lat-tice light sheet microscopy for imaging rare and com-plex cellular events. bioRxiv , 2023.03.07.531517doi: 10. 1101/2023.03.07.531517 .Shi, Y., Tabet, J.S., Milkie, D.E., Daugird, T.A., Yang, C.Q., Ritter, A.T., Giovannucci, A., Legant, W.R., 2024. Smart lattice light-sheet microscopy for imaging rare and complex cellular events. Nat Methods 21, 301– 310. doi: 10.1038/s41592-023-02126-0 .Shpilman, A., Boikiy, D., Polyakova, M., Kudenko, D., Burakov, A.V., Nadezhdina, E., 2017. Deep learning of cell classification using microscope images of intra-cellular microtubule networks. 2017 16th IEEE Inter-national Conference on Machine Learning and Applica-tions (ICMLA) , 1–6. Stepp, W.L., Durmus, E.B., Rodriguez Alvarez, S.N., Lan-doni, J.C., Tortarolo, G., Douglass, K.M., Weigert, M., Manley, S., 2025. Smart hybrid microscopy for cell-friendly detection of rare events. bioRxiv , 2025.04.04.647219doi: 10.1101/2025.04.04.647219 .Szegedy, C., Vanhoucke, V., Ioffe, S., Shlens, J., Wojna, Z., 2016. Rethinking the inception architecture for com-puter vision, in: 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), pp. 2818– 2826. doi: 10.1109/CVPR.2016.308 .Tarvainen, A., Valpola, H., 2018. Mean teachers are better role models: Weight-averaged consistency tar-gets improve semi-supervised deep learning results. 
+
+arXiv:1703.01780 .Toettcher, J.E., Gong, D., Lim, W.A., Weiner, O.D., 2011. Light-based feedback for controlling intracellular signal-ing dynamics. Nat Methods 8, 837–9. doi: 10.1038/ nmeth.1700 .Van Engelen, J., Hoos, H.H., 2020. A survey on semi-supervised learning. Machine Learning 109, 373–440. doi: 10.1007/s10994-019-05855-6 .Van Valen, D.A., Kudo, T., Lane, K.M., Macklin, D.N., Quach, N.T., DeFelice, M.M., Maayan, I., Tanouchi, Y., Ashley, E.A., Covert, M.W., 2016. Deep learning au-tomates the quantitative analysis of individual cells in live-cell imaging experiments. PLoS Comput Biol 12, e1005177. doi: 10.1371/journal.pcbi.1005177 .Wang, X., Chen, H., Xiang, H., Lin, H., Lin, X., Heng, P.A., 2021. Deep virtual adversarial self-training with consistency regularization for semi-supervised medical image classification. Medical Image Analysis 70, 102010. doi: 10.1016/j.media.2021.102010 .Wenus, J., Dussmann, H., Paul, P., Kalamatianos, D., Rehm, M., Wellstead, P., Prehn, J., Huber, H., 2009. Alissa: an automated live-cell imaging system for sig-nal transduction analyses. Biotechniques 47, 1033–40. doi: 10.2144/000113247 .Wu, Z., Chhun, B.B., Popova, G., Guo, S.M., Kim, C.N., Yeh, L.H., Nowakowski, T., Zou, J., Mehta, S.B., 2022. Dynamorph: self-supervised learning of morpho-dynamic states of live cells. Mol Biol Cell 33, ar59. doi: 10.1091/mbc.E21-11-0561 .Yang, J., Shi, R., Wei, D., Liu, Z., Zhao, L., Ke, B., Pfister, H., Ni, B., 2023. Medmnist v2-a large-scale lightweight benchmark for 2d and 3d biomedical image classifica-tion. Scientific Data 10, 41. Yao, K., Rochman, N.D., Sun, S.X., 2019. Cell type clas-sification and unsupervised morphological phenotyping from low-resolution images using deep learning. Sci Rep 9, 13467. doi: 10.1038/s41598-019-50010-9 .Yosinski, J., Clune, J., Bengio, Y., Lipson, H., 2014. How transferable are features in deep neural networks? arXiv , 1411.1792doi: 10.48550/arXiv.1411.1792 .Yuan, Y., Wang, X., Yang, X., Li, R., Heng, P.A., 2023. Semi-supervised class imbalanced deep learning for car-diac mri segmentation, in: Greenspan, H., Madabhushi, A., Mousavi, P., Salcudean, S., Duncan, J., Syeda-Mahmood, T., Taylor, R. (Eds.), Medical Image Com-puting and Computer Assisted Intervention – MICCAI 2023, Springer Nature Switzerland, Cham. pp. 459–469. Zaritsky, A., Jamieson, A.R., Welf, E.S., Nevarez, A., Cillay, J., Eskiocak, U., Cantarel, B.L., Danuser, G., 2021. Interpretable deep learning uncovers cellular prop-erties in label-free live cell images that are predictive of highly metastatic melanoma. Cell Syst 12, 733–747 e6. doi: 10.1016/j.cels.2021.05.003 .Zhong, L., Qian, K., Liao, X., Huang, Z., Liu, Y., Zhang, S., Wang, G., 2025. Unisal: Unified semi-supervised active learning for histopathological image classification. Medical Image Analysis 102, 103542. doi: 10.1016/j. media.2025.103542 .17 Appendix A. SGAN training curves examples Appendix B. Confusion matrices of Transfer Learning results on CellCognition and Homemade Zeiss data sets. Appendix C. Confusion matrices Transfer Learn-ing on Nagao dataset Appendix D. Confusion matrix Transfer Learning on DIC dataset Appendix E. Transfer learning dataset 
+
+Dataset Classes Orig. Aug. Total 
+
+Cell Cog_ 5 5 284 796 1,080 Cell Cog_ 8 8 2,024 7,244 9,268 Homemade Zeiss 7 1,281 3,765 5,046 HHE 2 501 1,503 2,004 HHG 2 491 1,470 1,961 RHC 2 461 1,396 1,857 Cilia 2 558 1,676 2,234 DIC 3 169 1,690 1,859 
+
+Total 5,769 19,540 25,309 
+
+Table E.4: Summary of image counts (original and augmented) across all datasets used in transfer learning experiments. 0 100 200 300 400 500 600 
+
+> Epoch
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> Loss
+
+SGAN Loss Evolution - Training 40        
+
+> Training Loss
+> Validation Loss 0200 400 600 800 1000 1200 1400
+> Epoch
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> Loss
+
+SGAN Loss Evolution - Training 80     
+
+> Training Loss
+> Validation Loss 050 100 150 200
+> Epoch
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> 1.6
+> Loss
+
+SGAN Loss Evolution - Training 40        
+
+> Training Loss
+> Validation Loss 050 100 150 200 250 300 350
+> Epoch
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> Loss
+
+SGAN Loss Evolution - Training 80 
+
+> Training Loss
+> Validation Loss
+
+Figure A.7: SGAN classifier training loss evolution under different labelled and unlabelled data regimes. Top row: U = 100 with 40 and 80 labelled samples. Bottom row: U = 600 with 40 and 80 labelled samples. Overfitting is observed in regimes with limited labelled data. 
+
+18 Anaphase 
+
+> Apoptosis
+> Interphase
+> Metaphase
+> prometaphase
+
+Predicted Label 
+
+Anaphase 
+
+Apoptosis 
+
+Interphase 
+
+Metaphase 
+
+prometaphase 
+
+> True Label
+
+32 0 0 1 1
+
+0 43 0 0 0
+
+0 0 43 0 0
+
+0 0 0 43 0
+
+1 0 0 1 34 earlyana 
+
+> lateana
+> I
+> J
+> metaphase
+> prometaphase
+> pro
+> telophase
+
+Predicted Label 
+
+earlyana 
+
+lateana 
+
+I
+
+J
+
+metaphase 
+
+prometaphase 
+
+pro 
+
+telophase 
+
+> True Label
+
+297 0 0 0 0 0 0 3
+
+1 281 0 0 7 0 0 11 
+
+0 0 372 0 0 0 4 1
+
+1 9 1 285 0 3 0 1
+
+7 36 0 0 238 0 0 19 
+
+0 2 0 0 2 279 8 9
+
+0 0 40 0 0 0 260 0
+
+4 6 1 0 4 0 0 285 ana_earl_ana 
+
+> I
+> J
+> meta
+> pro
+> prometa
+> telo
+
+Predicted Label 
+
+ana_earl_ana 
+
+I
+
+J
+
+meta 
+
+pro 
+
+prometa 
+
+telo 
+
+> True Label
+
+127 0 0 0 0 7 1
+
+0 124 1 0 4 0 0
+
+0 0 134 0 2 0 0
+
+0 0 0 151 0 2 0
+
+0 3 2 0 120 0 0
+
+0 0 2 1 4 155 5
+
+4 0 0 9 0 1 151 Figure B.8: Confusion matrices of the SGAN-based transfer-learning model on the CellCognition dataset for the five-class (top) and eight-class cell-cycle (middle), and on our homemade Zeiss dataset (bot-tom). Class 0 Class 1 
+
+Predicted Label 
+
+Class 0 
+
+Class 1 
+
+> True Label
+> 183
+> (95.8%)
+> 8
+> (4.2%)
+> 28
+> (13.9%)
+> 173
+> (86.1%)
+> 20
+> 40
+> 60
+> 80
+> 100
+> 120
+> 140
+> 160
+> 180
+> Count
+
+(a) B HeLa-GM130 
+
+89 .6 ± 0.75% Class 0 Class 1 
+
+Predicted Label 
+
+Class 0 
+
+Class 1 
+
+> True Label
+> 205
+> (91.9%)
+> 18
+> (8.1%)
+> 30
+> (13.4%)
+> 194
+> (86.6%)
+> 25
+> 50
+> 75
+> 100
+> 125
+> 150
+> 175
+> 200
+> Count
+
+(b) C NIH3T3 
+
+88 .45 ± 0.71% Class 0 Class 1 
+
+Predicted Label 
+
+Class 0 
+
+Class 1 
+
+> True Label
+> 156
+> (84.3%)
+> 29
+> (15.7%)
+> 18
+> (9.6%)
+> 169
+> (90.4%)
+> 20
+> 40
+> 60
+> 80
+> 100
+> 120
+> 140
+> 160
+> Count
+
+(c) D RPE1-CENPF 
+
+86 .65 ± 0.86% Class 0 Class 1 
+
+Predicted Label 
+
+Class 0 
+
+Class 1 
+
+> True Label
+> 163
+> (79.1%)
+> 43
+> (20.9%)
+> 9
+> (4.6%)
+> 185
+> (95.4%)
+> 20
+> 40
+> 60
+> 80
+> 100
+> 120
+> 140
+> 160
+> 180
+> Count
+
+(d) E HeLa-EB1 
+
+81 .09 ± 4.91% 
+
+Figure C.9: Confusion matrices of transfer learning results across five G2-phase classification datasets. 
+
+19 Aan M NEBD 
+
+Predicted Label 
+
+> Aan
+> M
+> NEBD
+> True Label
+> 100
+> (82.6%)
+> 21
+> (17.4%)
+> 0
+> (0.0%)
+> 7
+> (5.6%)
+> 117
+> (93.6%)
+> 1
+> (0.8%)
+> 1
+> (0.8%)
+> 6
+> (4.8%)
+> 118
+> (94.4%)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Count
+
+Figure D.10: Confusion matrix for the three-class classification on the DIC C. elegans embryo dataset. Full retraining initialised from Mitocheck pre-trained weights substantially improved generalisation, achieving 84 .13 ± 7.42% overall test accuracy. Interphase Prophase Prometaphase  
+
+> Metaphase
+> Early Anaphase
+> Late Anaphase
+> Telophase J-phase
+> Cell Cycle Progression
+
+Figure E.11: Representative sample image for each of the eight cell-cycle phases in the CellCognition dataset, displayed in order of mitotic progression: Interphase → Prophase → Prometaphase →
+
+Metaphase → Early Anaphase → Late Anaphase → Telophase →
+
+J-phase (cytokinesis). 
+
+Figure E.12: Images acquired on a Zeiss inverted axio observer using a 20x dry objective. 
+
+Dataset G2 class Not G2 RPE1_Hoechst_CENPF 
+
+HeLa_Hoechst_GM130 
+
+HeLa_Hoechst_EB1 
+
+Figure E.13: Representative images from three G2-focused datasets: (top) RPE1_Hoechst_CENPF (RHC), (middle) HeLa_Hoechst_GM130 (HHG), and (bottom) HeLa_Hoechst_EB1 (HHE). Each dataset shows cells in G2 phase alongside non-G2 cells, demonstrating morphological markers used for binary cell cycle classification. 
+
+Figure E.14: Example images from ciliated/non-ciliated cells dataset. 
+
+Figure E.15: Representative images from the C. elegans DIC No-marski dataset showing three key cell cycle phases: before nuclear envelope breakdown (NEBD), during metaphase, and after anaphase. The dataset comprises 169 images. 
+
+20
