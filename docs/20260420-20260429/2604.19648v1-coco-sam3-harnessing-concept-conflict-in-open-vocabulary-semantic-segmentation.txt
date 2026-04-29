@@ -1,0 +1,418 @@
+Title: CoCo-SAM3: Harnessing Concept Conflict in Open-Vocabulary Semantic Segmentation
+
+URL Source: https://arxiv.org/pdf/2604.19648v1
+
+Published Time: Wed, 22 Apr 2026 01:21:18 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# CoCo-SAM3: Harnessing Concept Conflict in Open-Vocabulary Semantic Segmentation 
+
+Yanhui Chen 1, Baoyao Yang 1, Siqi Liu 2, and Jingchao Wang 3 
+
+> 1
+
+School of Computers, Guangdong University of Technology 2 Shenzhen Research Institute of Big Data 3 Peking University 
+
+chenyanhui91@mails.gdut.edu.cn, ybaoyao@gdut.edu.cn, siqiliu@sribd.cn, ethanwangjc@163.com 
+
+Abstract. SAM3 advances open-vocabulary semantic segmentation by introducing a prompt-driven mask generation paradigm. However, in multi-class open-vocabulary scenarios, masks generated independently from different category prompts lack a unified and inter-class compa-rable evidence scale, often resulting in overlapping coverage and unsta-ble competition. Moreover, synonymous expressions of the same con-cept tend to activate inconsistent semantic and spatial evidence, lead-ing to intra-class drift that exacerbates inter-class conflicts and com-promises overall inference stability. To address these issues, we propose 
+
+CoCo-SAM3 (Concept-Conflict SAM3), which explicitly decouples in-ference into intra-class enhancement and inter-class competition. Our method first aligns and aggregates evidence from synonymous prompts to strengthen concept consistency. It then performs inter-class compe-tition on a unified comparable scale, enabling direct pixel-wise compar-isons among all candidate classes. This mechanism stabilizes multi-class inference and effectively mitigates inter-class conflicts. Without requiring any additional training, CoCo-SAM3 achieves consistent improvements across eight open-vocabulary semantic segmentation benchmarks. 
+
+Keywords: Open-Vocabulary Semantic Segmentation · SAM3 · Training-Free Inference 
+
+## 1 Introduction 
+
+Open-vocabulary semantic segmentation (OVSS) [5, 37] aims to assign semantic labels to image pixels without requiring a pre-fixed category set. Unlike conven-tional semantic segmentation, which relies on a closed label system and assumes the same categories during training and testing, OVSS models categories as open concepts described in natural language. This eliminates the need for costly and repeated annotation and retraining when new categories emerge, significantly re-ducing deployment overhead and enabling scalable adaptation to novel concepts. As such, OVSS provides essential capabilities for open-world understanding and interactive vision applications. Recent advances in OVSS have increasingly focused on training-free inference, which leverages pre-trained foundation models to segment novel concepts directly 
+
+> arXiv:2604.19648v1 [cs.CV] 21 Apr 2026
+
+2 Y. Chen et al. Sofa  Towel 
+
+# + = 
+
+> Sofa or towel ?
+> (a)inter -class conflicts
+> Overlap 、competition
+> The evidence of sofa and the towel cannot be compared
+> (b) Effect of Inter -Class Competition
+> 82.2
+> 59.0
+> 28.2
+> 33.3
+> 48.2
+> 53.1
+> 44.6 93.2
+> 65.4
+> 33.3
+> 81.9
+> 62.3
+> 31.8
+> 88.9
+> 46.1
+> 50.0
+> 43.6
+> 67.9
+> 61.2
+> 86.8
+> 70. 7
+> 38.3
+> 95.2
+> 50.5
+
+Fig. 1: Left: Inter-class conflicts when applying SAM3 to open-vocabulary semantic segmentation. Masks for different categories are generated independently from their respective prompts, without evidence calibration on a unified scale, resulting in mu-tual overwriting and confusion. Right: Controlled inter-class competition analysis on COCO-S. We vary the ratio of inter-class competitors p in the semantic-prior normal-ization by adding to the target class the most similar “easy” and the least similar “hard” negative classes (non-target classes), and report mIoU. 
+
+without task-specific fine-tuning. This paradigm circumvents the annotation bot-tleneck and enables rapid deployment to evolving category sets, aligning with the core motivation of OVSS. Within this paradigm, mainstream approaches typically treat CLIP [29] as a source of semantic evidence, producing pixel-level category responses by measuring the similarity between dense visual features and text embeddings. Along this line, ClearCLIP [19] improves the usability of open-vocabulary prediction mainly by eliminating irrelevant structures and achieving more stable vision–language alignment, while SFP enhances spatial coherence by adaptively detecting and suppressing the propagation of abnormal token re-sponses in attention. However, relying solely on CLIP-based semantic responses often fails to provide reliable pixel-accurate boundaries and fine-grained struc-tures, thereby limiting contour quality and localization precision. To compensate for missing structural cues, another family of training-free methods incorporates additional vision foundation models ( e.g. , DINOv2 [27] and SAM2 [30]) as priors for structure and boundary separability ( e.g. , FreeDA [1] and CorrCLIP [42]). Although such multi-model collaboration can improve contours and details, the resulting pipelines and cross-representation alignment significantly increase in-ference complexity; more importantly, these methods still lack mechanism-level constraints on cross-class interactions in multi-class dense prediction, and thus cannot fundamentally suppress the instability induced by inter-class conflicts. As a new generation of promptable segmentation foundation model, SAM3 [7] further advances OVSS from similarity-driven discriminative prediction to a concept-conditioned paradigm: conditioned on a concept prompt, it directly gen-erates a segmentation mask for the corresponding concept, providing a more CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 3
+
+expressive and scalable pathway for OVSS [18]. However, since SAM3 is trained with one-to-one supervision between a single word and its mask, its outputs are inherently on a prompt-conditioned scale. When directly applied to multi-concept joint inference, mask responses triggered by different category prompts lack a unified, inter-class comparable evidence scale, making it difficult to es-tablish stable relative priorities and mutual exclusion across concepts; this leads to regional overwriting and inter-class conflicts (see the overlapping competition between “sofa” and “towel” in Fig. 1a). Moreover, we conduct a controlled inter-class competition analysis on the COCO-S dataset by varying the ratio of nega-tive classes p used in semantic-prior normalization, and comparing performance when selecting the most similar “easy” versus the least similar “hard” negative classes as competitors. The results in Fig. 1b show that both the strength and composition of inter-class competition significantly affect mIoU, indicating that multi-class OVSS requires explicit and controllable modeling and calibration of inter-class competition, rather than allowing incomparable prompt responses to passively conflict in space. Moreover, we find that in multi-class joint inference, the instability of inter-class conflicts can be largely attributed to insufficient intra-class evidence con-sistency. Since SAM3’s responses operate on a prompt-conditioned scale, the same semantic concept expressed with different phrasings (including synonyms) may activate inconsistent semantic facets and spatial evidence, causing intra-class evidence to scatter or even contradict each other. This lack of intra-class coherence undermines a concept’s stable representativeness in inter-class com-petition, thereby amplifying uncertainty in cross-class competition and making overwriting and conflicts more likely. Consequently, before establishing stable inter-class competition, we must consolidate multi-view intra-class evidence into a consistent representation. Motivated by these observations, this paper proposes CoCo-SAM3 , a training-free framework that stably transfers SAM3’s promptable mask generation ca-pability to open-vocabulary multi-class semantic segmentation. CoCo-SAM3 
+
+keeps SAM3 parameters frozen and constructs an intermediate representation with stronger semantic–text alignment on dense features from an intermediate layer of the perception encoder, serving as a unified interface for multi-concept joint inference. This representation provides two core functions. On the one hand, it establishes global cross-class calibration that maps pixel-level evidence of different concepts onto a unified, inter-class comparable scale, such that com-petition among semantically similar concepts at the same spatial location attains stable relative priorities and mutual exclusivity; this imposes mechanism-level suppression of inter-class conflicts and thereby substantially alleviates spatial overlap, overwriting, and confusing assignments. On the other hand, synonym prompts are treated as multi-view expressions of the same concept, and synonym evidence is calibrated and weight-aggregated only within this representation; un-der the same unified scale, intra-class semantic cues are integrated to improve intra-class semantic consistency and reduce sensitivity to prompt wording varia-tions. Under these comparable and consistent semantic constraints, the concept 4 Y. Chen et al. 
+
+masks generated by SAM3 under prompt conditioning are fused as structural ev-idence, so that SAM3’s strong contour priors support stable multi-class semantic decisions. The main contributions are summarized as follows: 
+
+– From the perspective of multi-class open-vocabulary joint inference, we iden-tify two critical limitations in SAM3: the absence of a unified evidence scale for cross-concept competition, and the lack of intra-class semantic consis-tency maintenance under open-naming diversity. We attribute the result-ing systemic instability to SAM3’s output organization and its prompt-conditioned response mechanism. 
+
+– We propose CoCo-SAM3 , a training-free framework that constructs an alignment-enhanced intermediate representation within the perception en-coder. It establishes a unified scale and stably models inter-class competition through global cross-class calibration, while simultaneously calibrating and aggregating evidence from synonymous prompts within this representation to restore intra-class semantic consistency. 
+
+– Extensive experiments on eight OVSS benchmarks demonstrate that CoCo-SAM3 consistently improves multi-class joint inference performance under the training-free setting. It significantly reduces conflicts among semantically similar concepts and mitigates fluctuations caused by synonym prompts, validating its effectiveness in stabilizing open-vocabulary segmentation. 
+
+## 2 Related Work 
+
+Open-Vocabulary Semantic Segmentation (OVSS) aims to perform pixel-level semantic segmentation under an open label space, conditioned on category con-cepts described in natural language. Unlike conventional semantic segmentation that relies on a fixed label set with matched training and test categories, OVSS allows the category set to be specified dynamically at inference time and requires the model to generalize to unseen categories and diverse textual expressions. 
+
+Train-based OVSS. Train-based methods typically rely on pixel-level mask annotations or text supervision for learning [11, 13, 24, 33, 38, 40]. For example, LSeg [21] directly learns pixel-level representations and aligns them with textual concepts, enabling segmentation with text categories as queries; CAT-Seg [9] further formulates pixel-to-text matching as a cost volume and performs ag-gregation to enhance fine-grained structures and local discrimination. Beyond fully supervised settings, weakly supervised approaches such as GroupViT [39] explore grouping mechanisms that allow semantic region structures to emerge from text supervision, offering an alternative way to reduce annotation depen-dence. Overall, train-based methods often achieve a higher performance ceiling, but they require supervision and training pipelines, and typically need retrain-ing or additional adaptation when transferring across domains or when the label space changes. 
+
+Training-free OVSS: CLIP-only. This line of work treats CLIP’s aligned representations as the sole semantic source and converts them into pixel-level CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 5
+
+category responses through inference-time structural modifications and response calibration [4,14,44]. Many studies generalize the query–key attention in CLIP’s last layer to self–self attention variants or their combinations to reduce noise in dense matching and improve localization, such as the value–value attention in CLIP Surgery [23], the query–query and key–key attention in SCLIP [35], and the more general self–self attention combinations in GEM [4]. Other works diagnose and adjust CLIP’s final-layer architecture to improve dense separabil-ity; for instance, ClearCLIP [19] processes the last-layer residual branch and feed-forward structure to obtain cleaner segmentation responses. Overall, these methods are lightweight and easy to deploy, but their pixel-accurate boundaries and fine-grained structural modeling are often bounded by CLIP’s image–text alignment pretraining objective. 
+
+Training-free OVSS: CLIP-VFM. Another direction introduces vision foun-dation models as structural priors to constrain, reorganize, or fuse CLIP’s dense responses, compensating for its limitations in localization and boundary delin-eation [1, 17, 20, 25, 34, 42]. FreeDA [1] leverages DINOv2 [27] self-supervised representations to enhance local separability and structural awareness; Proxy-CLIP [20] constructs more reliable pixel-level proxy representations via external visual priors to improve spatial consistency in open-vocabulary semantic seg-mentation; CorrCLIP [42] combines DINO [8] and SAM2 [30] priors to recon-struct and constrain CLIP patch correlations, improving contour quality and fine-grained structures. In general, this collaborative line can substantially en-hance boundaries and region structures, but it also introduces additional com-plexity due to multi-model pipelines and cross-representation alignment. More-over, it still lacks direct inference-time constraints for cross-class interference in multi-class open-vocabulary settings and within-class inconsistency caused by naming diversity, and thus may remain unstable under large sets of semantically similar categories or varying synonym prompts. 
+
+## 3 Preliminaries: SAM3 
+
+Architecture. SAM3 [7] is a promptable foundation segmentation model that formulates segmentation as concept-conditioned mask generation : given an input image  I and a concept prompt  s (e.g. , a class name or a short phrase), the model outputs a binary mask  ˆM for the concept, written as  ˆM = σ(ϕ(I, s )) , together with a global confidence indicating whether the concept is present. We formalize the decoder outputs as follows: for each pixel location  x, the mask decoder produces a pixel-wise mask logit map  asam  
+
+> s
+
+(x) ∈ R, and the pixel-wise mask probability map is obtained via sigmoid, 
+
+P sam  
+
+> s
+
+(x) = σ(asam  
+
+> s
+
+(x)) ∈ (0 , 1)  (1) In addition, it outputs an image-level presence logit  zs ∈ R, which characterizes the degree of concept presence and segmentability in the current image. The overall pipeline consists of two stages: (i) a unified perception encoding stage that produces dense visual representations and concept embeddings; and (ii) a 6 Y. Chen et al. 
+
+mask decoding stage where the concept embedding serves as the conditioning signal and interacts cross-modally with dense visual features to yield concept-aware pixel-level responses and the final mask prediction. 
+
+Perception Encoder (PE) [3] is the unified representation module in SAM3 that maps images and text prompts into an alignable semantic space. On the image side, PE outputs a multi-level dense feature pyramid {F (l)}Ll=1 with 
+
+F (l) ∈ Rhl×wl×dl , preserving spatial layout while spanning from low-level tex-ture cues to high-level semantic structures; on the text side, PE produces a concept embedding es ∈ Rd that serves as the conditioning signal for decoding, and can be aligned with local visual features via a similarity score e⊤ 
+
+> s
+
+fi to yield concept-relevant dense responses. 
+
+## 4 Methodology 
+
+The overall framework is illustrated in Fig. 2. To address the unstable inter-class competition when directly applying SAM3 to open-vocabulary semantic segmen-tation, we extend SAM3 with a semantic-evidence branch and a unified-scale fu-sion mechanism. We first perform Semantic Evidence Calibration (Sec. 4.1): by matching textual concepts with intermediate-layer visual representations from the Perception Encoder, we explicitly model pixel-wise semantic–structural con-sistency, providing a stable semantic prior for multi-class joint inference and alleviating conflicts caused by independently generated masks. Furthermore, to reduce fluctuations induced by open-vocabulary naming, we incorporate Syn-onym Aggregation (Sec. 4.2): we use an LLM to expand each category into diverse linguistic variants and softly aggregate the resulting multi-view seman-tic evidence within the class, yielding a more robust category-level semantic response. Finally, we calibrate and fuse this semantic prior with SAM3’s mask responses on a unified scale, thereby stabilizing inter-class competition, reducing overwriting and confusion, and producing more reliable open-vocabulary seman-tic segmentation results. 
+
+4.1 Semantic Evidence Calibration 
+
+Semantic Evidence Calibration (SEC) aims to explicitly decouple visual separa-bility from semantic alignment in multi-class open-vocabulary inference, and to calibrate the posterior under a unified additive scale, thereby stabilizing inter-class competition and reducing fluctuations induced by open-vocabulary naming. Given an input image  I and a candidate concept set  C, we first extract spatially aligned dense visual features from an intermediate layer of SAM3’s perception encoder (PE), and denote the feature vector at location  x as  f (x) ∈ Rd. On the text side, for each category  c ∈ C , we encode a concept embedding  ec ∈ Rd. Be-fore computing similarities, both  f (x) and  ec are L2-normalized so that their dot product corresponds to cosine similarity; thus, the semantic matching strength between location  x and concept  c is given by CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 7
+
+uc(x) = e⊤ 
+
+> c
+
+f (x) (2) To align semantic evidence with SAM3’s mask outputs at the same spatial reso-lution, we first bilinearly upsample the intermediate-layer PE feature map used to compute  uc(x) to match the resolution of the mask probability map. We then perform cross-class normalization over the candidate set  C, converting the matching strength into an inference-ready pixel-wise semantic prior distribution: 
+
+πc(x) = exp  uc(x)P 
+
+> c′∈C
+
+exp  uc′ (x) (3) Here,  πc(x) encodes a cross-category relative preference: it does not depend on the absolute response magnitude of any single class, but instead captures which candidate concept is more semantically consistent at the same location. Therefore, when multiple concepts can yield visually plausible contours,  πc(x)
+
+provides a stable cross-class semantic constraint that anchors the decision to the concept with higher semantic consistency, thereby improving the stability of multi-class joint inference. At fusion time, SEC further addresses the scale mismatch between semantic and structural evidence. Under prompt conditioning, SAM3 produces a pixel-wise response as a probability  P sam  
+
+> c
+
+(x) ∈ (0 , 1) , which mainly reflects the struc-tural segmentability of concept  c at location  x. In contrast,  πc(x) is a cross-class softmax-normalized relative measure. Direct multiplication or naive comparison of the two can suffer from saturation, dominance imbalance, and incompatible numerical scales. To this end, we map the structural evidence into the logit space to obtain an additive scale, and inject the semantic prior in the log form, yielding a calibrated score under a unified scale: 
+
+Sc(x) = log P sam  
+
+> c
+
+(x)1 − P sam  
+
+> c
+
+(x) + λprior log πc(x) + zc (4) The first term converts SAM3’s pixel-wise structural evidence into an addi-tive logit representation, while the second term  λprior log πc(x) explicitly injects cross-class semantic constraints as a posterior correction, enlarging inter-class margins and discouraging semantically inconsistent attribution. The last term 
+
+zc is SAM3’s image-level presence logit produced by the mask decoder; it is a class-wise scalar and is broadcast and added to all pixel locations when com-puting  Sc(x), providing an image-level presence bias and global suppression. Intuitively, when the semantic prior favors a category,  log πc(x) systematically increases inter-class separation and reduces overwriting; when the semantic dis-tribution is flatter and more uncertain, the decision relies more on the structural logit, avoiding domination by noisy priors. The final pixel-wise prediction is 
+
+ˆy(x) = arg max c∈C Sc(x).8 Y. Chen et al. Eq.3       
+
+> Sofa
+> …
+> Towel
+> Mask
+> Decoder
+> Overall Pipeline
+> Class embeddings Class name
+> Image
+> …
+> From SAM3
+> Visual Features
+> LLM expansion
+> Text
+> Encoder
+> ……
+> …
+> {𝑒 𝑐 ,1,…,𝑒 𝑐 ,𝑚 }
+> ···
+> ···
+> Sofa
+> Towel
+> Bath -Towel
+> Eq.4
+> Result
+> Sofa Towel
+> Conflict prior
+> Similarity Graph
+> couch
+> Logsumexp
+> 𝑒 𝑡𝑜𝑤𝑒𝑙
+> 𝑒 𝑠𝑜𝑓𝑎
+> Eq.5
+> Synonym Aggregation Semantic Evidence Calibration
+> MatMul
+> …
+> Perception
+> Encoder
+> Intermediate
+> Feature
+
+Fig. 2: The overview of CoCo-SAM3 . We enhance semantic-evidence consistency via intra-class synonym aggregation and build a unified-scale conflict prior to stabilize inter-class competition, yielding stable open-vocabulary semantic segmentation. 
+
+4.2 Synonym Aggregation 
+
+In multi-class open-vocabulary inference, whether inter-class conflicts can be stably suppressed often hinges on whether intra-class evidence can form a sta-ble representative signal: if the same concept activates substantially different semantic evidence under different linguistic realizations, its relative advantage in inter-class competition will fluctuate with wording variations, thereby ampli-fying overwriting and label instability. To enhance intra-class consistency and reduce sensitivity to prompt wording, we introduce Synonym Aggregation on the semantic-evidence branch, representing each category  c by a set of synonymous prompts  Sc = {sc, 1, . . . , s c,m c }. This set can be obtained by expanding the class name with an LLM to cover aliases, abbreviations, colloquial names, and dataset nomenclature, providing multi-view linguistic observations for the same concept. Concretely, each synonym prompt  sc,j  is encoded into a text embedding 
+
+ec,j ∈ Rd and matched against the spatially aligned dense feature  f (x) from an intermediate PE layer. The matching strength follows the definition in Sec. 4.1 (see Eq. 2), where we simply replace the category embedding  ec with the synonym embedding  ec,j  , yielding a synonym-level similarity response  uc,j (x). This step corresponds to the Similarity Graph in Fig. 2: different synonym prompts of the same category produce multiple similarity heatmaps. To balance broader linguistic coverage and maintaining discriminability, we adopt a soft intra-class aggregation in the LogSumExp form and define the category-level semantic score as 
+
+˜uc(x) = log 
+
+> mc
+
+X
+
+> j=1
+
+exp e⊤ 
+
+> c,j
+
+f (x)
+
+τs
+
+!
+
+(5) CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 9
+
+The temperature  τs controls the sharpness of the aggregation: when  τs is small, 
+
+˜uc(x) behaves more like selecting the best-matching synonym (i.e., approximate max pooling), which suppresses the influence of weak or noisy synonyms; when multiple synonym prompts give consistent support at the same location, the LogSumExp aggregation accumulates multi-path evidence, enhancing the sta-bility and robustness of category-level semantic responses. We then replace the similarity term in Sec. 4.1 used to construct the semantic prior with  ˜uc(x), and apply the same cross-class normalization over the candidate set  C to obtain  πc(x),which is subsequently fed into SEC for unified-scale calibration and inter-class competition. Importantly, synonym aggregation only operates on the semantic-evidence branch: its computation occurs between the intermediate PE features and the text embeddings, and does not incur additional SAM3 mask decoding calls. Therefore, this strategy keeps the computational overhead manageable while substantially improving intra-class consistency under prompt variation, cross-domain naming discrepancies, and long-tail concept scenarios—providing a more reliable semantic foundation for stable inter-class competition. 
+
+## 5 Experiments 
+
+5.1 Experimental Setup Datasets. Following prior work, we evaluate our method on the validation sets of five datasets, which together form eight OVSS benchmarks. Specifically, the Pascal VOC [12] validation set contains 1,449 images and yields two benchmarks: 
+
+V21 evaluates 21 classes including the background class, while V20 evaluates 20 classes without the background class. The Pascal Context [26] validation set contains 5,104 images and similarly yields two benchmarks: PC60 evalu-ates 60 classes including background, while PC59 evaluates 59 classes without background. The COCO-Stuff [6] validation set contains 5,000 images and is an-notated with 171 classes, which yields two benchmarks: COCO-S evaluates 171 classes without the background class; COCO-O is derived from COCO-Stuff by merging all stuff categories into the background class, and thus evaluates 81 classes including background. In addition, the ADE20K [43] validation set contains 2,000 images and evaluates 150 classes without background, forming the ADE benchmark; the Cityscapes [10] validation set contains 500 images and evaluates 19 classes without background, forming the City benchmark. We report mean Intersection-over-Union (mIoU) as the evaluation metric. 
+
+Experimental Details. All experiments uniformly adopt the official SAM3 model as the backbone and follow its default architecture and inference settings. The visual encoder uses PE-L+ as the feature backbone, and the core visual representation module is kept fully frozen throughout all experiments (i.e., no training updates are performed). The input image is resized to 1008 × 1008 pix-els to match SAM3’s native resolution. Class synonyms are expanded from the dataset-provided category texts via text-only rewriting and augmentation, with-out introducing any new visual categories; details are provided in the appendix. 10 Y. Chen et al. 
+
+Table 1: Quantitative comparison with existing methods on eight OVSS benchmarks (mIoU, %). Existing methods are grouped into four paradigms: training-based, and training-free methods based on CLIP-only, CLIP-VFM, and SAM3. Avg. denotes the average over all eight benchmarks. Red indicates the best method, and blue indicates the second best. 
+
+Method with background without background Avg. 
+
+V21 PC60 COCO-O V20 PC59 COCO-S City ADE 
+
+Training-based 
+
+GroupViT [39] (CVPR’22) 50.4 18.7 27.5 79.7 23.4 15.3 11.1 9.2 29.4 TCL [31] (CVPR’23) 51.2 24.3 30.4 77.5 30.3 19.6 23.1 14.9 33.9 CLIP-DINOiser [36] (ECCV’24) 62.1 32.4 34.8 80.9 35.9 24.6 31.7 20.0 40.3 Talk2DINO [2] (ICCV’25) 65.8 37.7 45.1 88.5 42.4 30.2 38.1 22.5 46.3 
+
+Training-free CLIP-Only 
+
+CLIP [29] (ICML’21) 18.6 7.8 6.5 49.1 11.2 7.2 6.7 3.2 13.8 CaR [15] (CVPR’24) 48.6 13.6 15.4 73.7 18.4 – – 5.4 –CLIPtrase [32] (ECCV’24) 50.9 29.9 43.6 81.0 33.8 22.8 – 16.4 –ClearCLIP [19] (ECCV’24) 51.8 32.6 33.0 80.9 35.9 23.9 30.0 16.7 38.1 SCLIP [35] (ECCV’24) 59.1 30.4 30.5 80.4 34.1 22.4 32.2 16.1 38.2 NACLIP [14] (WACV’25) 58.9 32.2 33.2 79.7 35.2 23.3 35.5 17.4 39.4 SFP [16] (ICCV’25) 63.9 37.2 37.9 84.5 39.9 26.4 41.1 20.8 44.0 RF-CLIP [22] (AAAI’26) 67.2 37.9 39.1 87.0 41.4 27.5 43.0 21.0 45.5 
+
+Training-free CLIP-VFM 
+
+FreeDA [1] (CVPR’24) 51.8 35.3 36.3 84.3 39.7 25.7 34.1 20.8 41.0 ProxyCLIP [20] (ECCV’24) 58.6 33.8 37.4 83.0 37.2 25.4 33.9 19.7 41.1 CASS [17] (CVPR’25) 65.8 36.7 37.8 87.8 40.2 26.7 39.4 20.4 44.4 CorrCLIP [42] (ICCV’25) 76.7 44.9 49.4 91.5 50.8 34.0 51.1 30.7 53.6 Trident [34] (ICCV’25) 67.1 38.6 41.1 84.5 42.2 28.3 42.9 21.9 45.8 ReME [41] (ICCV’25) 82.2 44.6 48.2 93.2 53.1 33.3 59.0 28.2 55.2 
+
+Training-free SAM3 
+
+SAM3 [7] (ICLR’26) 81.9 46.1 65.4 88.9 50.0 33.3 62.3 31.8 57.5 
+
+CoCo-SAM3 (Ours) 86.8 50.5 67.9 95.2 61.2 43.6 70.7 38.3 64.3 
+
+For synonym aggregation, we set the temperature to τs = 0 .10 and compute text embeddings in batches with chunk = 16 to improve efficiency. We report mean Intersection-over-Union (mIoU) as the primary evaluation metric and run inference on a machine equipped with 4× NVIDIA RTX 4090 GPUs (24GB each). During testing, we do not apply any data augmentation or additional post-processing. 
+
+5.2 Comparison with State-of-the-Art Methods 
+
+As shown in Table 1, our method CoCo-SAM3 achieves the best performance across all eight OVSS benchmarks, reaching an average mIoU of 64.3 . We group the compared approaches into four paradigms: training-based OVSS meth-ods (GroupViT [39], TCL [31], CLIP-DINOiser [36], Talk2DINO [2]), training-free methods relying solely on CLIP (CLIP [29], CaR [15], CLIPtrase [32], ClearCLIP [19], SCLIP [35], NACLIP [14], SFP [16], RF-CLIP [22]), and training-free CLIP-VFM methods that incorporate vision foundation models (FreeDA [1], CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 11 Image CorrCLIP SAM3 Ours      
+
+> VOC21 PC59 COCO -SCity ADE
+> GT
+> Fig. 3: Qualitative comparisons. “GT” denotes the ground truth.
+
+ProxyCLIP [20], CASS [17], CorrCLIP [42], Trident [34], ReME [41]). With-out any additional training, CoCo-SAM3 not only significantly outperforms the vanilla SAM3 [7] framework (57.5, +6.8), but also surpasses the strongest CLIP-VFM baselines ReME (55.2, +9.1) and CorrCLIP (53.6, +10.7). Further analysis by evaluation protocol shows that under the with-background setting, 
+
+CoCo-SAM3 improves over SAM3 by about +3.9 on average, while under the more challenging no-background setting, the average improvement increases to about +8.5. These results indicate that our method consistently enhances class discriminability under both protocols, with more pronounced gains when the background class is absent and inter-class competition is stronger. As shown in Fig. 3, we conduct qualitative comparisons among CorrCLIP, SAM3, and our method on five benchmarks: VOC21, PC59, COCO-S, City, and ADE. We observe that CorrCLIP is often limited by interference among se-mantically similar categories, leading to incorrect category responses and local noisy predictions. Although SAM3 provides strong boundaries and fine-grained details, it still suffers from cross-class overwriting and unstable decisions in the multi-class open-vocabulary setting, which becomes more pronounced for seman-tically similar or co-occurring concepts. In contrast, our method performs unified pixel-wise competitive inference by jointly integrating structural and semantic evidence, thereby more robustly suppressing overwriting and confusion induced by cross-class competition while preserving SAM3’s boundary advantages. As a result, our method yields more consistent category assignments over target re-gions, improves overall object continuity, and significantly reduces background misclassification and fragmented noise. 
+
+5.3 Ablation Study Impact of component integration. Table 2 evaluates the roles of the two key components in CoCo-SAM3—Semantic Evidence Calibration (SEC) and Syn-onym Aggregation (SA)—for open-vocabulary multi-class segmentation. Start-12 Y. Chen et al.                                 
+
+> Table 2: Key component ablation study. ✓indicates the module is enabled, and ×
+> indicates the module is removed.
+> SEC SA VOC20 PC59 COCO-S City ADE Avg.
+> ××88.9 50.0 33.3 62.3 31.8 53.3
+> ✓×94.8 59.1 43.0 67.9 37.3 60.4
+> ✓✓95.2 61.2 43.6 70.7 38.3 61.8
+
+ing from the SAM3 baseline (53.3 mIoU on average), enabling SEC alone brings stable and substantial improvements, raising the average mIoU to 60.4 (+7.1). This gain is consistent across all benchmarks: VOC20 improves from 88.9 to 94.8, PC59 from 50.0 to 59.1, COCO-Stuff from 33.3 to 43.0, City from 62.3 to 67.9, and ADE from 31.8 to 37.3. These results highlight that calibrating multi-class evidence onto a unified and inter-class comparable scale is crucial for alleviating scale mismatch and suppressing inter-class conflicts. Further adding SA on top of SEC yields additional consistent gains, improving the average mIoU to 61.8 (+1.4), with more noticeable boosts on PC59 to 61.2 (+2.1) and City to 70.7 (+2.8). Overall, combining SEC and SA achieves the best perfor-mance, increasing the average mIoU from 53.3 to 61.8 (+8.5), demonstrating their complementarity: SEC strengthens stable inter-class competition and con-flict suppression, while SA further enhances intra-class evidence consistency and integration within the same calibrated evidence space, leading to better overall performance. 
+
+Effect of Feature Layers from the Perception Encoder. We further an-alyze how extracting features from different layers of the Perception Encoder 
+
+(PE) affects performance. PE consists of 32 stacked encoder blocks, and features at different depths exhibit a clear trade-off between semantic abstraction and the preservation of spatial details. For open-vocabulary semantic segmentation, our key goal is to better model semantic-level inter-class conflict and cooper-ation : on the one hand, enhancing semantic separability to reduce confusion among categories; on the other hand, retaining sufficient local structural cues to support pixel-level boundaries and region prediction. To this end, we keep all other settings unchanged and select PE layer #3, #12, #18, #25, and #31 as feature sources, evaluating on VOC20, PC59, COCO-S, City, and ADE. The results show that mid-level features (layer #18) yield the best and most stable overall performance. This observation is consistent with the analysis in the PE paper [3], where mid-level representations often strike a more favorable balance between high-level semantics and low-level visual details, making them particularly suitable for modeling category discrimination and collaboration in open-vocabulary settings. 
+
+Sensitivity to λprior . Table 4 studies the effect of the semantic-prior weight 
+
+λprior on five datasets while fixing τs = 0 .10 . Overall, the method is fairly robust to λprior within a moderate range: as λprior increases from 0.3 to 0.7, performance consistently improves on PC59 (60.8 →61.2), COCO-S (43.1 →43.6), and ADE (37.8 →38.3), indicating that a moderately stronger cross-class semantic prior CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 13 
+
+Fig. 4: Comparison of mIoU using different PE layers (#3/#12/#18/#25/#31). 
+
+Table 3: Effect of selecting different feature layers from the PE on open-vocabulary semantic segmentation performance (mIoU, %). With all other settings fixed, we extract dense features from different PE layers (#3/#12/#18/#25/#31)                               
+
+> Approach VOC20 PC59 COCO-S City ADE
+> layer from Perception Encoder
+> from layer #3 93.2 59.5 41.8 69.5 36.1 from layer #12 94.4 60.8 43.1 70.3 36.6 from layer #18 95.2 61.2 43.6 70.7 38.3
+> from layer #25 95.0 60.4 43.5 70.7 37.5 from layer #31 93.7 59.3 41.2 69.6 36.9
+
+Table 4: Sensitivity to λprior (with τs = 0 .10 fixed). mIoU (%) on VOC20, PC59, COCO-Stuff, Cityscapes, and ADE under different λprior , measuring the effect of the semantic-prior weight in logit-space fusion.                               
+
+> Approach VOC20 PC59 COCO-S City ADE
+> τs= 0 .10
+> λprior = 0 .395.0 60.8 43.1 70.4 37.8
+> λprior = 0 .595.2 61.1 43.3 70.6 38.1
+> λprior = 0 .795.2 61.2 43.6 70.7 38.3
+> λprior = 0 .994.8 60.7 43.5 70.7 38.0
+
+participates more effectively in competition resolution and alleviates inter-class conflicts and confusion in multi-class inference. When further increasing λprior to 0.9, PC59 and ADE slightly drop (61.2 →60.7 and 38.3 →38.0), and VOC20 also decreases marginally (95.2 →94.8), suggesting that an overly strong semantic prior may suppress visual structural evidence under semantic uncertainty or among closely related categories, leading to minor degradation. Across the five datasets, λprior = 0 .7 achieves the best or near-best overall performance; thus it is used as the default setting in subsequent experiments. 
+
+Inference Efficiency. Table 5 summarizes the runtime cost and performance during online inference. We report the average inference time (ms/img) and GPU memory consumption (MB). Notably, our method incurs no offline con-struction cost. CoCo-SAM3 introduces only a minor overhead: the inference time increases from 902 ms/img to 934 ms/img, and the memory usage increases from 10563 MB to 10722 MB. This overhead mainly comes from the additional text encoding required by synonym prompt expansion and a small amount of fusion computation. Nevertheless, we fully reuse SAM3’s native frozen backbone and decoding pipeline, without introducing extra models or a heavy multi-model 14 Y. Chen et al. 
+
+Table 5: Efficiency comparison on OVSS benchmarks. We report the average infer-ence time (ms/img), GPU memory consumption (MB), and segmentation performance (mIoU) averaged over eight benchmarks. chunk prompt = 16 indicates that, during multi-class inference, the evaluated concept prompts are processed in chunks of 16.          
+
+> Approach Time(ms/img) ↓Mem.(MB) ↓Perf.(mIoU) ↑
+> chunk prompt = 16
+> SAM3 902 10563 57.5
+> CoCo-SAM3 934 10722 64.3
+
+Table 6: Ablation on prompt sources (Avg. mIoU). We use different LLMs to generate prompt expansions for each category and report the average mIoU under the same evaluation setting.         
+
+> Variant Prompt Source Avg.
+> SAM3 (classname only) -57.5
+> CoCo-SAM3 Gemini-3 Pro 64.0
+> CoCo-SAM3 GPT-5.2Thinking 64.3
+
+pipeline, making the overall overhead well controlled. Meanwhile, CoCo-SAM3 
+
+significantly improves mIoU from 57.5 to 64.3, demonstrating stable and sub-stantial gains while maintaining inference cost close to vanilla SAM3. 
+
+Prompt Sources. Table 6 presents an ablation study on different prompt sources. Taking SAM3 with class-name-only prompts as the baseline (57.5 mIoU), leveraging LLM-generated prompt expansions for each category and incorpo-rating the CoCo-SAM3 inference framework yields significant improvements: using Gemini-3 Pro achieves 64.0 mIoU (+6.5), while using GPT-5.2Thinking achieves 64.3 mIoU (+6.8). Both generators follow a consistent gain pattern, with only a 0.3 mIoU difference; These results indicate that CoCo-SAM3 is robust to the choice of prompt generator, and GPT-5.2Thinking is slightly bet-ter, though the margin is limited. 
+
+## 6 Conclusion 
+
+We identify two key sources of instability in SAM3 for multi-class OVSS: (i) independently conditioned concept prompts make masks incomparable, caus-ing cross-class overwriting, confusion, and unstable competition; (ii) naming di-versity and synonymous expressions induce intra-class evidence drift, further increasing inconsistency. To address this, we propose a training-free method, 
+
+CoCo-SAM3 , which decomposes multi-class inference into two complementary priors— inter-class competition and intra-class consistency enhancement —and unifies structural and semantic evidence with a pixel-wise competitive score for stable joint prediction on a common scale. This strengthens SAM3 for multi-class OVSS without a heavy multi-model pipeline, achieving strong results on eight benchmarks. CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 15 
+
+## References 
+
+1. Barsellotti, L., Amoroso, R., Cornia, M., Baraldi, L., Cucchiara, R.: Training-free open-vocabulary segmentation with offline diffusion-augmented prototype gener-ation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 3689–3698 (2024) 2. Barsellotti, L., Bianchi, L., Messina, N., Carrara, F., Cornia, M., Baraldi, L., Falchi, F., Cucchiara, R.: Talking to dino: Bridging self-supervised vision backbones with language for open-vocabulary segmentation. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 22025–22035 (2025) 3. Bolya, D., Huang, P.Y., Sun, P., Cho, J.H., Madotto, A., Wei, C., Ma, T., Zhi, J., Rajasegaran, J., Rasheed, H., et al.: Perception encoder: The best visual em-beddings are not at the output of the network. arXiv preprint arXiv:2504.13181 (2025) 4. Bousselham, W., Petersen, F., Ferrari, V., Kuehne, H.: Grounding everything: Emerging localization properties in vision-language transformers. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 3828–3837 (2024) 5. Bucher, M., Vu, T.H., Cord, M., Pérez, P.: Zero-shot semantic segmentation. Ad-vances in Neural Information Processing Systems 32 (2019) 6. Caesar, H., Uijlings, J., Ferrari, V.: Coco-stuff: Thing and stuff classes in context. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 1209–1218 (2018) 7. Carion, N., Gustafson, L., Hu, Y.T., Debnath, S., Hu, R., Suris, D., Ryali, C., Alwala, K.V., Khedr, H., Huang, A., et al.: Sam 3: Segment anything with concepts. arXiv preprint arXiv:2511.16719 (2025) 8. Caron, M., Touvron, H., Misra, I., Jégou, H., Mairal, J., Bojanowski, P., Joulin, A.: Emerging properties in self-supervised vision transformers. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 9650–9660 (2021) 9. Cho, S., Shin, H., Hong, S., Arnab, A., Seo, P.H., Kim, S.: Cat-seg: Cost aggregation for open-vocabulary semantic segmentation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 4113–4123 (2024) 10. Cordts, M., Omran, M., Ramos, S., Rehfeld, T., Enzweiler, M., Benenson, R., Franke, U., Roth, S., Schiele, B.: The cityscapes dataset for semantic urban scene understanding. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 3213–3223 (2016) 11. Ding, J., Xue, N., Xia, G.S., Dai, D.: Decoupling zero-shot semantic segmenta-tion. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 11583–11592 (2022) 12. Everingham, M., Van Gool, L., Williams, C.K., Winn, J., Zisserman, A.: The pascal visual object classes (voc) challenge. International journal of computer vision 88 (2), 303–338 (2010) 13. Ghiasi, G., Gu, X., Cui, Y., Lin, T.Y.: Scaling open-vocabulary image segmentation with image-level labels. In: European conference on computer vision. pp. 540–557. Springer (2022) 14. Hajimiri, S., Ben Ayed, I., Dolz, J.: Pay attention to your neighbours: Training-free open-vocabulary semantic segmentation. In: Proceedings of the Winter Conference on Applications of Computer Vision. pp. 5061–5071 (2025) 15. Huang, Y., Kang, D., Chen, L., Zhe, X., Jia, W., Bao, L., He, X.: Car: Class-aware regularizations for semantic segmentation. In: European Conference on Computer Vision. pp. 518–534. Springer (2022) 16 Y. Chen et al. 16. Jin, S., Yu, S., Zhang, B., Sun, M., Dong, Y., Xiao, J.: Feature purification mat-ters: Suppressing outlier propagation for training-free open-vocabulary semantic segmentation. In: Proceedings of the IEEE/CVF International Conference on Com-puter Vision. pp. 20291–20300 (2025) 17. Kim, C., Ju, D., Han, W., Yang, M.H., Hwang, S.J.: Distilling spectral graph for object-context aware open-vocabulary semantic segmentation. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 15033–15042 (2025) 18. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., et al.: Segment anything. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 4015–4026 (2023) 19. Lan, M., Chen, C., Ke, Y., Wang, X., Feng, L., Zhang, W.: Clearclip: Decomposing clip representations for dense vision-language inference. In: European Conference on Computer Vision. pp. 143–160. Springer (2024) 20. Lan, M., Chen, C., Ke, Y., Wang, X., Feng, L., Zhang, W.: Proxyclip: Proxy at-tention improves clip for open-vocabulary segmentation. In: European Conference on Computer Vision. pp. 70–88. Springer (2024) 21. Li, B., Weinberger, K.Q., Belongie, S., Koltun, V., Ranftl, R.: Language-driven semantic segmentation. arXiv preprint arXiv:2201.03546 (2022) 22. Li, J., Lu, Y., Zhang, Y., Xie, Y., Wang, F., Xie, Y., Qu, Y.: Target refocusing via attention redistribution for open-vocabulary semantic segmentation: An explain-ability perspective. arXiv preprint arXiv:2511.16170 (2025) 23. Li, Y., Wang, H., Duan, Y., Li, X.: Clip surgery for better explainability with enhancement in open-vocabulary tasks. arXiv e-prints pp. arXiv–2304 (2023) 24. Liang, F., Wu, B., Dai, X., Li, K., Zhao, Y., Zhang, H., Zhang, P., Vajda, P., Mar-culescu, D.: Open-vocabulary semantic segmentation with mask-adapted clip. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recog-nition. pp. 7061–7070 (2023) 25. Lu, L., Chen, X., Guo, M., Li, S., Wang, J., Shi, Y.: Chordedit: One-step low-energy transport for image editing. arXiv preprint arXiv:2602.19083 (2026) 26. Mottaghi, R., Chen, X., Liu, X., Cho, N.G., Lee, S.W., Fidler, S., Urtasun, R., Yuille, A.: The role of context for object detection and semantic segmentation in the wild. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 891–898 (2014) 27. Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al.: Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 (2023) 28. Pei, G., Jiang, X., Yao, Y., Shu, X., Shen, F., Jeon, B.: Taming sam3 in the wild: A concept bank for open-vocabulary segmentation. arXiv preprint arXiv:2602.06333 (2026) 29. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al.: Learning transferable visual models from natural language supervision. In: International conference on machine learning. pp. 8748–8763. PmLR (2021) 30. Ravi, N., Gabeur, V., Hu, Y.T., Hu, R., Ryali, C., Ma, T., Khedr, H., Rädle, R., Rolland, C., Gustafson, L., et al.: Sam 2: Segment anything in images and videos. arXiv preprint arXiv:2408.00714 (2024) 31. Ru, L., Zheng, H., Zhan, Y., Du, B.: Token contrast for weakly-supervised semantic segmentation. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 3093–3102 (2023) CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 17 32. Shao, T., Tian, Z., Zhao, H., Su, J.: Explore the potential of clip for training-free open vocabulary semantic segmentation. In: European Conference on Computer Vision. pp. 139–156. Springer (2024) 33. Shi, Y., Xie, Y., Guo, M., Lu, L., Huang, M., Wang, J., Zhu, Z., Xu, B., Huang, Z.: Mmerror: A benchmark for erroneous reasoning in vision-language models. arXiv preprint arXiv:2601.03331 (2026) 34. Shi, Y., Dong, M., Xu, C.: Harnessing vision foundation models for high-performance, training-free open vocabulary segmentation. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 23487–23497 (2025) 35. Wang, F., Mei, J., Yuille, A.: Sclip: Rethinking self-attention for dense vision-language inference. In: European conference on computer vision. pp. 315–332. Springer (2024) 36. Wysoczańska, M., Siméoni, O., Ramamonjisoa, M., Bursuc, A., Trzciński, T., Pérez, P.: Clip-dinoiser: Teaching clip a few dino tricks for open-vocabulary se-mantic segmentation. In: European Conference on Computer Vision. pp. 320–337. Springer (2024) 37. Xian, Y., Choudhury, S., He, Y., Schiele, B., Akata, Z.: Semantic projection network for zero-and few-label semantic segmentation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 8256– 8265 (2019) 38. Xie, B., Cao, J., Xie, J., Khan, F.S., Pang, Y.: Sed: A simple encoder-decoder for open-vocabulary semantic segmentation. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 3426–3436 (2024) 39. Xu, J., De Mello, S., Liu, S., Byeon, W., Breuel, T., Kautz, J., Wang, X.: Groupvit: Semantic segmentation emerges from text supervision. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 18134– 18144 (2022) 40. Xu, X., Xiong, T., Ding, Z., Tu, Z.: Masqclip for open-vocabulary universal im-age segmentation. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 887–898 (2023) 41. Xuan, X., Deng, Z., Ma, K.L.: Reme: A data-centric framework for training-free open-vocabulary segmentation. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 20954–20965 (2025) 42. Zhang, D., Liu, F., Tang, Q.: Corrclip: Reconstructing patch correlations in clip for open-vocabulary semantic segmentation. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 24677–24687 (2025) 43. Zhou, B., Zhao, H., Puig, X., Fidler, S., Barriuso, A., Torralba, A.: Scene parsing through ade20k dataset. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 633–641 (2017) 44. Zhou, C., Loy, C.C., Dai, B.: Extract free dense labels from clip. In: European conference on computer vision. pp. 696–712. Springer (2022) 18 Y. Chen et al. 
+
+## Appendix A Implementation Details 
+
+For each category, we construct a prompt set consisting of the canonical class name and several synonymous expressions. The synonym set is used only to build the semantic prior, while the structural branch performs decoding only once using the canonical prompt. Therefore, our method does not run multiple structural predictions for multiple synonymous prompts. Let Sc denote the synonym set of category c, and let uc,s (x) denote the dense matching score between prompt s ∈ S c and the image feature at pixel x. We first aggregate intra-class semantic evidence as 
+
+zc(x) = log X
+
+> s∈S c
+
+exp  uc,s (x), (6) and then perform cross-class normalization over the full candidate set C:
+
+log πc(x) = zc(x) − log X
+
+> c′∈C
+
+exp  zc′ (x). (7) Thus, the semantic prior is comparatively calibrated within a given candidate set. All main results use full-class competition; the partial-negative setting in Fig. 1 is used only for analysis. The structural branch provides spatial evidence and is combined with the semantic prior to form the final category score Zc(x). Category-level existence information acts as an image-level bias that suppresses unlikely classes. The final prediction is obtained as 
+
+ˆy(x) = arg max  
+
+> c∈C
+
+Zc(x). (8) For the with-background setting, background is not treated as an explicit text prompt category; instead, it is obtained by rejecting low-confidence pixels in the unified score space. In implementation, log-domain operations are computed in numerically stable forms. Compared with conventional prompt ensembling, our method uses synonym expansion only to build a competitive semantic prior, rather than averaging multiple structural predictions or final outputs. 
+
+## B Additional Quantitative Results and Ablations 
+
+We further provide two additional ablation studies to examine the sensitivity of our method to the source of dense visual features and the design of intra-class aggregation. Unless otherwise specified, all other settings remain the same as those in the main paper. Here we report results on five datasets: V20, PC59, COCO-S, City, and ADE. CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 19 
+
+Table 7: Ablation on semantic-prior feature sources.                   
+
+> Method V20 PC59 COCO-S City ADE Avg. Ours (DINOv2) 94.1 59.8 42.1 69.2 36.9 60.4 Ours (PE) 95.2 61.2 43.6 70.7 38.3 61.8
+
+Table 8: Ablation on intra-class aggregation strategies.                         
+
+> Aggregation V20 PC59 COCO-S City ADE Avg. Average 94.8 60.5 42.9 69.9 37.6 61.1 Max 93.5 58.4 40.2 67.6 36.7 59.3 Log-Sum-Exp 95.2 61.2 43.6 70.7 38.3 61.8
+
+Replacing PE Features with DINOv2 [27]. We replace the PE dense fea-tures in the semantic-prior branch with DINOv2 features to examine how depen-dent our framework is on the choice of visual representation. In this experiment, all other parts of the inference pipeline remain unchanged, including the synonym sets, cross-class normalization, and unified fusion with structural responses. The results are shown in Table 7. Even with DINOv2 features, the overall perfor-mance drops only moderately, indicating that the proposed competitive semantic prior is compatible with different dense feature sources rather than being tied to one specific representation. Meanwhile, PE still performs better, suggesting that a feature space more aligned with the structural branch leads to more stable semantic-structural cooperation and thus better final predictions. 
+
+Ablation on Intra-class Aggregation. We further compare three intra-class aggregation strategies, i.e., Average, Max, and log-sum-exp, to clarify whether the gain comes merely from introducing more synonymous prompts or from a more effective way of integrating semantic evidence. The results are shown in Ta-ble 8. Average benefits from multiple prompts, but is prone to over-smoothing weakly related expressions. Max relies only on the strongest response, which makes it more selective but less robust overall. In contrast, log-sum-exp preserves the dominance of highly relevant prompts while still accumulating complemen-tary evidence from other related expressions, leading to the best performance. This result suggests that the advantage of our method comes not only from ex-panding the prompt set, but also from using an aggregation strategy that better matches the competitive semantic-prior design. 
+
+## C Synonym Generation Template 
+
+Inspired by ConceptBank [28], we generate a small set of lexical variants for each category in an offline stage. The expanded prompts are used only in the semantic-prior branch, while the structural branch always uses the canonical class name. 
+
+Quality control. We keep only label-faithful variants, such as aliases, spelling variants, singular and plural variants, and hyphenation or spacing variants. We exclude hypernyms, hyponyms, parts, attributes, actions, scenes, materials, and 20 Y. Chen et al. 
+
+other expressions that may change the original class boundary. The generated prompts are further lowercased, deduplicated, and filtered by length and validity. 
+
+[System] Generate a small set of lexical variants for a segmentation class name while strictly preserving its original visual semantics. 
+
+[User] Given Dataset: {DATASET} and Class: {CLASS}, output a single-line, comma-separated prompt list. The first item must be the original class name. 
+
+Rules: allow aliases, spelling variants, singular and plural variants, and hyphenation or spacing variants; do not generate hypernyms, hyponyms, parts, attributes, actions, scenes, materials, or other expressions that expand the original category boundary; keep each phrase concise; if no reliable variant exists, keep only the original class name; retain at most 
+
+M = 10  candidate items for each class, including the original class name. 
+
+Prompt file and usage. The final prompt file is stored in plain-text format, with one category per line and comma-separated retained variants. All experi-ments use fixed prompt files. At inference time, the full prompt set is used only for intra-class aggregation in the semantic-prior branch. 
+
+## D More Qualitative Results 
+
+We provide more qualitative comparisons on PC59, COCO-S, VOC21, Cityscapes, and ADE20K to further demonstrate the behavior of our method under diverse scenes and category sets. Compared with CorrCLIP and SAM3, our method produces more coherent semantic regions, better preserves object boundaries, and reduces cross-class overwriting in challenging open-vocabulary settings. The corresponding results are shown in Fig. 5–9. These examples consistently show that the proposed competitive semantic prior, together with unified fusion with structural responses, leads to more stable pixel-wise predictions across different datasets. CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 21 Image CorrCLIP SAM3 Ours GT 
+
+Fig. 5: Additional qualitative results of our method on PC59. Image CorrCLIP SAM3 Ours GT 
+
+Fig. 6: Additional qualitative results of our method on COCO-S. 22 Y. Chen et al. Image CorrCLIP SAM3 Ours GT 
+
+Fig. 7: Additional qualitative results of our method on VOC21. Image CorrCLIP SAM3 Ours GT 
+
+Fig. 8: Additional qualitative results of our method on Cityscapes. CoCo-SAM3 for Open-Vocabulary Semantic Segmentation 23 Image CorrCLIP SAM3 Ours GT 
+
+Fig. 9: Additional qualitative results of our method on ADE20K.
