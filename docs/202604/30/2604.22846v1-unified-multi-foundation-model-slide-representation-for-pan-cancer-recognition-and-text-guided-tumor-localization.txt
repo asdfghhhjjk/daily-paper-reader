@@ -1,0 +1,922 @@
+Title: Unified Multi-Foundation-Model Slide Representation for Pan-Cancer Recognition and Text-Guided Tumor Localization
+
+URL Source: https://arxiv.org/pdf/2604.22846v1
+
+Published Time: Tue, 28 Apr 2026 00:05:06 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+## Unified Multi-Foundation-Model Slide Representation for Pan-Cancer Recognition and Text-Guided Tumor Localization 
+
+Tianyang Wang 1,2,∗, Ziyu Su 1, Abdul Rehman Akbar 1,2, Usama Sajjad 1,2, Lina Gokhale 1, Charles Rabolli 1,Wei Chen 1, Anil Parwani 1, and Muhammad Khalid Khan Niazi 1,21Department of Pathology, College of Medicine, The Ohio State University Wexner Medical Center, Columbus, OH, USA 
+
+> 2
+
+Department of Biomedical Engineering, The Ohio State University, Columbus, OH, USA 
+
+Corresponding author : Tianyang Wang (Tianyang.Wang@osumc.edu) 
+
+Abstract 
+
+The expanding ecosystem of pathology foundation models has produced powerful but fragmented tile-level representations, limiting their use in clinical tasks that require unified slide-level reasoning and inter-pretable linkage to clinically meaningful information. We present ASTRA, a pan-cancer framework that in-tegrates heterogeneous foundation-model representations into a shared slide-level representation space and semantically grounds that space using structured pathology annotation fields, including classification category, cancer type, and anatomic site. ASTRA combines sparse mixture-of-experts contextualization, masked multi-model reconstruction, and contrastive alignment to structured pathology prompts to learn slide representations that support 4-category classification, 3-class solid tumor typing, 16-class cancer typing, and text-guided tu-mor localization without pixel-level supervision. Developed on a CHTN cohort of 10,359 whole-slide images (WSIs) spanning 16 tumor types, ASTRA consistently improves pan-cancer classification across four pathol-ogy foundation-model backbones, achieving up to 97.8% macro-AUC for 4-category classification, 99.7% for 3-class solid tumor typing, and 99.2% for 16-class cancer typing. For tumor localization, ASTRA achieves a mean Dice of 0.897 on an annotated in-domain CHTN subset ( n = 380 ) spanning 16 cancer types and 0.738 on an external TCGA cohort ( n = 1 ,686 ) spanning four cancer types. These results demonstrate that minimal structured pathology annotation fields derived from slide-level metadata can provide effective semantic super-vision for unified slide representation learning, enabling both pan-cancer prediction and weakly supervised tumor localization within a single framework. 1
+
+> arXiv:2604.22846v1 [cs.CV] 21 Apr 2026
+
+Introduction 
+
+The digitization of pathology has transformed histopathologic assessment into a scalable computational paradigm, enabling quantitative analysis of whole-slide images (WSIs) in both research and clinical prac-tice 1–4 . Recent pathology foundation models further show that local tissue morphology can be encoded into rich and transferable tile-level representations without task-specific supervision 5–10 . These advances have substantially expanded what can be learned from individual image tiles. Yet many questions of clinical and bi-ological interest are not defined at the level of an isolated tile, but at the level of the WSI, where diagnostically relevant signals are distributed across spatially organized tissue regions. Translating strong tile-level repre-sentations into slide-level representations that preserve local spatial context, remain interpretable, and support robust downstream inference across tasks and cohorts therefore remains a central challenge in computational pathology. Tumor localization provides a stringent test of this broader problem. A single WSI often contains tumor, benign epithelium, stroma, necrosis, and background in complex spatial mixtures, and many downstream anal-yses depend on identifying which regions truly harbor tumor 11 . Fully supervised segmentation frameworks such as U-Net, nnU-Net, and HookNet can achieve strong performance when dense annotations are avail-able 12–14 , but producing pathologist-delineated pixel-level tumor annotations at WSI scale is costly, labor-intensive, and subject to inter-observer variability 15, 16 . These practical constraints have motivated weakly supervised approaches that infer tumor regions directly from WSI level labels 9, 17–20 . However, when super-vision is limited to coarse global labels alone, the resulting representations often lack the semantic specificity needed for precise localization and may generalize inconsistently across tumor types and cohorts. This challenge is compounded by the growing ecosystem of pathology foundation models. Models such as UNI, Virchow2, GigaPath, and CONCH each produce strong tile-level representations 6–9 . However, these representations are fundamentally diverse, as variations in training data, model architecture, and learning ob-jectives lead each model to capture distinct aspects of tissue morphology and semantics. This heterogeneity creates an opportunity, because complementary information may be distributed across models, but it also com-plicates downstream analysis, where selecting a single backbone is often empirical and may leave useful signals unexploited. Recent studies have therefore started to combine embeddings from multiple pathology founda-tion models at either the tile or slide level, with evidence that unified representations can outperform individual encoders 21–23 . Still, most existing strategies treat multi-model integration largely as feature fusion, without ex-plicitly modeling local spatial structure or connecting the resulting slide representation to clinically grounded supervision. Semantic grounding offers a promising route to bridge this gap. Recent vision-language pathology mod-els, including TITAN 24 and CONCH 9, have shown that aligning slide representations with pathology text supports strong zero-shot retrieval and classification, suggesting that text alignment also enables semanti-cally informed localization without dense annotations. However, these approaches often depend on curated multimodal corpora that extend beyond routine clinical workflows. For example, TITAN 24 uses multi-stage visual–language supervision, combining ROI-level alignment based on large pathology regions with synthetic PathChat-generated captions and WSI-level alignment based on slide–report pairs 25 . Similarly, CONCH is pre-trained on a large histopathology image-caption corpus constructed from educational resources and PubMed Central Open Access articles using an automated curation pipeline. These studies demonstrate the potential of semantic alignment, but they also rely on specialized multimodal data construction or report-level text that is not routinely available across institutions. It therefore remains unclear whether structured pathology annota-tion fields available through routine pathology data curation workflows, such as classification category, cancer class, and anatomic site, are sufficient to ground slide representations for spatially resolved tumor inference. 2More broadly, a unified framework is still lacking that can reconcile heterogeneous pathology foundation-model embeddings, preserve local spatial context, and semantically ground the resulting representations using only such structured annotation fields. To address these challenges, we developed ASTRA, a pan-cancer framework for slide representation learning with semantic grounding. ASTRA unifies representations from multiple pathology foundation mod-els, models local tissue context with a spatially aware sparse mixture-of-experts encoder, and aligns slide representations with structured pathology prompts derived from routinely available annotation fields. In con-trast to prior vision-language approaches that rely on paired free-text reports or curated image-caption corpora, ASTRA uses structured pathology fields, including classification category, cancer type, and anatomic site, as scalable semantic supervision. We evaluated the learned representation on slide-level classification tasks of varying granularity and additionally examined whether the same semantically grounded representation could support text-guided tumor localization without pixel-level supervision. 3Malignant 7231 (69.8%)       
+
+> Normal Adjacent to Tumor 2043 (19.7%)
+> Benign 647 (6.2%)
+> Normal 438 (4.2%)
+> Carcinoma 6706 (97.7%)
+> Sarcoma 371 (5.1%)
+> Melanoma 154 (2.1%)
+> 4 Classification Categories
+> 3 Solid Tumor Types
+
+A. Number of slides 
+
+A histopathology whole-slide image of Malignant 
+
+Adenocarcinoma from the Lung & Bronchus .
+
+Slide-Level Labels 
+
+Whole-Slide Image 
+
+Diagnosis_Class 
+
+Cancer_Class 
+
+Primary Anat. Site 
+
+Malignant 
+
+Adenocarcinoma 
+
+Lung & Bronchus 
+
+Whole-Slide Image 
+
+B. 
+
+Tile extraction 
+
+UNI 
+
+Virchow2 
+
+GigaPath 
+
+CONCH 
+
+1536-d 
+
+2560-d 
+
+1536-d 
+
+768-d 
+
+Tile encoders Embedding pool 
+
+16 
+
+Slide-Level Labels 
+
+Classification 
+
+Category 
+
+Cancer Type 
+
+Anatomic Site 
+
+Malignant 
+
+Adenocarcinoma 
+
+Lung & Bronchus 
+
+B. UNI 
+
+Virchow2 
+
+GigaPath 
+
+CONCH 
+
+1
+
+1
+
+Sample one Local embedding crop 
+
+(16 ×16 grid, N=256) 
+
+> Visible
+> tokens
+
+Cancer types 
+
+𝐀 𝐀 
+
+Projector 
+
+Random Masking  
+
+> Sparse Expert Contextualizer
+> Sparse MoE
+> Transformer Block
+
+2nd layer 
+
+4th layer      
+
+> Sparse MoE
+> Transformer Block
+> Sparse MoE
+> Transformer Block
+> Sparse MoE
+> Transformer Block
+> Sparse MoE
+> Transformer Block
+> Sparse MoE
+> Transformer Block
+
+6th layer 
+
+> Masked
+> tokens
+
+Q
+
+K V 
+
+K V 
+
+> Cross Attention
+> Block
+> Cross Attention
+> Block
+> Crss Attention
+> Block
+
+Decoder Encoder 
+
+Reconstructed 
+
+embeddings 
+
+16 
+
+Muti-targets 
+
+Q
+
+Add & Norm 
+
+Spatial Self-Attention 
+
+(+ ALiBi distance bias) 
+
+Add & Norm 
+
+Noisy Top-k Gate 
+
+(Top-2 routing) 
+
+Expert 1 
+
+Expert 2 
+
+Expert 3 
+
+Expert 4 
+
+Σ
+
+> MoE contextual tokens
+> Residual connection
+
+Σ Expert aggregation  
+
+> Q(decoder)
+
+Cross Attention 
+
+(layer 2/ 4/ 6) 
+
+Sparse MoE FFN  
+
+> K V (encoder)
+
+Add & Norm 
+
+Feed Forward 
+
+Add & Norm 
+
+C. 
+
+ASTRA 
+
+Contextual Encoder 
+
+UNI 
+
+Virchow2 Virchow2 
+
+Virchow2 GigaPath 
+
+CONCH 
+
+Slide-level Classification 
+
+CONCH Text 
+
+Encoder  
+
+> Aggregator
+> Slide
+> embedding
+> Classi fier
+> Category (4)
+
+Text Prompt Construction from Slide-Level Labels 
+
+A histopathology whole-slide image 
+
+of Malignant Adenocarcinoma from 
+
+the Colon & Rectum . Text 
+
+> embedding
+
+𝐀 𝐀𵀀𝐀𶠀𝐀 Text-guided tumor localization 
+
+Prompt-guided slide–text contrastive learning 
+
+> Tile–text
+> cosine similarity
+> tile layout
+> Low
+> High
+
+Tile-text similarity map    
+
+> Non-selected experts
+> Selected experts
+> Solid tumor type (3) Cancer type (16)
+
+4Figure 1: Overview of ASTRA. (A) Composition of the CHTN pan-cancer cohort used to develop ASTRA, comprising 10,359 WSIs across 16 tumor types. Each slide is associated with structured pathology annotation fields (classification category, cancer type, and anatomic site), which serve as semantic supervision for slide-level representation learning. (B) ASTRA pretraining. WSIs are encoded by four pathology foundation models to form a shared embedding pool. Local spatial crops of tile embeddings are sampled and partially masked, and contextualized using a sparse mixture-of-experts (MoE) transformer. A hierarchical cross-attention de-coder reconstructs embeddings from multiple foundation models, encouraging a unified representation that captures spatial context and is predictive across heterogeneous embedding spaces. (C) Downstream tasks and semantic supervision in ASTRA. Contextualized tile embeddings are aggregated into slide-level representa-tions for pan-cancer slide-level classification. During training, slide-level representations are aligned with structured pathology prompts via contrastive learning to inject semantic supervision. For text-guided tumor localization, tile embeddings are compared with text embeddings independently of the classification head to produce tile–text similarity maps. Further details are described in the Methods .
+
+Results 
+
+Pan-Cancer Slide Classification 
+
+We evaluated whether ASTRA improves slide-level classification performance across heterogeneous pathol-ogy foundation models. Using Gated ABMIL for slide aggregation and a linear classifier, we compared five contextualization strategies across four backbones on three held-out classification tasks of increasing granu-larity: 4-category classification ( n = 2 ,072 ), 3-class major-group prediction ( n = 1 ,402 ), and 16-class cancer typing on malignant slides ( n = 1 ,446 ). Quantitative results are summarized in Figure 2a–c , with full metric breakdowns in Supplementary Tables 1–3 .Comprehensive evaluations across various tasks and backbone architectures indicate that ASTRA variants consistently outperform the corresponding Raw baselines, with the most pronounced improvements observed in macro-AUC and balanced accuracy. In the four-class setting, ASTRA increases balanced accuracy by up to 
+
+3.6 (e.g., CONCH v1.5: 73 .2 → 76 .8) and macro-AUC by up to 0.7 (96 .7 → 97 .4), alongside steady AUC gains of 0.3–0.6 across other backbones. Overall, ASTRA variants achieve or surpass the Raw baseline in macro-AUC across all 12 backbone-task configurations. Furthermore, the full ASTRA model demonstrates superior performance in 11 of these 12 cases, with the sole exception being the GigaPath backbone applied to the 16-class cancer-typing task. ASTRA (ISO) also generally surpasses TICON (ISO) in balanced accuracy. Representative absolute increases in the four-class setting include 3.6 for CONCH v1.5 and 1.2 for Virchow2. These results demonstrate that ASTRA yields substantial representational benefits even under isolated feature extraction conditions, inde-pendent of slide-level spatial context. The efficacy of multi-foundation-model pretraining is most striking in highly fine-grained analytical tasks. Parallel improvements in balanced accuracy (up to 2.2) and macro-AUC (up to 0.6) are observed in the three-class major-group task. During the 16-class cancer-typing task, ASTRA enhances balanced accuracy by a maximum of 4.0 (GigaPath: 81 .3 → 85 .3) and maintains an increase of approximately 1.2 across multiple backbones, while macro-AUC exhibits consistent gains of 0.2–0.4. These findings underscore the critical advantage of integrating complementary morphological features from multiple encoders to capture fine-grained histopathological distinctions. 
+
+Mechanistic analysis of expert routing 
+
+To visualize how ASTRA routes tissue tiles through the Sparse MoE encoder, we extracted tile-level routing assignments from the final MoE block of the trained model. For each tile, we identified the highest-probability expert from the routing distribution and mapped these assignments back to the original whole-slide coordi-nates to generate a smoothed slide-level expert partition map ( Figure 3, left ). To summarize the morphology associated with each expert, we selected high-confidence tiles with clear expert separation and displayed the top-ranked tissue tiles within each expert as representative exemplars ( Figure 3, right ). 5A board-certified pathologist reviewed these expert-specific tile groups and found that the routed tilees corre-sponded to recurrent and distinct histologic patterns rather than random mixtures of tissue appearances. Specif-ically, Expert 1 predominantly captured poorly differentiated malignant epithelial cells characterized by solid tumor architecture, nuclear pleomorphism, and a high nuclear-to-cytoplasmic ratio. Expert 2 was enriched for gland-forming adenocarcinoma structures with luminal organization and columnar tumor cells. Expert 3 primarily represented benign or near-normal glandular epithelium with preserved polarity and relatively uni-form nuclei. Expert 4 captured stromal and microenvironmental components, including fibroblastic stroma, adipocytic tissue, vascular structures, and inflammatory infiltrates. These observations indicate that ASTRA’s Sparse MoE encoder learns structured and morphologically coherent routing patterns, with different experts specializing in recurrent histologic phenotypes. Such spatial specializa-tion suggests that ASTRA preserves fine-grained tissue organization during contextualization, motivating us to examine whether this property can support accurate tumor localization under guidance from slide-specific pathology prompts derived from routine annotations alone, without pixel-level supervision. Raw TICON (ISO) ASTRA (ISO) TICON ASTRA 
+
+> CONCH v1 .5
+> UNI v2
+> Virchow2
+> GigaPath
+> 96.0
+> 96.2
+> 96.5
+> 96.8
+> 97.0
+> 97.2
+> 97.5
+> 97.8
+> 98.0
+> Macro AUC (%)
+
+a 4-Category Classification 
+
+> CONCH v1 .5
+> UNI v2
+> Virchow2
+> GigaPath
+> 98.4
+> 98.6
+> 98.8
+> 99.0
+> 99.2
+> 99.4
+> 99.6
+> 99.8
+> 100.0
+> Macro AUC (%)
+
+b 3-Class Major Group 
+
+> CONCH v1 .5
+> UNI v 2
+> Virch ow2
+> GigaP ath
+> 98.0
+> 98.2
+> 98.4
+> 98.6
+> 98.8
+> 99.0
+> 99.2
+> 99.4
+> 99.6
+> 99.8
+> Macro AUC (%)
+
+c 16-Class Cancer Typing      
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Dice coefficient
+> Thyroid Carcinoma
+> Hepatocellular Carcinoma
+> Sarcoma
+> Neuroendocrine Neoplasm
+> Renal Cell Carcinoma
+> Urothelial Carcinoma
+> Prostatic Adenocarcinoma
+> Cholangiocarcinoma
+> Melanoma
+> Ovarian Carcinoma
+> Breast Carcinoma
+> Colorectal Adenocarcinoma
+> Endometrial Carcinoma
+> Lung Carcinoma
+> Pancreatic Adenocarcinoma
+> Squamous Cell Carcinoma
+> 0.963
+> 0.960
+> 0.955
+> 0.943
+> 0.937
+> 0.926
+> 0.913
+> 0.912
+> 0.894
+> 0.892
+> 0.879
+> 0.877
+> 0.864
+> 0.839
+> 0.818
+> 0.807
+
+d Text-Guided Localization — CHTN (n = 380)      
+
+> Overall (mean=0.897)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Dice coefficient
+> LUSC
+> LUAD
+> BLCA
+> PRAD
+> 0.817
+> 0.779
+> 0.697
+> 0.628
+
+e Text-Guided Localization — TCGA (n = 1,686) 
+
+> Overall (mean=0.738)
+
+6Figure 2: Pan-cancer performance of ASTRA in slide classification and text-guided tumor localization. a–c , Macro-averaged area under the receiver operating characteristic curve (AUC) across three slide-level classification tasks of increasing granularity: 4-class classification ( a), 3-class major-group prediction ( b), and 16-class cancer typing ( c). Performance is compared across four pathology foundation-model backbones and five contextualization strategies. Error bars represent standard deviation over five independent random seeds. ASTRA variants generally outperform Raw and TICON baselines, with the strongest overall performance achieved by the full ASTRA model and peak results obtained with the Virchow2 backbone. d–e , Text-guided tumor localization performance measured by Dice similarity coefficient on the in-domain annotated CHTN subset ( d, n = 380 ) and the external TCGA cohort ( e, n = 1 ,686 ), stratified by cancer type, including lung squamous cell carcinoma (LUSC), lung adenocarcinoma (LUAD), bladder urothelial carcinoma (BLCA), and prostate adenocarcinoma (PRAD). Error bars indicate standard deviation across slides. The dashed vertical line marks the overall mean Dice across all slides in the respective cohort. Expert 1 Expert 3 
+
+> Expert 2 Expert 4
+> WSI
+> Expert regions
+
+Figure 3: Visualization of ASTRA expert routing and histologic specialization. Left, a representative WSI and the corresponding smoothed expert-region partition map derived from top-1 tile-level routing assignments in the final MoE block. Right, representative high-confidence tissue tiles assigned to each expert. Expert 1 predominantly captured poorly-differentiated carcinoma cells. Expert 2 was enriched for gland-forming car-cinoma structures with moderate cytoarchitectural atypia. Expert 3 primarily represented well-formed tumor glands with low-grade cytoarchitectural atypia. Expert 4 captured tumor stromal and microenvironmental components. 
+
+Text-guided tumor localization 
+
+We next evaluated whether ASTRA’s semantically aligned representation could localize tumor regions without pixel-level supervision. Quantitative localization results are summarized in Figure 2d–e, with full numerical breakdowns in Supplementary Tables 4 and 5 . On the in-domain CHTN annotated subset ( n = 380 , spanning all 16 cancer types), ASTRA achieved an overall mean Dice of 0.897 and a median Dice of 0.969 , indicating high spatial overlap for most slides. Performance was strongest for thyroid carcinoma (mean Dice 0.963 ), hepatocellular carcinoma ( 0.960 ), and sarcoma group ( 0.955 ), whereas lower but still competitive scores were observed for squamous cell carcinoma ( 0.807 ) and pancreas carcinoma ( 0.818 ). Representative localization examples across all 16 CHTN cancer types are shown in Figure 4 . These examples show that the strong quantitative performance was accompanied by visually accurate recovery of tumor extent 7across diverse morphologic patterns, including compact nodular lesions such as hepatocellular and thyroid carcinoma, as well as more diffuse growth patterns such as squamous cell and urothelial carcinoma. Overall, the qualitative results are consistent with the broad Dice performance observed in the in-domain cohort. We then evaluated generalization to an external TCGA cohort ( n = 1 ,686 ) in a zero-shot setting, without any fine-tuning on the target domain, using previously released slide-level tumor prediction maps as the ex-ternal reference resource. ASTRA achieved an overall mean Dice of 0.738 , with the strongest performance on LUSC ( 0.817 ) and LUAD ( 0.779 ), intermediate performance on BLCA ( 0.697 ), and lower performance on PRAD ( 0.628 ). Although performance decreased relative to the in-domain CHTN subset, substantial local-ization accuracy was retained under zero-shot cross-cohort transfer, despite the absence of explicit pixel-level supervision during training. Representative qualitative examples from the external TCGA cohort are provided in Supplementary Figure 1–4 .8Breast     
+
+> Carcinoma
+> Endometrium
+> Carcinoma
+> WSI Ground Truth Prediction Heatmap
+> Hepatocellular
+> Carcinoma
+> Lung
+> Carcinoma
+> Melanoma
+> Neuroendocrine
+> Neoplasm
+> Ovary
+> Carcinoma
+> Renal Cell
+> Carcinoma Sarcoma
+> Squamous cell
+> Carcinoma
+> Thyroid
+> Carcinoma
+> Urothelial
+> Carcinoma
+> Colorectal
+> Carcinoma
+> WSI Ground Truth Prediction Heatmap
+> Prostate
+> Carcinoma
+> Pancreatic
+> Carcinoma
+> Cholangio
+> Carcinoma
+
+Figure 4: Representative ASTRA tumor localization across 16 CHTN cancer types. Each row corre-sponds to one cancer type from the annotated CHTN subset. Columns show the H&E whole-slide thumbnail (left), the ground-truth tumor contour overlaid in green (center), and the tile–text cosine similarity heatmap be-tween ASTRA tile embeddings and the slide-specific pathology prompt (right). Warmer colors indicate higher similarity. 9Discussion 
+
+ASTRA addresses two related challenges in computational pathology: how to integrate heterogeneous pathol-ogy foundation-model embeddings at the slide level, and how to semantically ground those representations using structured pathology annotation fields. Across three classification tasks, ASTRA consistently outper-formed raw foundation-model embeddings and prior contextualization baselines, with the strongest results ob-served with Virchow2. ASTRA also supported text-guided tumor localization without pixel-level supervision, achieving strong performance on the annotated CHTN subset and retaining substantial localization accuracy on external TCGA slides. These results show that multi-foundation-model contextualization and routine semantic alignment can support both slide-level prediction and spatial tumor inference. The classification results highlight two points. First, the largest gains were observed on the 3-class and 16-class tasks, where discrimination depends on subtle morphologic differences. This pattern suggests that different pathology foundation models capture complementary tissue embeddings. Second, ASTRA (ISO) frequently outperformed TICON (ISO), indicating that the benefit does not come only from multi-foundation-model pre-training. The sparse MoE contextualizer itself likely contributed to this improvement, consistent with the expert-routing analysis showing that different experts preferentially captured recurrent histologic phenotypes rather than arbitrary tissue partitions. The localization results further clarify both the strengths and the limits of the learned representation. On the in-domain CHTN subset, strong Dice scores across 16 cancer types indicate that the aligned visual–text space preserves spatial information relevant to tumor extent. On TCGA, performance dropped but remained substantial without fine-tuning, indicating partial transfer under cohort shift. A major likely contributor to this reduction is that the reference labels were generated by another model rather than by pathologists, which may introduce label noise into the evaluation. Additional factors may include differences in staining, image acquisition, and cohort composition, as well as limited representation of some morphologies in the training set. More broadly, these findings show that structured pathology annotation fields, including classification category, cancer type, and anatomic site, can provide useful semantic supervision without paired slide–report data or curated caption corpora. Several limitations should be noted. ASTRA was not trained as a fully supervised segmentation model, and its localization maps are derived from tile–text similarity rather than direct boundary optimization. TCGA evaluation also relied on previously released tumor prediction maps from an external segmentation model rather than pathologist-delineated ground truth 26 ; the reported Dice values therefore reflect agreement with an external reference resource, not direct comparison with manual annotations. In addition, ASTRA requires offline extraction of embeddings from multiple foundation models, increasing preprocessing time and storage demands. Future work should evaluate ASTRA across broader institutions and rarer tumor types, ideally with larger manually annotated external cohorts, and test whether unified multi-foundation-model representations can support additional pathology tasks. 
+
+Conclusion 
+
+We introduced ASTRA, a pan-cancer pathology representation learning framework that unifies multiple pathol-ogy foundation-model embeddings and grounds slide representations in structured pathology annotation fields derived from slide-level metadata. Across diverse classification tasks and external localization evaluation, AS-TRA showed that multi-foundation-model contextualization and lightweight semantic supervision can improve slide understanding without requiring paired reports or dense tumor labels. These findings support minimal structured pathology annotation fields as a scalable path toward semantically grounded pathology foundation models. 
+
+Methods 
+
+10 Dataset and cohort design 
+
+We use the Cooperative Human Tissue Network (CHTN) cohort, a multi-institutional repository of digitized hematoxylin-and-eosin-stained WSIs curated from six academic medical centers across the United States 27 ,for all stages of ASTRA training and evaluation. Within this tissue bank, the cohort of 10 ,359 WSIs is struc-turally organized into four primary classification categories: Malignant ( n = 7 ,231 ; 69.8%), Normal Adjacent to Tumor ( n = 2 ,043 ; 19.7%), Benign ( n = 647 ; 6.2%), and Normal ( n = 438 ; 4.2%). The malignant cate-gory is further grouped into three broad solid tumor types: carcinomas ( n = 6 ,706 ; 92.7% of malignant cases), sarcomas ( n = 371 ; 5.1%), and melanomas ( n = 154 ; 2.1%). As illustrated in Figure 1A (left) , the malignant cohort exhibits a highly diverse subtype distribution across 16 fine-grained cancer classes and a minor subset of uncategorized malignancies: squamous cell carcinoma ( n = 1 ,294 ), renal cell carcinoma ( n = 1 ,112 ), col-orectal carcinoma ( n = 806 ), endometrial carcinoma ( n = 690 ), breast carcinoma ( n = 574 ), lung carcinoma (n = 529 ), ovarian carcinoma ( n = 374 ), sarcoma group ( n = 371 ), thyroid carcinoma ( n = 310 ), neu-roendocrine neoplasm ( n = 222 ), urothelial carcinoma ( n = 197 ), prostate carcinoma ( n = 156 ), melanoma (n = 154 ), pancreatic carcinoma ( n = 124 ), hepatocellular carcinoma ( n = 85 ), cholangiocarcinoma ( n = 37 ), and an Others group comprising rare or unspecified malignancies ( n = 196 ). Each CHTN slide is associated with three structured clinical annotation fields routinely available in clinical practice: classification category, cancer type, and anatomic site. These labels are directly utilized to construct the descriptive slide-level pathol-ogy prompts for ASTRA ( Figure 1A, right ). The cohort was originally partitioned into an 80% training split and a 20% held-out test split by stratified random sampling on cancer class (seed = 42 ). All stages of ASTRA pretraining and slide–text alignment exclusively utilized the 80% training split; the held-out test split remained strictly unseen throughout the entire pipeline and was not accessed during model training or selection. For downstream ABMIL classification, the 80% training split was dynamically subdivided during each training run: 90% of this split was used for model parameter updates and 10% was reserved as a validation set for early stopping. Final performance was evaluated exclusively on the 20% held-out test split and reported as mean ± standard deviation over five independently seeded runs. No cross-validation across the full cohort was performed. The three downstream classification tasks were defined on distinct subsets of the CHTN cohort. The 4-class classification-category task utilized the full cohort of 10 ,359 slides, with a held-out test set of n = 2 ,072 . The 3-class major-group task (Carcinoma / Sarcoma / Melanoma) encompassed all 7,231 malignant slides, with neuroendocrine Neoplasms integrated into the Carcinoma group, resulting in a held-out test set of n = 1 ,446 .The 16-class cancer-typing task was restricted to 7,035 malignant slides belonging to the 16 predefined core subtypes (excluding a small number of rare tumors outside these panels), yielding a held-out test set of n =1,405 .Tumor localization was evaluated on a manually annotated subset of 380 CHTN slides drawn exclusively from the held-out test split and spanning all 16 cancer types: Breast carcinoma ( n = 27 ), Cholangiocarcinoma (n = 11 ), Colorectal carcinoma ( n = 21 ), Endometrium carcinoma ( n = 27 ), Hepatocellular carcinoma (n = 26 ), Lung carcinoma ( n = 26 ), Melanoma ( n = 16 ), Neuroendocrine neoplasms ( n = 21 ), Ovary carcinoma ( n = 20 ), Pancreas carcinoma ( n = 17 ), Prostate carcinoma ( n = 20 ), Renal cell carcinoma (n = 40 ), Sarcoma group ( n = 23 ), Squamous cell carcinoma ( n = 39 ), Thyroid carcinoma ( n = 29 ), and Urothelial carcinoma ( n = 17 ). Tumor regions were delineated at the slide level to generate ground-truth masks. External generalization was assessed on an independent TCGA cohort comprising 1,686 WSIs from four cancer types: LUAD ( n = 476 ), LUSC ( n = 458 ), PRAD ( n = 365 ), and BLCA ( n = 387 ). For TCGA evaluation, slide-specific prompts were instantiated from the available case-level cancer-type and anatomic-site metadata for these four classification categories, rather than from the full three-field annotation schema used in CHTN training. For example, a LUAD case was paired with the prompt “A histopathology whole-slide image of malignant lung adenocarcinoma from the lung” We used the previously released slide-level tumor prediction maps from Skrede et al. 26 as the reference resource rather than manually annotated ground-truth 11 masks. Because these reference masks were generated by an external segmentation model rather than by manual delineation, we excluded slides whose reference tumor masks covered less than 20% of tissue area, in order to avoid unstable Dice estimates driven by extremely small predicted regions. No TCGA slides were used at any stage of training. 
+
+Overview of ASTRA 
+
+ASTRA is a pan-cancer representation learning framework that unifies heterogeneous pathology foundation-model embeddings and grounds them in structured pathology annotation fields. The full workflow proceeds from cohort-level annotation, to multi-foundation-model pretraining, to semantically aligned downstream in-ference. Starting from the CHTN cohort in Figure 1A , each WSI is paired with three structured annotation fields: classification category, cancer class, and primary anatomic site, which are composed into slide-level pathology prompts. These prompts provide the semantic supervision used throughout the framework. ASTRA pretraining then builds a shared representation space from multiple pathology foundation models (Figure 1B ). A WSI is first encoded by four pathology foundation models to form a pool of aligned tile embeddings. Local embedding crops are sampled from this shared pool, partially masked, and passed through a sparse MoE contextualizer, after which a decoder reconstructs masked embeddings across all four foundation-model spaces. In this way, ASTRA learns a unified contextual representation that preserves local spatial organization while remaining predictive across heterogeneous embedding spaces. In the downstream application ( Figure 1C ), contextualized tile embeddings are aggregated into a slide-level representation and aligned with structured pathology prompts through contrastive learning. The resulting representation supports two complementary applications: pan-cancer slide-level classification and zero-shot text-guided tumor localization. By reading out localization directly from tile–text similarity in the aligned representation space, ASTRA enables zero-shot tumor localization without requiring pixel-level labels, paired report data, or synthetic captions. 
+
+Shared spatial grid construction 
+
+WSIs were processed using the TRIDENT pipeline 28 . Tissue regions were identified by Otsu-based thresh-olding in HSV space and tessellated into non-overlapping tiles at 20 × magnification. Tile embeddings were extracted using four pathology foundation models at their native input resolutions: UNI v2 6 (256 × 256 px, 1536-d), GigaPath 8 (256 × 256 px, 1536-d), CONCH v1.5 9 (512 × 512 px, 768-d), and Virchow2 7 (224 × 224 
+
+px, 2560-d). Because these models operate at different tile sizes, receptive fields, and embedding dimensions, their raw feature maps are not directly comparable for dense spatial reasoning. All feature extraction was therefore anchored to a shared spatial grid with a fixed stride of 512 pixels, corresponding to a 25 .6 μm step at 20 ×
+
+magnification. This stride matches the largest native tile size among the four encoders (CONCH v1.5, 512 ×512 
+
+px), ensuring that each grid coordinate maps to a single non-overlapping tissue region for every model without introducing sub-grid misalignment. For encoders with smaller native tile sizes, including UNI v2 and GigaPath, multiple embeddings falling within the same 512 × 512 grid cell were average-pooled to produce a single aligned representation for that spatial location. Each valid tissue position is accordingly represented by four parallel embeddings, one per foundation model, defined on a common integer lattice. 
+
+Tissue-aware local crop construction and asymmetric masking 
+
+At each training step, we sample a 16 × 16 tile window from a slide at 20 × magnification. Under the shared 512-pixel grid stride, this corresponds to a region of approximately 8,192 ×8,192 pixels (about 4.1×4.1 mm), a mesoscopic scale that captures microenvironmental organization including tumor–stroma interfaces, glandular architecture, and immune-rich regions, consistent with the local context scale adopted in TITAN 24 . Candidate windows are drawn at random and accepted only if at least 55% of the 256 grid positions contain valid tissue tiles under the CONCH v1.5 anchor model. This threshold excludes background-dominated windows while preserving exposure to sparse or transitional tissue patterns that are important for robust localization. If no candidate satisfies the threshold after repeated sampling, the highest-coverage window is retained as a fallback. Within the selected window, 64 of the 256 tile positions are revealed to the encoder and the remaining 192 are masked, giving a masking ratio of 75%. Histopathological tile embeddings exhibit strong short-range spatial 12 redundancy; at lower masking ratios, masked positions can often be recovered by local interpolation alone. At 75% masking, reconstruction requires integrating information across a broader spatial context and encourages the encoder to model tissue organization rather than local continuity. At each training step, the encoder input foundation model is sampled uniformly at random so that no single embedding space dominates pretraining. Visible embeddings from the selected model are projected into a shared latent space through model-specific two-layer MLP heads, which normalize dimensional heterogeneity before contextual processing. 
+
+Spatial contextualization with sparse MoE transformer 
+
+The 64 visible tokens entering the encoder span only a fraction of the 16 × 16 crop and originate from a sin-gle randomly selected foundation model. Tissue within a single crop is often morphologically heterogeneous: tumor epithelium, reactive stroma, inflammatory infiltrate, and necrotic regions may coexist within the same local neighborhood, whereas a standard dense FFN applies the same transformation to every token. We there-fore replace the feed-forward network in each encoder block with a sparse Mixture-of-Experts (MoE) layer 29 ,which routes each token to a learned subset of expert networks according to its content. This allows distinct tis-sue compartments to be processed by different expert pathways without requiring explicit compartment labels. These routing patterns are examined directly through mechanistic analysis of expert routing ( Figure 3 ). 
+
+Multi-target reconstruction across heterogeneous embedding spaces 
+
+Contextualized visible tokens are used to reconstruct masked tissue positions in all four foundation-model embedding spaces, regardless of which model provided the encoder input. This cross-space predictiveness is the core pretraining objective: the encoder representation must generalize beyond the sampled input space. 
+
+Hierarchical decoder. Reconstruction is performed by a lightweight cross-attention decoder inspired by Hi-End-MAE 30 . The decoder contains three blocks connected to different encoder depths: the first, second, and third decoder blocks receive their cross-attention context from the 2nd, 4th, and 6th encoder layers, respec-tively, after block-specific linear projections into the decoder space ( Figure 1B, right ). This staged coupling exposes early decoder steps to local, low-level morphology embeddings while later steps receive increasingly contextualized representations, and prevents the encoder from concentrating all reconstructive information in its final layer. Spatial and morphological structure must therefore remain accessible at intermediate depths, which is consequential for downstream localization. 
+
+Multi-target reconstruction loss. Decoder outputs are projected independently to each foundation model’s native embedding dimension through per-model output heads. Reconstruction is supervised by the mean cosine distance between predicted and ground-truth embeddings, averaged over all masked positions and all four models: 
+
+Lrecon = 14
+
+> 4
+
+X
+
+> k=1
+
+1
+
+|M k|
+
+X
+
+> i∈M k
+
+1 − ˆy⊤
+
+> k,i
+
+yk,i 
+
+∥ˆyk,i ∥2∥yk,i ∥2
+
+!
+
+, (1) where Mk denotes masked positions with a valid tissue embedding under model k. Cosine distance is pre-ferred over mean-squared error because foundation-model embeddings encode morphological identity primar-ily through direction rather than magnitude. 
+
+Expert load balancing. To prevent routing collapse, a load-balancing regularizer 29 penalizes unequal token allocation across experts. The full pretraining objective is 
+
+L = Lrecon + λ Lmoe , (2) where λ controls the strength of the expert load-balancing term (see Implementation Details). 
+
+Semantic alignment via structured annotations 
+
+Pretraining yields tile representations that retain spatial context and cross-model predictiveness but are not yet explicitly grounded in structured pathology annotation fields. To introduce such semantic grounding, AS-TRA aligns slide-level representations with structured text derived from three annotation fields available in the curated slide-level metadata: classification category, cancer type, and primary anatomic site. 13 Structured prompt construction. The three annotation fields are composed into a natural-language prompt using four fixed templates matched to the diagnostic context:             
+
+> Pathology Prompt Templates
+> Malignant “A histopathology whole-slide image of malignant [cancer type] from the [anatomic site] .”
+> Norm. Adj. “A histopathology whole-slide image showing normal adjacent tissue from the [anatomic site] .”
+> Benign “A histopathology whole-slide image of benign [cancer type] from the [anatomic site] .”
+> Normal “A histopathology whole-slide image of normal tissue from the [anatomic site] .”
+
+Slots are filled directly from the clinical record, with no expert curation, free-text generation, or paired re-port data. This differs from vision-language models such as TITAN 24 and CONCH 9, which rely on large slide–report corpora that are frequently unavailable in routine practice. Prompts are encoded by the frozen CONCH v1.5 text encoder, producing L2-normalized 512-dimensional text embeddings. 
+
+Slide-level contrastive alignment. Tile embeddings from all valid tissue positions in a slide are extracted with the pretrained ASTRA encoder and aggregated into a single slide embedding by Gated Attention-based Multi-ple Instance Learning (Gated ABMIL) 19 . The gated attention mechanism assigns content-dependent weights to tiles, allowing diagnostically informative regions to drive the slide-level representation. The resulting em-bedding is projected to 512 dimensions to match the text embedding space. Slide and text embeddings are each L2-normalized. For a batch of B slide–text pairs {(si, ti)}Bi=1 , the slide-to-text loss is 
+
+Ls→t = − 1
+
+B
+
+> B
+
+X
+
+> i=1
+
+log exp( s⊤ 
+
+> i
+
+ti / τ )
+
+PBj=1 exp( s⊤ 
+
+> i
+
+tj / τ ), (3) and the final alignment objective is the symmetric average LsymCL = 12 [Ls→t +Lt→s], where τ is the contrastive temperature. 
+
+Downstream evaluation 
+
+The learned ASTRA representation was evaluated in two settings: pan-cancer slide-level classification and text-guided tumor localization ( Figure 1C ). 
+
+Pan-cancer slide-level classification. At inference time, tile embeddings from any of the four foundation-model backbones (UNI v2, GigaPath, CONCH v1.5, Virchow2) are projected through the corresponding input projector and passed through the shared sparse MoE encoder. This backbone-agnostic design allows a single pretrained ASTRA model to be evaluated across all four foundation models without retraining. To disentangle the contributions of architecture and pretraining strategy, we evaluated five contextualization configurations per backbone, following the protocol of TICON 21 . Raw uses non-contextualized tile em-beddings as ABMIL input and serves as the per-backbone baseline. TICON (ISO) and ASTRA (ISO) are single-FM variants pretrained on tile embeddings from the same backbone used at downstream evaluation time, following the original TICON protocol. TICON and ASTRA are the corresponding multi-FM variants, pretrained jointly on tile embeddings from all four foundation models. Here, ASTRA refers to the full model, combining joint multi-FM pretraining with the sparse MoE encoder. This design allows us to compare the ef-fect of sparse expert routing against a dense FFN under matched ISO settings, while also examining the benefit of joint multi-FM pretraining relative to the corresponding ISO variants. Contextualized tile embeddings were aggregated per slide with Gated ABMIL 19 and classified with a lin-ear head. We evaluated three slide-level classification tasks of increasing granularity: 4-class classification-category prediction, 3-class major-group prediction (Carcinoma / Sarcoma / Melanoma, with neuroendocrine tumors integrated into the Carcinoma group) on malignant slides, and 16-class cancer-typing prediction on malignant slides. Performance was assessed by accuracy (Acc), balanced accuracy (B-Acc), macro-averaged 14 one-vs-rest specificity (Sp ∗), and macro-averaged one-vs-rest AUC across five independent random seeds. 
+
+Text-guided tumor localization. For a given slide, contextualized tile embeddings are projected from 1536 to 512 dimensions using the trained slide projection head from the semantic alignment stage and then L2-normalized. This projection aligns the visual embedding space with the fixed 512-dimensional output space of the frozen CONCH v1.5 text encoder. The slide-specific pathology prompt, constructed from classifica-tion category, cancer type, and anatomic site using the templates described above, is encoded by the frozen CONCH v1.5 text encoder to produce a 512-dimensional text embedding. Per-tile cosine similarity is com-puted as 
+
+si = f ⊤ 
+
+> i
+
+t
+
+∥fi∥2∥t∥2
+
+, (4) and the resulting similarity heatmap is thresholded at a fixed value (see Implementation Details) to generate a binary tumor prediction mask without per-slide normalization or adaptive thresholding. Localization performance was evaluated on the 380-slide annotated CHTN subset and on the external TCGA cohort without fine-tuning on either. For both cohorts, slide-specific prompts were instantiated from the avail-able structured annotation fields. Dice similarity coefficients were computed on a per-slide basis against the corresponding reference masks and then summarized by cancer type and by cohort. For CHTN, the reference masks were manually delineated ground-truth tumor annotations. For TCGA, we used previously released slide-level tumor prediction maps from Skrede et al. 26 as the reference resource rather than manually anno-tated ground-truth masks. Because these TCGA reference masks were generated by an external segmentation model rather than by manual delineation, we excluded slides whose reference tumor masks covered less than 20% of tissue area in order to avoid unstable Dice estimates driven by extremely small predicted regions. No localization labels were used at any stage of training; tumor localization was read out directly from the aligned visual–text representation space induced by slide-level diagnostic supervision. 
+
+Implementation details 
+
+ASTRA pretraining was conducted for 500 epochs on 8 NVIDIA A100 80 GB GPUs using PyTorch Distributed Data Parallel with the NCCL backend. Each slide contributed 20 independently sampled crops per epoch; with a per-GPU batch size of 128 and 8 GPUs, the effective batch size was 1,024. Optimization used AdamW 31 
+
+with learning rate 2 × 10 −4, weight decay 0.05, and momentum parameters (β1, β 2) = (0 .9, 0.999) , with linear warmup over the first 2,000 steps followed by cosine annealing to zero. Gradient norms were clipped to 1.0 throughout. The load-balancing coefficient for Sparse MoE pretraining was set to λ = 0 .01 .The text alignment stage and all downstream experiments were run on a single NVIDIA A100 80 GB GPU. The text alignment stage used AdamW with learning rate 10 −4, weight decay 0.05, cosine annealing for 50 epochs, and batch size 32. The ABMIL aggregator used a hidden dimension of 256, gated attention dropout of 0.25, and a 512-dimensional slide projection head to match the fixed output dimension of the CONCH v1.5 text encoder. For slide–text contrastive alignment, the symmetric InfoNCE objective used a temperature of 
+
+τ = 0 .1. Incomplete final batches were discarded to ensure a consistent batch size for contrastive training. Downstream ABMIL classifiers were trained using the Adam optimizer (learning rate 10 −4, weight decay 
+
+10 −5) and a cosine annealing scheduler for up to 30 epochs. Specifically, for each of the K = 5 seeds, 10% of the training split was randomly held out as a stratified internal validation set for early stopping based on macro-averaged recall (patience = 7 ), ensuring that the final model selected for test-set evaluation demonstrated the best generalization on unseen training data. For text-guided localization, a fixed cosine similarity threshold of 
+
+τloc = 0 .15 was applied uniformly across all slides. 15 Supplementary Materials Supplementary Table 1: 4-category classification (Malignant / Normal Adjacent To tumor / Benign / Normal; total n = 10 ,359 with an 80%/20% train/test split). Values are mean ± std over K = 5 seeds on the held-out test set. Acc : accuracy; B-Acc : balanced accuracy (macro-averaged recall); Sp ∗: macro one-vs-rest specificity; 
+
+AUC : macro one-vs-rest AUC. Subscripts report absolute percentage-point change versus Raw (↑ / ↓ / =). 
+
+ASTRA (ISO) : single-FM pretraining; ASTRA : full multi-FM pretraining. Bold indicates the highest AUC within each backbone. 
+
+Backbone Method Acc B-Acc Sp ∗ AUC CONCH v1.5 
+
+Raw 92 .4 ± 0.6 73 .2 ± 0.9 97 .4 ± 0.1 96 .7 ± 0.1
+
+TICON (ISO) 92 .4 ± 0.6 +0 .0 73 .1 ± 0.3 −0.1 97 .4 ± 0.2 +0 .0 96 .8 ± 0.2 +0 .1
+
+ASTRA (ISO) 93 .0 ± 0.8 +0 .6 76 .8 ± 1.3 +3 .6 97 .6 ± 0.2 +0 .2 97 .4 ± 0.1 +0 .7
+
+TICON 92 .6 ± 0.3 +0 .2 72 .7 ± 1.2 −0.5 97 .4 ± 0.1 +0 .0 96 .8 ± 0.2 +0 .1
+
+ASTRA 92 .7 ± 0.4 +0 .3 75 .6 ± 0.8 +2 .4 97 .6 ± 0.1 +0 .2 97 .1 ± 0.4 +0 .4
+
+UNI v2 
+
+Raw 92 .9 ± 0.4 75 .4 ± 0.7 97 .6 ± 0.2 97 .1 ± 0.3
+
+TICON (ISO) 92 .9 ± 0.4 +0 .0 75 .5 ± 1.0 +0 .1 97 .5 ± 0.1 −0.1 97 .2 ± 0.2 +0 .1
+
+ASTRA (ISO) 93 .1 ± 0.5 +0 .2 76 .2 ± 1.5 +0 .8 97 .7 ± 0.3 +0 .1 97 .4 ± 0.2 +0 .3
+
+TICON 93 .0 ± 0.2 +0 .1 75 .3 ± 1.1 −0.1 97 .6 ± 0.2 +0 .0 97 .2 ± 0.3 +0 .1
+
+ASTRA 93 .3 ± 0.4 +0 .4 76 .6 ± 0.5 +1 .2 97 .8 ± 0.1 +0 .2 97 .6 ± 0.2 +0 .5
+
+Virchow2 
+
+Raw 93 .0 ± 0.2 75 .4 ± 0.7 97 .6 ± 0.1 97 .2 ± 0.4
+
+TICON (ISO) 92 .9 ± 0.3 −0.1 76 .3 ± 1.2 +0 .9 97 .7 ± 0.1 +0 .1 97 .1 ± 0.3 −0.1
+
+ASTRA (ISO) 93 .3 ± 0.7 +0 .3 76 .6 ± 1.6 +1 .2 97 .4 ± 0.3 −0.2 97 .6 ± 0.3 +0 .4
+
+TICON 93 .1 ± 0.3 +0 .1 75 .8 ± 1.0 +0 .4 97 .5 ± 0.1 −0.1 97 .4 ± 0.3 +0 .2
+
+ASTRA 93 .5 ± 0.3 +0 .5 77 .0 ± 1.1 +1 .6 97 .8 ± 0.0 +0 .2 97 .8 ± 0.1 +0 .6
+
+GigaPath 
+
+Raw 91 .8 ± 0.6 75 .2 ± 1.3 97 .1 ± 0.1 96 .9 ± 0.2
+
+TICON (ISO) 92 .0 ± 0.5 +0 .2 75 .7 ± 1.3 +0 .5 97 .2 ± 0.2 +0 .1 96 .5 ± 0.2 −0.4
+
+ASTRA (ISO) 92 .6 ± 0.7 +0 .8 75 .7 ± 1.1 +0 .5 97 .4 ± 0.3 +0 .3 97 .0 ± 0.2 +0 .1
+
+TICON 92 .0 ± 0.7 +0 .2 74 .9 ± 0.7 −0.3 97 .2 ± 0.3 +0 .1 96 .6 ± 0.3 −0.3
+
+ASTRA 92 .7 ± 0.4 +0 .9 75 .7 ± 2.1 +0 .5 97 .4 ± 0.2 +0 .3 97 .0 ± 0.3 +0 .1
+
+16 Supplementary Table 2: 3-class major-group prediction (Carcinoma / Sarcoma / Melanoma; total n = 7 ,231 
+
+with an 80%/20% train/test split). Same reporting convention as Supplementary Table 1. 
+
+Backbone Method Acc B-Acc Sp ∗ AUC CONCH v1.5 
+
+Raw 98 .5 ± 0.1 92 .9 ± 1.4 98 .1 ± 0.6 98 .9 ± 0.2
+
+TICON (ISO) 98 .6 ± 0.3 +0 .1 93 .2 ± 1.6 +0 .3 97 .8 ± 0.6 −0.3 99 .0 ± 0.3 +0 .1
+
+ASTRA (ISO) 98 .4 ± 0.3 −0.1 93 .2 ± 0.5 +0 .3 98 .2 ± 0.6 +0 .1 99 .2 ± 0.3 +0 .3
+
+TICON 98 .5 ± 0.3 +0 .0 93 .0 ± 1.0 +0 .1 98 .0 ± 0.4 −0.1 98 .7 ± 0.5 −0.2
+
+ASTRA 98 .6 ± 0.3 +0 .1 91 .3 ± 3.0 −1.6 97 .9 ± 0.7 −0.2 99 .4 ± 0.2 +0 .5
+
+UNI v2 
+
+Raw 98 .7 ± 0.1 92 .4 ± 1.2 98 .0 ± 0.7 98 .8 ± 0.4
+
+TICON (ISO) 98 .8 ± 0.1 +0 .1 92 .7 ± 1.4 +0 .3 97 .9 ± 0.6 −0.1 99 .0 ± 0.3 +0 .2
+
+ASTRA (ISO) 98 .8 ± 0.2 +0 .1 93 .1 ± 1.2 +0 .7 98 .2 ± 0.5 +0 .2 99 .2 ± 0.4 +0 .4
+
+TICON 98 .7 ± 0.2 +0 .0 92 .5 ± 1.9 +0 .1 98 .1 ± 0.8 +0 .1 98 .9 ± 0.2 +0 .1
+
+ASTRA 99 .0 ± 0.2 +0 .3 93 .6 ± 1.2 +1 .2 98 .4 ± 0.4 +0 .4 99 .4 ± 0.1 +0 .6
+
+Virchow2 
+
+Raw 98 .6 ± 0.2 92 .5 ± 0.5 98 .1 ± 0.7 99 .3 ± 0.2
+
+TICON (ISO) 98 .7 ± 0.3 +0 .1 92 .2 ± 2.9 −0.3 98 .4 ± 0.4 +0 .3 99 .5 ± 0.1 +0 .2
+
+ASTRA (ISO) 98 .8 ± 0.2 +0 .2 93 .6 ± 0.9 +1 .1 98 .6 ± 0.6 +0 .5 99 .6 ± 0.3 +0 .3
+
+TICON 98 .7 ± 0.4 +0 .1 93 .0 ± 1.8 +0 .5 98 .3 ± 0.6 +0 .2 99 .4 ± 0.3 +0 .1
+
+ASTRA 98 .9 ± 0.1 +0 .3 94 .7 ± 0.7 +2 .2 98 .7 ± 0.5 +0 .6 99 .7 ± 0.3 +0 .4
+
+GigaPath 
+
+Raw 98 .2 ± 0.2 91 .7 ± 2.1 97 .0 ± 0.7 99 .1 ± 0.4
+
+TICON (ISO) 97 .8 ± 0.2 −0.4 90 .7 ± 1.1 −1.0 96 .5 ± 0.6 −0.5 99 .3 ± 0.1 +0 .2
+
+ASTRA (ISO) 98 .5 ± 0.3 +0 .3 92 .5 ± 2.4 +0 .8 97 .6 ± 0.7 +0 .6 99 .1 ± 0.3 +0 .0
+
+TICON 98 .0 ± 0.2 −0.2 88 .9 ± 2.6 −2.8 96 .4 ± 0.9 −0.6 99 .1 ± 0.6 +0 .0
+
+ASTRA 98 .6 ± 0.1 +0 .4 93 .4 ± 1.6 +1 .7 98 .1 ± 0.7 +1 .1 99 .4 ± 0.1 +0 .3
+
+17 Supplementary Table 3: 16-class cancer typing classification (malignant slides only; total n = 7 ,035 with an 80%/20% train/test split). Same reporting convention as Supplementary Table 1. 
+
+Backbone Method Acc B-Acc Sp ∗ AUC CONCH v1.5 
+
+Raw 90 .5 ± 0.3 86 .1 ± 0.7 99 .3 ± 0.0 98 .9 ± 0.1
+
+TICON (ISO) 90 .3 ± 0.3 −0.2 84 .9 ± 0.5 −1.2 99 .3 ± 0.0 +0 .0 98 .9 ± 0.1 +0 .0
+
+ASTRA (ISO) 90 .9 ± 0.2 +0 .4 86 .9 ± 0.7 +0 .8 99 .3 ± 0.0 +0 .0 99 .1 ± 0.2 +0 .2
+
+TICON 90 .1 ± 0.3 −0.4 86 .4 ± 0.6 +0 .3 99 .3 ± 0.0 +0 .0 99 .0 ± 0.1 +0 .1
+
+ASTRA 91 .2 ± 0.4 +0 .7 87 .2 ± 0.9 +1 .1 99 .4 ± 0.0 +0 .1 99 .2 ± 0.1 +0 .3
+
+UNI v2 
+
+Raw 90 .7 ± 0.2 85 .6 ± 0.8 99 .4 ± 0.0 98 .9 ± 0.1
+
+TICON (ISO) 90 .4 ± 0.4 −0.3 85 .1 ± 0.9 −0.5 99 .3 ± 0.0 +0 .0 98 .9 ± 0.1 +0 .0
+
+ASTRA (ISO) 91 .4 ± 0.5 +0 .7 86 .5 ± 1.1 +0 .9 99 .5 ± 0.0 +0 .1 99 .1 ± 0.1 +0 .2
+
+TICON 89 .9 ± 0.5 −0.8 84 .0 ± 0.4 −1.6 99 .3 ± 0.0 −0.1 98 .8 ± 0.1 −0.1
+
+ASTRA 91 .5 ± 0.3 +0 .8 86 .8 ± 0.5 +1 .2 99 .5 ± 0.0 +0 .1 99 .2 ± 0.1 +0 .3
+
+Virchow2 
+
+Raw 90 .9 ± 0.4 85 .0 ± 0.5 99 .4 ± 0.0 98 .8 ± 0.2
+
+TICON (ISO) 90 .6 ± 0.5 −0.4 84 .2 ± 1.1 −0.7 99 .4 ± 0.0 +0 .0 99 .0 ± 0.1 +0 .2
+
+ASTRA (ISO) 91 .6 ± 0.3 +0 .7 85 .7 ± 0.4 +0 .7 99 .5 ± 0.0 +0 .1 99 .0 ± 0.1 +0 .2
+
+TICON 89 .9 ± 0.6 −1.1 83 .9 ± 0.5 −1.1 99 .3 ± 0.0 −0.1 98 .8 ± 0.3 +0 .0
+
+ASTRA 91 .8 ± 0.5 +0 .9 86 .2 ± 0.7 +1 .2 99 .5 ± 0.0 +0 .1 99 .1 ± 0.3 +0 .3
+
+GigaPath 
+
+Raw 87 .9 ± 0.5 81 .3 ± 2.7 99 .2 ± 0.0 98 .5 ± 0.1
+
+TICON (ISO) 87 .8 ± 0.4 +0 .0 82 .0 ± 0.9 +0 .7 99 .2 ± 0.0 +0 .0 98 .5 ± 0.2 −0.1
+
+ASTRA (ISO) 90 .4 ± 0.3 +2 .6 84 .6 ± 0.9 +3 .3 99 .3 ± 0.0 +0 .2 98 .9 ± 0.1 +0 .4
+
+TICON 87 .5 ± 0.3 −0.4 80 .5 ± 0.8 −0.8 99 .1 ± 0.0 +0 .0 98 .5 ± 0.1 +0 .0
+
+ASTRA 90 .7 ± 0.2 +2 .9 85 .3 ± 0.5 +4 .0 99 .4 ± 0.0 +0 .2 99 .0 ± 0.1 +0 .4
+
+18 Supplementary Table 4: Text-guided tumor localization on the CHTN annotated subset (n = 380 ), stratified by cancer type. Values are mean Dice ± SD and median Dice across slides. Overall summarizes all 380 cases; Macro denotes the unweighted mean across the 16 cancer types. Localization results are reported for ASTRA only, as this evaluation relies on semantic grounding from routine structured pathology annotation fields and is not directly comparable to models pretrained under different supervision or alignment settings. 
+
+Cancer type n Mean Dice ± SD Median Dice 
+
+Breast Carcinoma 27 0.879 ± 0.222 0.963 
+
+Cholangiocarcinoma 11 0.912 ± 0.111 0.947 
+
+Colorectal Adenocarcinoma 21 0.877 ± 0.107 0.904 
+
+Endometrial Carcinoma 27 0.864 ± 0.217 0.973 
+
+Hepatocellular Carcinoma 26 0.960 ± 0.085 0.985 
+
+Lung Carcinoma 26 0.839 ± 0.221 0.910 
+
+Melanoma 16 0.894 ± 0.167 0.965 
+
+Neuroendocrine Neoplasm 21 0.943 ± 0.119 0.980 
+
+Ovarian Carcinoma 20 0.892 ± 0.154 0.962 
+
+Pancreatic Adenocarcinoma 17 0.818 ± 0.184 0.886 
+
+Prostatic Adenocarcinoma 20 0.913 ± 0.094 0.952 
+
+Renal Cell Carcinoma 40 0.937 ± 0.125 0.979 
+
+Sarcoma 23 0.955 ± 0.106 0.991 
+
+Squamous Cell Carcinoma 39 0.807 ± 0.243 0.964 
+
+Thyroid Carcinoma 29 0.963 ± 0.029 0.972 
+
+Urothelial Carcinoma 17 0.926 ± 0.131 0.981 
+
+Overall 380 0.897 ± 0.167 0.969 
+
+Macro – 0.899 –
+
+Supplementary Table 5: Text-guided tumor localization on the external TCGA cohort (n = 1 ,686 ), stratified by cancer type. The CHTN-trained model and fixed threshold were applied directly to TCGA in a zero-shot setting, without dataset-specific adjustment or fine-tuning. Overall summarizes all evaluated cases; 
+
+Macro denotes the unweighted mean across the four cancer types. 
+
+Cancer type n Mean Dice ± SD Median Dice 
+
+Lung adenocarcinoma (LUAD) 476 0.779 ± 0.147 0.819 
+
+Lung squamous cell carcinoma (LUSC) 458 0.817 ± 0.131 0.858 
+
+Prostate adenocarcinoma (PRAD) 365 0.628 ± 0.219 0.656 
+
+Urothelial carcinoma (BLCA) 387 0.697 ± 0.194 0.737 
+
+Overall 1686 0.738 ± 0.187 0.796 
+
+Macro – 0.730 –
+
+19 TCGA-MP-A4T7-01Z-00-DX1.C74D7A5B-1D1A-423B-85CA-C11E0CCF5873 
+
+WSI Ground Truth Prediction Heat map 
+
+TCGA-L9-A444-01Z-00-DX1.88CF6F01-0C1F-4572-81E3-1A5790692861 
+
+TCGA-86-8672-01Z-00-DX1.94ca1954-921d-4ef6-a078-4e0fcb09157f 
+
+TCGA-44-3918-01Z-00-DX1.6da70a8b-6307-423a-9d2d-380c16962855 
+
+TCGA-38-4626-01Z-00-DX1.142bc018-bd79-4db9-84e2-f83a617ea92a 
+
+TCGA-L9-A443-01Z-00-DX1.9F68A13A-2865-41BF-88A7-B0DF75961C6F 
+
+TCGA-49-4488-01Z-00-DX2.ce896a98-8b45-4606-8849-3a377b81e3de 
+
+TCGA-50-5068-01Z-00-DX2.0492A5C6-09CB-424B-BE20-10A1CBEA2E57 
+
+TCGA-50-6597-01Z-00-DX1.ec7fc0b2-78a1-4384-bddd-e89f02ee5eb6 
+
+WSI Ground Truth Prediction Heat map 
+
+TCGA-86-8278-01Z-00-DX1.6500afef-f0f0-4e7c-a6c0-60da81993641 
+
+TCGA-95-7948-01Z-00-DX1.FF1AEF38-19E5-4475-87C8-B318204FEF1D 
+
+TCGA-86-8669-01Z-00-DX1.845b8b4e-6445-4da1-8275-42b765c024cc 
+
+TCGA-44-2656-01Z-00-DX1.5f247f31-4bb5-460d-a1f7-7dcdba33c835 
+
+TCGA-44-2664-01Z-00-DX1.35c75ae5-eee0-4e69-a13a-31b5fad9869a 
+
+TCGA-73-4659-01Z-00-DX1.578400cd-d284-451b-8fdf-9f82c1458276 
+
+TCGA-86-8278-01Z-00-DX1.6500afef-f0f0-4e7c-a6c0-60da81993641 Supplementary Figure 1: Representative ASTRA text-guided tumor localization in TCGA lung adeno-carcinoma (LUAD). Columns show the H&E WSI thumbnail, the reference tumor contour overlaid in green, and the prediction heatmap generated from tile-text cosine similarity between ASTRA tile embeddings and the slide-specific pathology prompt. Warmer colors indicate higher similarity. TCGA slide identifiers are shown above each example. 20 TCGA-18-3408-01Z-00-DX1.B4AFC08A-7460-4EE6-B033-629C6A6CA6E8 
+
+WSI Ground Truth Prediction Heat map 
+
+TCGA-18-3415-01Z-00-DX1.8C62F2CD-4A2F-4D1E-A662-D7D5AFE557AB 
+
+WSI Ground Truth Prediction Heat map 
+
+TCGA-18-3411-01Z-00-DX1.D9228674-5B13-44CB-A7AE-C64FD97A3BBB 
+
+TCGA-18-3419-01Z-00-DX1.69597BCF-2D4E-4D9B-B4E8-C03137445AF4 
+
+TCGA-18-5595-01Z-00-DX1.75235488-2F6F-42CE-8D7D-0E9A360E1C61 
+
+TCGA-22-5477-01Z-00-DX1.D4CA03F8-FFA8-4926-B93C-EBFDC6791B1F 
+
+TCGA-33-4547-01Z-00-DX1.7009df06-03f9-497a-b7bd-f8ef4244d152 
+
+TCGA-22-5474-01Z-00-DX1.8736FB24-7E65-4ACB-9325-382D7F864F62 
+
+TCGA-85-A50Z-01Z-00-DX1.A8911EBB-EAB6-4787-9F6E-3E8A9F1078F3 
+
+TCGA-94-8490-01Z-00-DX1.5A44A8C6-38F4-47A4-80C6-7BB805E9116C 
+
+TCGA-66-2742-01Z-00-DX1.8fdd6990-a08c-457b-80e4-586c619a784e 
+
+TCGA-66-2780-01Z-00-DX1.895b75f9-6127-49f9-8106-0161b5de18ec 
+
+TCGA-NC-A5HL-01Z-00-DX1.E40E17C1-42BA-4C02-AA01-0E2891B3174A 
+
+TCGA-96-8170-01Z-00-DX1.8283cd4c-f374-4320-88bd-36a462866d24 Supplementary Figure 2: Representative ASTRA text-guided tumor localization in TCGA lung squa-mous cell carcinoma (LUSC). Columns show the H&E WSI thumbnail, the reference tumor contour overlaid in green, and the prediction heatmap generated from tile-text cosine similarity between ASTRA tile embed-dings and the slide-specific pathology prompt. Warmer colors indicate higher similarity. TCGA slide identifiers are shown above each example. 21 TCGA-EJ-5518-01Z-00-DX1.e7860e09-7490-4cda-be17-4c5116d1698a 
+
+WSI Ground Truth Prediction Heat map WSI Ground Truth Prediction Heat map 
+
+TCGA-WW-A8ZI-01Z-00-DX4.19925B69-872C-4A20-AA9F-7D8A31DF02F9 
+
+TCGA-EJ-5532-01Z-00-DX1.07548d1f-867f-4bca-a9f3-aaed043b8753 
+
+TCGA-EJ-5511-01Z-00-DX1.45a97ef9-90fb-400d-9bdb-ebe8776e228b 
+
+TCGA-HC-7821-01Z-00-DX1.85c082ca-1159-4cd1-b003-fed32f2ddf9e 
+
+TCGA-HC-A6AN-01Z-00-DX1.542ADC3A-F070-4D11-AD07-2D2B429A5F1A 
+
+TCGA-WW-A8ZI-01Z-00-DX1.D8EA0F9D-EF79-489E-9AB7-C07CBBF4AAC2 TCGA-HC-A8D1-01Z-00-DX1.8217FC07-A7A1-4C84-B5CF-9468AD18F912 
+
+TCGA-VP-A87H-01Z-00-DX1.AE5FAB92-3282-404D-BD0C-699746F7915E 
+
+TCGA-V1-A9ZR-01Z-00-DX1.09668B8E-0AFA-4252-ABF1-BA7BD5D301B6 
+
+TCGA-Y6-A9XI-01Z-00-DX4.46354624-5C2E-4E43-A73D-FC530D90068D 
+
+TCGA-Y6-A9XI-01Z-00-DX3.167452BB-33BA-4C13-9795-371CEAA8527D Supplementary Figure 3: Representative ASTRA text-guided tumor localization in TCGA prostate ade-nocarcinoma (PRAD). Columns show the H&E WSI thumbnail, the reference tumor contour overlaid in green, and the prediction heatmap generated from tile-text cosine similarity between ASTRA tile embeddings and the slide-specific pathology prompt. Warmer colors indicate higher similarity. TCGA slide identifiers are shown above each example. 22 TCGA-XF-A9SX-01Z-00-DX1.6DB4572E-915C-491F-BE68-99C019799E20 
+
+WSI Ground Truth Prediction Heat map WSI Ground Truth Prediction Heat map 
+
+> TCGA-CF-A3MH-01Z-00-DX1.4A6F7BDC-B7D2-4203-AA8E-7BA5DB8BF3AC
+> TCGA-4Z-AA7M-01Z-00-DX1.05317C75-A8F3-4124-95D2-F039BEFFE63A
+> TCGA-4Z-AA7Y-01Z-00-DX1.5771D5DA-5163-4F6C-A99A-DA682D3F059F
+> TCGA-4Z-AA89-01Z-00-DX1.6DD89FC0-A062-41F1-AED3-FF8975FAADF3
+> TCGA-BT-A20R-01Z-00-DX1.38320FC0-F1E5-401B-9336-D77796456B30
+> TCGA-CF-A3MG-01Z-00-DX1.49D55C73-735B-496E-82DA-1F6BFE88D607
+> TCGA-BT-A20Q-01Z-00-DX1.BFF3D35C-CB0C-49C3-8D35-D5C84E133B49
+> TCGA-DK-A2I6-01Z-00-DX1.7BF86D3B-D4F7-47F9-B021-7FD6B673A238
+> TCGA-FD-A3NA-01Z-00-DX1.2AD62CEE-0D76-4382-AE2E-9B7FCB1130D9
+> TCGA-BT-A2LD-01Z-00-DX1.A2AEDD2E-481A-401B-BDD7-5D680B5E36E9
+> TCGA-E7-A8O8-01Z-00-DX1.009173C4-BC8E-4B96-98FC-E24A39438F4E
+> TCGA-XF-A9SX-01Z-00-DX1.6DB4572E-915C-491F-BE68-99C019799E20
+> TCGA-G2-A2EO-01Z-00-DX3.F64AE021-27AB-4B3C-9DD2-9B8A358326C3
+
+Supplementary Figure 4: Representative ASTRA text-guided tumor localization in TCGA bladder urothelial carcinoma (BLCA). Columns show the H&E WSI thumbnail, the reference tumor contour overlaid in green, and the prediction heatmap generated from tile-text cosine similarity between ASTRA tile embed-dings and the slide-specific pathology prompt. Warmer colors indicate higher similarity. TCGA slide identifiers are shown above each example. 
+
+Code and data availability The processed data and underlying code for this study will be made available upon reasonable request to the corresponding author. The Cooperative Human Tissue Network (CHTN) co-hort 27 is subject to institutional data access restrictions and is available through the Cooperative Human Tis-sue Network under appropriate approvals and access agreements. TCGA WSIs can be accessed through the TCGA Research Network ( https://www.cancer.gov/tcga ). The TCGA tumor segmentation predic-tions used for localization evaluation in BLCA, LUAD, LUSC, and PRAD are publicly available at Zenodo 23 (https://zenodo.org/records/18481478 ). 
+
+Author Contributions 
+
+T.W. conceptualized and designed the study; developed the overall framework and architectural design; im-plemented the methodology; conducted the experiments; analyzed the results; created the visualizations and figures; and wrote the manuscript. Z.S. contributed to model design and development; assisted with exper-iments and analysis; and contributed to writing and revising the manuscript. A.R.A. and U.S. assisted with methodology implementation, experiments, and data analysis; and reviewed and revised the manuscript. L.G. and C.R. performed the histopathology annotations and contributed to data curation. W.C. and A.P. provided clinical insight; approved the study design; evaluated the results as an expert attending pathologist; and re-viewed and revised the manuscript. M.K.K.N. conceptualized and designed the study; supervised the research; validated the methodology and results; provided funding support; and edited and revised the manuscript. 
+
+Competing Interests The authors declare no competing interests. 
+
+Acknowledgments 
+
+We thank the patients who contributed tissue samples to the Cooperative Human Tissue Network (CHTN) cohort and acknowledge the Cooperative Human Tissue Network for providing access to the data used in this study. We gratefully thank Dr. Skrede for making the TCGA tumor segmentation predictions publicly available and enabling their use in our external localization evaluation. This work used the Ohio Supercomputer Center’s high-performance computing resources through its collaboration with The Ohio State University College of Medicine. We also thank the Department of Pathology and the Comprehensive Cancer Center at The Ohio State University for their support. 
+
+Funding 
+
+This project was supported in part by R01 CA276301 (PIs: Niazi and Chen) from the National Cancer Institute, Pelotonia under IRP CC13702 (PIs: Niazi, Vilgelm, and Roy), and by the Department of Pathology and the Comprehensive Cancer Center at The Ohio State University. The content is solely the responsibility of the authors and does not necessarily represent the official views of the National Cancer Institute, the National Institutes of Health, or The Ohio State University. 
+
+Ethics Approval and Consent to Participate 
+
+This study involved secondary analysis of retrospective, fully de-identified clinical and histopathology data ob-tained from existing institutional and public repositories. Under applicable regulations, the use of de-identified data does not constitute human subjects research. Therefore, Institutional Review Board (IRB) approval was not required, and informed consent to participate was waived. 24 References 
+
+1. Baxi, V., Edwards, R., Montalto, M. & Saha, S. Digital pathology and artificial intelligence in translational medicine and clinical practice. Modern Pathology 35 , 23–32 (2022). 2. Niazi, M. K. K., Parwani, A. V. & Gurcan, M. N. Digital pathology and artificial intelligence. The lancet oncology 20 , e253–e261 (2019). 3. Rajpurkar, P., Chen, E., Banerjee, O. & Topol, E. J. Ai in health and medicine. Nature medicine 28 , 31–38 (2022). 4. Akbar, A. R. et al. Learning the language of histopathology images reveals prognostic subgroups in invasive lung adenocarcinoma patients. arXiv preprint arXiv:2508.16742 (2025). 5. Su, Z., Akbar, A. R., Sajjad, U., Parwani, A. V. & Niazi, M. K. K. Streamline pathology foundation model by cross-magnification distillation. arXiv preprint arXiv:2509.23097 (2025). 6. Chen, R. J. et al. Towards a general-purpose foundation model for computational pathology. Nature Medicine (2024). 7. Zimmermann, E. et al. Virchow2: Scaling self-supervised mixed magnification models in pathology. arXiv preprint arXiv:2408.00738 (2024). 8. Xu, H. et al. A whole-slide foundation model for digital pathology from real-world data. Nature (2024). 9. Lu, M. Y. et al. A visual-language foundation model for computational pathology. Nature Medicine 30 ,863–874 (2024). 10. Chen, Y., Su, Z., Khan, H. & Niazi, M. K. K. Ranger: Sparsely-gated mixture-of-experts with adaptive retrieval re-ranking for pathology report generation. arXiv preprint arXiv:2603.04348 (2026). 11. Choi, J. H. & Ro, J. Y. The 2020 who classification of tumors of soft tissue: selected changes and new entities. Advances in anatomic pathology 28 , 44–58 (2021). 12. Ronneberger, O., Fischer, P. & Brox, T. U-net: Convolutional networks for biomedical image segmen-tation. In International Conference on Medical image computing and computer-assisted intervention ,234–241 (Springer, 2015). 13. Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J. & Maier-Hein, K. H. nnu-net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods 18 , 203–211 (2021). 14. Van Rijthoven, M., Balkenhol, M., Silin ¸a, K., Van Der Laak, J. & Ciompi, F. Hooknet: Multi-resolution convolutional neural networks for semantic segmentation in histopathology whole-slide images. Medical image analysis 68 , 101890 (2021). 15. Wang, Z. et al. Label cleaning multiple instance learning: Refining coarse annotations on single whole-slide images. IEEE transactions on medical imaging 41 , 3952–3968 (2022). 16. Verghese, G. et al. Computational pathology in cancer diagnosis, prognosis, and prediction–present day and prospects. The Journal of pathology 260 , 551–563 (2023). 17. Campanella, G. et al. Clinical-grade computational pathology using weakly supervised deep learning on whole slide images. Nature medicine 25 , 1301–1309 (2019). 18. Lu, M. Y. et al. Data-efficient and weakly supervised computational pathology on whole-slide images. 
+
+Nature biomedical engineering 5, 555–570 (2021). 19. Ilse, M., Tomczak, J. & Welling, M. Attention-based deep multiple instance learning. In International conference on machine learning , 2127–2136 (PMLR, 2018). 25 20. Shao, Z. et al. Transmil: Transformer based correlated multiple instance learning for whole slide image classification. Advances in neural information processing systems 34 , 2136–2147 (2021). 21. Belagali, V. et al. Ticon: A slide-level tile contextualizer for histopathology representation learning. arXiv preprint arXiv:2512.21331 (2025). 22. Runevic, J. Combining foundation models in computational pathology: Unlocking multi-representational insights (2025). 23. Chen, Y. et al. Histomet: A pan-cancer deep learning framework for prognostic prediction of metastatic progression and site tropism from primary tumor histopathology. arXiv preprint arXiv:2602.07608 (2026). 24. Ding, T. et al. A multimodal whole-slide foundation model for pathology. Nature medicine 1–13 (2025). 25. Lu, M. Y. et al. A foundational multimodal vision language ai assistant for human pathology. arXiv preprint arXiv:2312.07814 (2023). 26. Skrede, O.-J. et al. Generalisation of automatic tumour segmentation in histopathological whole-slide images across multiple cancer types. npj Precision Oncology (2026). 27. National Cancer Institute. Cooperative human tissue network (CHTN). https://www.chtn.org 
+
+(2024). 28. Zhang, A., Jaume, G., Vaidya, A., Ding, T. & Mahmood, F. Accelerating data processing and benchmark-ing of ai models for pathology. arXiv preprint arXiv:2502.06750 (2025). 29. Shazeer, N. et al. Outrageously large neural networks: The sparsely-gated mixture-of-experts layer. arXiv preprint arXiv:1701.06538 (2017). 30. Tang, F. et al. Hi-end-mae: Hierarchical encoder-driven masked autoencoders are stronger vision learners for medical image segmentation. Medical Image Analysis 103770 (2025). 31. Kingma, D. P. & Ba, J. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 
+
+(2014). 26
