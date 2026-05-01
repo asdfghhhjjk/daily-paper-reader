@@ -23,6 +23,14 @@ on:
         description: "是否继续运行本地 Qwen3 reranker（true/false）"
         required: false
         default: "false"
+      run_llm_refine:
+        description: "是否继续运行 DeepSeek 相关性打分（true/false）"
+        required: false
+        default: "false"
+      llm_min_star:
+        description: "DeepSeek 打分前保留的 rerank 星级下限"
+        required: false
+        default: "4"
       profile_tag:
         description: "仅运行指定词条 tag；留空表示全量词条"
         required: false
@@ -53,7 +61,11 @@ jobs:
       LOCAL_RERANK_MODEL: Qwen/Qwen3-Reranker-0.6B
       LOCAL_RERANK_DEVICE: cpu
       LOCAL_RERANK_BATCH_SIZE: "4"
+      MKL_THREADING_LAYER: GNU
       DPR_EMBED_API_TIMEOUT: "60"
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
+      DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
       PYTHONUNBUFFERED: "1"
 
     steps:
@@ -103,6 +115,8 @@ jobs:
           TOP_K="${{ github.event.inputs.top_k }}"
           RRF_TOP_N="${{ github.event.inputs.rrf_top_n }}"
           RUN_RERANK="${{ github.event.inputs.run_rerank }}"
+          RUN_LLM_REFINE="${{ github.event.inputs.run_llm_refine }}"
+          LLM_MIN_STAR="${{ github.event.inputs.llm_min_star }}"
           RUN_DATE="$(date -u +%Y%m%d)"
 
           if [ -z "$TOP_K" ]; then
@@ -123,6 +137,13 @@ jobs:
           )
           if [ "${RUN_RERANK:-false}" = "true" ]; then
             ARGS+=(--run-rerank --rerank-device cpu --rerank-batch-size 4)
+          fi
+          if [ "${RUN_LLM_REFINE:-false}" = "true" ]; then
+            if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+              echo "::error::run_llm_refine=true requires DEEPSEEK_API_KEY secret."
+              exit 1
+            fi
+            ARGS+=(--run-llm-refine --llm-min-star "${LLM_MIN_STAR:-4}" --llm-filter-concurrency 2)
           fi
 
           python src/conference_pipeline.py "${ARGS[@]}"

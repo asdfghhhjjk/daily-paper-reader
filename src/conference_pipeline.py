@@ -31,9 +31,9 @@ def log(message: str) -> None:
     print(f"[{ts}] {message}", flush=True)
 
 
-def run_step(name: str, cmd: List[str]) -> None:
+def run_step(name: str, cmd: List[str], *, env: Dict[str, str] | None = None) -> None:
     log(f"[INFO] {name}: {' '.join(cmd)}")
-    subprocess.run(cmd, cwd=str(ROOT_DIR), check=True)
+    subprocess.run(cmd, cwd=str(ROOT_DIR), check=True, env=env)
 
 
 def rel(path: Path) -> str:
@@ -49,11 +49,15 @@ def load_count(path: Path) -> Dict[str, int]:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f) or {}
     queries = data.get("queries") or []
-    return {
+    result = {
         "papers": len(data.get("papers") or []),
         "queries": len(queries),
         "non_empty_queries": sum(1 for q in queries if q.get("sim_scores")),
     }
+    llm_ranked = data.get("llm_ranked")
+    if isinstance(llm_ranked, list):
+        result["llm_ranked"] = len(llm_ranked)
+    return result
 
 
 def write_manifest(path: Path, payload: Dict[str, Any]) -> None:
@@ -79,6 +83,10 @@ def main() -> None:
     parser.add_argument("--rerank-top-n", type=int, default=80)
     parser.add_argument("--rerank-device", type=str, default=os.getenv("LOCAL_RERANK_DEVICE", "cpu"))
     parser.add_argument("--rerank-batch-size", type=int, default=int(os.getenv("LOCAL_RERANK_BATCH_SIZE") or "4"))
+    parser.add_argument("--run-llm-refine", action="store_true", help="继续运行 DeepSeek 相关性打分。")
+    parser.add_argument("--llm-min-star", type=int, default=4)
+    parser.add_argument("--llm-batch-size", type=int, default=10)
+    parser.add_argument("--llm-filter-concurrency", type=int, default=2)
     args = parser.parse_args()
 
     conferences = parse_conferences(args.conferences)
@@ -133,7 +141,8 @@ def main() -> None:
     run_step("Conference RRF", rrf_cmd)
 
     rerank_path = None
-    if args.run_rerank:
+    should_run_rerank = bool(args.run_rerank or args.run_llm_refine)
+    if should_run_rerank:
         rank_dir = output_dir.parent / "rank" if output_dir.name == "filtered" else output_dir / "rank"
         rank_dir.mkdir(parents=True, exist_ok=True)
         rerank_path = rank_dir / f"conference-{conf_token}-{year_token}.supabase.rerank.json"
@@ -151,7 +160,33 @@ def main() -> None:
             "--rerank-batch-size",
             str(max(int(args.rerank_batch_size or 1), 1)),
         ]
-        run_step("Conference rerank", rerank_cmd)
+        rerank_env = os.environ.copy()
+        rerank_env.setdefault("MKL_THREADING_LAYER", "GNU")
+        run_step("Conference rerank", rerank_cmd, env=rerank_env)
+
+    llm_path = None
+    if args.run_llm_refine:
+        if rerank_path is None:
+            raise RuntimeError("DeepSeek 打分需要先生成 rerank 结果。")
+        rank_dir = rerank_path.parent
+        llm_path = rank_dir / f"conference-{conf_token}-{year_token}.supabase.llm.json"
+        llm_cmd = [
+            sys.executable,
+            str(SCRIPT_DIR / "4.llm_refine_papers.py"),
+            "--input",
+            str(rerank_path),
+            "--output",
+            str(llm_path),
+            "--min-star",
+            str(max(int(args.llm_min_star or 1), 1)),
+            "--batch-size",
+            str(max(int(args.llm_batch_size or 1), 1)),
+            "--filter-concurrency",
+            str(max(int(args.llm_filter_concurrency or 1), 1)),
+        ]
+        if args.config and str(args.config).strip() != "-":
+            llm_cmd.extend(["--config", args.config])
+        run_step("Conference DeepSeek refine", llm_cmd)
 
     manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -159,18 +194,21 @@ def main() -> None:
         "years": years,
         "top_k": max(int(args.top_k or 1), 1),
         "rrf_top_n": max(int(args.rrf_top_n or 1), 1),
-        "run_rerank": bool(args.run_rerank),
+        "run_rerank": should_run_rerank,
+        "run_llm_refine": bool(args.run_llm_refine),
         "files": {
             "bm25": rel(bm25_path),
             "embedding": rel(embedding_path),
             "rrf": rel(rrf_path),
             "rerank": rel(rerank_path) if rerank_path else "",
+            "llm": rel(llm_path) if llm_path else "",
         },
         "counts": {
             "bm25": load_count(bm25_path),
             "embedding": load_count(embedding_path),
             "rrf": load_count(rrf_path),
             "rerank": load_count(rerank_path) if rerank_path else {},
+            "llm": load_count(llm_path) if llm_path else {},
         },
     }
     write_manifest(manifest_path, manifest)

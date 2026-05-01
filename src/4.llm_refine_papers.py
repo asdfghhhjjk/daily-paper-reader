@@ -18,7 +18,7 @@ ROOT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 TODAY_STR = str(os.getenv("DPR_RUN_DATE") or "").strip() or datetime.now(timezone.utc).strftime("%Y%m%d")
 ARCHIVE_DIR = os.path.join(ROOT_DIR, "archive", TODAY_STR)
 RANKED_DIR = os.path.join(ARCHIVE_DIR, "rank")
-CONFIG_FILE = os.path.join(ROOT_DIR, "config.yaml")
+CONFIG_FILE = os.getenv("DPR_CONFIG_FILE") or os.path.join(ROOT_DIR, "config.yaml")
 
 DEFAULT_FILTER_MODEL = (
     os.getenv("DEEPSEEK_FILTER_MODEL")
@@ -56,8 +56,9 @@ def save_json(data: Dict[str, Any], path: str) -> None:
     log(f"[INFO] saved: {path}")
 
 
-def load_config() -> Dict[str, Any]:
-    if not os.path.exists(CONFIG_FILE):
+def load_config(config_path: str | None = None) -> Dict[str, Any]:
+    path = str(config_path or CONFIG_FILE).strip() or CONFIG_FILE
+    if not os.path.exists(path):
         return {}
     try:
         import yaml  # type: ignore
@@ -65,7 +66,7 @@ def load_config() -> Dict[str, Any]:
         log("[WARN] PyYAML not installed, skip config.yaml.")
         return {}
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
             return data if isinstance(data, dict) else {}
     except Exception as exc:
@@ -703,6 +704,7 @@ def _filter_batch(
 def process_file(
     input_path: str,
     output_path: str,
+    config_path: str | None,
     min_star: int,
     batch_size: int,
     max_chars: int,
@@ -722,7 +724,7 @@ def process_file(
         log("[WARN] missing papers or queries, skip.")
         return
 
-    config = load_config()
+    config = load_config(config_path)
     user_requirements = build_user_requirements(config, queries)
     if not user_requirements:
         log("[WARN] no user requirements built from config/queries, skip.")
@@ -878,6 +880,12 @@ def main() -> None:
         help="output JSON path.",
     )
     parser.add_argument(
+        "--config",
+        type=str,
+        default=CONFIG_FILE,
+        help="config YAML path for user requirements.",
+    )
+    parser.add_argument(
         "--min-star",
         type=int,
         default=4,
@@ -924,9 +932,14 @@ def main() -> None:
     if not os.path.isabs(output_path):
         output_path = os.path.abspath(os.path.join(ROOT_DIR, output_path))
 
+    config_path = args.config
+    if not os.path.isabs(config_path):
+        config_path = os.path.abspath(os.path.join(ROOT_DIR, config_path))
+
     process_file(
         input_path=input_path,
         output_path=output_path,
+        config_path=config_path,
         min_star=args.min_star,
         batch_size=args.batch_size,
         max_chars=args.max_chars,
