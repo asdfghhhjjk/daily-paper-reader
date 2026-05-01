@@ -1,0 +1,2131 @@
+Title: Probabilistic coupling of cellular and microenvironmental heterogeneity by masked self-supervised learning
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.04.21.719876v1.full.pdf
+
+Number of Pages: 22
+
+Markdown Content:
+# PROBABILISTIC COUPLING OF CELLULAR AND MICROENVIRONMENTAL HETEROGENEITY BY MASKED SELF -SUPERVISED LEARNING 
+
+Yasuhiro Kojima 1,†,* , Yosuke Tanaka 2,† , Haruka Hirose 1,3 , Fumiko Chiwaki 4, Kazuya Nishimura 1,5 , Shuto Hayashi 3,6 , Kota Itahashi 7, Masato Ishikawa 8, Teppei Shimamura 3, Hiroyuki Mano 9
+
+> 1
+
+Laboratory of Computational Life Science, National Cancer Center Research Institute, Tokyo, Japan 
+
+> 2
+
+Laboratory of Cancer Target Discovery, National Cancer Center Research Institute, Tokyo, Japan 
+
+> 3
+
+Department of Computational and Systems Biology, Institute of Science Tokyo, Bunkyo-ku, Tokyo, Japan 
+
+> 4
+
+Department of Translational Oncology, National Cancer Center Research Institute, Tokyo, Japan 
+
+> 5
+
+D3 center, The University of Osaka, Suita, Osaka, Japan 
+
+> 6
+
+Innovation Center of NanoMedicine, Kawasaki Institute of Industrial Promotion, Kawasaki, Kanagawa, Japan 
+
+> 7
+
+Division of Cancer Immunology, Research Institute/Exploratory Oncology Research & Clinical Trial Center (EPOC), National Cancer Center, Tokyo, Japan 
+
+> 8
+
+Institute for Life and Medical Sciences, Kyoto University, Kyoto, Japan 
+
+> 9
+
+Division of Cellular Signaling, National Cancer Center Research Institute, Tokyo, Japan 
+
+> †
+
+These authors contributed equally to this work. 
+
+> *
+
+Corresponding author: Yasuhiro Kojima 
+
+## ABSTRACT 
+
+Spatial omics technologies have advanced to single-cell resolution, enabling systematic analysis of 1
+
+tissue microenvironments alongside cellular-state heterogeneity. However, computationally defining 2
+
+microenvironmental states at single-cell resolution and identifying representations most informative 3
+
+for biological discovery remain major challenges. Here we present Mievformer, a Transformer-4
+
+based masked self-supervised framework that learns microenvironmental embeddings by encod-5
+
+ing neighboring cellular states and relative spatial configurations to parameterize the conditional 6
+
+distribution of continuous cell states at central spatial positions. Through InfoNCE optimization, 7
+
+Mievformer learns representations that capture the relative enrichment of cell states across microen-8
+
+vironments, formalized as a conditional density ratio, thereby enabling probabilistic inference of the 9
+
+coupling between microenvironmental and cellular heterogeneity. Mievformer outperformed exist-10 
+
+ing methods in niche clustering on simulated spatial transcriptomics data and achieved the highest 11 
+
+average performance across five real datasets spanning three spatial transcriptomics platforms when 12 
+
+evaluated using DREC, a ground-truth-free metric that most strongly correlated with ground-truth 13 
+
+performance in simulations. Beyond conventional clustering, Mievformer enables identification 14 
+
+of cellular subpopulations based on their microenvironmental distribution and detection of gene-15 
+
+expression signatures associated with colocalization of specific cell populations. Together, these 16 
+
+results establish Mievformer as a quantitatively robust and biologically informative framework for 17 
+
+learning microenvironment representations in spatial omics. 18 
+
+## 1 Introduction 19 
+
+Single-cell transcriptomics has revealed prevalent cellular heterogeneity across diverse biological systems, including 20 
+
+disease states[1]. These data have enabled the reconstruction of developmental lineage hierarchies and their mas-21 
+
+ter regulators, as well as the identification of disease-associated cell populations that clarify cell-level pathomecha-22 
+
+nisms. However, the progression and diversification of multicellular systems, such as tumors, are driven not only 23 
+
+by autonomous cell-state transitions but also from sequential, context-dependent cell-cell interactions that define the 24 
+
+evolution of cellular communities[2, 3]. Thus, elucidating tissue development and disease through the framework 25 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+of cellular heterogeneity requires characterising the heterogeneity of microenvironments wherein multiple cell types 26 
+
+interact. This perspective drives omics analyses of the cell states that produce microenvironmental heterogeneity and 27 
+
+the identification of cell populations that are enriched in specific microenvironments. 28 
+
+Spatial omics, conducted by measuring gene expression in its native spatial context, offers unprecedented power to dis-29 
+
+sect microenvironmental heterogeneity[4], since it enables the identification of disease-specific microenvironments [5] 30 
+
+and improves data-driven inference of cell-cell interactions by providing spatial proximity constraints [6]. However, 31 
+
+the notion of "microenvironmental state" remains conceptually ambiguous, hampering its computational definition and 32 
+
+estimation. A prevalent strategy is to learn representations that directly reconstruct spot-level expression from spatial 33 
+
+transcriptomics. For example, BayesSpace[7] assigns discrete microenvironmental states under Markov random-field 34 
+
+constraints to enforce spatial coherence and optimise state-specific expression profiles and assignments via Markov 35 
+
+Chain Monte Carlo. STAGATE[8] and GraphST[9] construct spatial proximity graphs and learn latent microenviron-36 
+
+mental states using graph-based encoders. However, these approaches equate the microenvironmental state with the 37 
+
+expression observed at each spatial location, which can be limiting for modern single-cell-resolution platforms where 38 
+
+cells with distinctively different expression profiles such as tumor and immune cells can be adjacent to each other in a 39 
+
+shared microenvironment. Recently, several methods have been proposed to better leverage the increasing resolution 40 
+
+of spatial omics. NicheCompass[10] models microenvironments with a graph attention network[11] by jointly regress-41 
+
+ing the central cell expression profile and the neighbourhood-averaged expression, while regularising the latent space 42 
+
+so that microenvironmental similarities align with the spatial proximity graph. Banksy[12] derives microenviron-43 
+
+mental representations by augmenting neighbourhood-averaged expression with spatial expression gradients, thereby 44 
+
+capturing features that mean profiles alone miss. CellCharter[13] constructs a spatial neighbor graph via Delaunay 45 
+
+triangulation and aggregates neighborhood features across multiple graph layers, enabling the identification of spatial 46 
+
+cell niches at multiple scales. Nevertheless, because these approaches rely on expression aggregated over user-defined 47 
+
+neighbourhoods, their outputs are sensitive to the neighbourhood definition and, in practice, attenuate the single-cell 48 
+
+resolution of the measurements. 49 
+
+Here, we present Mievformer, a Transformer-based masked self-supervised framework that learns microenvironmental 50 
+
+embeddings by encoding neighboring cellular states and relative spatial configurations. Rather than regressing cen-51 
+
+tral expression profiles or neighborhood-aggregated features, Mievformer parameterizes the conditional distribution 52 
+
+of continuous cell states at central spatial positions. Through InfoNCE [14] optimization, it learns representations 53 
+
+that capture the relative enrichment of cell states across microenvironments, formalized as a conditional density ra-54 
+
+tio, thereby enabling probabilistic inference of the coupling between microenvironmental and cellular heterogeneity. 55 
+
+This framework supports analyses beyond conventional clustering, including single-cell-resolution characterization 56 
+
+of microenvironmental preferences and identification of gene-expression signatures associated with colocalization of 57 
+
+specific cell populations. Together, these capabilities establish Mievformer as a quantitatively robust and biologically 58 
+
+informative framework for spatial omics analysis. 59 
+
+## 2 Results 60 
+
+2.1 Overview of Mievformer 61 
+
+Mievformer learns microenvironmental representations by encoding the cellular states and spatial configurations of 62 
+
+neighboring cells using a Transformer-based architecture with masked self-supervised learning. Specifically, it masks 63 
+
+the cell state at a central cell position and employs InfoNCE loss to maximize the mutual information between the 64 
+
+inferred microenvironmental embedding and the observed central cell state. This contrastive learning objective yields 65 
+
+embeddings that parameterize the conditional density ratio of cell states in local tissue contexts (see the Methods 66 
+
+section for details). 67 
+
+Formally, given spatial transcriptomics data comprising gene expression y, low-dimensional expression embeddings 
+
+z obtained via Principal component analysis (PCA), and spatial coordinates x, Mievformer operates as follows: For each cell i with spatial neighborhood N (i), the microenvironmental embedding is computed as: 
+
+ei = Transformer ([MASK] + PE (0) , {h(zj ) + PE (xj − xi) | j ∈ N (i)}),
+
+where h is a learned projection of cell embeddings and PE (·) denotes the sinusoidal positional encoding of relative 68 
+
+spatial coordinates. The model defines a score function s(ei, z j ) and computes the probability Pij that the cell state 69 
+
+zj would be observed at the masked position via softmax normalization across all cells in the mini-batch. Training 70 
+
+maximizes Pii , the likelihood of the actual observed cell state zi, which is equivalent to minimizing the InfoNCE 71 
+
+loss. This optimization learns embeddings such that the score function approximates the conditional density ratio 72 
+
+p(z|e)/p (z). Once trained, Mievformer can compute microenvironmental embeddings for any spatial position and 73 
+
+derive the stochastic association between cell states and microenvironments from the learned density ratio. 74 
+
+2
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+Beyond conventional clustering-based characterization of microenvironmental heterogeneity, the density ratio learned 75 
+
+by Mievformer enables several downstream analyses through probabilistic inference. First, by applying density-ratio-76 
+
+based Bayesian inversion to the learned ratio p(z|e)/p (z), p(e|z)/p (e) is obtained, which represents the posterior 77 
+
+density ratio of microenvironments given a cell state. Aggregating these ratios over microenvironmental clusters yields 78 
+
+single-cell-resolution microenvironmental membership profiles, which can be used to identify cell subpopulations with 79 
+
+specific microenvironmental preferences. Second, calculating the expectation of the density ratio p(z|e)/p (z) across 80 
+
+all cell states belonging to a specific cell population by Monte-Carlo approximation, the density of that population in 81 
+
+microenvironment e is obtained. Correlation analysis with this density reveals the genes up- or down-regulated given 82 
+
+the colocalization with the target cell popution. Together, these capabilities establish Mievformer as a quantitative 83 
+
+framework for clarifying the joint structure of cellular and microenvironmental heterogeneity in spatial omics data 84 
+
+(Figure 1). 85 cell state embedding positional embedding NicheEncoder Distributor transformer 
+
+> p(z|e) p(z)
+
+# ?Downstream Applications ?   
+
+> Identifying cell populations based on niche distribution Cell population density at single cell resolution Detecting genes specific to colocalizaiton cell niche 123
+> at single cell resolution
+> expression of geneA colocalization with cell B
+> e:niche state
+> z:cell state
+> :cell B
+> :gene A
+
+Figure 1: Overview of the Mievformer framework. (Left) Schematic of spatial tissue context: neighboring cells surrounding a central cell (marked with “?”) whose cell state is masked and microenvironmental state is to be inferred. 
+
+(Center) The NicheEncoder module receives cell state embeddings and positional embeddings of neighboring cells and processes them through a Transformer architecture to produce a microenvironmental embedding. (Right) The Distributor module computes the conditional density ratio p(z|e)/p (z), quantifying how much more likely each cell state is to be observed in the inferred microenvironment relative to the marginal distribution. (Bottom) Downstream applications enabled by the learned density ratios: identifying cell subpopulations based on their microenvironmental distribution profiles, estimating cell population density at single-cell resolution, and detecting genes specific to colo-calization patterns. 
+
+2.2 Performance superiority in deriving representations of microenvironment in simulated data 86 
+
+To quantitatively assess the performance of Mievformer, we applied it to simulation data configured with multiple 87 
+
+patterns, each comprising three ground-truth microenvironmental regions (inner, boundary, and outer), and compared 88 
+
+its performance against existing methods (Figure 2). The simulation consisted of multiple concentric annular patterns, 89 
+
+each composed of these three region types and assigned a distinct, pattern-specific cell-cluster composition. These 90 
+
+repetitive lumen-like patterns were designed to mimic tissue architectures observed in biological structures such as 91 
+
+thyroid follicles, renal tubules, and seminiferous tubules. For each spatial spot, a cluster label was first determined 92 
+
+according to the composition of its assigned region (inner, boundary, or outer), and then an expression profile was 93 
+
+randomly sampled from cells belonging to that cluster. 94 
+
+3
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+We applied Mievformer, NicheCompass, CellCharter, Banksy, COVET, STAGATE, and GraphST to the simulated 95 
+
+spatial transcriptomics data. The microenvironmental representations obtained from each method were partitioned 96 
+
+into three clusters using k-means clustering. As baselines, we also performed clustering on PCA expression profiles 97 
+
+and spatial coordinates. Qualitative comparison of the spatial distributions of estimated microenvironmental clusters 98 
+
+with ground-truth regions revealed that Mievformer most faithfully reproduced the three-layered structure of inner, 99 
+
+boundary, and outer regions (Figure 2a). Quantitative evaluation using the Adjusted Rand Index (ARI) confirmed 100 
+
+that Mievformer achieved superior agreement with ground truth compared to that of all competing methods (Figure 101 
+
+2b). All methods outperformed the PCA and spatial coordinate baselines. To assess robustness, we further evaluated 102 
+
+performance across varying simulation parameters, including boundary layer thickness and number of distinct cell 103 
+
+composition patterns. Although ARI values were reduced for all methods under conditions with fewer patterns or 104 
+
+thinner boundary layers, Mievformer consistently achieved the highest performance across all tested conditions (Figure 105 
+
+2c,d). 106 a
+
+b c d
+
+Figure 2: Simulation Comparisons for Niche Clustering Methods. (a) Spatial niche pattern comparison using Hungarian algorithm for optimal cluster matching across methods (Mievformer, NicheCompass, CellCharter, Banksy, GraphST, STAGATE, ENVI, Spatial, PCA). Ground truth niche patterns and cell clusters are also presented as refer-ences. (b) Adjusted Rand Index (ARI) comparison across clustering methods at standard duct wall thickness (thick=2) with standard errors. (c) Niche ARI performance as a function of duct wall thickness. The shades represent the stan-dard errors. (d) Niche ARI performance as a function of number of duct types (categorical complexity). The shades represent the standard errors. 
+
+2.3 Benchmarking microenvironmental representations on real datasets 107 
+
+Next, we compared the performance of microenvironmental representation methods on five real spatial transcriptomics 108 
+
+datasets: Xenium datasets from pancreatic, lung, and glioblastoma cancers, a Stereo-seq mouse brain dataset[15], 109 
+
+and a Visium HD mouse brain dataset. We applied k-means clustering to the microenvironmental representations 110 
+
+obtained by each method and qualitatively compared their spatial distributions. Relative to clusters derived from 111 
+
+PCA coordinates, all methods exhibited more spatially coherent patterns; however, qualitative assessment alone was 112 
+
+insufficient to determine superiority among methods (Figure 3a). 113 
+
+Although multiple quantitative metrics have been proposed and employed in prior studies of microenvironmental rep-114 
+
+resentation, their validity has not been rigorously established. To address this, we evaluated the correlation between 115 
+
+4
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+several metrics and ground-truth performance (Niche ARI) in simulation data. Specifically, we examined one existing 116 
+
+metric (CAS), three novel metrics we propose (SCAS, NEA, and DREC), and four metrics from the NicheCompass 117 
+
+benchmarking module[10] (NCB-GCS, NCB-CAS, NCB-NASW, NCB-MLAMI). Our implemented metrics are sum-118 
+
+marized as follows: 119 
+
+CAS (Cell Type Affinity Similarity): Measures the correlation between cell-type co-localization patterns in mi-120 
+
+croenvironmental embedding neighborhoods and in spatial neighborhoods, thereby quantifying the preservation of 121 
+
+spatial co-localization. However, this metric can assign high scores to representations that closely approximate spatial 122 
+
+coordinates themselves. 123 
+
+SCAS (Shuffled Cell Type Affinity Similarity): After clustering microenvironmental states, spatial coordinates are 124 
+
+randomly permuted within each cluster, and the correlation of cell-type co-localization patterns with the original 125 
+
+coordinates is computed. This metric tests whether co-localization patterns are retained under shuffling, mitigating the 126 
+
+bias favoring spatial-coordinate-based embeddings. 127 
+
+NEA (Neighbourhood Enrichment Accuracy): Evaluates consistency between cell-type composition ratios in mi-128 
+
+croenvironmental clusters and spatial co-localization. Defined as the Pearson correlation between an enrichment 129 
+
+matrix Esp computed from spatial nearest neighbours (2-nearest neighbours) and an expected enrichment matrix 130 
+
+Eniche = P · P T derived from the cell-type composition matrix P within microenvironmental clusters. 131 
+
+DREC (Dual Recovery): Quantifies the proportion of expression-similar cells whose nearby spatial neighbors belong 132 
+
+to the same microenvironmental cluster as the original cell. Specifically, for each cell, we select the k-th nearest cell in 133 
+
+expression space (based on the top 20 principal components, with k = 10 ) and evaluate whether the k-nearest spatial 134 
+
+neighbor ( k = 10 ) of that selected cell belongs to the same microenvironmental cluster as the original cell. 135 
+
+The comparison of these metrics with ground-truth Niche ARI in simulation data revealed that DREC exhibited the 136 
+
+strongest correlation across varying simulation parameters, including duct thickness and number of duct categories 137 
+
+(Figure 3b). Conversely, CAS showed the second-lowest correlation. Notably, the baseline representation using 138 
+
+spatial coordinates alone achieved the highest CAS value, confirming our concern that CAS favors proximity-based 139 
+
+features. Although SCAS exhibited moderate correlation, performance of multiple methods converged near ceiling 140 
+
+values, precluding Mievformer’s superiority observed in ARI and qualitative analyses. Both SCAS and NEA, similar 141 
+
+to CAS, evaluate coarse-grained inter-cell-type co-localization rather than single-cell-resolution microenvironmental 142 
+
+consistency, which likely explains DREC’s superior discriminative power. The four NCB metrics generally exhibited 143 
+
+weak or negative correlations with Niche ARI, with NCB-MLAMI showing a strongly negative correlation ( −0.34 144 
+
+to −0.61 ). Based on these findings, we adopted DREC as the primary performance metric for subsequent real-data 145 
+
+analyses. 146 
+
+Finally, we benchmarked all methods on five real datasets using DREC (Figure 3c). Mievformer achieved the highest 147 
+
+DREC score in four of the five datasets, with only the Xenium GBM dataset being an exception. In the Visium 148 
+
+HD Mouse Brain dataset, Mievformer tied with GraphST for the top position. Across all five datasets, Mievformer 149 
+
+attained the highest mean DREC score. Notably, the PCA baseline, which is simple expression-based clustering, 150 
+
+also exhibited high DREC scores, with only Mievformer, NicheCompass, Banksy, and CellCharter exceeding it. This 151 
+
+likely reflects the biological tendency for expression-similar cells to co-localize spatially. Nevertheless, these results 152 
+
+demonstrate that Mievformer captures microenvironmental structure more faithfully than existing methods, including 153 
+
+expression-based baselines, suggesting its representations better reflect latent microenvironmental organization. 154 
+
+2.4 Elucidating microenvironmental diversity in lung cancer 155 
+
+To qualitatively assess whether Mievformer’s microenvironmental embeddings capture biologically meaningful mi-156 
+
+croenvironmental diversity, we performed detailed interpretation of Mievformer outputs on lung cancer Xenium data 157 
+
+(Figure 4). Clustering of the microenvironmental embeddings identified twelve clusters with specific cell-type com-158 
+
+positions (Figure 4a,b). Five clusters (Niche 4, 5, 6, 7, and 10) were dominated by tumor cells, whereas Niche 1 159 
+
+predominantly was occupied by monocytes/macrophages, Niche 0 was T cell-enriched, and Niches 2, 3, and 11 were 160 
+
+fibroblast-dominant niches. Notably, even among the tumor-dominant clusters, Mievformer resolved fine-grained mi-161 
+
+croenvironmental differences: Niche 4 comprised >80% tumor cells, Niche 5 contained 20% fibroblasts alongside 162 
+
+tumor cells, and Niche 7 resembled Niche 4 but included 10% endothelial cells. 163 
+
+Spatial analysis revealed that tumor-dominant niche clusters (4, 5, 6, 7, and 10) were localized to the tumor core, 164 
+
+fibroblast-enriched clusters (2 and 3) occupied stromal regions, and immune-enriched clusters were concentrated at 165 
+
+tumor-stroma boundaries (Figure 4d). Interestingly, macrophage-dominated Niche 1 was distributed throughout the 166 
+
+tumor interior. Direct comparison of the spatial patterns of Niches 4 (tumor-enriched) and 1 (macrophage-enriched) 167 
+
+confirmed that Mievformer successfully distinguished these spatially intermingled microenvironments (Figure 4c). 168 
+
+5
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. a b
+
+c
+
+Figure 3: Real Data Comparisons Across Tissue Types. (a) Spatial visualization comparing k-means clustering of niche representations from methods (Mievformer, NicheCompass, CellCharter, Banksy, GraphST, STAGATE, ENVI, Spatial, PCA). cell type annotations (left). (b) Heatmap showing the Pearson correlation between eight evaluation metrics (CAS, SCAS, NEA, DREC, NCB-GCS, NCB-CAS, NCB-NASW, NCB-MLAMI) and ground-truth Niche ARI across varying simulation parameters. (c) Horizontal bar graphs showing dual recovery (DREC) metrics across methods and five datasets: Xenium GBM, Xenium Lung, Xenium Pancreas, Mouse Brain Stereo-seq, and Mouse Brain Visium HD. Together, these results demonstrate that Mievformer embeddings enable biologically interpretable dissection of mi-169 
+
+croenvironmental heterogeneity. 170 
+
+2.5 Identification of cell subpopulations based on microenvironmental distribution 171 
+
+Mievformer enables the characterization of cell-type subpopulations based on their microenvironmental distributions 172 
+
+by computing membership probabilities to microenvironmental clusters for each individual cell. To quantitatively 173 
+
+validate the membership probabilities assigned by Mievformer, we aggregated the estimated probabilities for each 174 
+
+combination of microenvironmental clusters and cell types (Figure 5b). For all the cell types, the membership proba-175 
+
+bility to the corresponding niche cluster was consistently the highest among microenvironmental clusters containing 176 
+
+≥5% of cells from the given cell type (Figure 5b). While fibroblasts exhibited highly specific cluster assignments, we 177 
+
+observed the some combinations of microenvironmental clusters and cell types exhibited relatively low specificity to 178 
+
+corresponding microenvironmental clusters. For instance, tumor cells in Niche 5 showed substantial assignment not 179 
+
+only to Niche 5 but also to Niche 7, and macrophages in Niche 10 similarly exhibited increased assignment to Niche 180 
+
+7. 181 
+
+To investigate whether these differences in mean assignment probability reflected overall differences in cluster speci-182 
+
+ficity or intra-cluster variation, we examined the distribution of membership probabilities within each microenvi-183 
+
+ronmental cluster for each cell type. Clusters with specific assignments displayed sharp peaks near probability 1.0, 184 
+
+whereas clusters with non-specific assignments, although containing cells with high assignment probabilities to the 185 
+
+corresponding cluster, exhibited broad distributions with substantial variance (Supplementary Figure 2). These results 186 
+
+indicate that Mievformer’s membership probabilities to microenvironmental clusters correctly capture the relationship 187 
+
+between expression variation within cell types and distribution to microenvironmental clusters, suggesting that for cer-188 
+
+tain cell types and microenvironmental clusters, there exist cells specifically enriched in particular microenvironments 189 
+
+and those that are not. To leverage this distribution across microenvironmental clusters as a novel cellular feature 190 
+
+encoding niche specificity, we performed hierarchical clustering based on microenvironmental membership profiles of 191 
+
+6
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. a b
+
+# c
+
+# d
+
+# e
+
+# f
+
+Figure 4: Niche Heterogeneity Analysis in Lung Tissue. (a) UMAP visualization of Mievformer’s latent represen-tation for Xenium lung cells, colored by niche cluster assignment. (b) Hierarchical clustering heatmap showing cell type composition across niche clusters. (c) Spatial plots for niche clusters 0, 1, and 4. Black points indicate cells belonging to the target niche cluster; light gray points show all other cells. (d) Overview of lung tissue section with selected region marked by black rectangle. (e) Cell type spatial plot of the selected region. (f) Niche cluster spatial plot of the selected region. tumor cells (Figure 5c). This approach stratified subpopulations (Dist 1, ..., and Dist 15) by microenvironmental speci-192 
+
+ficity. For instance, among cells with high assignment to Niche 5, we identified Dist 5, which also showed increased 193 
+
+assignment to Niche 7, and Dist 6, which exhibited specific assignment exclusively to Niche 5. Similarly, we identified 194 
+
+tumor cell spatial clusters Dist 7, 10, 4, 1, and 6, each specifically enriched in Niche 10, 1, 0, 7, and 5, respectively, 195 
+
+where tumor cells are moderately abundant. To assess the biological utility of this microenvironment-specific cell 196 
+
+population identification, we performed comparative differential expression gene (DEG) analyses. We contrasted two 197 
+
+approaches: (1) comparing tumor cells in each niche (Niches 10, 1, 0, 7, and 5) versus those in Niche 4 (the cluster 198 
+
+with the highest tumor cell proportion), and (2) comparing tumor cells in the corresponding spatial clusters (Dist 7, 199 
+
+10, 4, 1, and 6) versus those in Dist 12 (which specifically localizes to Niche 4) (Figure 5d, Supplementary Figure 4). 200 
+
+While the two approaches yielded broadly similar trends across most niches, spatial clustering revealed distinct expres-201 
+
+sion signatures not detected by niche-based analysis. For example, PPR1B, which was not identified as DEGs between 202 
+
+Niche 5 and 4, showed markedly differential expression between their corresponding spatial clusters Dist 6 and 12. 203 
+
+Given that Niche 5 is characterized by abundant fibroblasts alongside tumor cells and macrophages, we examined 204 
+
+the spatial expression patterns of PPR1B in tumor cells relative to fibroblast distribution (Figure 5e). PPR1B exhib-205 
+
+ited markedly increased expression in tumor cells surrounding fibroblasts. These results demonstrate that extracting 206 
+
+microenvironment-specific cell populations using Mievformer’s membership probabilities enables more sensitive de-207 
+
+tection of expression changes associated with microenvironmental differences than that of comparative analysis based 208 
+
+solely on microenvironmental clusters. 209 
+
+7
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. b c
+
+## d e
+
+## a
+
+cell 
+
+niche 1 2 3       
+
+> p(z|e)
+> p(z)
+> e:niche state
+> z:cell state
+> niche -wise enrichment
+> of cell states
+> p(e|z)
+> p(e)
+> e:niche state
+> z:cell state
+> cell -wise enrichment
+> of niche states
+> ??
+> ?
+> ?
+> ??
+> ?
+> cell clustering by
+> niche distribution
+> aggregation by
+> niche clusters
+> Bayes’ Theorem
+
+Figure 5: Cell-wise posterior distribution across microenvironments. (a) Schematic overview of spatial-cluster-based cell subpopulation identification. For each cell, membership probabilities across microenvironmental clusters are computed by Mievformer, and hierarchical clustering on these distribution profiles defines microenvironment-specific subpopulations (spatial clusters; labeled Dist N). (b) Heatmap showing niche-cluster-wise aggregated poste-rior distribution across nine niche clusters for Fibroblasts/Smooth Muscle, Epithelial, and Monocytes/Macrophages. 
+
+(c) Single-cell-wise posterior distribution across microenvironments for epithelial cells. Rows are ordered by hierar-chical clustering; row colors indicate the spatial cluster assignment derived from this clustering. (d) Scatter plot of differentially expressed gene scores. X-axis: DEG scores between spatial clusters (Dist 6 vs 12), Y-axis: DEG scores between niche clusters (Niche 5 vs 4). DEG scores were calculated using the Wilcoxon rank-sum test, implemented in Scanpy’s rank_genes_groups function. (e) Spatial expression plot of PPP1R1B gene. Red marks location of fibroblasts. 8
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+2.6 Single-cell resolution analysis of microenvironmental colocalization 210 
+
+Mievformer enables the estimation of the conditional probability that any cell state would be observed in each mi-211 
+
+croenvironment. This capability allows quantitative assessment of whether cells from specific populations of interest 212 
+
+could be distributed to particular spatial locations. By computing the probability of target cell population existence 213 
+
+at each single-cell location, we can quantify the likelihood of colocalization with the target population, which is the 214 
+
+probability of residing in the same microenvironment. Using these single-cell colocalization scores, we can identify 215 
+
+genes whose expression is up-regulated given the colocalization with target populations. 216 
+
+We applied this framework to Xenium data of pancreatic cancer, computing microenvironmental states and cell-type-217 
+
+specific existence probabilities (Figure 6b–d). The estimated existence probability for each cell type was consistent 218 
+
+with its observed spatial distribution. Quantitatively, for all cell types, the averages of the estimated density in mi-219 
+
+croenvironments where that cell type was present exceeded twice the density averaged across all microenvironments 220 
+
+(Figure 6e). These results demonstrate that Mievformer’s density estimates accurately reflect the spatial distribution of 221 
+
+actual cell populations. Examining the histograms of cell-type densities (Figure 6f) revealed distinct colocalization be-222 
+
+haviors: while microenvironments with estimated cancer cell density exceeding 0.99 represented a substantial fraction 223 
+
+of cancer-cell-containing microenvironments, such highly exclusive microenvironments were nearly absent for pan-224 
+
+creatic stellate cells. This indicates that while cancer cells frequently occupy isolated microenvironments, pancreatic 225 
+
+stellate cells almost invariably colocalize with other cell types at close range. 226 
+
+Finally, we used estimated cell densities to identify colocalization signatures with specific cell populations. For en-227 
+
+dothelial cells, we computed correlations between tumor cell density and gene expression (Figure 6g). Genes ex-228 
+
+hibiting the top10 positive correlations included CXCR4, which is specifically expressed in tip cells extending into 229 
+
+tumor regions during angiogenesis[16], and APOLD1, which contributes to the angiogenic process[17]. These re-230 
+
+sults suggest the successful capture of the expression signature of tip cells expected in peritumoral angiogenesis. For 231 
+
+the analysis of colocalization between tumor cells and pancreatic stellate cells, we analyzed correlations between 232 
+
+stellate cell density and gene expression in tumor cells (Figure 6h). Among genes exhibiting the top10 positive cor-233 
+
+relations, MYC has been reported to be associated with EMT in pancreatic cancer[18]. Furthermore, we validated 234 
+
+this finding by quantifying c-Myc expression in fibroblast-proximal and tumor-core regions of PDAC sections using 235 
+
+immunohistochemistry (Figure 6i,j). Nuclear-level quantification revealed significantly higher c-Myc expression in 236 
+
+the fibroblast-proximal region compared with the tumor core (median DAB-positive fraction 0.45 vs. 0.11; Mann– 237 
+
+Whitney U test, p = 8 .14 × 10 −10 ), consistent with a role for fibroblast-derived signals in modulating tumor cell 238 
+
+proliferative capacity[19]. Together, these results demonstrate that Mievformer’s density-based framework enables 239 
+
+the systematic characterization of how colocalization with specific cell populations influences expression profiles. 240 
+
+## 3 Discussion 241 
+
+In this study, we present Mievformer, a novel framework for estimating microenvironmental states as parameterizations 242 
+
+of the conditional distribution of continuous cell states, and demonstrate its utility through simulation and real-data 243 
+
+analyses. First, we quantitatively evaluated Mievformer’s performance relative to existing methods using simulated 244 
+
+and real datasets. In simulations with known ground truth, Mievformer consistently achieved superior performance 245 
+
+across a wide range of parameter settings. When applied to five real spatial transcriptomics datasets across Xenium, 246 
+
+Stereo-seq, and Visium HD platforms, Mievformer achieved the highest average performance on our proposed eval-247 
+
+uation metric, ranking first in four of five datasets. Beyond performance benchmarking, we demonstrated that the 248 
+
+probabilistic coupling between cell and microenvironmental states learned by Mievformer enables biologically mean-249 
+
+ingful discovery and hypothesis generation. We established two downstream analytical frameworks: (1) cell clustering 250 
+
+based on microenvironmental distribution profiles, and (2) identification of colocalization signatures through corre-251 
+
+lation with cell-population density estimates. Both approaches successfully recapitulated established knowledge of 252 
+
+tumor microenvironments, validating their effectiveness for dissecting microenvironmental cell communities from 253 
+
+single-cell spatial transcriptome data. 254 
+
+Since the emergence of spatial transcriptomics, numerous methodologies have characterized microenvironmental 255 
+
+states from spatial omics data. Early spatial transcriptomics platforms lacked single-cell resolution, prompting meth-256 
+
+ods that primarily sought faithful representations of spot-level expression profiles while incorporating spatial con-257 
+
+straints to enforce consistency across neighboring spots[20]. However, this paradigm becomes problematic at single-258 
+
+cell resolution, where microenvironments often comprise local mixtures of transcriptionally distinct cell types, re-259 
+
+quiring representations that capture context beyond individual expression profiles. To address these limitations, re-260 
+
+cent approaches have aimed to derive low-dimensional representations from spatially aggregated features, such as 261 
+
+neighborhood-averaged expression[10, 12]. While this strategy enables spatially coherent microenvironmental esti-262 
+
+mation even at single-cell resolution, it effectively reduces the resolution of the data to a user-defined neighborhood 263 
+
+9
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. b
+
+c
+
+d
+
+e f
+
+g h
+
+i
+
+Fibrobla sts Tumor core 
+
+j
+
+a   
+
+> p(z|e)
+> p(z)
+> e:niche state
+> z:cell state
+> niche -wise enrichment
+> of cell states
+> ?
+> aggregation by
+> cell clusters
+> Cell population density
+> at each niche Detecting genes
+> specific to colocalizaiton
+> expression of geneA
+> at each niche
+> density of cell B
+> at each niche
+> :cell B
+> :gene A
+> Correlation analysis
+> with gene expression
+> across niches
+
+Figure 6: Colocalization analysis by population density estimation in pancreatic cancer. (a) Schematic overview of single-cell colocalization analysis. At each single-cell location, Mievformer estimates the conditional existence probability of each target cell population, from which density-based colocalization scores are computed and correlated with gene expression to identify colocalization-associated genes. (b–d) Spatial distribution of cell types in pancreatic cancer tissue. Left: estimated population density for Mievformer’s latent representation at each single cell spot. Right: cell positions (red=target cell type, gray=others). (b) macrophages, (c) endothelial cells, (d) pancreatic ductal cells. (e) 
+
+Cell-type density enrichment barplot. For each target cell population, the bar shows the fold change of the estimated population density within that population relative to the mean estimated population density across other cells. (f) 
+
+Histograms of estimated population density for pancreatic ductal cells (top) and pancreatic stellate cells (bottom), comparing the target cell population against all other cells. (g) Correlation between pancreatic ductal cell density and gene expression of endothelial cell. Only top and bottom 10 genes are shown. (h) Correlation between stellate cell density and gene expression of pancreatic ductal cell. Only top and bottom 10 genes are shown. (i) Representative immunohistochemistry image of a PDAC sample stained with c-Myc antibody, showing the locations of the analyzed regions of interest (ROIs). Brown staining indicates c-Myc positive cells. (j) DAB-positive pixel fraction per nucleus in fibroblast-proximal (red, n = 39 ) and tumor core (black, n = 47 ) regions. Box plots show median and interquartile range. Mann–Whitney U test, p = 8 .14 × 10 −10 .10 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint Kojima and Tanaka et al. 
+
+scale, discarding the fine-grained spatial information already present in the measurements. Conversely, Mievformer 264 
+
+learns microenvironmental representations as parameterizations of the conditional distribution of continuous cell states 265 
+
+at focal positions. Although computed from spatial neighborhoods, Mievformer explicitly incorporates relative spatial 266 
+
+coordinates within those neighborhoods, enabling microenvironmental state estimation at a granularity finer than that 267 
+
+imposed by fixed neighborhood sizes. This approach fully leverages the high spatial resolution of modern platforms 268 
+
+and is expected to underlie Mievformer’s superior performance in microenvironmental characterization relative to 269 
+
+existing methods. 270 
+
+Self-supervised learning approaches for microenvironmental state estimation have been previously proposed [10]; 271 
+
+however, these methods fundamentally differ from Mievformer in their learning objectives and resulting representa-272 
+
+tions. Some approaches reduce to regression of central cell expression profiles[21], while others frame the problem 273 
+
+as probabilistic deconvolution of cell type proportions at each spatial location[22]. In contrast, Mievformer parame-274 
+
+terizes the conditional probability distribution of continuous cell states at the central position, enabling probabilistic 275 
+
+inference of the coupling between microenvironmental and cellular heterogeneity at single cell and single spot res-276 
+
+olution. This probabilistic framework yields bidirectional inference capabilities: given a microenvironmental state, 277 
+
+Mievformer estimates the distribution of cell states at the corresponding microenvironment; conversely, given a cell 278 
+
+state, it computes the posterior distribution over microenvironments. These capabilities enable downstream analyses 279 
+
+that are not readily accessible with existing methods, including estimating cell-population densities in arbitrary mi-280 
+
+croenvironments and single-cell-resolution clustering based on microenvironmental membership profiles. Herein, we 281 
+
+demonstrated the biological utility of these analyses through multiple case studies. In lung cancer data, clustering anal-282 
+
+ysis based on niche distribution revealed increased PPR1B expression in tumor cells residing in fibroblast-enriched 283 
+
+microenvironments. In pancreatic cancer data, correlation analysis between endothelial cell expression and tumor 284 
+
+cell density identified CXCR4 upregulation in endothelial cells colocalizing with tumors, recapitulating the known 285 
+
+expression signature of angiogenic tip cells. Together, these results establish that Mievformer’s probabilistic coupling 286 
+
+of cell states and microenvironments provides a distinct utility for dissecting cellular heterogeneity which correlated 287 
+
+with microenvironmental context. 288 
+
+Although the estimation of microenvironmental states offers significant biological utility, quantitative performance 289 
+
+evaluation remains challenging, similar to unsupervised representation learning in other domains. NicheCompass 290 
+
+addressed this challenge by aggregating multiple evaluation metrics to ensure robust performance assessment[10]. 291 
+
+However, the validation of individual metrics primarily relied on their theoretical foundations rather than empirical 292 
+
+verification. In this study, we explicitly assessed the validity of the metrics using simulation data with known ground 293 
+
+truth. We found that some of the metrics assigned higher scores to naive baselines such as spatial coordinates or 294 
+
+raw expression profiles instead of the methods specialized for microenvironmental representation learning, including 295 
+
+Mievformer. Notably, these same metrics exhibited weak correlations with ground-truth performance measures. In 296 
+
+contrast, this study introduced DREC, which demonstrated consistently strong correlation with ground-truth metrics 297 
+
+across diverse simulation conditions. We attribute DREC’s superior discriminative power to its ability to evaluate 298 
+
+microenvironmental consistency at single-cell resolution by directly operating on cell embeddings, thereby avoiding 299 
+
+the information loss inherent in cluster-aggregated evaluations of cell-type composition. This finer-grained approach 300 
+
+enables DREC to more sensitively capture microenvironmental structure than metrics that assess only coarse cell-type 301 
+
+colocalization patterns. 302 
+
+Although Mievformer demonstrates superior performance in single-cell-resolution microenvironmental state estima-303 
+
+tion, certain limitations must be acknowledged. First, the current framework is optimized for characterizing spatially 304 
+
+contiguous microenvironments and may not fully capture higher-order community structures, such as hierarchically 305 
+
+nested or spatially interleaved microenvironmental patterns. For instance, CellCharter[13] captures multi-scale neigh-306 
+
+borhood structure through hierarchical graph-layer aggregation. Extending Mievformer to model such hierarchical or-307 
+
+ganization would require architectural modifications to explicitly represent multi-scale spatial dependencies. Another 308 
+
+important consideration is the extension to multi-sample spatial transcriptomics analysis. Mievformer is primarily 309 
+
+designed to characterize microenvironmental heterogeneity within individual tissue sections, but recent studies in-310 
+
+creasingly require integrative analysis across multiple samples, patients, or experimental conditions. In such settings, 311 
+
+batch effects arising from technical variability between samples must be appropriately accounted for. NicheCompass 312 
+
+incorporates a batch correction mechanism that enables joint embedding of cells from multiple samples into a shared 313 
+
+latent space[10], and Nicheformer leverages a foundation model approach pretrained on large-scale single-cell and 314 
+
+spatial atlases to achieve cross-dataset generalization[23]. Integrating similar multi-sample harmonization strategies 315 
+
+into Mievformer would broaden its applicability to cohort-level studies and facilitate the identification of microenvi-316 
+
+ronmental changes associated with disease progression or treatment response. Addressing these limitations represents 317 
+
+promising directions for improving spatial omics analysis methods. 318 
+
+11 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+## 4 Methods 319 
+
+4.1 In situ gene expression profiling 320 
+
+In situ RNA expression analysis was performed using Xenium (10x Genomics, CG000601). FFPE sections (10 μm321 
+
+thick) were prepared on Xenium slides. Fixation and tissue permeabilization were performed according to the protocol 322 
+
+provided by 10x Genomics. The probe hybridization mixture was prepared using a Xenium Human Multi-Tissue and 323 
+
+Cancer Panel. The prepared probes were hybridized, and post-hybridization washing, ligation, and amplification were 324 
+
+performed according to the user guide. Autofluorescence quenching and nuclear staining were conducted in the dark. 325 
+
+Using the prepared slides, fluorescent probe hybridization and imaging were conducted via a Xenium Analyzer (10x 326 
+
+Genomics). After the Xenium run, H&E staining was performed on the Xenium slide. 327 
+
+4.2 Data preprocessing 328 
+
+In this study, we analyzed spatial transcriptome data generated by three platforms: Xenium (10x Genomics), Stereo-329 
+
+seq (BGI Genomics), and Visium HD (10x Genomics). Each dataset underwent the following preprocessing pipeline 330 
+
+using rapids-singlcell [24], a GPU-accelerated implementation of scanpy[25]. First, quality control (QC) metrics were 331 
+
+calculated for each cell, and cells were filtered based on the number of detected genes. Specifically, cells with fewer 332 
+
+than 20 detected genes were excluded. Next, gene filtering was performed to remove genes detected in fewer than 333 
+
+0.5% of cells to eliminate uninformative genes. Expression values were then normalized using total-count normal-334 
+
+ization, where each cell’s counts were scaled so that the total count per cell equals the median total count across all 335 
+
+cells, followed by natural logarithm transformation via log( x + 1) (log1p ). PCA was applied to the preprocessed 336 
+
+expression matrix, retaining the first 30 principal components. A k-nearest neighbor graph was constructed in the 337 
+
+PCA space, followed by UMAP[26] dimensionality reduction for visualization and Leiden clustering[27] for cell-338 
+
+type annotation. These clustering results were used to define cell populations for downstream microenvironmental 339 
+
+analyses. The annotation was performed based on known marker genes for each cell type, which were derived from 340 
+
+PanglaoDB[28]. Spatial coordinates were normalized by the mean distance to k-nearest neighbors (default k = 100 )341 
+
+used in Mievformer, ensuring that relative positional coordinates were within an appropriate range for model input. 342 
+
+4.3 Datasets 343 
+
+We used five spatial transcriptomics datasets in this study. The Xenium Lung and Xenium Pancreas datasets 344 
+
+were generated in this study using the Xenium In Situ platform (see “In situ gene expression profiling” for ex-345 
+
+perimental details). These data will be deposited in the Gene Expression Omnibus (GEO) database upon ac-346 
+
+ceptance. The Xenium GBM (glioblastoma) data were obtained from the 10x Genomics public dataset reposi-347 
+
+tory (https://www.10xgenomics.com/datasets). The Stereo-seq Mouse Brain data were obtained from the MOSTA 348 
+
+project[15] via the STOmicsDB database (https://db.cngb.org/stomics/mosta/). The Visium HD Mouse Brain data 349 
+
+were obtained from the 10x Genomics public dataset repository (https://www.10xgenomics.com/datasets). 350 
+
+4.4 Mievformer 351 
+
+4.4.1 Input data preparation 352 
+
+Mievformer input is comprised by spatial transcriptome data containing gene expression vectors yi and spatial coordi-353 
+
+nates xi for each cell i, and computes microenvironmental embeddings ei representing the local microenvironmental 354 
+
+state. For computational efficiency and optimization stability, rather than operating directly on gene expression, Miev-355 
+
+former uses low-dimensional representations zi obtained via PCA. 356 
+
+For each cell i, the embedding ei is computed from the cell states {zj | j ∈ N (i)} within its spatial neighborhood 
+
+N (i), where N (i) denotes the set of neighboring cells excluding i. The neighborhood N (i) is determined using scikit-learn’s[29] NearestNeighbors module, with a default of 100 neighboring cells. Spatial coordinates are encoded as relative positions dij = xj − xi and transformed into positional encodings δij via sinusoidal encoding[30], defined as: 
+
+δi,j,Kl +k = sin( di,j,l · coeff k),δi,j,LK +Kl +k = cos( di,j,l · coeff k),
+
+where coeff k = exp( −2k log(10000) /d model ), dmodel denotes the embedding dimension, L is the dimensionality of 357 
+
+spatial coordinates ( L = 2 in this study), K = dmodel /(2 L), and indices run over k = 0 , 1, . . . , K − 1 and l =358 
+
+0, . . . , L − 1.359 
+
+12 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+4.4.2 Mievformer algorithm 360 
+
+Mievformer employs a masked self-supervised learning framework to compute the probability of observing a central 361 
+
+cell state given its surrounding cellular context, and maximizes this probability during training. The architecture 362 
+
+comprises NicheEncoder and Distributor as main components. 363 
+
+NicheEncoder constructs the input sequence by placing a learnable mask token at the central cell position: [mask +364 
+
+δi,i , {h(zj ) + δij | j ∈ N (i)}]. Each neighboring cell state zj is linearly projected to dmodel dimensions (default: 64) 365 
+
+via transformation g and combined with its positional encoding δij .366 
+
+This sequence is processed through multiple Transformer encoder layers (default: 3), implemented using 367 
+
+PyTorch’s[31] nn.TransformerEncoderLayer , which integrates multi-head self-attention and feedforward net-368 
+
+works. The final hidden state of the mask token is transformed into a microenvironmental state ei using a feedforward 369 
+
+neural network. 370 
+
+Distributor computes the probability that each cell embedding zj (j = 1 , . . . , M ) in the mini-batch could be observed at the central position given microenvironment ei. The model defines a score function: 
+
+sθ (ei, z j ) = we(ei)⊤wz (zj ) + bz (zj ),
+
+where we and wz are neural networks mapping microenvironmental and cell-state embeddings to a shared hidden dimension h, and bz provides a cell-state-dependent bias. We did not include bias term for a microenvironmental state ei, since the calculated scores are normalized for each ei. The conditional probability is obtained via softmax normalization: 
+
+Pij = exp (sθ (ei, z j ))∑Mj′=1 exp (sθ (ei, z j′ )) .
+
+The training objective maximizes the likelihood that the observed central cell state zi is generated from its inferred microenvironment ei by minimizing the negative log-likelihood: 
+
+L(θ) = 1
+
+M
+
+> M
+
+∑
+
+> i=1
+
+− log Pii .
+
+This formulation corresponds to the InfoNCE loss, a contrastive learning objective widely used in self-supervised rep-371 
+
+resentation learning[14]. InfoNCE maximizes mutual information between paired observations by treating one sample 372 
+
+as positive and others in the batch as negatives. Hence, Mievformer’s training encourages learning microenvironmental 373 
+
+embeddings that have high mutual information with their corresponding central cell states. 374 
+
+Model parameters are optimized using the AdamW optimizer[32] with a learning rate of 1 × 10 −3, implemented via 375 
+
+PyTorch Lightning[33]. Training is performed for a maximum of 1000 epochs with early stopping based on validation 376 
+
+loss, using a patience of 20 epochs. The validation set is constructed by extracting a spatially contiguous central 377 
+
+region from the tissue, specifically the central square region whose side length is √0.1 times the average of the tissue 378 
+
+width and height, corresponding to approximately 10% of the total tissue area. This spatial validation strategy ensures 379 
+
+that the model is evaluated on cells with spatial context distinct from the training set while maintaining biological 380 
+
+coherence. Mini-batch size is set to 512 cells by default. The model checkpoint with the lowest validation loss is 381 
+
+retained for downstream analysis. All neural networks were implemented in PyTorch[31]. 382 
+
+4.4.3 Relationship between score function and density ratio obtained by Mievformer 383 
+
+In this section, we demonstrate that the score function sθ (e, z ) learned by Mievformer in the previous section ap-384 
+
+proximates the conditional density ratio p(z | e)/p (z), which quantifies the degree to which the observing cell state 385 
+
+z becomes more probable when it is conditioned on the microenvironment e, and represents the mutual information 386 
+
+between microenvironment e and cell state z.387 
+
+Starting from the score function sθ (e, z ) defined in the previous section, we construct the positive ratio function and its normalization: 
+
+rθ (e, z ) = exp (sθ (e, z )) > 0,gθ (e, z ) = rθ (e, z )
+
+∫ rθ (e, z ′) p(z′) dz ′ ,
+
+where p(z) denotes the true marginal distribution over cell embeddings. By construction, gθ (e, z ) satisfies the normal-ization constraint ∫
+
+gθ (e, z ) p(z) dz = 1 .
+
+13 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+Consequently, we can define a valid probability distribution over z conditioned on e as: 
+
+pθ (z | e) = p(z) gθ (e, z ).
+
+We now show that minimizing the Kullback-Leibler divergence between the true conditional distribution p(z | e) and 388 
+
+the model distribution pθ (z | e) is equivalent to minimizing the training loss defined in the previous section. The 389 
+
+expected KL divergence can be expanded as: 390 
+
+L′(θ) = Ee∼p(e)
+
+[KL (p(z | e) ∥∥ pθ (z | e))] 
+
+= Ee∼p(e)
+
+[KL (p(z | e) ∥∥ p(z) gθ (e, z ))] 
+
+= − E(e,z )∼p(e) p(z|e)[log gθ (e, z )] + const ,
+
+where the constant term corresponds to the entropy of p(z | e) and is independent of θ.391 
+
+Here, we approximate this expected loss using a mini-batch of M observed cell-microenvironment pairs {(ei, z i)}Mi=1 :
+
+L′(θ) ≈ 1
+
+M
+
+> M
+
+∑
+
+> i=1
+
+− log gθ (ei, z i).
+
+Additionally, the normalization integral in gθ (e, z ) is approximated by Monte Carlo sampling over the mini-batch: 
+
+∫
+
+rθ (e, z ′) p(z′) dz ′ ≈ 1
+
+M
+
+> M
+
+∑
+
+> j=1
+
+rθ (e, z j ) = 1
+
+M
+
+> M
+
+∑
+
+> j=1
+
+exp (sθ (e, z j )).
+
+Substituting this approximation yields 
+
+gθ (ei, z i) ≈ exp (sθ (ei, z i))
+
+> 1
+> M
+
+∑Mj=1 exp (sθ (ei, z j )) = Pii ,
+
+where Pii is the softmax probability defined in the previous section. Therefore, the expanded KL divergence results in 
+
+L′(θ) ≈ 1
+
+M
+
+> M
+
+∑
+
+> i=1
+
+− log Pii .
+
+which is identical to the loss function presented in the Mievformer algorithm section. 392 
+
+This equivalence demonstrates that minimizing the training loss of Mievformer is mathematically equivalent to mini-mizing the KL divergence between p(z | e) and pθ (z | e). At the optimal solution, the model exactly recovers the true conditional: 
+
+p∗ 
+
+> θ
+
+(z | e) = p(z) g∗ 
+
+> θ
+
+(e, z ) = p(z | e),
+
+And, therefore, 
+
+g∗ 
+
+> θ
+
+(e, z ) = p(z | e)
+
+p(z) .
+
+4.4.4 Estimation of cell population density 393 
+
+The cell population density ρC (e) in a given microenvironment e can be derived by integrating the learned conditional 394 
+
+distribution pθ (z | e) across all cell states belonging to population C, utilizing the density ratio relationship established 395 
+
+in the previous section. 396 
+
+The density of population C in microenvironment e is defined as: 
+
+ρC (e) = 
+
+∫
+
+> z∈C
+
+pθ (z | e) dz. 
+
+Substituting the density ratio decomposition pθ (z | e) = p(z) gθ (e, z ) from the previous section, we obtain 
+
+ρC (e) = 
+
+∫
+
+1C (z) p(z) gθ (e, z ) dz = Ez∼p(z)
+
+[ 1C (z) gθ (e, z ) ],
+
+where 1C (z) denotes the indicator function for membership in population C.397 
+
+14 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+In practice, we approximate this expectation using the empirical distribution pemp (z) = 1
+
+> |Z|
+
+∑ 
+
+> j∈Z
+
+δ(z − zj ), where Z
+
+denotes the set of all observed cell embeddings. This yields 
+
+ρC (e) ≈ 1
+
+|Z| 
+
+∑
+
+> j∈Z
+
+1C (zj ) rθ (e, z j )
+
+> 1
+> |Z|
+
+∑ 
+
+> k∈Z
+
+rθ (e, z k) =
+
+∑ 
+
+> j∈C
+
+rθ (e, z j )
+
+∑ 
+
+> k∈Z
+
+rθ (e, z k) .
+
+Thus, under the empirical distribution, the density is the ratio of the sum of rθ (e, z ) = exp( sθ (e, z )) over population 398 
+
+C to the sum over the entire dataset Z.399 
+
+For computational efficiency with large-scale datasets, we employ Monte Carlo approximation via independent random sampling from C and Z. Let UC ⊂ C and UZ ⊂ Z denote simple random samples of sizes MC and MZ , respectively. The full sums can be approximated by unbiased Monte Carlo estimators: 
+
+∑
+
+> j∈C
+
+rθ (e, z j ) ≈ |C|
+
+MC
+
+∑
+
+> j∈UC
+
+rθ (e, z j ), ∑
+
+> k∈Z
+
+rθ (e, z k) ≈ |Z| 
+
+MZ
+
+∑
+
+> k∈UZ
+
+rθ (e, z k),
+
+yielding the density estimate 
+
+ˆρC (e) ≈
+
+> 1
+> MC
+
+∑ 
+
+> j∈UC
+
+exp (sθ (e, z j ))
+
+> 1
+> MZ
+
+∑ 
+
+> j∈UZ
+
+exp (sθ (e, z j )) · |C||Z| .
+
+By construction, ρC (e) ∈ [0 , 1] .400 
+
+For numerical stability, we compute the estimate in log-space using the log-sum-exp (LSE) function: 
+
+log ̂ ΣC (e) = LSE ({sθ (e, z j )}j∈UC
+
+) + log |C| − log MC ,
+
+log ̂ ΣZ (e) = LSE ({sθ (e, z j )}j∈UZ
+
+) + log |Z| − log MZ ,
+
+ˆρC (e) = exp ( log ̂ ΣC (e) − log ̂ ΣZ (e)),
+
+where LSE( {aj }) = log ∑ 
+
+> j
+
+eaj .401 
+
+4.4.5 Single-cell level microenvironment distribution estimation 402 
+
+For each cell embedding z, we estimate the posterior distribution across microenvironments through density-ratio-based Bayesian inversion. We define the joint distribution of cell embedding z and microenvironment e as: 
+
+pθ (z, e ) = pθ (z | e) p(e),
+
+where p(e) denotes the true distribution of microenvironments. By Bayes’ theorem, 
+
+pθ (e | z) = pθ (z | e) p(e)
+
+∫ pθ (z | e′) p(e′) de ′ .
+
+Introducing the density ratio function gθ (e, z ) = pθ (z|e) 
+
+> p(z)
+
+, which is the function learned by Mievformer as established in the previous section, we obtain: 
+
+pθ (e | z) = gθ (e, z ) p(e)
+
+∫ gθ (e′, z ) p(e′) de ′ .
+
+Therefore, the density-ratio-based Bayesian inversion yields: 
+
+pθ (e | z)
+
+p(e) = gθ (e, z )
+
+∫ gθ (e′, z ) p(e′) de ′ = gθ (e, z )
+
+Ee′∼p(e)
+
+[ gθ (e′, z ) ] .
+
+In practice, we approximate this expectation using the empirical distribution pemp (e) = 1
+
+> N
+
+∑Ni=1 δ(e − ei), where 
+
+{ei}Ni=1 are the observed microenvironmental embeddings: 
+
+pθ (e | z)
+
+p(e) ≈ gθ (e, z )
+
+> 1
+> N
+
+∑Ni=1 gθ (ei, z ) .
+
+This expression demonstrates that bidirectional probabilistic inference ( e ↔ z) is unified through the density ratio 403 
+
+framework: if gθ (e, z ) approximates pθ (z | e)/p (z), it can be directly used for estimating pθ (e | z)/p (e).404 
+
+15 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+To obtain the posterior probability for a microenvironmental cluster c, we define ˆqc(z) as the integral of pθ (e|z) across the region where e belongs to cluster c:
+
+ˆqc(z) = 
+
+∫
+
+> e∈cluster c
+
+pθ (e | z) de. 
+
+Using the density ratio relationship derived above, we can rewrite this as: 
+
+ˆqc(z) = 
+
+∫
+
+> e∈cluster c
+
+pθ (e | z)
+
+p(e) p(e) de = Ee∼p(e)
+
+[ 1c(e) pθ (e | z)
+
+p(e)
+
+],
+
+where 1c(e) = 1 if e ∈ cluster c and 0.405 
+
+In practice, we approximate this expectation using the empirical distribution pemp (e) = 1
+
+> N
+
+∑Ni=1 δ(e − ei), where 
+
+{ei}Ni=1 are the observed microenvironmental embeddings: 
+
+ˆqc(z) ≈ 1
+
+N
+
+> N
+
+∑
+
+> i=1
+
+1c(ei) pθ (ei | z)
+
+p(ei) .
+
+Substituting the previously derived density ratio approximation pθ (e|z) 
+
+> p(e)
+
+≈ gθ (e,z )    
+
+> 1
+> N
+> ∑Nj=1 gθ(ej,z )
+
+, we obtain: 
+
+ˆqc(z) ≈
+
+∑  
+
+> i:ei∈cluster c
+
+gθ (ei, z )
+
+∑Nj=1 gθ (ej , z ) .
+
+This expression directly yields the posterior probability of cluster membership, as ∑ 
+
+> c
+
+ˆqc(z) = 1 by construction. For computational efficiency with large datasets, we can further approximate this using Monte Carlo sampling: drawing a random subset Uc ⊂ { i : ei ∈ cluster c} of size Mc and a random subset UZ ⊂ { 1, . . . , N } of size MZ , we obtain: 
+
+ˆqc(z) ≈
+
+> |Cc|
+> Mc
+
+∑ 
+
+> i∈Uc
+
+gθ (ei, z )
+
+> NMZ
+
+∑ 
+
+> j∈UZ
+
+gθ (ej , z ) ,
+
+where |Cc| denotes the number of microenvironments in cluster c.406 
+
+This density-ratio-based framework enables rigorous estimation of each cell’s microenvironmental distribution profile, 407 
+
+facilitating cell clustering according to microenvironmental preferences and quantitative characterization of context-408 
+
+dependent cellular behavior. 409 
+
+4.5 Evaluation metrics 410 
+
+For quantitative evaluation of microenvironmental representations, the following metrics were employed: 411 
+
+Niche Adjusted Rand Index (Niche ARI): Evaluates the concordance between ground-truth clusters and estimated 412 
+
+microenvironmental clusters in simulation data. ARI ranges from 0 to 1, with higher values indicating greater agree-413 
+
+ment. For clustering microenvironmental representations, k-means was applied with the number of clusters set to 414 
+
+match the true number of microenvironmental clusters configured in the simulation. 415 
+
+Cell Type Affinity Similarity (CAS): Assesses the concordance between cell-type colocalization patterns in mi-416 
+
+croenvironmental embedding neighborhoods and those in spatial neighborhoods. Specifically, k-nearest neigh-417 
+
+bor graphs (default k = 5) were constructed for both microenvironmental embeddings and spatial coordi-418 
+
+nates using rapids_singlecell[24], and neighborhood enrichment matrices were computed using squidpy’s[34] 419 
+
+nhood_enrichment function. The resulting matrices were flattened, and Spearman’s rank correlation coefficient 420 
+
+was calculated using scipy.stats’[35] spearmanr function. 421 
+
+Shuffled Cell Type Affinity Similarity (SCAS): Evaluates the preservation of colocalization patterns when spatial 422 
+
+coordinates are randomly permuted within microenvironmental clusters. K-means clustering was applied to microen-423 
+
+vironmental embeddings (default K = 50 ), and spatial coordinates were shuffled within each cluster. Neighborhood 424 
+
+enrichment matrices were computed for both original and shuffled spatial coordinates, and the mean Pearson correla-425 
+
+tion coefficient was calculated row-wise across cell types. 426 
+
+Neighbourhood Enrichment Accuracy (NEA): Defined as the Pearson correlation coefficient between the following two matrices: (1) Spatial enrichment matrix Esp ∈ RC×C : Let j = NN sp (i) denote the spatial nearest neighbor of 16 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+cell i , and let yi ∈ { 1, . . . , C } denote the cell type. Define nc = # {i | yi = c} as the number of cells of type c, and the co-occurrence count of type pairs as 
+
+Scc ′ = # {i | yi = c, y NN sp (i) = c′}.
+
+Then, 
+
+Esp (c, c ′) = Scc ′
+
+nc nc′
+
+.
+
+(2) Expected enrichment matrix based on microenvironmental clusters Eniche ∈ RC×C : K-means clustering (default 
+
+K = 50 ) was applied to the latent representation to obtain microenvironmental cluster assignments ti ∈ { 1, . . . , K }.From the type-by-cluster frequency matrix 
+
+Mc,k = # {i | yi = c, t i = k},
+
+we constructed the cluster composition matrix for each cell type 
+
+Pc,k = Mc,k 
+
+nc
+
+,
+
+and defined 
+
+Eniche = P P ⊤.
+
+The final score is computed as 
+
+NEA = corr (vec( Esp ), vec( Eniche )),
+
+where corr and vec denote Pearson correlation and vectorization, respectively. 427 
+
+Dual Recovery (DREC): Quantifies the proportion of cells for which expression-similar and spatially proximal neigh-428 
+
+bors belong to the same microenvironmental cluster. Specifically, for each cell, the 10th nearest neighbor cell was 429 
+
+selected based on expression differences. DREC was computed as the fraction of cases where the spatial nearest 430 
+
+neighbor of that cell belongs to the same microenvironmental cluster as the original cell. K-means clustering was 431 
+
+used for microenvironmental clustering with the number of clusters set to 50 by default. 432 
+
+Among these metrics, DREC, which exhibited the highest correlation with ground-truth evaluation (Niche ARI) in 433 
+
+simulation data, was adopted as the primary performance evaluation metric for real datasets. For unsupervised eval-434 
+
+uation, a relatively large number of microenvironmental clusters (default K = 50 ) was used to reduce performance 435 
+
+variability due to the clustering results. 436 
+
+In addition to the metrics described above, we evaluated four metrics from the NicheCompass benchmarking 437 
+
+module[10]: Graph Connectivity Similarity (NCB-GCS), Cell-type Affinity Similarity (NCB-CAS), Niche Average 438 
+
+Silhouette Width (NCB-NASW), and Maximum Leiden Adjusted Mutual Information (NCB-MLAMI). For detailed 439 
+
+definitions of these metrics, see Birk et al.[10]. 440 
+
+4.6 Comparison methods 441 
+
+NicheCompass[10]: A microenvironmental representation learning method based on graph attention networks (GAT). 442 
+
+The method integrates information on cell-cell interaction and other biological processes using gene program dic-443 
+
+tionaries obtained from OmniPath[36], MEBOCOST[37], and NicheNet[38], constructing a spatial graph with four 444 
+
+neighbors per cell. Learning was performed using a GATv2Conv [11] encoder with learning rate 0.001, a maximum of 445 
+
+400 epochs, and early stopping. Microenvironmental representations were obtained by setting the active gene program 446 
+
+threshold ratio to 0.01. 447 
+
+Banksy[12]: A microenvironmental representation method that integrates mean expression profiles and spatial expres-448 
+
+sion gradients within local neighborhoods. Scale-Gaussian weights were applied with 15 neighbors, and the spatial 449 
+
+regularization parameter λ was set to 0.8. PCA was applied to the resulting features to obtain a 20-dimensional 450 
+
+representation. 451 
+
+STAGATE[8]: A spatial transcriptomics analysis method based on graph convolutional neural networks. Spatial 452 
+
+binning on a 50 ×50 grid was applied to reduce memory requirements. The spatial network radius cutoff was set to 453 
+
+400, and pure representation learning was executed with the autoencoder weight parameter α = 0 .454 
+
+GraphST[9]: A graph neural network-based representation learning method for spatial transcriptomics data. Spatial 455 
+
+binning on a 100 ×100 grid was applied to reduce memory requirements. Latent representations are learned through 456 
+
+graph convolution utilizing spatial proximity-based graph structures. 457 
+
+COVET[39]: Spatial omics features derived from ENVI, an integrated analysis framework for spatial and 458 
+
+single-cell omics based on variational autoencoders[40]. Spatial embeddings were computed using the 459 
+
+17 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+scenvi.utils.compute_covet() function, followed by PCA-based dimensionality reduction to 20 dimensions 460 
+
+to obtain the final microenvironmental representation. 461 
+
+CellCharter[13]: A spatial cell niche identification method that aggregates neighborhood features across multiple 462 
+
+graph layers. A spatial neighbor graph was constructed using Delaunay triangulation via Squidpy[34]. PCA was 463 
+
+applied to gene expression data to obtain 50-dimensional representations, which were then aggregated over the spatial 464 
+
+graph using cc.gr.aggregate_neighbors() with n_layers=3 to capture multi-scale neighborhood information. 465 
+
+The resulting aggregated features were used as microenvironmental representations. 466 
+
+As comparison baselines, the following methods were also included: 467 
+
+PCA: Principal component analysis was applied to gene expression data to obtain a 20-dimensional representation. 468 
+
+This serves as a basic baseline using expression information alone. 469 
+
+Spatial coordinates: Raw spatial coordinates were used directly as microenvironmental representations. This baseline 470 
+
+evaluates the performance limits of representations that rely solely on spatial information. 471 
+
+4.7 Simulation data generation with multiple microenvironmental patterns 472 
+
+To enable quantitative evaluation and benchmarking of Mievformer against competing methods, we generated syn-473 
+
+thetic spatial transcriptomics data with known ground-truth microenvironmental structure. The simulation framework 474 
+
+supports multiple distinct microenvironmental patterns while preserving realistic gene expression characteristics by 475 
+
+directly sampling expression profiles from observed cells in pancreatic cancer Xenium data. 476 
+
+4.7.1 Spatial structure and microenvironmental pattern definition 477 
+
+The simulation domain was defined as a square region of dimensions 1000 × 1000 arbitrary units. We configured D478 
+
+distinct microenvironmental patterns ( D = duct_category_num ), each representing a spatially contiguous region 479 
+
+with defined cellular composition. 480 
+
+For each pattern k ∈ { 0, . . . , D − 1}, we generated nduct annular structures (ducts) as follows: 481 
+
+• Duct centers were sampled uniformly within the simulation domain, and each was randomly assigned a 482 
+
+pattern label k uniformly. 483 
+
+• To introduce spatial heterogeneity, the radius r and boundary thickness t of each duct were perturbed from 484 
+
+baseline values ( radius_base and thick_base , respectively) according to: 485 
+
+r = radius_base × (1 + 2 a(U − 0.5) ),t = thick_base × (1 + 2 a(U − 0.5) ),
+
+where U ∼ Uniform [0 , 1] and a = 0 .2 controls the magnitude of variation. 486 
+
+• The inner and outer radii were computed as rin = max(0 , r − t) and rout = r + t, defining three concentric 487 
+
+microenvironmental zones per duct: inner, boundary, and outer. 488 
+
+Each spatial location was assigned one of 2D + 1 ground-truth microenvironmental labels: outside (background), 489 
+
+inner_ k, or boundary_ k for k = 0 , . . . , D − 1.490 
+
+4.7.2 Cell placement and microenvironmental assignment 491 
+
+A total of ncell cells were uniformly distributed across the simulation domain. Each cell’s microenvironmental label 492 
+
+was determined via nearest-neighbor search as follows: 493 
+
+• For each pattern k, we constructed a k-nearest neighbors index ( k = 10 ) using only duct centers of that 494 
+
+pattern and computed the distance from each cell to its nearest duct of pattern k.495 
+
+• If the minimum distance was less than rout , the cell was provisionally labeled as boundary_ k; if less than rin ,496 
+
+it was relabeled as inner_ k.497 
+
+• Labels were assigned in hierarchical order (boundary → inner) across all patterns, with later patterns poten-498 
+
+tially overwriting earlier assignments. 499 
+
+• Cells whose distances to all ducts exceeded rout retained the default label Outside. 500 
+
+18 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+4.7.3 Cell-type composition and expression profile sampling 501 
+
+For each microenvironmental label (outside, inner_ k, and boundary_ k), we defined distinct cell-type compositions 502 
+
+and sampled corresponding expression profiles from the reference dataset. 503 
+
+• We first computed the empirical cell-type frequency vector π from the reference Xenium data using a prede-504 
+
+fined cell-type annotation key ( cluster_key ). 505 
+
+• For each microenvironment n, a cell-type composition vector p(n) was sampled from a Dirichlet distribution 506 
+
+with concentration parameter α = alpha_base × π, where alpha_base controls the degree of variation 507 
+
+around the reference composition. 508 
+
+• For each cell assigned to microenvironment n, a cell type was drawn according to the multinomial distribution 509 
+
+Multinomial (1 , p (n)).510 
+
+• The gene expression profile for that cell was obtained by randomly selecting one observed cell of the assigned 511 
+
+type from the reference dataset and copying its preprocessed expression vector. 512 
+
+This sampling strategy ensures that simulated expression profiles reflect the biological variability present in real data 513 
+
+while maintaining controlled microenvironmental structure. 514 
+
+4.7.4 Parameter settings 515 
+
+Unless otherwise specified, simulations employed the following default parameters: alpha_base = 5 , nduct = 1000 ,516 
+
+ncell = 300 ,000 , radius_base = 10 , thick_base = 2 , and D = duct_category_num (varied across experiments). 517 
+
+The relative perturbation magnitude was fixed at a = 0 .2, and k = 10 nearest neighbors were used for microenvi-518 
+
+ronmental assignments. These parameters were externally configurable via model identifiers in the simulation script 519 
+
+(make_duct_sim.py ). 520 
+
+4.8 Immunohistochemistry 521 
+
+Paraffin-embedded tissue sections (4 μm) were deparaffinized, rehydrated, and subjected to antigen retrieval using 522 
+
+Target Retrieval Solution, Citrate pH 6 (Dako). Endogenous peroxidase activity was blocked with 3% hydrogen 523 
+
+peroxide in methanol for 5 min, followed by blocking with 3% BSA in PBS for 30 min. Sections were incubated 524 
+
+overnight at 4 °C with an anti–c-Myc antibody (Y59, Abcam), then with EnVision+ Dual Link System-HRP (Dako) for 525 
+
+30 min at room temperature. Signals were visualized using the Liquid DAB+ Substrate Chromogen System (Dako), 526 
+
+and sections were counterstained with Mayer’s hematoxylin, dehydrated, cleared, and mounted. Hematoxylin and 527 
+
+eosin staining was performed for background evaluation. 528 
+
+Quantitative analysis of c-Myc immunohistochemistry was performed to compare expression levels between 529 
+
+fibroblast-proximal and tumor-core regions. Color deconvolution was applied to separate hematoxylin and DAB chan-530 
+
+nels using the HED color space. Nuclear segmentation was performed on the hematoxylin channel using Otsu’s 531 
+
+thresholding (multiplier = 0.6) followed by the watershed algorithm. The DAB positivity threshold was determined by 532 
+
+fitting a two-component Gaussian Mixture Model to pixel values from all nuclear regions, with the threshold set at the 533 
+
+midpoint between component means. For each nucleus, the DAB-positive pixel fraction was calculated as the propor-534 
+
+tion of pixels exceeding this threshold. Two regions of interest ( 130 × 130 pixels) were defined in fibroblast-proximal 535 
+
+and tumor-core regions. Statistical comparison was performed using the Mann–Whitney U test. 536 
+
+## Acknowledgements 537 
+
+This work was supported by P-PROMOTE (grant no. 24ama221609h000 to Y.K.) and PRIME (grant no. 538 
+
+25gm7010014h0001 to Y.K.) from the Japan Agency for Medical Research and Development (AMED), the Moonshot 539 
+
+Research and Development Program (grant no. JP22zf0127009 to H.M.), National Cancer Center Research and De-540 
+
+velopment Fund (grant no. 2024-A-6 to Y.K.), and Grant-in-Aid for Scientific Research (grant no. 23K16991 to Y.K.) 541 
+
+from the Japan Society for the Promotion of Science (JSPS). 542 
+
+## Author contributions 543 
+
+Y.K. designed the study and performed software development and data analysis. Y.T., F.C. and H.M. conducted and 544 
+
+supervised experiments. H.H., S.H., M.I., and T.S. performed software development and data analysis. H.H. and K.I. 545 
+
+performed data analysis. 546 
+
+19 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+## Data and code availability 547 
+
+The Xenium Lung and Xenium Pancreas datasets generated in this study will be deposited in the Gene Expression 548 
+
+Omnibus (GEO) database upon acceptance. The Stereo-seq Mouse Brain data are available from the STOmicsDB 549 
+
+(https://db.cngb.org/stomics/mosta/). The Xenium GBM and Visium HD Mouse Brain datasets are available from the 550 
+
+10x Genomics public dataset repository (https://www.10xgenomics.com/datasets). The source code for Mievformer 551 
+
+is publicly available as a Python package at https://github.com/kojikoji/mievformer_package , with docu-552 
+
+mentation at https://kojikoji.github.io/mievformer_package/index.html .553 
+
+## References 554 
+
+[1] Aleksandra A. Kolodziejczyk, Jong Kyoung Kim, Valentine Svensson, John C. Marioni, and Sarah A. Teich-555 
+
+mann. The technology and biology of single-cell RNA sequencing. Molecular Cell , 58(4):610–620, 2015. 556 
+
+[2] Douglas Hanahan. Hallmarks of cancer: New dimensions. Cancer Discovery , 12(1):31–46, 2022. 557 
+
+[3] Mikhail Binnewies, Edward W. Roberts, Kelly Kersten, Vincent Chan, Douglas F. Fearon, Miriam Merad, 558 
+
+Lisa M. Coussens, Dmitry I. Gabrilovich, Suzanne Ostrand-Rosenberg, Catherine C. Hedrick, Robert H. Von-559 
+
+derheide, Mikael J. Pittet, Rakesh K. Jain, Weiping Zou, T. Kevin Howcroft, Elisa C. Woodhouse, Robert A. 560 
+
+Weinberg, and Matthew F. Krummel. Understanding the tumor immune microenvironment (TIME) for effective 561 
+
+therapy. Nature Medicine , 24:541–550, 2018. 562 
+
+[4] Lambda Moses and Lior Pachter. Museum of spatial transcriptomics. Nature Methods , 19:534–546, 2022. 563 
+
+[5] Andrew L. Ji, Adam J. Rubin, Kim Thrane, Sizun Jiang, David L. Reynolds, Robin M. Meyers, Margaret G. 564 
+
+Guo, Benson M. George, Annelie Mollbrink, Joseph Bergenstråhle, Ludvig Larsson, Yunhao Bai, Bokai Zhu, 565 
+
+Aparna Bhaduri, Jordan M. Meyers, Xavier Rovira-Clavé, S. Tyler Hollmig, Sumaira Z. Aasi, Garry P. Nolan, 566 
+
+Joakim Lundeberg, and Paul A. Khavari. Multimodal analysis of composition and spatial architecture in human 567 
+
+squamous cell carcinoma. Cell , 182:497–514.e22, 2020. 568 
+
+[6] Zixuan Cang, Yanxiang Zhao, Axel A. Almet, Adam Stabell, Raul Ramos, Maksim V. Plikus, Scott X. Atwood, 569 
+
+and Qing Nie. Screening cell-cell communication in spatial transcriptomics via collective optimal transport. 570 
+
+Nature Methods , 20(2):218–228, 2023. 571 
+
+[7] Edward Zhao, Matthew R. Stone, Xing Ren, Jamie Guenthoer, Kimberly S. Smythe, Thomas Pulliam, Stephen R. 572 
+
+Williams, Cedric R. Uytingco, Sarah E. B. Taylor, Paul Nghiem, Jason H. Bielas, and Raphael Gottardo. Spatial 573 
+
+transcriptomics at subspot resolution with BayesSpace. Nature Biotechnology , 39:1375–1384, 2021. 574 
+
+[8] Kangning Dong and Shihua Zhang. Deciphering spatial domains from spatially resolved transcriptomics with an 575 
+
+adaptive graph attention auto-encoder. Nature Communications , 13(1):1739, 2022. 576 
+
+[9] Yahui Long, Kok Siong Ang, Mengwei Li, Kian Long Kelvin Chong, Raman Sethi, Chengwei Zhong, Hang Xu, 577 
+
+Zhiwei Ong, Karishma Sachaphibulkij, Ao Chen, Li Zeng, Huazhu Fu, Min Wu, Lina Hsiu Kim Lim, Longqi 578 
+
+Liu, and Jinmiao Chen. Spatially informed clustering, integration, and deconvolution of spatial transcriptomics 579 
+
+with GraphST. Nature Communications , 14(1):1155, 2023. 580 
+
+[10] Sebastian Birk, Irene Bonafonte-Pardàs, Adib Miraki Feriz, Adam Boxall, Eneritz Agirre, Fani Memi, Anna 581 
+
+Maguza, Anamika Yadav, Erick Armingol, Rong Fan, Gonçalo Castelo-Branco, Fabian J. Theis, Omer Ali 582 
+
+Bayraktar, Carlos Talavera-López, and Mohammad Lotfollahi. Quantitative characterization of cell niches in 583 
+
+spatially resolved omics data. Nature Genetics , 57:897–909, 2025. 584 
+
+[11] Shaked Brody, Uri Alon, and Eran Yahav. How attentive are graph attention networks? In International Confer-585 
+
+ence on Learning Representations (ICLR) , 2022. 586 
+
+[12] Vipul Singhal, Nigel Chou, Joseph Lee, Yifei Yue, Jinyue Liu, Wan Kee Chock, Li Lin, Yun-Ching Chang, Erica 587 
+
+Mei Ling Teo, Jonathan Aow, Hwee Kuan Lee, Kok Hao Chen, and Shyam Prabhakar. BANKSY unifies cell 588 
+
+typing and tissue domain segmentation for scalable spatial omics data analysis. Nature Genetics , 56:431–441, 589 
+
+2024. 590 
+
+[13] Marco Varrone, Daniele Tavernari, Albert Santamaria-Martínez, Logan A. Walsh, and Giovanni Ciriello. 591 
+
+Cellcharter reveals spatial cell niches associated with tissue remodeling and cell plasticity. Nature Genetics ,592 
+
+56(1):74–84, 2024. 593 
+
+[14] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Representation learning with contrastive predictive coding. 594 
+
+arXiv preprint arXiv:1807.03748 , 2018. 595 
+
+[15] Ao Chen, Sha Liao, Mengnan Cheng, Kailong Ma, Liang Wu, Yiwei Lai, Xiaojie Qiu, Jin Yang, Jiangshan Xu, 596 
+
+Shijie Hao, Xin Wang, Huifang Lu, Xi Chen, Xing Liu, Xin Huang, Zhao Li, Yan Hong, Yujia Jiang, Jian Peng, 597 
+
+20 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+Shuai Liu, Mengzhe Shen, Chuanyu Liu, Quanshui Li, Yue Yuan, Xiaoyu Wei, Huiwen Zheng, Weimin Feng, 598 
+
+Zhifeng Wang, Yang Liu, Zhaohui Wang, Yunzhi Yang, Haitao Xiang, Lei Han, Baoming Qin, Pengcheng Guo, 599 
+
+Guangyao Lai, Pura Muñoz-Cánoves, Patrick H. Maxwell, Jean Paul Thiery, Qing-Feng Wu, Fuxiang Zhao, 600 
+
+Bichao Chen, Mei Li, Xi Dai, Shuai Wang, Haoyan Kuang, Junhou Hui, Liqun Wang, Ji-Feng Fei, Ou Wang, 601 
+
+Xiaofeng Wei, Haorong Lu, Bo Wang, Shiping Liu, Ying Gu, Ming Ni, Wenwei Zhang, Feng Mu, Ye Yin, 602 
+
+Huanming Yang, Michael Lisby, Richard J. Cornall, Jan Mulder, Mathias Uhlén, Miguel A. Esteban, Yuxiang 603 
+
+Li, Longqi Liu, Xun Xu, and Jian Wang. Spatiotemporal transcriptomic atlas of mouse organogenesis using 604 
+
+DNA nanoball-patterned arrays. Cell , 185(10):1777–1792.e21, 2022. 605 
+
+[16] Mara E. Pitulescu, Inga Schmidt, Benedetto Daniele Giaimo, Tobiah Antoine, Frank Berkenfeld, Francesca 606 
+
+Ferrante, Hongryeol Park, Manuel Ehling, Daniel Biljes, Susana F. Rocha, Urs H. Langen, Martin Stehling, 607 
+
+Takashi Nagasawa, Napoleone Ferrara, Tilman Borggrefe, and Ralf H. Adams. Dll4 and notch signalling couples 608 
+
+sprouting angiogenesis and artery formation. Nature Cell Biology , 19:915–927, 2017. 609 
+
+[17] Zheng Fan, Raphaela Ardicoglu, Aashil A. Batavia, Ruslan Rust, Lukas von Ziegler, Rebecca Waag, Jing Zhang, 610 
+
+Thibaut Desgeorges, Oliver Sturman, Hairuo Dang, Rebecca Weber, Martin Roszkowski, Andreas E. Moor, 611 
+
+Martin E. Schwab, Pierre-Luc Germain, Johannes Bohacek, and Katrien De Bock. The vascular gene Apold1 612 
+
+is dispensable for normal development but controls angiogenesis under pathological conditions. Angiogenesis ,613 
+
+26:385–407, 2023. 614 
+
+[18] Yuchong Zhao, Yun Wang, Wei Chen, Shuya Bai, Wang Peng, Mengli Zheng, Yilei Yang, Bin Cheng, and Zhou 615 
+
+Luan. Targeted intervention of eif4a1 inhibits emt and metastasis of pancreatic cancer cells via c-myc/mir-9 616 
+
+signaling. Cancer Cell International , 21(1), 2021. 617 
+
+[19] Sohinee Bhattacharyya, Chet Oon, Aayush Kothari, Wesley Horton, Jason Link, Rosalie C. Sears, and Mara H. 618 
+
+Sherman. Acidic fibroblast growth factor underlies microenvironmental regulation of MYC in pancreatic cancer. 619 
+
+Journal of Experimental Medicine , 217(8):e20191805, 2020. 620 
+
+[20] Zexian Zeng, Yawei Li, Yiming Li, and Yuan Luo. Statistical and machine learning methods for spatially resolved 621 
+
+transcriptomics data analysis. Genome Biology , 23(1):83, 2022. 622 
+
+[21] Pengfei Zhu, Han Shu, Yongtian Wang, Xiaofeng Wang, Yuan Zhao, Jialu Hu, Jiajie Peng, Xuequn Shang, Zhen 623 
+
+Tian, Jing Chen, and Tao Wang. MAEST: accurately spatial domain detection in spatial transcriptomics with 624 
+
+graph masked autoencoder. Briefings in Bioinformatics , 26(2), 2025. 625 
+
+[22] Alma Andersson, Joseph Bergenstråhle, Michaela Asp, Ludvig Bergenstråhle, Aleksandra Jurek, José Fernán-626 
+
+dez Navarro, and Joakim Lundeberg. Single-cell and spatial transcriptomics enables probabilistic inference of 627 
+
+cell type topography. Communications Biology , 3(1):565, 2020. 628 
+
+[23] Alejandro Tejada-Lapuerta, Anna C. Schaar, Robert Gutgesell, Giovanni Palla, Lennard Halle, Mariia Minaeva, 629 
+
+Larsen Vornholz, Leander Dony, Francesca Drummer, Till Richter, Mojtaba Bahrami, and Fabian J. Theis. 630 
+
+Nicheformer: a foundation model for single-cell and spatial omics. Nature Methods , 22:2525–2538, 2025. 631 
+
+[24] Corey Nolet, Avantika Lal, Rajesh Ilango, Taurean Dyer, Rajiv Movva, John Zedlewski, and Johnny Israeli. 632 
+
+Accelerating single-cell genomic analysis with GPUs. bioRxiv , 2022. Preprint. 633 
+
+[25] F. Alexander Wolf, Philipp Angerer, and Fabian J. Theis. SCANPY: large-scale single-cell gene expression data 634 
+
+analysis. Genome Biology , 19(1):15, 2018. 635 
+
+[26] Leland McInnes, John Healy, and James Melville. UMAP: Uniform manifold approximation and projection for 636 
+
+dimension reduction. arXiv preprint arXiv:1802.03426 , 2018. 637 
+
+[27] V. A. Traag, L. Waltman, and N. J. van Eck. From louvain to leiden: guaranteeing well-connected communities. 638 
+
+Scientific Reports , 9(1):5233, 2019. 639 
+
+[28] Oscar Franzén, Li-Ming Gan, and Johan L M Björkegren. PanglaoDB: a web server for exploration of mouse 640 
+
+and human single-cell RNA sequencing data. Database , 2019:baz046, 2019. 641 
+
+[29] Fabian Pedregosa, Gaël Varoquaux, Alexandre Gramfort, Vincent Michel, Bertrand Thirion, Olivier Grisel, 642 
+
+Mathieu Blondel, Andreas Müller, Joel Nothman, Gilles Louppe, Peter Prettenhofer, Ron Weiss, Vincent 643 
+
+Dubourg, Jake Vanderplas, Alexandre Passos, David Cournapeau, Matthieu Brucher, Matthieu Perrot, and 644 
+
+Édouard Duchesnay. Scikit-learn: Machine learning in Python. Journal of Machine Learning Research , 12:2825– 645 
+
+2830, 2011. 646 
+
+[30] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, 647 
+
+and Illia Polosukhin. Attention is all you need. In Advances in Neural Information Processing Systems 30 648 
+
+(NeurIPS 2017) , pages 5998–6008, 2017. 649 
+
+21 
+
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted April 24, 2026. ;https://doi.org/10.64898/2026.04.21.719876 doi: bioRxiv preprint
+
+Kojima and Tanaka et al. 
+
+[31] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, 650 
+
+Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Kopf, Edward Yang, Zachary De-651 
+
+Vito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith 652 
+
+Chintala. PyTorch: An imperative style, high-performance deep learning library. Advances in Neural Information 653 
+
+Processing Systems , 32:8024–8035, 2019. 654 
+
+[32] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In International Conference on 655 
+
+Learning Representations (ICLR) , 2019. 656 
+
+[33] William Falcon and The PyTorch Lightning team. PyTorch Lightning, 2019. 657 
+
+[34] Giovanni Palla, Hannah Spitzer, Michal Klein, David Fischer, Anna Christina Schaar, Louis Benedikt Kuem-658 
+
+merle, Sergei Rybakov, Ignacio L. Ibarra, Olle Holmberg, Isaac Virshup, Mohammad Lotfollahi, Sabrina Richter, 659 
+
+and Fabian J. Theis. Squidpy: a scalable framework for spatial omics analysis. Nature Methods , 19:171–178, 660 
+
+2022. 661 
+
+[35] Pauli Virtanen, Ralf Gommers, Travis E. Oliphant, Matt Haberland, Tyler Reddy, David Cournapeau, Evgeni 662 
+
+Burovski, Pearu Peterson, Warren Weckesser, Jonathan Bright, Stéfan J. van der Walt, Matthew Brett, Joshua 663 
+
+Wilson, K. Jarrod Millman, Nikolay Mayorov, Andrew R. J. Nelson, Eric Jones, Robert Kern, Eric Larson, C J 664 
+
+Carey, ˙ Ilhan Polat, Yu Feng, Eric W. Moore, Jake VanderPlas, Denis Laxalde, Josef Perktold, Robert Cimrman, 665 
+
+Ian Henriksen, E. A. Quintero, Charles R. Harris, Anne M. Archibald, Antônio H. Ribeiro, Fabian Pedregosa, 666 
+
+Paul van Mulbregt, Aditya Vijaykumar, Alessandro Pietro Bardelli, Alex Rothberg, Andreas Hilboll, Andreas 667 
+
+Kloeckner, Anthony Scopatz, Antony Lee, Ariel Rokem, C. Nathan Woods, Chad Fulton, Charles Masson, 668 
+
+Christian Häggström, Clark Fitzgerald, David A. Nicholson, David R. Hagen, Dmitrii V. Pasechnik, Emanuele 669 
+
+Olivetti, Eric Martin, Eric Wieser, Fabrice Silva, Felix Lenders, Florian Wilhelm, G. Young, Gavin A. Price, Gert-670 
+
+Ludwig Ingold, Gregory E. Allen, Gregory R. Lee, Hervé Audren, Irvin Probst, Jörg P. Dietrich, Jacob Silterra, 671 
+
+James T Webber, Janko Slaviˇ c, Joel Nothman, Johannes Buchner, Johannes Kulick, Johannes L. Schönberger, 672 
+
+José Vinícius de Miranda Cardoso, Joscha Reimer, Joseph Harrington, Juan Luis Cano Rodríguez, Juan Nunez-673 
+
+Iglesias, Justin Kuczynski, Kevin Tritz, Martin Thoma, Matthew Newville, Matthias Kümmerer, Maximilian 674 
+
+Bolingbroke, Michael Tartre, Mikhail Pak, Nathaniel J. Smith, Nikolai Nowaczyk, Nikolay Shebanov, Oleksandr 675 
+
+Pavlyk, Per A. Brodtkorb, Perry Lee, Robert T. McGibbon, Roman Feldbauer, Sam Lewis, Sam Tygier, Scott 676 
+
+Sievert, Sebastiano Vigna, Stefan Peterson, Surhud More, Tadeusz Pudlik, Takuya Oshima, Thomas J. Pingel, 677 
+
+Thomas P. Robitaille, Thomas Spura, Thouis R. Jones, Tim Cera, Tim Leslie, Tiziano Zito, Tom Krauss, Utkarsh 678 
+
+Upadhyay, Yaroslav O. Halchenko, and Yoshiki Vázquez-Baeza. SciPy 1.0: fundamental algorithms for scientific 679 
+
+computing in Python. Nature Methods , 17:261–272, 2020. 680 
+
+[36] Dénes Türei, Alberto Valdeolivas, Lejla Gul, Nicolàs Palacio ‐ Escat, Michal Klein, Olga Ivanova, Márton Öl-681 
+
+bei, Attila Gábor, Fabian Theis, Dezs˝ o Módos, Tamás Korcsmáros, and Julio Saez ‐ Rodriguez. Integrated intra-682 
+
+and intercellular signaling knowledge for multicellular omics analysis. Molecular Systems Biology , 17(3):e9923, 683 
+
+2021. 684 
+
+[37] Rongbin Zheng, Yang Zhang, Tadataka Tsuji, Xinlei Gao, Farnaz Shamsi, Allon Wagner, Nir Yosef, Kui Cui, 685 
+
+Hong Chen, Michael A Kiebish, Juan J Aristizabal-Henao, Niven R Narain, Lili Zhang, Yu-Hua Tseng, and 686 
+
+Kaifu Chen. MEBOCOST maps metabolite-mediated intercellular communications using single-cell RNA-seq. 687 
+
+Nucleic Acids Research , 2025. PMID: 40568942. 688 
+
+[38] Robin Browaeys, Wouter Saelens, and Yvan Saeys. NicheNet: modeling intercellular communication by linking 689 
+
+ligands to target genes. Nature Methods , 17:159–162, 2020. 690 
+
+[39] Doron Haviv, Ján Remšík, Mohamed Gatie, Catherine Snopkowski, Meril Takizawa, Nathan Pereira, John 691 
+
+Bashkin, Stevan Jovanovich, Tal Nawy, Ronan Chaligne, Adrienne Boire, Anna-Katerina Hadjantonakis, and 692 
+
+Dana Pe’er. The covariance environment defines cellular niches for spatial inference. Nature Biotechnology ,693 
+
+43:269–280, 2025. 694 
+
+[40] Diederik P. Kingma and Max Welling. Auto-encoding variational bayes. In International Conference on Learning 695 
+
+Representations (ICLR) , 2014. 696 
+
+22
