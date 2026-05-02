@@ -1,0 +1,1230 @@
+Title: Sparse Reduced-rank Regression Methods for Spatially Misaligned Data with Application to Spatial Transcriptomics
+
+URL Source: https://arxiv.org/pdf/2604.23755v1
+
+Published Time: Tue, 28 Apr 2026 01:17:09 GMT
+
+Number of Pages: 35
+
+Markdown Content:
+# Sparse Reduced-rank Regression Methods for Spatially Misaligned Data with Application to Spatial Transcriptomics 
+
+## Zitian Wu Department of Biostatistics, University of Florida Susmita Datta ∗
+
+## Department of Biostatistics, University of Florida Arkaprava Roy ∗
+
+## Department of Biostatistics, University of Florida April 28, 2026 
+
+Abstract 
+
+Understanding the spatiotemporal dynamics of disease progression in relation to transcriptomic profiles provides key insights into complex conditions such as Alzheimer’s disease. To enable such investigations, STARmap PLUS technology offers joint profiling of high-resolution spatial transcriptomics and protein detection within the same tissue section. Motivated by data from Zeng et al. (2023), we develop a novel kernel-weighted regression framework that models plaque size as a collective effect of the spatial transcriptomics of neighboring cells, automatically integrating across cell types and tissue samples from different disease states. To further strengthen interpretability and efficiency, we incorporate a sparse low-rank factorization that enables gene selection while borrowing strength across genes, cell types, and time points. The proposed approach is implemented in a fully automated manner with data-driven specification of key model components. Through simulation studies, we demonstrate the robustness of the proposed method and its superiority across a range of specification scenarios. Applied to Alzheimer’s data, the proposed framework uncovers biologically meaningful associations, highlighting its potential for advancing the understanding of disease mechanisms. 
+
+Keywords: Cellular microenvironment; Kernel-weighted regression; Sparse Low-rank factor-ization; STARmap PLUS  
+
+> ∗
+
+Equal Contribution 
+
+1
+
+> arXiv:2604.23755v1 [stat.AP] 26 Apr 2026
+
+# 1 Introduction 
+
+Alzheimer’s disease (AD) comprises interacting pathologies that vary across space, cell types, and time (De Strooper and Karran, 2016; Jack Jr et al., 2018, 2024). Amyloid-β plaques and hyperphosphorylated tau accumulate within a dynamic microenvironment shaped by microglia, astrocytes, oligodendrocyte-lineage cells, and neurons (Long and Holtzman, 2019; Hampel et al., 2021). Spatially resolved studies in mouse and human reveal reproducible plaque-adjacent niches and layer-specific molecular patterns, linking microglial/astrocytic remodeling and tau-aligned neuronal changes to local pathology (Chen et al., 2020, 2022; Zeng et al., 2023; Mallach et al., 2024; Miyoshi et al., 2024). Motivated by these spatially organized niches, we adopt a lesion-centric formulation: we treat plaque centers as outcome locations and quantify how nearby cellular gene expression relates to the plaque size (mean radius). Traditional transcriptomic designs struggle to capture this heterogeneity. Bulk RNA-seq averages across mixed cell types and loses cellular heterogeneity and the spatial context of the cells, while single-cell RNA-seq restores cellular resolution but still discards in-tissue organization. Spatially resolved transcriptomics (SRT) maps gene expression to spatial coor-dinates via two broad classes: (i) barcoded capture arrays (Spatial Transcriptomics/Visium) that provide transcriptome-wide profiles at multi-cell spot resolution (Ståhl et al., 2016; Vickovic et al., 2019; Maynard et al., 2021); and (ii) imaging-based assays (e.g., MER-FISH(Chen et al., 2015), seqFISH(Shah et al., 2016), STARmap(Wang et al., 2018)) that achieve single-cell or subcellular resolution with targeted gene panels. Among imaging-based SRT, STARmap PLUS (Zeng et al., 2023) co-registers targeted RNAs with amyloid-β and p-tau immunostains within the same tissue sample, yielding single-cell expression aligned to plaque segmentations and centers, and enabling direct linkage between molecular readouts and neuropathology in situ. Each tissue section contains many plaques 2and thousands of cells with known coordinates; plaque size varies markedly within a section, and this variability is embedded in distinct cellular neighborhoods defined by which cells lie nearby and what genes they express. This provides exactly the data structure needed for a plaque-centric analysis. Beyond Alzheimer’s disease, co-registering histopathology with SRT enables tumor-region delineation, quantification of tissue architecture and burden, and pathology-informed disease modeling (Ni et al., 2022; Arora et al., 2023; Bassiouni et al., 2023; Xun et al., 2023; Jin et al., 2024). Related statistical questions also arise in environmental applications (Alexeeff et al., 2016). This breadth underscores the generality and translational relevance of our framework for modeling disease-related spatial outcomes from spatial molecular measurements. The primary statistical challenges are: (1) spatial misalignment between plaque locations and SRT measurement locations, (2) the high dimensionality of SRT data, (3) effect heterogeneity across collection times and cell types, i.e., regression coefficients linking plaque size to neighborhood features vary by time point and cell type, with gene-level coefficients exhibiting shared latent structure, (4) the need for a spatially structured characterization of the collective influence of different neighboring cells on plaque size, and (5) between-sample heterogeneity in plaque-adjacent microenvironments (e.g., shifts in local cell-type composition and activation states). For regressing spatially varying outcomes on predictors from nearby locations, spatial measurement error models have been proposed, such as two-stage correction approaches (Szpiro and Paciorek, 2013), and spatial simulation extrapolation methods (Alexeeff et al., 2016). Local/kernel regressions and geographically weighted regression (GWR) model local heterogeneity by weighting nearby observations more heavily; multiscale GWR further allows each predictor have its own spatial scale parameter. However, they typically treat constructed predictors as error-free and do not scale or pool information effectively in 3high-dimensional, structured SRT settings (Nadaraya, 1964; Fotheringham et al., 2017; Fan, 2018; Oshan et al., 2019). Change-of-support and downscaler models propagate aggregation/registration uncertainty, yet classical formulations remain low-dimensional and do not accommodate high-dimensional features or latent commonalities across groups (Gotway and Young, 2002; Berrocal et al., 2010). Together, these approaches address parts of the problem but do not provide a unified, high-dimensional regression that learns predictor-specific spatial scales while quantifying the collective impact of neighboring cells. This gap motivates our framework. In an asynchronous longitudinal regression setting, Cao et al. (2015); Li et al. (2022, 2023) proposed a kernel-weighted approach to handle mismatched observation times between the response and covariate within a given subject. We follow a similar direction by introducing a kernel function to borrow information from all possible pairs of outcomes and the predictors in the misaligned spatial setting. This particularly helps to characterize the collective effect of different cells from varying cell types on the plaque size. An isotropic proximity kernel with sample-specific bandwidths aggregates local signals, accommodating section-to-section enrichment and sampling differences without overfitting directionality. Gene effects are parameterized by a low-rank coefficient tensor over gene × cell type × time, together with 
+
+gene-mode regularization to capture shared structure and heterogeneity across samples and time points under high dimensionality. To achieve interpretable gene-level discovery, we apply a LASSO penalty only on the gene mode of this factorization: genes with weak signal are shrunk toward zero, while the associated cell-type and time patterns for the retained genes remain flexible. All tuning parameters (e.g. kernel bandwidths, rank, and penalty levels) are selected in data-driven manner; details are provided in Section 3.1. The resulting framework yields interpretable component-level profiles and signed effects, where the sign of the estimated regression coefficient indicates direction (positive = larger plaque size; 4negative = smaller) across cell types and time points. Applied to STARmap PLUS AD sections, the model identifies 13-month multigene expression patterns dominated by a Microglia–Oligodendrocyte axis: a microglial Apoe/Tyrobp module and an oligodendrocyte-lineage (OPC-like) pattern are positively associated with plaque size, whereas an astrocytic transport-related signature is negatively associated with plaque size (see Section 5). We first describe the STARmap PLUS data and exploratory analyses motivating a plaque-centric estimand and isotropic neighborhood kernel. We then develop the kernel-weighted regression with sample-specific bandwidths and low-rank, gene-mode selection), assess performance in spatially realistic simulations, analyze AD sections, and close with limitations and extensions. 
+
+# 2 Data and Exploratory Analysis 
+
+## 2.1 Data 
+
+In this study, we use the single-cell spatial transcriptomics data integrated with amyloid-β
+
+plaque histopathology from a mouse model of Alzheimer’s disease (AD). Specifically, data were obtained from the brains of TauPS2APP transgenic mice at two critical stages of disease progression: 8 months (8 mo) and 13 months (13 mo) of age, providing a temporal snapshot of AD pathology and cellular heterogeneity. Each of the four samples analyzed includes comprehensive gene expression data at single-cell resolution from all identified cells, alongside spatial localization of extracellular amyloid-β plaques. The SRT data employed the STARmap PLUS method (Zeng et al., 2023), which simultane-ously captures spatially resolved single-cell expression and protein-level histopathological markers within the same tissue section at subcellular resolution. In this study, STARmap 5PLUS profiled 2,766 genes while simultaneously labeling extracellular amyloid-β plaques (X-34 dye) and hyperphosphorylated tau (AT8 immunostaining), enabling precise co-registration of cell bodies, mRNA, and pathology. Although both amyloid-β and tau signals are available, the present study focuses exclusively on amyloid-β plaques. Voxel size was 95 × 95 × 350 
+
+nm with 56 − 64 fields of view per sample. The method preserves morphology and allows joint RNA-protein mapping at subcellular scales, unlike chip-based whole-transcriptome approaches with coarser pixels ( 100 μm pixel size) (Chen et al., 2020). In the original dataset, STARmap PLUS yielded a high-resolution spatial atlas across cortex and hippocampus and identified 13 major cell types over 72 k cells. Our analysis uses the diseased subset to focus specifically on plaque-proximal biology. Two features make this dataset uniquely informative for plaque-centric analyses: (i) exact spatial location of cells, gene expression, and plaque pathology within the same section, and (ii) clear distance-dependent patterns in cellular composition around plaques. From Zeng et al. (2023), we obtain the plaque size data. In that, they first identified the plaques’ centers and then computed their mean radii. Fig 1 shows co-registered spatial maps of two mouse brain tissue sections collected at (a) 8 months and (b) 13 months. Gray points denote the spatial locations of all cells, and amyloid plaques are shown as red filled circles with circle radius equal to plaque sizes in μm.
+
+## 2.2 Exploring the Spatial Variability 
+
+To characterize plaque-adjacent microenvironments, we re-examined plaque-centric orga-nization using concentric rings around plaques (0–30, 30–70, 70–150 μm) in Figs. 2 and 3. Motivated by the concentric-ring analyses of Zeng et al. (2023), who defined distances with respect to plaque boundaries, we use the Euclidean distances from the cell centroids to the nearest plaque center U in our analysis to define the plaque microenvironment. 6500 1000 1500 2000 μm 0 500 1000 1500 2000 μm (a) 8 months     
+
+> 500 1000 1500 2000 μm 0500 1000 1500 2000 μm (b) 13 months
+
+Figure 1: Co-registered spatial maps from two distinct tissue sections collected at two time points: (a) 8 months and (b) 13 months. Cells are shown as gray points, and amyloid plaques are overlaid as red filled circles with radii encoding plaque sizes. Gene expression is measured for each cell at its observed spatial coordinate. We focus on three cell-types: Microglia, Astrocytes, and Oligodendrocyte-lineage cells, because both our exploratory analyses (Figs. 2 and 3) and prior work by Zeng et al. (2023) revealed robust, plaque-centric organization for these types with sufficient counts for stable stratification. Microglia are enriched right at plaques center with “core-shell” (as defined by Zeng et al. (2023) concerning the nearest concentric-ring) architecture closely contacting amyloid-β plaques ( 0–30 μm from the plaque center), while Astrocytes and Oligodendrocytes are enriched in surrounding shells ( 30 –150 μm from the plaque center). Across sections and between 8 and 13 months, enrichment magnitudes generally increase, while beyond 150 μmno systematic enrichment is detected. Guided by these spatial cell enrichments, we next construct bulk-like plaque-level summaries of near-plaque gene expression stratified by plaque size for descriptive visualization, to assess whether near-plaque expression varies with plaque size in Fig 4. The nearest plaque 7500 1000 1500 2000 μm 0 500 1000 1500 2000 μm     
+
+> 500 1000 1500 2000 μm 0500 1000 1500 2000 μm Distance from plaque (μm) 0-30μm 30-70μm 70-150μm
+> ≥150μm Cell type Microglia Oligodendrocytes Astrocytes
+
+Figure 2: Plaque-centric distance maps. Shaded annuli show Euclidean distance bands from the nearest plaque center: 0–30, 30–70, 70–150, and ≥ 150 μm. Points are cell locations colored by three cell types (legend). Each cell is placed in the ring at which it falls; these maps define the radial stratification used in downstream summaries. The two tissue sections are slightly different in dimension. for each cell is identified by sorting Euclidean distances from the cell centroid to different plaque centers. A cell is considered near-plaque if its distance to the nearest plaque center is ≤ 150 μm. For visualization only, plaque size is dichotomized based on the global median radius, namely Small: plaques with radii ≤ median; Large: plaques with radii > median. For each gene, heatmap values in Fig 4 are computed via two-stage averaging: first, we compute Plaque-level (bulk-like) mean for each plaque as the average gene expression over all near-plaque cells, yielding one value per (plaque, gene); and subsequently, we compute the average of plaque-level means for each time (8 mo vs 13 mo), plaque-size (Small vs Large). This finally gets us one value per time, size, and gene, which forms the heatmap entries. Fig 4 tells us: (i) the difference-in-differences for each gene expression, showing how the 8→13 mo change near Large plaques compares with the change near Small plaques (positive bars = larger increase or smaller decrease near Large plaques), (ii) a heatmap of the per-size 80200 400 600 800 1000 0-30μm 30-70μm 70-150μm 0–150 μm Cell density (cells / mm²)   
+
+> ≥150μm
+> ≥150 μm
+> Overall Overall
+> 0200 400 600 800 1000 0-30μm 30-70μm 70-150μm 0–150 μm Cell density (cells / mm²)
+> ≥150μm
+> ≥150 μm
+> Overall Overall Cell type Microglia Oligodendrocytes Astrocytes
+
+Figure 3: Cell density by distance to the nearest plaque. Bars show mean cell density (cells/mm 2) within each radial band (0–30, 30–70, 70–150, ≥150 μm) and overall, for Microglia, Astrocyte, and Oligodendrocyte-lineage cells. Densities are computed per sample and averaged across samples. Enrichment near plaques is most pronounced for Microglia in 
+
+0–30 μm and for Astrocyte/Oligodendrocyte-lineage cells in 30 –150 μm.change from 8 mo to 13 mo shown separately for Small and Large, and (iii-iv) heatmaps of expression at 8 mo and 13 mo (columns = Small vs Large). Row centering (within time) is applied only to the expression heatmaps (iii–iv); the bar plot and the change heatmap show raw contrasts. Across the 30 most varying genes over time, these summaries reveal size-associated differences in near-plaque expression and motivate our regression problem below, where plaque radius is regressed on the local gene expression levels. 
+
+# 3 Model 
+
+We propose a novel kernel-weighted regression framework to analyze the effect of spatial transcriptomic profiles on amyloid-β plaque deposition. For clarity, we first introduce some notations that are used throughout the article. Let n stands for the total number of tissue samples. For each sample i = 1 , . . . , n , let 
+
+Mi denotes the number of outcome locations (e.g., plaques) and {Ui,j }Mi 
+
+> j=1
+
+be their spatial 9-0.08 -0.06 -0.04 -0.02 0.00 0.02 0.04 0.06 0.08         
+
+> ΔLarge −ΔSmall
+> Δ(13 mo −8 mo)
+> Small Large
+> 8 month
+> Small Large
+> 13 month
+> Cst3 Tmsb4x C1qa Apoe Gfap Vsnl1 Calm1 Gna14 Ddit3 Glul Gpm6a Slc1a3 Jph4 Cd9 Ctsb Mbp Cd63 Dab1 Trem2 Car2 Ppp1r9b Lhx8 Hexb Itm2b Vim Cst7 Serpinb1b Agap2 Add1 Ywhae Small Large
+> Δ(13 mo −8 mo)
+> -0.4 -0.2 00.2 0.4
+> Centered expr
+> -0.1 -0.05 00.05 0.1
+
+Figure 4: Near-plaque gene expression by plaque size. Left: bar plot of ∆Large − ∆Small 
+
+where ∆ denotes the 13 mo minus 8 mo change in near-plaque expression within each plaque-size group (positive indicates a larger temporal increase near Large plaques). Middle-left: heatmap of ∆ shown separately for Small and Large plaques. Middle-right / right: heatmaps of near-plaque expression at 8 months and 13 months, respectively (columns: Small vs Large). Rows are the 30 genes with the largest temporal variation. Row centering (within time) is applied only to the expression heatmaps; the bar plot and change heatmap show raw contrasts. coordinates. At each of these locations, we observe spatially indexed scalar outcomes, such as plaque sizes, denoted by {yi,j := y(Ui,j ), j = 1 , . . . , M i}. Let Ni stands for the number of cells in i-th sample and {Vi,k }Ni 
+
+> k=1
+
+be their spatial coordinates. The spatial transcriptomics data, recording gene expression levels of p genes, are available at individual cell locations, denoted by {xi,k := x(Vi,k ) ∈ Rp, k = 1 , . . . , N i}. Furthermore, the samples are obtained at different stages of the disease progression, where ti := t(i) represents the corresponding collection time of the i-th sample. Note that all tissue samples are independent, as they come from different mice. Each cell further belongs to one of the C cell-types. For clarity, let ci,k := c(Vi,k ) represent the cell type associated with the cell at location Vi,k in i-th 
+
+sample. Our goal is to estimate the effect of gene expression levels on plaque sizes, measured at 10 different sample collection times. Specifically, we aim to estimate βc,t ∈ Rp, whose j-th 
+
+value quantifies the effect of the j-th gene’s expression (among the p genes) in the c-th cell type on plaque sizes collected at the t-th time point. However, to run this analysis, we must take into account the following three characteristics in our proposed model: 1) The spatial locations of the cells and plaques do not match in general. 2) Each plaque is surrounded by cells with different cell types. 3) The gene-specific regression effects for different cell types may share some commonal-ities. 4) Samples collected at different time points are independent, but gene-specific effects may share commonalities through underlying latent factors that capture shared biological or regulatory dependencies. In order to resolve these issues, we utilize the inherent spatial dependence in the data. Specifically, aligning with the realistic scenarios arising from integrating single-cell spatial transcriptomics data with amyloid-beta plaque data in Alzheimer’s disease, spatial proximity informs similarities in gene expression levels and biological response patterns, using sample-specific, density-adaptive neighborhoods. Thus, to characterize the relationship between spatially mismatched xi,k and yi,j , we first propose the following kernel-weighted objective function, 
+
+> n∑
+> i=1
+> Ni∑
+> k=1
+> Mi∑
+> j=1
+
+Ki,j,k · (
+
+yi,j − x⊤
+
+> i,k
+
+βci,k ,t i
+
+> )2
+
+, (1) where ci,k ∈ { 1, . . . , C } standing for the cell-type of the cell present at location Vi,k ,
+
+ti ∈ { 1, . . . , T } is the collection time for sample i, and Ki,j,k := Khi (∥Ui,j − Vi,k ∥2) are nonnegative kernel weights with possibly sample-specific bandwidth hi. For the kernel Kh(·),11 we consider the Epanechnikov kernel to assign weights based on the Euclidean distance between Ui,j and Vi,k . This compactly supported kernel determines the contribution of each observation to the local fit. The Epanechnikov kernel is a widely used choice due to its optimality in minimizing mean squared error. The unscaled kernel is defined as K(d) = 0 .75(1 − d2)+, where (·)+ denotes the positive part. Given a bandwidth parameter h > 0, the kernel is scaled as Kh(d) = K(d/h )/h . This formulation ensures that observations farther than h units apart receive zero weight, while closer observations have smoothly decreasing influence as their distance approaches h. Now, there are pGT unknown parameters to be estimated in {βc,t ∈ Rp}Cc=1 Tt=1 . Direct estimation of these parameters is computationally infeasible and fails to exploit the inherent dependencies among genes, cell types, and time. Moreover, sparsity-inducing structures are required to identify important genes. Thus, we propose a sparse reduced-rank factorization of the regression coefficient to identify important genes while borrowing information across different cell types and time. 
+
+Low-rank factorization of the regression coefficient: In order to judiciously estimate the regression coefficient βc,t , we utilize a reduced-rank factorization that leverages shared structure across cell types, time, and genes. In that, we first rewrite it as a tensor B ∈ Rp×C×T
+
+with three dimensions: Genes × Cell-types × Times, where the (l, c, t )-th entry is β(l, c, t ),for l = 1 , . . . , p , c = 1 , . . . , C , and t = 1 . . . , T . One may then apply the tensor-factorization methods, such as CANDECOMP/PARAFAC (CP) Carroll and Chang (1970); Harshman (1970); Kiers (2000), or more generally the Tucker decomposition Tucker (1966). In this 12 work, we employ a CP decomposition on B as: 
+
+β(l, c, t ) = 
+
+> R∑
+> r=1
+
+wrq(1)  
+
+> l,r
+
+q(2)  
+
+> c,r
+
+q(3) 
+
+> t,r
+
+B =
+
+> R∑
+> r=1
+
+wrq(1)  
+
+> r
+
+◦ q(2)  
+
+> r
+
+◦ q(3) 
+
+> r
+
+q(1)  
+
+> r
+
+:= (
+
+q(1)  
+
+> l,r
+> )pl=1
+
+, q(2)  
+
+> r
+
+:= (
+
+q(2)  
+
+> c,r
+> )Cc=1
+
+, q(3)  
+
+> r
+
+:= (
+
+q(3)  
+
+> t,r
+> )Tt=1
+
+,
+
+such that wr > 0, ∥q(m) 
+
+> r
+
+∥2 = 1 , for all r = 1 , . . . , R ; m = 1 , 2, 3,
+
+where ∥·∥ 2 stands for the ℓ2 norm which is defined as ∥a∥ = 
+
+> √∑
+> i
+
+a2 
+
+> i
+
+. By restricting q(1)  
+
+> r
+
+, q(2)  
+
+> r
+
+,and q(3)  
+
+> r
+
+, to be normalized individually, it ensures that wr captures the scale for each rank. This further helps in rank selection and introducing sparsity, as discussed later. The CP decomposition reduces parameter dimensionality while enabling information sharing across genes, cell types, and time. Specifically, we represent {βc,t } as a sum of R components; 
+
+r = 1 , . . . , R indexes the component (“rank”). Note that under the CP decomposition, the same rank R appears across all modes by construction, since R denotes the number of rank-one components. For greater flexibility, Tucker factorization with mode-specific ranks may be considered. However, for sparse tensors, CP decompositions are usually adequate. In the gene direction, we place a LASSO penalty on q(1)  
+
+> r
+
+= {q(1)  
+
+> l,r
+
+}pl=1 for each rank r, inducing sparsity in B. The resulting objective function is: 
+
+F (B) = 12
+
+> n∑
+> i=1
+> Ni∑
+> k=1
+> Mi∑
+> j=1
+
+Ki,j,k · (
+
+yi,j − x⊤
+
+> i,k
+
+βci,k ,t i
+
+> )2
+
++ λRp 
+
+> R∑
+> r=1
+
+∥q(1)  
+
+> r
+
+∥1, (2) where ∥ · ∥ 1 stands for the ℓ1 norm which is defined as ∥a∥1 = ∑ 
+
+> i
+
+|ai|. It allows us to obtain a sparse solution and select the important genes. 13 3.1 Estimation 
+
+The overall implementation is fully automated with data-driven efficient tuning. We up-date all the parameters using a blocked coordinate descent algorithm. To do that, we first partition the full parameter set into R blocks with r-th block: {q(1)  
+
+> r
+
+, q(2)  
+
+> r
+
+, q(3)  
+
+> r
+
+, w r}. In each iteration, we cycle through r = 1 , . . . , R , and update the components sequentially in each block. The blocked coordinate descent updates are given below. After each update, we normalize q(k) 
+
+> r
+
+by its corresponding ℓ2 norm and adjust wr accordingly. We minimize Eq.(2), where xi,k = ( x1,ik , . . . , x p,ik )⊤. Write the CP form 
+
+βc,t =
+
+> R
+
+∑
+
+> s=1
+
+ws q(1)  
+
+> ·s
+
+q(2)  
+
+> c,s
+
+q(3)  
+
+> t,s
+
+, β(−r) 
+
+> c,t
+
+= βc,t − wr q(1)  
+
+> ·r
+
+q(2)  
+
+> c,r
+
+q(3)  
+
+> t,r
+
+.
+
+For a fixed component r define 
+
+z(1)  
+
+> ik,r
+
+:= wrq(2)  
+
+> ci,k ,r
+
+q(3) 
+
+> ti,r
+
+, sik,r := x⊤
+
+> i,k
+
+q(1)  
+
+> ·r
+
+, R(−r) 
+
+> i,j,k
+
+:= yi,j − x⊤
+
+> i,k
+
+β(−r)  
+
+> ci,k ,t i
+
+.
+
+We update q(1)  
+
+> l,r
+
+by holding all others fixed, and use the leave-one-coordinate-out residual 
+
+˜R(l,r ) 
+
+> i,j,k
+
+:= R(−r) 
+
+> i,j,k
+
+− z(1) 
+
+> ik,r
+
+(
+
+sik,r − xl,ik · q(1) 
+
+> l,r
+
+)
+
+.
+
+Define the sufficient statistics 
+
+al,r := ∑
+
+> i,k,j
+
+Ki,j,k · z(1)  
+
+> ik,r
+
+· xl,ik · ˜R(l,r )
+
+> i,j,k
+
+, bl,r := ∑
+
+> i,k,j
+
+Ki,j,k 
+
+(
+
+z(1)  
+
+> ik,r
+
+· xl,ik 
+
+)2
+
+.
+
+Let Sτ (u) = sign (u)( |u| − τ )+ be the soft-th resholding operator where τ = λ/ (Rp ). Then 14 the closed-from update is 
+
+q(1)  
+
+> l,r
+
+← Sλ/ (Rp )(al,r )
+
+bl,r 
+
+, (3) with the convention q(1)  
+
+> l,r
+
+← 0 if bl,r = 0 . For fixed (l, r ), the objective function reduces to  
+
+> 12
+
+bl,r q2 − al,r q + λRp |q|, whose minimizer is the soft-th resholding operator above. For updating the entry q(2)  
+
+> c,r
+
+in the cell-type loadings, we set z(2)  
+
+> ik,r
+
+:= wrq(3) 
+
+> ti,r
+
+sik,r . This block is unpenalized weighted least squares: 
+
+q(2)  
+
+> c,r
+
+←
+
+∑  
+
+> i,k :ci,k =cMi
+
+∑
+
+> j=1
+
+Ki,j,k · z(2)  
+
+> ik,r
+
+· R(−r)
+
+> i,j,k
+
+∑  
+
+> i,k :ci,k =cMi
+
+∑
+
+> j=1
+
+Ki,j,k · (
+
+z(2) 
+
+> ik,r
+
+)2
+
+. (4) Similarly for the time loadings, we set z(3)  
+
+> ik,r
+
+:= wrq(2)  
+
+> ci,k ,r
+
+sik,r . Then 
+
+q(3)  
+
+> t,r
+
+←
+
+∑ 
+
+> i:ti=tNi
+
+∑
+
+> k=1
+> Mi
+
+∑
+
+> j=1
+
+Ki,j,k · z(3)  
+
+> ik,r
+
+· R(−r)
+
+> i,j,k
+
+∑ 
+
+> i:ti=tNi
+
+∑
+
+> k=1
+> Mi
+
+∑
+
+> j=1
+
+Ki,j,k · (
+
+z(3) 
+
+> ik,r
+
+)2
+
+. (5) To update entry wr ≥ 0, we set z(2)  
+
+> ik,r
+
+:= q(2)  
+
+> ci,k ,r
+
+q(3) 
+
+> ti,r
+
+sik,r . Then 
+
+wr ← max 
+
+
+
+0, ·
+
+∑
+
+> i,k,j
+
+Ki,j,k · z(w) 
+
+> ik,r
+
+· R(−r)
+
+> i,j,k
+
+∑
+
+> i,k,j
+
+Ki,j,k · (
+
+z(w)
+
+> ik,r
+
+)2
+
+
+
+. (6) 
+
+Computational efficiency and stability: In our implementation, we keep track of the residuals Ri,j,k = yi,j − x⊤
+
+> i,k
+
+βci,k ,t i and update them incrementally. When a coordinate 
+
+q(1)  
+
+> l,r
+
+changes by ∆, set Ri,j,k ← Ri,j,k − z(1) 
+
+> ik,r
+
+xl,ik ∆; analogous updates are used for q(2)  
+
+> c,r
+
+, q(3) 
+
+> t,r
+
+15 and wr. This reduces the per-coordinate cost from O(p ∑ 
+
+> i
+
+MiNi) for recomputation to 
+
+O(∑ 
+
+> i
+
+MiNi), yielding substantial speed-ups without any approximation. After updating the factors for each rank, we rescale them to unit ℓ2 norm and absorb the entire scale into the scaler wr. Let αm = ∥∥∥q(m) 
+
+> ·r
+> ∥∥∥2
+
+for m ∈ { 1, 2, 3}. We set 
+
+q(m) 
+
+> ·r
+
+← q(m)
+
+> ·r
+
+αm
+
+for m = 1 , 2, 3, wr ← wr α1α2α3,
+
+so that the contribution from the r-th rank, wr q(1)  
+
+> ·r
+
+q(2)  
+
+> c,r
+
+q(3)  
+
+> t,r
+
+, (and thus fitted values) is unchanged. This prevents factor columns from arbitrarily exploding/vanishing with com-pensating shrink/expansion in wr, keeps the coordinate-descent curvature well conditioned, and makes the ℓ1 penalty on q(1) act consistently rather than depending on arbitrary scaling of q(1) .
+
+Stopping rules: One may continue the above iterative process up to a fixed number of iterations. Instead, we continue until the following predefined convergence criterion is met: 
+
+1) max 
+
+> c,t
+
+∥β(new ) 
+
+> c,t
+
+− β(old ) 
+
+> c,t
+
+∥2
+
+> ∞
+
+∥β(old ) 
+
+> c,t
+
+∥2
+
+> ∞
+
+< 10 −6.
+
+2) max r,m 
+
+> {
+
+∥q(m) 
+
+> r,new
+
+− q(m)
+
+> r,old
+
+∥}
+
+≤ 10 −4. (7) The second criterion in Eq. (7) was also used in Anandkumar et al. (2015) and Sun et al. (2017) in the context of tensor-valued response regression. 
+
+Automatic CP-rank update: In our approach, the procedure of selecting CP rank is seamlessly integrated into the blocked Coordinate Descent algorithm. We do not need to specify or tune the rank during model fitting manually. Instead, the method begins by initializing the model with a sufficiently large CP rank, which we recommend setting to the product of the number of cell type ( C) and time points ( T ), i.e., C × T . The general upper 16 bound on the maximum CP rank for any three-way tensor X ∈ RI×J×K satisfies (Kruskal, 1989; Kolda and Bader, 2009) 
+
+rank( X ) ≤ min {IJ, IK, JK }. (8) A rank-dropping strategy is then applied during the first 500 iterations, and the algorithm actively prunes unnecessary components in these steps. This strategy ensures that the subsequent updates focus on stabilizing the estimation across iterations based on the selected rank after the rank-dropping. Specifically, the CP rank of B is reduced from R to R − 1 by discarding r-th component if any of the following conditions are met: 
+
+1) wr 
+
+> ∑
+> i
+
+wi
+
+< 10 −5, 2) wr = 0 , 3) ∥q(1)  
+
+> r
+
+∥∞ > 0.99 . (9) By automatically discarding redundant or negligibly small components, the rank-dropping strategy allows the model to achieve both good estimation accuracy and computational efficiency by selecting a final rank that balances model complexity and goodness-of-fit automatically. 
+
+Lambda selection: We first fit the method for different choices of λ and then select the optimal λ based on a BIC-like criteria. To ensure computational efficiency, we begin with the penalty parameter λ that yields the all-zero solution and progressively decrease it, as done in the path solution algorithms (Efron et al., 2004; Friedman et al., 2010). The successive penalty parameters are then set recursively as λk+1 = 0 .9λk. Finally, for each penalty, we evaluate the following BIC-like criterion to do the final selection: 
+
+N ∗ log  
+
+> 
+
+1
+
+N ∗
+
+> n∑
+> i=1
+> Ni∑
+> k=1
+> Mi∑
+> j=1
+
+Ki,j,k · (
+
+yi,j − x⊤
+
+> i,k
+
+βci,k ,t i 
+
+> )2
+> 
+
++ ν log( N ∗), (10) 17 where N ∗ = ∑ni=1  
+
+> ∑Ni
+> k=1
+> ∑Mi
+> j=1
+
+1{Ki,j,k > 0} and ν is the number of nonzero entries in q(1)  
+
+> r
+
+,
+
+q(2)  
+
+> r
+
+, and q(3)  
+
+> r
+
+. Although one can choose a smaller decay factor than 0.9 for a finer exploration, in our experiments, this choice works reasonably well. 
+
+Bandwidth selection: The kernel bandwidth hi is set based on an elbow rule, as discussed below. First, we set the candidate bandwidths as the medians of the distances from each plaque to its L-th closest neighboring cell for different choices of L’s. Let the median distance based on L-th closest neighboring cell in i-th sample be Hi(L) = Median ({e(L) 
+
+> i,j
+
+}Ni
+
+> j=1
+
+), where 
+
+e(L) 
+
+> i,j
+
+= D(L)(Ui,j ) where D(1) (Ui,j ) ≤ D(2) (Ui,j ) ≤ · · · ≤ D(Mi)(Ui,j ) stands for the sorted sequence of the distances of different cells from j-th plaque i.e. {∥ Ui,j − Vi,k ∥2}Mi
+
+> k=1
+
+.Finally, we plot the normalized loss 
+
+1
+
+N ∗
+
+> n∑
+> i=1
+> Ni∑
+> k=1
+> Mi∑
+> j=1
+
+KHi(L)(∥Ui,j − Vi,k ∥2) (
+
+yi,j − x⊤
+
+> i,k
+
+βci,k ,t i
+
+> )2
+
+as a function of the neighborhood size L and select L using the elbow (point-of-diminishing-returns) criterion, defined as the value of L maximizing the perpendicular distance to the line connecting the endpoints of the loss curve (Satopaa et al., 2011). Even with the same 
+
+L for all samples, the sample-specific bandwidths (Hi(L)) may be different. 
+
+## 3.2 Initialization 
+
+To initialize the model parameters wr, q(1)  
+
+> r
+
+, q(2)  
+
+> r
+
+, and q(3)  
+
+> r
+
+, we apply a weighted Ridge regression without the CP decomposition structure. For each pair (c, t ), define the objective 
+
+Lc,t (β) = ∑ 
+
+> i:ti=t
+> ∑
+> k:ci,k =cMi∑
+> j=1
+
+Ki,j,k · (
+
+yi,j − x⊤
+
+> i,k
+
+β)2
+
++ λc,t ∥β∥22,
+
+18 and the estimator 
+
+ˆβ(Ridge ) 
+
+> c,t
+
+∈ arg min 
+
+β∈Rp
+
+Lc,t (β).
+
+Here, we put the l2 penalty on the coefficient vector. A CP decomposition with the initial rank described above is then applied to the resulting ˆB(Ridge ) to obtain the initial model parameters, where ( ˆB(Ridge )) 
+
+> l,c,t
+
+=
+
+> (
+
+ˆβ(Ridge )
+
+> c,t
+> )
+> l
+
+, for l = 1 , . . . , p .
+
+Algorithm 1 Comprehensive Implementation Algorithm for the Proposed Method 
+
+Step 1: Select a sequence of λ and L. For each choice of (λ, L ) run the following: 
+
+Input: {y(Ui,j )}j=1 ,...,N i;i=1 ,...,n ,{x(Vi,k )}k=1 ,...,M i;i=1 ,...,n , Rmax , λ, hi(L) 
+
+> 1:
+
+(Initialization) Run a weighted Ridge regression applying glmnet and get ˆB(Ridge ) as described in Sec 3.2, where λRidge is selected via cross-validation (Friedman et al., 2010).  
+
+> 2:
+
+while Rmax ≥ 1 do  
+
+> 3:
+
+R ← Rmax  
+
+> 4:
+
+Initialize wr, q(1)  
+
+> r
+
+, q(2)  
+
+> r
+
+, and q(3)  
+
+> r
+
+by applying CP on ˆB(Ridge ) with initial rank R. 
+
+> 5:
+
+repeat  
+
+> 6:
+
+Update parameters as equations from Eq.(3) to Eq.(6).  
+
+> 7:
+
+wr ← wr∥q(1)  
+
+> r
+
+∥∥ q(2)  
+
+> r
+
+∥∥ q(3)  
+
+> r
+
+∥; q(m) 
+
+> r
+
+← q(m) 
+
+> r
+
+/∥q(m) 
+
+> r
+
+∥ for m = 1 , 2, 3. 
+
+> 8:
+
+Update CP-rank R automatically by Eq.(9).  
+
+> 9:
+
+until Stopping rule Eq.(7) satisfied, or R = 0 . 
+
+> 10:
+
+if R = 0 then  
+
+> 11:
+
+Rmax ← Rmax − 1; Repeat Steps 2-9  
+
+> 12:
+
+else  
+
+> 13:
+
+Rfinal ← R; break ▷ converged at current rank R
+
+Output: Obtain final estimate as B(final)  
+
+> λ,L
+
+= ∑Rfinal  
+
+> r=1
+
+wrq(1)  
+
+> r
+
+◦ q(2)  
+
+> r
+
+◦ q(3)  
+
+> r
+
+for a given λ and L.
+
+Step 2: Select the optimal ˆλ from the pre-specified sequence for each choice of L using the criteria in Eq.(10). 
+
+Step 3: Select the optimal ˆL applying the elbow rule, and get the final estimate B(final) ˆλ, ˆL .
+
+# 4 Simulations 
+
+To evaluate our method’s ability to recover the important genes and quantify gene-plaque relationships, we design a simulation setting relying on simulated spatial transcriptomic data using the STRsim package (Zhu et al., 2023). Following the real data, the plaque sites are set well-separated in the simulation too. We compare our estimates with those from a LASSO-regularized linear regression model. 19 Since fitting LASSO requires the data in a paired form as (outcome, predictors), we first organize the data as (yi, xi), where xi is the gene expression of the cell nearest to i-th 
+
+outcome yi. Then, we fit the LASSO regression model. 
+
+## 4.1 Data Generation 
+
+While generating the simulated data, we mimic our real data and consider two time points. Thus, for each replicated dataset, we generate two square-shaped SRT samples using SRTsim 
+
+package, one for each time point. For each sample i ∈ { 1, 2}, let Si denote the set of spatial spots. For each sample i, we simulate a square section with an expected |S i| ≈ 5000 spots and C = 3 cell-type groups ( SRTsim “number of groups”=3). SRTsim returns a gene-by-spot expression matrix xi ∈ Rp×|S i|, 2D coordinates {si,j }j∈S i , and group labels cij ∈ { 1, 2, 3}.Each spot has a unique location within the section. For each sample i, we designate a plaque set Pi ⊂ S i of size Mi ∈ { 50 , 100 , 200 }, chosen to be well separated in space and balanced across cell types (i.e., |P i,c | is the same for c =1, . . . , C , where Pi,c = {j ∈ P i : cij = c}). The remaining spots Ci = Si \ P i serve as the pool of neighboring predictor cells, reflecting the spatial misalignment in real data where outcomes are observed at plaques while predictors are measured at nearby SRT locations. For each plaque j ∈ P i, we generate the outcom using the linear model: 
+
+yi,j = x(si,j )⊤βc,t + ei,j ,
+
+where βc,t ∈ Rp is the regression coefficient for c-th cell-type at time t. Let ei = ( ei,j )j∈P i .Rather than independent noise, we add spatially correlated errors, 
+
+ei ∼ N (0 , σ 2 
+
+> e
+
+Ki), σ2 
+
+> e
+
+∈ { 1, 5, 10 , 100 , 200 },
+
+20 with Ki(j, j ′) = exp {− di(j, j ′)/ ˆϕ}. We estimate ˆϕ once from the real plaque by fitting an exponential variogram using geoR (variog /variofit ; Ribeiro Jr and Diggle (2025)) and then hold ˆϕ fixed across samples and replicates. Although yi,j is generated from the expression at the same plaque location x(si,j ), in the downstream analysis we treat plaque-site expression as unobserved and remove {x(si,j ) : j ∈ P i} from the predictor set, so {yi,j : j ∈ P i} are modeled using only neighboring non-plaque spots {x(si,j ) : j ∈ C i}.We set the total number of predictors at 50, with 5 out of 50 having non-zero effects, and assume a CP-based low-rank form with rank 4. In order to achieve this, we set a randomly selected 5 rows in q1 to be non-zero and the rest all zero, with non-zero entries generated from N (0 , 22) The entries in q2 and q3 are generated from N (5 , 22) and N (0 , 0.52)
+
+respectively. 
+
+## 4.2 Estimation 
+
+We set the Rmax at 6 following maximum rank characterization in Eq. (8) , and vary bandwidth over choosing L ∈ { 5, 10 , 12 , 15 , 20 , 25 , 30 , 35 , 40 , 45 , 50 , 70 }. We specify λmax = 10 10 ×0.9−30 .We then apply the procedure described in Algorithm 1, which performs data-driven selection of these parameters and yields the final estimate. To assess variable selection performance, we compute the true positive rate (TPR) and false positive rate (FPR) at threshold τ ≥ 0 in Table 1 as TPR (τ ) =  
+
+> ∑
+
+I {
+
+| ˆβlgt | ≥ τ, β lgt ̸ = 0 }∑ I {βlgt ̸ = 0 } ; FPR (τ ) =  
+
+> ∑
+
+I {
+
+| ˆβlgt | ≥ τ, β lgt = 0 }∑ I {βlgt = 0 } .
+
+By thresholding the estimated coefficients ˆβ(i, c, t ) at a sequence of cutoff values, we trace out an ROC curve in the TPR–FPR plane. We augment it with the extreme points (0,0) and (1,1) to ensure a full range of rate values, and compute the area under the curve (AUC) 21 Mi σ2                                                                               
+
+> eProposed MSE Paired MSE Proposed AUC Paired AUC 50 16.333 7.086 0.574 0.485 50 56.367 7.014 0.563 0.485 50 10 6.392 6.985 0.544 0.484 50 100 6.891 8.029 0.495 0.501 50 200 7.359 9.169 0.510 0.507 100 16.256 7.455 0.647 0.514 100 56.253 7.422 0.629 0.524 100 10 6.275 7.380 0.650 0.525 100 100 6.403 8.330 0.565 0.539 100 200 6.586 9.256 0.568 0.546 200 16.278 6.706 0.626 0.484 200 56.235 6.717 0.607 0.489 200 10 6.273 6.705 0.606 0.494 200 100 6.319 6.815 0.565 0.501 200 200 6.486 8.356 0.568 0.498
+
+Table 1: Performance over 30 replicates across choices of plaque number Mi and error variance σ2 
+
+> e
+
+, when the data is generated following Section 4.1. For each condition, penalty parameter λ and bandwidth h were selected as described in Section 3. Note that paired LASSO often yields all-zero estimates. via the trapezoidal rule. To quantify overall estimation accuracy, we calculate the mean squared error (MSE) of the coefficient estimates: 
+
+M SE = mean 
+
+> l,c,t
+> [̂
+
+β(l, c, t ) − β(l, c, t )]2
+
+.
+
+Across 30 replicates over plaque numbers Mi ∈ { 50 , 100 , 200 } and error variances σ2 
+
+> e
+
+∈{1, 5, 10 , 100 , 200 }, the proposed method consistently delivers better discrimination than the paired LASSO: AUC = 0.54–0.68 (mean 0.606) versus 0.50–0.54 (mean 0.521), and typically lower MSE. The gains persist under high noise and grow with larger Mi, indicating accurate recovery of the underlying cell-type-specific gene effects. As shown in Table 1, the estimates from our proposed method are better both in estimation accuracy and in selecting the genes with non-zero effects, whereas the paired LASSO often collapses to all-zero solutions. 22 5 Aβ Plaque Size Analysis 
+
+In this section, we perform the integrative spatial transcriptomic analysis to examine the relationship between gene expression profiles and Amyloid-β (A β) plaque pathology in Alzheimer’s disease (AD), focusing on two different stages of disease progression and three specific cell types. We analyze four SRT tissue sections ( i = 1 , 2, 3, 4) from STARmap PLUS, with two sections at each time point (8 and 13 months). Specifically, sections i = 1 , 2
+
+correspond to the two 8-month replicates, and sections i = 3 , 4 correspond to the two 13-month replicates. The cell counts are (N1, N 2, N 3, N 4) = (8 ,186 , 8,202 , 10 ,372 , 9,634) ,and plaque counts are (M1, M 2, M 3, M 4) = (88 , 99 , 192 , 136) . We use the normalized expression provided by Zeng et al. (2023) to place all p = 2 ,766 genes on a common scale across sections and time points so that estimated coefficients are comparable across genes and over time. We set the Rmax at 6, and λmax = 10 5. The final selected values are always found to be smaller than these pre-specified upper bounds. We consider the discrete grid 1, . . . , 20 , 25 , 30 
+
+for the number of neighbors L, while setting the bandwidth Hi(L) for the i-th sample; the bandwidth selection procedure is described in Algorithm 1. Prior to fitting the plaque-size regressions, we apply an expression filter independent of plaque morphology to exclude transcripts with insufficient detection for stable estimation. Specifically, within each of the three target cell types and for each tissue sample collected at 8 and 13 months, we retain genes detected (nonzero) in > 20% of near-plaque cells (within 
+
+150 μm of the plaque center). We then augment the retained set with (i) 64 marker genes from Zeng et al. (2023) and (ii) plaque-induced genes (PIGs) from Chen et al. (2020) (32 of the 57 PIGs are present in our dataset). This procedure yields a final gene panel of 182 transcripts for modeling plaque morphology. 23 From our proposed model, we estimate a 3-dimensional coefficient tensor B ∈ Rp×C×T (gene 
+
+× cell type × time point), with a CP structure to relate plaque size to local, cell-type-resolved expression across time. The final rank is R = 4 with penalty λ = 10 5(0 .9) 21 ≈ 1.094 × 10 4.For the bandwidth selection, elbow rule give us the choice of L = 5 for all four samples. Accordingly, we set the sample-specific bandwidth for the kernel function as hi = Hi(5) , i =1, 2, 3, 4, where Hi(L) denotes the median distance to the L-th nearest neighboring cell in sample i (defined in Sec 3.1). This yields h = (41 .77 , 45 .42 , 36 .89 , 37 .76) μm. Here, each coefficient β(l, c, t ) is associated with the normalized expression of gene l, while setting other variables in the model fixed for cell type c and time t.For each cell type c and time t, we summarize the overall strength of association between gene expression in cell type c and the plaque size at time t by Ac,t = ∥β·ct ∥2, the ℓ2 norm of all p
+
+gene-effects. We summarize the averaged direction of association by ¯βc,t = p−1 ∑pl=1 β(l, c, t ),
+
+i.e., the mean gene effect across all p genes for cell type c at time t. At 8 months, Ac,t is modest (Astrocyte: 2.30; Oligodendrocyte: 6.20; Microglia: 3.04), but it increases sharply by 13 months (Astrocyte: 19.40; Oligodendrocyte: 39.74; Microglia: 21.81), indicating substantially stronger plaque–expression associations over time. The signed means ¯βc,t are near zero at 8 months (Astrocyte: −0.0049 , Oligodendrocyte −0.0018 ), while Microglia shows a small positive mean ( 0.0285 ), meaning that higher microglial gene expression tends to be associated with larger plaques on average at 8 months. By 13 months, the average effects are predominantly positive for Oligodendrocyte (0.0379) and especially Microglia (0.1536), while Astrocyte remains near zero (0.0017). Overall, these results point to strong, increasing plaque-proximal gene-expression effects in oligodendrocyte-lineage cells and microglia over time, with microglia showing the clearest positive directional signal at 13 months. Following the CP structure, we pursue a component-level interpretation of the results here. 24 CP Decomposes the coefficient tensor into four rank-1 latent factors that summarize the gene–cell-type–time patterns in the association with plaque size (Table 2). The first three components have substantially larger weights than the fourth. For component r with factors 
+
+q(1)  
+
+> r
+
+(genes), q(2)  
+
+> r
+
+(cell types), q(3)  
+
+> r
+
+(times) and weight wr, we orient it so that its top-loading genes have positive entries in the gene factor, and then summarize its overall direction using the signed-average product NetDir r = 
+
+> ∑
+> l
+
+q(1)  
+
+> l,r
+> ∑
+> l
+
+|q(1)  
+
+> l,r
+
+| 
+
+> ( ∑
+> c
+
+q(2)  
+
+> c,r
+> ∑
+> c
+
+|q(2)  
+
+> c,r
+
+| 
+
+> ) ∑
+> t
+
+q(3)  
+
+> t,r
+> ∑
+> t
+
+|q(3)  
+
+> t,r
+
+| 
+
+> 
+
+∈ [−1, 1] .
+
+We refer to 13 months as the late disease stage. As shown in Table 2, each component is dominated by the late time point, with the 13-month time loading having magnitude close to 1, indicating that the estimated associations concentrate their mass at 13 months (with direction determined by the joint sign across modes). Among them, Component 3 shows a clearly positive direction (Net direction ≈ +0 .47 ) with largest loadings on Oligodendrocytes and Microglia at 13 months; top genes include Trem2, Tmsb4x, Tyrobp, and Plp1, indicating a late microglia–oligodendrocyte component-derived signature in which higher expression is associated with larger plaques. In contrast, Components 1 and 2 carry negative temporal loadings at 13 months and split cell-type emphasis–one tilting toward Oligodendrocytes (Oligodendrocyte ↑, Microglia ↓) and the other toward Microglia (Microglia ↑, Astrocyte 
+
+↓). Despite substantial overlap in top genes (e.g., Trem2, C1qa, Aplp1), their opposite cell-type signs imply opposing directions of association across components at the same time point, consistent with heterogeneity between microglia-enriched expression patterns and oligodendrocyte/myelin related pathways. Finally, Component 4 is uniformly negative (Net direction ≈ − 1), dominated by Oligodendrocyte and Microglia loadings at 13 months with genes such as Tmsb4x, Plp1, C1qa, and Cst3, suggesting a late-stage component pattern in which higher expression accompanies smaller plaques. Thus, in summary, the estimated 25 associations concentrate at 13 months and along a Microglia–Oligodendrocyte axis, but with mixed directions across components: Component 3 aligns with larger plaques, whereas Components 1, 2, and 4 align with smaller plaques, suggesting distinct plaque-proximal expression patterns. These multigene expression patterns arising from the CP-component-based results align well with the known biological knowledge: microglial activation modules (e.g., Trem2, Tyrobp, C1q complex) rise near plaques (Hong et al., 2016; Keren-Shaul et al., 2017; Krasemann et al., 2017), while oligodendrocyte/myelin genes (e.g., Plp1, Mbp) mreflect white-matter processes implicated in AD progression (McKenzie et al., 2017; Nasrabady et al., 2018). CP combines these signals into a small number of interpretable, signed components that are localized by cell type and disease stage, enabling component-level summaries rather than gene-by-gene effects. For instance, a component dominated by microglia at 13 months shows a positive association with plaque size, whereas a component dominated by oligodendrocytes at 13 months shows a negative association. 
+
+Gene-level examples consistent with prior literature (associational). To summarize temporal changes in estimated regression coefficients (associational gene effects), we write 
+
+a → b for gene l in cell type c, where ˆβl,c, 8 = a (8 months) and ˆβl,c, 13 = b (13 months). 
+
+Astrocytes: transport-related markers show increasingly negative associations with plaque size (Aqp4 −0.27 → − 1.85 , Slc13a3 −0.26 → − 1.67 ), while alarmin/stress signals become more positively associated (Il33 +0 .27 → +1 .99 , S100a6 +0 .28 → +1 .82 ), consistent with reactive astrocyte frameworks and IL-33–microglia crosstalk (Escartin et al., 2021; Vainchtein et al., 2018). Oligodendrocyte lineage: larger plaques are associated with stronger precursor-like signal (Gpr17 +0 .29 → +2 .39 ) and reduced mature oligodendrocyte identity (Sox10 
+
+−0.16 → − 0.50 , Aspa ≈ − 0.20 ). These patterns are consistent with reported links between oligodendrocyte function and iron/transferrin biology (Todorich et al., 2009), and OPC– 26 Component, r Weight, wr NetDir Top cells Top times Top genes             
+
+> 198 .27 −0.1319 Oligodendrocyte ( +0 .75 ), Microglia ( −0.51 )13 mo ( −0.99 ), 8 mo ( −0.15 )Trem2( +0 .91 ), Tyrobp( −0.24 ), C1qa( −0.19 ), Aplp1( +0 .13 ), Mbp( +0 .08 )
+> 286 .34 −0.0287 Microglia ( +0 .83 ), Astrocyte ( −0.55 )13 mo ( −0.99 ), 8 mo ( −0.13 )Trem2( +0 .92 ), C1qa( −0.20 ), Aspa( −0.15 ), Aplp1( +0 .13 ), Tyrobp( −0.11 )
+> 366 .13 +0 .4662 Oligodendrocyte ( +0 .93 ), Microglia ( +0 .35 )13 mo ( +0 .99 ), 8 mo ( +0 .12 )Trem2( +0 .85 ), Tmsb4x( +0 .31 ), Tyrobp( +0 .22 ), Plp1( +0 .17 ), Aplp1( +0 .15 )
+> 419 .49 −1.0000 Oligodendrocyte ( −0.85 ), Microglia ( −0.52 )13 mo ( +1 .00 ), 8 mo ( +0 .09 )Tmsb4x( +0 .85 ), Plp1( +0 .40 ), C1qa( +0 .29 ), Cst3( +0 .19 )
+
+Table 2: CP component summary for the estimated coefficient tensor. For each component r,“Top cells/times/genes” are those with the largest-magnitude loadings in the corresponding mode. Component signs are oriented per component by top genes. The direction of association is determined by the reconstructed coefficient contribution (positive = larger plaques with higher expression; negative = smaller plaques with higher expression). vasculature coupling provides spatial context (Tsai et al., 2016). Microglia: an early Trem2-associated effect attenuates and reverses (Trem2 +0 .64 → − 0.37 ), while a later Apoe/Tyrobp-centered signature becomes strongly positively associated with plaque size (Apoe +0 .21 → +1 .78 ; Tyrobp −0.11 → +1 .20 ), mirroring reported DAM-like shifts and the TREM2–APOE pathway (Keren-Shaul et al., 2017; Krasemann et al., 2017; Deczkowska et al., 2018). 
+
+Novel or less-established associations requiring validation (hypothesis-generating). Oligodendrocyte “logistics”: strong, late positive coefficients for resource intake and protein production (Trf +0 .53 → +3 .53 , Pabpc1 +0 .50 → +3 .55 , Caskin1 
+
++0 .52 → +3 .95 ) suggest a resource-mobilizing oligodendrocyte niche as plaques enlarge; in contrast, Flt1 is strongly negative ( −0.57 → − 4.02 ), pointing to a vascular/adhesion signature aligned with smaller plaques. Microglial cytoskeleton and lysosome: Rhoc shows 27 a robust negative association ( −0.52 → − 3.95 ), consistent with more contractile morphology near smaller plaques, while cathepsins diverge (Ctsl +0 .20 → +1 .04 vs Ctss −0.11 → − 0.93 ), indicating targeted lysosomal remodeling rather than uniform activation. Astrocytes: 
+
+persistence and amplification of transport ↓/alarmin ↑ patterns across time underscore a simple, testable hypothesis: supporting basic astrocytic transport may align with smaller plaques. 
+
+# 6 Conclusion 
+
+In this paper, we introduce a novel kernel-weighted method to model how plaque-proximal single-cell spatial transcriptomic expression patterns relate to plaque size. The proposed framework is designed to capture both cell-type-specific and time-varying effects, thereby accommodating heterogeneity across genes, cell populations, and sample collection times. In addition, the method is fully automated through data-driven specification of the tuning parameters, such as rank, penalty, and bandwidth. We further adopt a low-rank model for the regression coefficients, which naturally captures the shared structure and inherent dependencies among genes, cell types, and time points. Our analysis reveals several plaque-size-associated expression patterns that are strongest at the 13-month data, mainly in microglia (brain immune cells) and oligodendrocytes (myelin-related cells), indicating that plaque-size associations reflect multiple transcriptional signatures acting in parallel rather than a single dominant signature. At a late disease stage, the microglial pattern is characterized by lipid-handling and complement-related genes, consistent with a plaque-proximal activation signature (Hong et al., 2016; Keren-Shaul et al., 2017; Krasemann et al., 2017); oligodendrocyte-lineage cells show a shift toward less mature (precursor-like) signatures, together with increased iron-homeostasis and protein-synthesis transcripts; and astrocyte signals are comparatively weak in net plaque-size tracking, with 28 transport-related genes showing attenuated associations. These findings suggest testable hypotheses for future validation: reduce the late-stage microglial-dominant lipid/complement activity, support astrocyte water/solute transport, and steer oligodendrocytes toward a mature maintenance state to evaluate whether plaque growth can be limited. For future work, we will analyze how gene expression changes in comparison to the plaque size. This will let us map which genes and multigene expression patterns rise or fall as plaques enlarge, compare patterns across different disease stages and brain regions. These insights will have important translational implications for understanding disease mechanisms and guiding hypothesis-driven experimental studies. Methodologically, there are opportunities to consider more flexible Tucker factorization for β, and also other types of effect characterizations beyond linearity. 
+
+Data availability 
+
+We use publicly available data from Zeng et al. (2023) for our analysis. 
+
+# Acknowledgement 
+
+The authors would like to thank Dr. Dongyuan Wu for helpful discussions and suggestions regarding the data. During the preparation of this work, the authors used ChatGPT to assist with writing. All content was subsequently reviewed and edited by the authors, who take full responsibility for the publication. 
+
+# References 
+
+Alexeeff, S. E., Carroll, R. J. and Coull, B. (2016), ‘Spatial measurement error and correction by spatial simex in linear regression models when using predicted air pollution exposures’, 
+
+Biostatistics 17 (2), 377–389. 29 Anandkumar, A., Ge, R. and Janzamin, M. (2015), ‘Guaranteed Non-Orthogonal Tensor Decomposition via Alternating Rank-1 Updates’. arXiv:1402.5180. Arora, R., Cao, C., Kumar, M., Sinha, S., Chanda, A., McNeil, R. et al. (2023), ‘Spatial transcriptomics reveals distinct and conserved tumor core and edge architectures that predict survival and targeted therapy response’, Nature communications 14 (1), 5029. Bassiouni, R., Idowu, M. O., Gibbs, L. D., Robila, V., Grizzard, P. J., Webb, M. G. et al. (2023), ‘Spatial transcriptomic analysis of a diverse patient cohort reveals a conserved architecture in triple-negative breast cancer’, Cancer research 83 (1), 34–48. Berrocal, V. J., Gelfand, A. E. and Holland, D. M. (2010), ‘A spatio-temporal downscaler for output from numerical models’, Journal of agricultural, biological, and environmental statistics 15 (2), 176–197. Cao, H., Zeng, D. and Fine, J. P. (2015), ‘Regression Analysis of Sparse Asynchronous Lon-gitudinal Data’, Journal of the Royal Statistical Society Series B: Statistical Methodology 
+
+77 (4), 755–776. Carroll, J. D. and Chang, J.-J. (1970), ‘Analysis of Individual Differences in Multidimensional Scaling Via an N-way Generalization of “Eckart-Young” Decomposition’, Psychometrika 
+
+35 (3), 283–319. Chen, K. H., Boettiger, A. N., Moffitt, J. R., Wang, S. and Zhuang, X. (2015), ‘Spatially resolved, highly multiplexed rna profiling in single cells’, Science 348 (6233), aaa6090. Chen, S., Chang, Y., Li, L., Acosta, D., Li, Y., Guo, Q. et al. (2022), ‘Spatially resolved transcriptomics reveals genes associated with the vulnerability of middle temporal gyrus in alzheimer’s disease’, Acta neuropathologica communications 10 (1), 188. Chen, W.-T., Lu, A., Craessaerts, K., Pavie, B., Sala Frigerio, C., Corthout, N. et al. (2020), ‘Spatial Transcriptomics and In Situ Sequencing to Study Alzheimer’s Disease’, Cell 
+
+30 182 (4), 976–991.e19. De Strooper, B. and Karran, E. (2016), ‘The cellular phase of alzheimer’s disease’, Cell 
+
+164 (4), 603–615. Deczkowska, A., Keren-Shaul, H., Weiner, A., Colonna, M., Schwartz, M. and Amit, I. (2018), ‘Disease-associated microglia: A universal immune sensor of neurodegeneration’, 
+
+Cell 173 (5), 1073–1081. Efron, B., Hastie, T., Johnstone, I. and Tibshirani, R. (2004), ‘Least angle regression’. Escartin, C., Galea, E., Lakatos, A., O’Callaghan, J. P., Petzold, A., Serrano-Pozo, A. et al. (2021), ‘Reactive astrocyte nomenclature, definitions, and future directions’, Nature Neuroscience 24 , 312–325. Fan, J. (2018), Local polynomial modelling and its applications: monographs on statistics and applied probability 66 , Routledge. Fotheringham, A. S., Yang, W. and Kang, W. (2017), ‘Multiscale geographically weighted regression (mgwr)’, Annals of the American Association of Geographers 107 (6), 1247–1265. Friedman, J., Hastie, T. and Tibshirani, R. (2010), ‘Regularization paths for generalized linear models via coordinate descent’, Journal of Statistical Software 33 (1), 1–22. Gotway, C. A. and Young, L. J. (2002), ‘Combining incompatible spatial data’, Journal of the American Statistical Association 97 (458), 632–648. Hampel, H., Hardy, J., Blennow, K., Chen, C., Perry, G., Kim, S. H. et al. (2021), ‘The amyloid-β pathway in alzheimer’s disease’, Molecular psychiatry 26 (10), 5481–5503. Harshman, R. A. (1970), Foundations of the PARAFAC procedure: Models and conditions for an "explanatory" multi-model factor analysis. Hong, S., Beja-Glasser, V. F., Nfonoyim, B. M., Frouin, A., Li, S., Ramakrishnan, S. et al. 31 (2016), ‘Complement and microglia mediate early synapse loss in alzheimer mouse models’, 
+
+Science 352 (6286), 712–716. Jack Jr, C. R., Andrews, J. S., Beach, T. G., Buracchio, T., Dunn, B., Graf, A. et al. (2024), ‘Revised criteria for diagnosis and staging of alzheimer’s disease: Alzheimer’s association workgroup’, Alzheimer’s & Dementia 20 (8), 5143–5169. Jack Jr, C. R., Bennett, D. A., Blennow, K., Carrillo, M. C., Dunn, B., Haeberlein, S. B. et al. (2018), ‘Nia-aa research framework: toward a biological definition of alzheimer’s disease’, Alzheimer’s & dementia 14 (4), 535–562. Jin, Y., Zuo, Y., Li, G., Liu, W., Pan, Y., Fan, T. et al. (2024), ‘Advances in spatial transcriptomics and its applications in cancer research’, Molecular Cancer 23 (1), 129. Keren-Shaul, H., Spinrad, A., Weiner, A., Matcovitch-Natan, O., Dvir-Szternfeld, R., Ulland, T. K. et al. (2017), ‘A unique microglia type associated with restricting development of alzheimer’s disease’, Cell 169 (7), 1276–1290.e17. Kiers, H. A. L. (2000), ‘Towards a standardized notation and terminology in multiway analysis’, Journal of Chemometrics 14 (3), 105–122. Kolda, T. G. and Bader, B. W. (2009), ‘Tensor Decompositions and Applications’, SIAM Review 51 (3), 455–500. Krasemann, S., Madore, C., Cialic, R., Baufeld, C., Calcagno, N., El Fatimy, R. et al. (2017), ‘The trem2-apoe pathway drives the transcriptional phenotype of dysfunctional microglia in neurodegenerative diseases’, Immunity 47 (4), 566–581. Kruskal, J. B. (1989), Rank, decomposition, and uniqueness for 3-way and n-way arrays, in 
+
+‘Multiway data analysis’, pp. 7–18. Li, T., Li, T., Zhu, Z. and Zhu, H. (2022), ‘Regression Analysis of Asynchronous Longi-tudinal Functional and Scalar Data’, Journal of the American Statistical Association 
+
+32 117 (539), 1228–1242. Li, T., Zhu, H., Li, T. and Zhu, H. (2023), ‘Asynchronous Functional Linear Regres-sion Models for Longitudinal Data in Reproducing Kernel Hilbert Space’, Biometrics 
+
+79 (3), 1880–1895. Long, J. M. and Holtzman, D. M. (2019), ‘Alzheimer disease: an update on pathobiology and treatment strategies’, Cell 179 (2), 312–339. Mallach, A., Zielonka, M., van Lieshout, V., An, Y., Khoo, J. H., Vanheusden, M. et al. (2024), ‘Microglia-astrocyte crosstalk in the amyloid plaque niche of an alzheimer’s disease mouse model, as revealed by spatial transcriptomics’, Cell Reports 43 (6). Maynard, K. R., Collado-Torres, L., Weber, L. M., Uytingco, C., Barry, B. K., Williams, S. R. et al. (2021), ‘Transcriptome-scale spatial gene expression in the human dorsolateral prefrontal cortex’, Nature neuroscience 24 (3), 425–436. McKenzie, A. T., Moyon, S., Wang, M., Katsyv, I., Song, W.-M., Zhou, X. et al. (2017), ‘Multiscale network modeling of oligodendrocytes reveals molecular components of myelin dysregulation in alzheimer’s disease’, Molecular neurodegeneration 12 (1), 82. Miyoshi, E., Morabito, S., Henningfield, C. M., Das, S., Rahimzadeh, N., Shabestari, S. K. et al. (2024), ‘Spatial and single-nucleus transcriptomic analysis of genetic and sporadic forms of alzheimer’s disease’, Nature Genetics 56 (12), 2704–2717. Nadaraya, E. A. (1964), ‘On estimating regression’, Theory of Probability & Its Applications 
+
+9(1), 141–142. Nasrabady, S. E., Rizvi, B., Goldman, J. E. and Brickman, A. M. (2018), ‘White matter changes in alzheimer’s disease: a focus on myelin and oligodendrocytes’, Acta neuropatho-logica communications 6(1), 22. Ni, Z., Prasad, A., Chen, S., Halberg, R. B., Arkin, L. M., Drolet, B. A. et al. (2022), ‘Spot-33 clean adjusts for spot swapping in spatial transcriptomics data’, Nature Communications 
+
+13 (1), 2971. Oshan, T. M., Li, Z., Kang, W., Wolf, L. J. and Fotheringham, A. S. (2019), ‘mgwr: A python implementation of multiscale geographically weighted regression for investigating process spatial heterogeneity and scale’, ISPRS International Journal of Geo-Information 
+
+8(6), 269. Ribeiro Jr, P. J. and Diggle, P. J. (2025), geoR: Analysis of Geostatistical Data . R package version 1.9-6. Satopaa, V., Albrecht, J., Irwin, D. and Raghavan, B. (2011), Finding a" kneedle" in a haystack: Detecting knee points in system behavior, in ‘2011 31st international conference on distributed computing systems workshops’, IEEE, pp. 166–171. Shah, S., Lubeck, E., Zhou, W. and Cai, L. (2016), ‘In situ transcription profiling of single cells reveals spatial organization of cells in the mouse hippocampus’, Neuron 
+
+92 (2), 342–357. Ståhl, P. L., Salmén, F., Vickovic, S., Lundmark, A., Navarro, J. F., Magnusson, J. et al. (2016), ‘Visualization and analysis of gene expression in tissue sections by spatial transcriptomics’, Science 353 (6294), 78–82. Sun, W. W., Lu, J., Liu, H. and Cheng, G. (2017), ‘Provable Sparse Tensor Decomposition’, 
+
+Journal of the Royal Statistical Society Series B: Statistical Methodology 79 (3), 899–916. Szpiro, A. A. and Paciorek, C. J. (2013), ‘Measurement error in two-stage analyses, with application to air pollution epidemiology’, Environmetrics 24 (8), 501–517. Todorich, B., Pasquini, J. M., Garcia, C. I., Paez, P. M. and Connor, J. R. (2009), ‘Oligodendrocytes and myelination: the role of iron’, Glia 57 (5), 467–478. Tsai, H.-H., Niu, J., Munji, R., Davalos, D., Chang, J., Zhang, H. et al. (2016), ‘Oligoden-34 drocyte precursors migrate along vasculature in the developing nervous system’, Science 
+
+351 (6271), 379–384. Tucker, L. R. (1966), ‘Some Mathematical Notes on Three-Mode Factor Analysis’, Psy-chometrika 31 (3), 279–311. Vainchtein, I. D., Chin, G., Cho, F. S., Kelley, K. W., Miller, J. G., Chien, E. C. et al. (2018), ‘Astrocyte-derived interleukin-33 promotes microglial synapse engulfment and neural circuit development’, Science 359 (6381), 1269–1273. Vickovic, S., Eraslan, G., Salmén, F., Klughammer, J., Stenbeck, L., Schapiro, D. et al. (2019), ‘High-definition spatial transcriptomics for in situ tissue profiling’, Nature methods 
+
+16 (10), 987–990. Wang, X., Allen, W. E., Wright, M. A., Sylwestrak, E. L., Samusik, N., Vesuna, S. et al. (2018), ‘Three-dimensional intact-tissue sequencing of single-cell transcriptional states’, 
+
+Science 361 (6400), eaat5691. Xun, Z., Ding, X., Zhang, Y., Zhang, B., Lai, S., Zou, D. et al. (2023), ‘Reconstruction of the tumor spatial microenvironment along the malignant-boundary-nonmalignant axis’, 
+
+Nature Communications 14 (1), 933. Zeng, H., Huang, J., Zhou, H., Meilandt, W. J., Dejanovic, B., Zhou, Y. et al. (2023), ‘Integrative in situ mapping of single-cell transcriptional states and tissue histopathology in a mouse model of Alzheimer’s disease’, Nature Neuroscience .Zhu, J., Shang, L. and Zhou, X. (2023), ‘Srtsim: spatial pattern preserving simulations for spatially resolved transcriptomics’, Genome biology 24 (1), 39. 35
