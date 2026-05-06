@@ -21,6 +21,15 @@ conclusion: DCAFA统一了组织成分差异分析与特征归因分析，为生
 
 代码可在：https://github.com/wgrgwrght/DCAFA 获取。
 
+## 速览
+**TLDR**：本文提出DCAFA，一种基于回归的组织学图像分析框架，可将样本分为潜在结构社区，并同时进行结构组成差异和特征归因分析，在多种生物医学应用中揭示了未被传统方法捕捉的可解释的组织组合变化与特征关联。 \
+**Motivation**：传统方法只关注单个特征忽略了组织结构组合变化中的临床信号，需建立能同时分析结构组成与特征关系的模型。 \
+**Method**：提出DCAFA框架，通过回归模型分析基于组织图像的层级数据，结合社区组成和特征归因两种分析视角。 \
+**Result**：DCAFA在多种生物医学场景中成功识别出了与临床或分子结果相关的组织组成变化与特征关联，比传统特征分析更具解释力。 \
+**Conclusion**：DCAFA统一了差异丰度检测与特征归因分析，为组织图像与临床结果的关联研究提供了实用且可解释的工具。
+
+---
+
 ## Abstract
 Histological images are composed of diverse local structures such as cells, glands, or tissue patches, whose organisation and relative abundance reflect underlying biological processes. While most computational approaches focus on analysing individual features, many clinically relevant signals arise from changes in the composition of these structures rather than isolated measurements. This motivates the need for explicitly modelling how groups of similar instances vary across samples and relate to outcomes. We present DCAFA (Differential Community Abundance and Feature Attribution Analysis), a regression-based framework for analysing hierarchical biomedical data through both compositional and feature-level perspectives. DCAFA groups instances into latent communities representing recurring morphological or phenotypic patterns, and then performs two complementary analyses: (i) community composition analysis, which identifies groups that are enriched or depleted across outcomes, and (ii) feature attribution analysis, which quantifies how instance-level features relate to outcomes directly or within specific communities. Both use generalised linear and mixed-effects models, enabling covariate adjustment and inference through effect sizes, confidence intervals, and false discovery rate control. We demonstrate the utility of DCAFA across multiple biomedical settings, including endometrial histopathology, spatial transcriptomics, multiplex immunofluorescence imaging, and predefined cell-type analyses in colorectal cancer. These examples identify interpretable compositional shifts and context-specific feature associations that are not captured by conventional feature-based approaches. By unifying differential abundance testing and feature attribution within a single statistical framework, DCAFA serves as an openly available toolbox that provides a practical and interpretable means of linking tissue composition with clinical or molecular outcomes in biomedical imaging data.
 

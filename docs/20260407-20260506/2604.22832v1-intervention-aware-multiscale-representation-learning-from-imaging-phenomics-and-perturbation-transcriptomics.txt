@@ -1,0 +1,528 @@
+Title: Intervention-Aware Multiscale Representation Learning from Imaging Phenomics and Perturbation Transcriptomics
+
+URL Source: https://arxiv.org/pdf/2604.22832v1
+
+Published Time: Tue, 28 Apr 2026 00:02:37 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# Intervention-Aware Multiscale Representation Learning from Imaging Phenomics and Perturbation Transcriptomics 
+
+# Jiayuan Chen Ruoqi Liu Zishan Gu Ping Zhang *
+
+# The Ohio State University 
+
+{chen.12930,liu.7324,gu.1090,zhang.10631 }@osu.edu 
+
+# Abstract 
+
+Microscopy-based phenotypic profiling is scalable for drug discovery but lacks the mechanistic depth of transcrip-tomics, which remains costly and scarce. Existing multi-modal approaches either use images to support other modal-ities or naively align representations by sample identity, ig-noring cell-type and dose variations in weakly paired data-limiting generalization to unseen interventions. In this pa-per, we introduce an intervention-aware distillation frame-work that leverages perturbational transcriptomics to guide image representation learning. A transcriptome-conditioned teacher integrates gene expression and intervention metadata to produce soft distributions over a chemistry-aware code-book organized by drug similarity. The teacher employs a fine-tuned single-cell foundation model to encode cell-type context and disentangle dose effects. An image-only student learns to predict these distributions from microscopy alone, distilling mechanistic knowledge while operating indepen-dently at test time. This design emphasizes intervention se-mantics rather than identity alignment and explicitly handles dose and cell-type mismatches. We provide theoretical guar-antees showing that transcriptomic guidance tightens the risk bound for image-based prediction. On Cell Painting and RxRx datasets paired with L1000, our method significantly improves one-shot transfer to unseen interventions and drug-target gene discovery compared to self-supervised and align-ment baselines 1.
+
+# 1. Introduction 
+
+Phenotype-based screening [6, 24] has become central to drug discovery [11, 17] and to building virtual cells [4, 32] that predict cellular responses to perturbations. Two com-plementary readouts dominate this landscape: microscopy imaging [2] provides scalable, low-cost morphological pro-files suitable for screening thousands of compounds, while 
+
+> *Corresponding author.
+> 1https://github.com/The-Real-JerryChen/BioMicroscopyProfiler
+
+perturbational transcriptomics [27, 32] captures pathway-level mechanistic signatures that reveal how drugs modulate cellular programs. In current practice, image-based mod-els rely primarily on self-supervised learning (SSL) meth-ods such as masked autoencoders (MAE) [12, 14] or DINO [5, 13] to extract transferable visual features. While these ap-proaches learn general-purpose representations, the resulting features remain weakly connected to the biological mecha-nisms and transcriptomic changes that drugs actually induce [1]. They excel at capturing morphological patterns but lack the mechanistic grounding that transcriptomics provides-the very information needed to understand why a phenotype emerges and to predict responses to novel interventions. This raises a fundamental question: when limited paired image-transcriptome data becomes available, how can we leverage perturbational transcriptomics to guide image representation learning toward mechanistic understanding? Existing image-centric multimodal approaches [22] typi-cally leverage transcriptomic or chemical information to im-prove compound representations. Some methods [8, 16, 29] align both images and RNA-seq to a shared drug embed-ding space, while others [10, 25, 34] directly pair drug struc-ture with image features, bypassing RNA altogether. While these designs enable cross-modal retrieval, they fundamen-tally center on drug identity rather than intervention effects. By treating drug identity as the primary supervision signal, they collapse the effect variations introduced by dose and cell type into binary matching objectives-the same compound as-sayed under different conditions is treated as an equivalent positive pair, discarding the graded response information crit-ical for generalization. Moreover, these approaches primarily aim to learn better drug [16, 25] or transcriptomic represen-tations [1], with images serving mainly as auxiliary signals rather than the target modality for improvement. As a re-sult, the learned image features remain disconnected from the mechanistic pathways that link drug chemistry to transcrip-tomic response and ultimately to morphological phenotype. Models trained this way struggle to transfer to unseen pertur-bations and cellular contexts where intervention effects differ from the training distribution [7, 15]. 
+
+> arXiv:2604.22832v1 [cs.CV] 19 Apr 2026
+
+We propose to reframe multimodal learning around inter-vention semantics rather than sample identity. Drug pertur-bations follow a structured causal pathway: chemistry de-termines which pathways are engaged, shaping transcrip-tomic responses that ultimately manifest in morphological phenotypes. To leverage this structure, we introduce an intervention-aware distillation framework in which pertur-bational transcriptomics guides image representation learn-ing during training. A transcriptome-conditioned teacher model encodes intervention effects from RNA-seq and meta-data, while an image-only student learns to recover these ef-fects from microscopy alone. Two technical designs instan-tiate this principle. First, we fine-tune a single-cell foun-dation model (scFM) on perturbation response prediction to encode cell-type context from basal gene expression and intervention-specific information from perturbed transcrip-tomes and doses. This encoding provides mechanism-aware representations that capture pathway-level effects while ac-counting for dosage variations across weakly paired samples. Second, to organize supervision by mechanism rather than identity, we construct a chemistry-aware codebook by pro-jecting drug molecular fingerprints into a normalized pro-totype space. The teacher integrates both RNA-seq and paired images to produce soft distributions over this code-book, while the student learns to predict these distributions from images alone. Transcriptomics thus serves as privileged information during training, shaping image features toward mechanistic understanding, but is not required at test time. We also provide theoretical analysis showing that incorporat-ing transcriptomic signals during training provably tightens the risk bound for image-based intervention prediction. We validate our approach on multiple benchmarks span-ning two encoder backbones. On Cell Painting [3, 7] and RxRx [15] datasets paired with L1000 perturbational tran-scriptomics, we evaluate one-shot transfer to unseen inter-ventions and unsupervised drug-target gene discovery. Com-pared with well-established self-supervised baselines (MAE, DINO) and contrastive alignment methods, our intervention-aware framework achieves significant improvements across all tasks. In summary, our contributions are: • We introduce an intervention-aware distillation framework that uses perturbational transcriptomics to guide image representation learning toward mechanistic understanding, with theoretical guarantees showing that transcriptomic guidance tightens the risk bound for image-based interven-tion prediction. • We propose a chemistry-aware codebook that struc-tures supervision by drug mechanism, combined with a transcriptome-conditioned teacher that leverages a fine-tuned scFM to encode cell context and intervention effects. • We demonstrate strong empirical performance on one-shot transfer to unseen interventions and unsupervised drug-target discovery across Cell Painting and RxRx datasets, outperforming self-supervised and alignment baselines. 
+
+# 2. Related Work 
+
+2.1. Phenotypic Profiling of Drug Perturbations 
+
+Microscopy-based profiling, such as Cell Painting [2], uses multiplexed fluorescent imaging to capture morphological re-sponses to drug perturbations at scale, enabling applications in novel biological relationship discovery [7, 15, 26]. These assays are cost-effective and high-throughput but lack direct mechanistic interpretation. Recent work applies SSL, such as MAE [14] and DINO [13], to extract morphological features from unlabeled images, though these remain weakly con-nected to biological mechanisms. Perturbational transcrip-tomics captures genome-wide gene expression changes, pro-viding pathway-level mechanistic insights through datasets like LINCS L1000 [27] and Tahoe-100M [32]. scFMs such as scGPT [11] and Geneformer [28] can be fine-tuned to predict perturbation responses [19], offering rich mechanis-tic representations but at higher cost and lower throughput. These modalities are complementary, images provide scale, transcriptomics provides mechanism, yet paired datasets re-main scarce and often weakly paired [1], with the same drug profiled at different doses, batch, or cell types across modal-ities. 
+
+2.2. Multimodal Learning for Perturbations 
+
+Recent work explores molecular representation learning from cellular data for cross-modal retrieval and molecular prop-erty prediction. Most methods employ alignment objectives: aligning drug structures with cellular images [25, 29, 34], or integrating gene expression with other omics to provide multi-faceted drug profiles [16, 29]. However, these ap-proaches primarily aim to learn better drug or transcriptomic representations for downstream molecular tasks, such as pre-dicting chemical properties and drug-drug interactions, with images serving mainly as auxiliary signals to enrich com-pound embeddings rather than as the target modality for im-provement. A recent complementary direction distills im-age foundation models to improve transcriptomics represen-tations [1], but the reverse that using transcriptomics to guide image learning remains underexplored. Critically, existing alignment methods center on drug identity rather than in-tervention effects, collapsing dose and cell-type variations into binary matches and struggling with weakly paired data. We instead propose intervention-aware distillation that using transcriptomics to guide image representations toward mech-anistic understanding. 
+
+# 3. Method 
+
+3.1. Problem Statement 
+
+In this paper, we study cellular responses to drug interven-tions observed through two complementary phenotypic read-outs: cellular imaging I and transcriptomics (RNA-seq) R.DC
+
+# ZM
+
+# RI Readouts       
+
+> Figure 1. Causal pathway of drug interventions across modalities.
+
+Causal Structure . Fig-ure 1 depicts the multiscale cellular state under a drug intervention. Let D denote the molecular structure of the interventional drug; after exposure, the drug binds to its molecular target(s), producing a target-engagement/signaling state 
+
+Z. This perturbed state then drives changes at two levels: the transcriptome R and the morphology M . Path Z → R
+
+corresponds to target binding perturbing signaling cascades and transcription-factor activity, inducing gene-expression changes captured by mRNA-seq. Morphology M is shaped both by direct drug-induced protein/biophysical effects via path Z → M and by indirect, transcription-mediated remodeling in which expression programs adjust protein levels/modifications and reorganize cellular architecture via the path Z → R → M . Finally, morphology is observed as images I through the optical pipeline that contains staining, imaging, and preprocessing. Cell type C provides the biological context, shaping target engagement Z, basal transcriptomic state R, and intrinsic morphology M , thereby introducing three conditioning paths, C → Z, C → R, and 
+
+C → M , that modulate the drug-induced cascades. 
+
+Scope and Assumptions. We focus on static and do not ex-plicitly model temporal dynamics or multi-cellular interac-tions in our primary framework. While batch effects are a practical concern in multi-plate imaging and cross-laboratory RNA-seq data, we do not model them explicitly in our causal graph; we discuss mitigation strategies and their relationship to our framework in Appendix. 
+
+Task Definition . Given this setup, we target image-based drug discovery: learning image representations that enable drug identification, mechanism clustering, and generaliza-tion to unseen compounds and cell types. Formally, we aim to estimate P (D | I, C ), the posterior distribution over drugs given cellular images and cell type, which captures how mor-phology encodes intervention-specific signals. At test time, only images I and cell type C are available; transcriptomics 
+
+R serves as privileged information during training to guide the image encoder toward mechanistic understanding. 
+
+3.2. Transcriptome-Guided Image Learning 
+
+We now establish the theoretical foundation for using tran-scriptomic guidance to improve image-based intervention prediction. Our goal is to learn a predictor ST (D|I, C ) that estimates the drug (intervention) posterior from images and cell type alone. During training, however, we have access to paired transcriptomes R that capture perturbation-induced gene expression changes: responses that reflect pathway-level mechanisms not directly observable in morphology. The key question is whether and how incorporating tran-scriptomic information during training provably improve the learned image representations We formalize this through a risk-bound analysis on the training distribution. Define L[q] as the expected log-loss of a predictor q that depends only on (I, C ), where P is the joint distribution of observed training data. Consider a richer pre-dictor T (D|I, R, C ) that incorporates RNA during training, producing a probability distribution over drugs D. The fol-lowing proposition shows that training with transcriptomics provably tightens the risk bound. 
+
+Proposition 3.1 (Transcriptome-Guided Learning Bound) .
+
+Given readout variables I and R conditioned on cell type 
+
+C, consider a predictor T : ( I, R, C ) 7 → ∆( D) that out-puts a distribution over drugs D, where ∆( D) denotes the probability simplex. Define the marginalized predictor that depends only on (I, C ):
+
+ST (D|I, C ) = ER|I,C [T (D|I, R, C )] 
+
+Let L[q] = E(I,C,D )∼P [− log q(D|I, C )] denote the log-loss risk for any predictor q that depends only on (I, C ). Then 
+
+L[ST ] is upper bounded by: 
+
+H(D|I, C ) + E(I,R,C )[KL( P (D|I, R, C )∥T (·| I, R, C ))] ,
+
+where H(D|I, C ) is the conditional entropy and the second term is the training objective that can be directly optimized. 
+
+This bound establishes that fitting the conditional distri-bution P (D|I, R, C ) during training, and marginalizing over 
+
+R at test time, yields a tighter risk bound on the training dis-tribution than directly fitting P (D|I, C ) without RNA guid-ance. The key insight is that transcriptomic responses pro-vide mechanistic information: conditioning on gene expres-sion allows the teacher T to distinguish drugs that produce similar morphologies but engage different molecular path-ways. When this knowledge is distilled into the image stu-dent through marginalization, the student learns representa-tions that align with biological mechanisms rather than su-perficial visual patterns. The complete proof is provided in the Appendix. The proposition suggests three design principles for our framework: (i) model P (D|I, R, C ) in a way that respects the causal structure of interventions, (ii) explicitly condition on cell type and dose to capture context-specific perturbation effects, and (iii) train the image student to approximate the marginalized posterior ST . Note that the bound concerns the training distribution-it establishes that transcriptomic guid-ance improves learning on observed data but does not directly SSL Loss (DINO) 
+
+## Vision 
+
+## Encoder 
+
+## scFM 
+
+## Drug 
+
+## Encoder 
+
+> Decoder
+> Dose
+
+## Transcriptional Responses Prediction 
+
+# Teacher 
+
+## Drug Codebook 
+
+> 1
+
+2
+
+9
+
+K
+
+> ..  ..
+> Cosine
+> Similarity
+
+KL 
+
+Loss 
+
+CE 
+
+Loss 
+
+# Student 
+
+... 
+
+## Interve ntions 
+
+## Projector 
+
+## +
+
+## Encoder 
+
+> Fine-tuned
+> Fixed
+> Cell Image
+> Drug
+> RNA-seq Figure 2. Framework overview. Our approach uses a chemistry-aware codebook and transcriptome-conditioned teacher to guide image student learning through distillation. Only images are required at test time.
+
+guarantee generalization to unseen drugs. However, we hy-pothesize that the mechanistic features learned through this process will transfer to novel compounds with similar mech-anisms, which we validate empirically in Section 4. We in-stantiate these principles in the following section. 
+
+3.3. Transcriptome-Guided Distillation Framework 
+
+We now present our transcriptome-guided distillation frame-work, which operationalizes the theoretical insights from Section 3.2. Figure 2 illustrates the overall architecture. Our framework consists of three key components. First, we con-struct a chemistry-aware codebook that organizes the drug space into K prototypes based on molecular representations, providing a structured target space where similar drugs are clustered. Second, we design a transcriptome-conditioned teacher that integrates paired images I, RNA-seq R, and in-tervention metadata (cell type C, doses δI , δ R) to produce soft distributions over the codebook, capturing mechanistic signals from transcriptomics. Third, an image-only student learns to predict the same distributions from images alone, distilling the teacher’s multimodal knowledge. We now de-tail each component. 
+
+3.3.1. Chemistry-aware Codebook 
+
+We construct a codebook that organizes drugs by molecu-lar similarity. Given the set of K training drugs, we extract a molecular representation for each drug. These represen-tations form the rows of a drug feature matrix, which we project into the same embedding space as the teacher and stu-dent encoders using a lightweight MLP followed by ℓ2 nor-malization. This yields a prototype matrix V ∈ RK×d, where each row vk represents a drug prototype on the unit hyper-sphere that are fully learnable parameters updated through backpropagation during training. The chemistry-aware struc-ture allows models to predict soft distributions over pro-totypes rather than hard drug identities, facilitating trans-fer to novel compounds through chemical similarity. While the prototypes adapt to encode mechanistic similarity as the teacher learns to predict codebook distributions from both images and transcriptomics. 
+
+3.3.2. Transcriptome-conditioned Teacher 
+
+The teacher model Tθ takes paired multi-modal observa-tions and produces distributions over the codebook that re-flect intervention-specific mechanistic signatures. A key design principle is that the teacher does not directly en-code the drug’s molecular structure; instead, it must infer pathway-level perturbation effects from the observed cellu-lar responses (morphology and transcriptomics), and super-vision from the codebook provides the link between inferred mechanisms and drug chemistry. This avoids shortcut learn-ing where the teacher trivially matches drug identity. To obtain robust encodings of cell type and dose-dependent transcriptomic effects, we employ a scFM [11], fine-tuned on perturbation response prediction. During fine-tuning, the model takes as input a cell’s basal gene expression 
+
+Rbasal , a drug representation, and a dose value δr , and pre-dicts the post-perturbation expression profile. Specifically, the scFM encodes Rbasal and combines it with drug and dose embeddings to form a latent state, which is then decoded to reconstruct the perturbed transcriptome. After fine-tuning, we use the trained scFM encoder to extract two types of rep-resentations: (i) a cell-type encoding hC from basal gene ex-pression, providing stable biological context across pertur-bations; and (ii) a dose-conditioned transcriptome encoding that disentangles dose information from the observed RNA-seq measurements. The scFM’s training objective ensures these encodings capture interpretable perturbation-response structure. Implementation details are provided in Appendix. The teacher then encodes three sources of information: • Image with dose : We encode the cellular image I and then detach dose-specific information δI from the image features using a FiLM-style conditioning mechanism [20], producing a dose-aware image representation hI .• RNA with dose : We encode the observed perturbed tran-scriptome R along with its associated dose δR, yielding 
+
+hR. The dose disentanglement allows this encoding to sep-arately represent the perturbation magnitude. • Cell type : We use the basal gene expression encoding hC
+
+from the scFM to represent cell-type-specific context. Critically, by encoding image dose δI and RNA dose δR sep-arately within their respective modality features, the teacher can handle weakly paired data where doses differ across modalities. Rather than treating mismatched doses as identi-cal through binary label matching, the teacher learns to rea-son about dose-dependent effects explicitly, producing ap-propriate soft targets that reflect the actual dosage contexts. For the codebook prediction, the teacher fuses the three encoded features through concat and a projection network ft:
+
+ht = ft([ hI || hR|| hC ]) ∈ Rd.
+
+It then computes similarity scores with all codebook proto-types, and produces a soft distribution over the codebook via temperature-scaled softmax: 
+
+Pt = Softmax 
+
+ V · ht
+
+τ · | ht|2
+
+
+
+∈ RK
+
+where V ∈ RK×d is drug codebook and τ controls distribu-tion sharpness. The teacher is trained with cross-entropy loss 
+
+Lteacher against true drug labels, establishing the connec-tion between observed cellular responses and drug chemistry through the codebook. The learned soft distributions, which encode fine-grained mechanistic similarities beyond hard la-bels, serve as targets for student distillation. 
+
+3.3.3. Image Student and Distillation Objective 
+
+The student learns to predict codebook distributions from images alone, without explicit cell type input. This design reflects the deployment scenario where only microscopy is available, and is justified by the fact that cell type information is inherently encoded in morphological features. The student uses the shared image encoder from the teacher, followed by a projection head to get the feature hs, producing codebook distributions Ps from images alone. We train the student to match the teacher’s distributions via KL divergence: 
+
+Ldistill = E(I,R,C,δ ) [KL (Pt|Ps] .
+
+Our framework is compatible with any self-supervised method. We apply Lssl (e.g., DINO, MAE) to all images, Dataset RxRx3 CPG-Pilot CPG-12 Image 61,690 93,696 916,721 Paired RNA 3,682 1,883 22,066 # Drugs 1,662 302 30,340 # Overlaps 235 85 6,989 # Eval Intervention 736 260 121  
+
+> Table 1. Dataset statistics and imaging-transcriptomics pairing. Numbers indicate image samples, RNA profiles, and compound overlap across modalities.
+
+paired and unpaired, leveraging abundant imaging data while learning general morphological features. The complete ob-jective is: 
+
+L = Ldistill + α · L teacher + β · L ssl .
+
+Our framework design operationalizes Proposition 3.1 by enabling the student to learn mechanistic features through two complementary mechanisms: the chemistry-aware code-book provides transfer to novel compounds via chemical similarity, while the transcriptome-conditioned teacher cap-tures pathway-level perturbation effects that generalize be-yond training drugs. By explicitly handling dose variations and avoiding identity shortcuts, the framework learns trans-ferable representations from limited paired data. We empiri-cally validate this generalization in Section 4. 
+
+# 4. Experiments 
+
+We evaluate our framework on image-based drug discovery tasks to assess whether transcriptomic guidance improves (i) generalization to novel interventions and (ii) recovery of mechanistic drug-target relationships. We conduct ex-periments on three large-scale Cell Painting datasets paired with perturbational transcriptomics (L1000), spanning mul-tiple cell lines and thousands of compounds. We com-pare against self-supervised baselines (MAE, DINO) and alignment-based methods (CLIP-style contrastive learning) to demonstrate the benefit of our approach. 
+
+4.1. Datasets 
+
+Imaging readouts. We use three Cell Painting datasets rep-resenting different scales and perturbation types: Cell Paint-ing and RxRx. 1. JUMP-Pilot (CPG-Pilot) [7] profiles A549 and U2OS cells under both chemical and genetic perturbations with standardized Cell Painting protocols. The joint coverage of compounds and CRISPR perturbations enables eval-uation of mechanism-level relationships and chemical-genetic concordance. 2. CPG0012 (CPG-12) [3] is a large-scale collection of 
+
+∼30,000 bioactive compounds in U2OS cells with con-sistent re-profiling. Its scale and diversity support eval-Dataset RxRx3 CPG-Pilot CPG-12 Backbone ViT CA-ViT ViT CA-ViT ViT Metric Top-1 Top-5 Top-1 Top-5 Top-1 Top-5 Top-1 Top-5 Top-1 Top-5 MAE 1.54 6.79 1.00 3.26 2.95 12.31 2.05 8.97 4.68 11.02 DINO 4.82 14.86 4.62 13.32 11.36 30.82 13.97 33.46 36.36 60.01 CL (D) 5.16 15.63 5.93 16.40 14.61 36.66 15.17 38.46 40.04 65.07 CL (R) 4.93 14.27 5.25 13.90 13.97 30.64 14.87 35.51 30.57 60.89 TIDE 5.62 16.86 6.04 17.27 16.01 39.12 17.80 40.74 42.09 71.07 
+
+> Table 2. One-shot transfer to unseen interventions. We report Top-1 and Top-5 accuracy (%) for transfer to unseen genetic perturbations (CPG-Pilot, RxRx3) and unseen compounds (CPG-12). Best results highlighted are in bold, and second-best results are underlined
+
+uation of cross-compound generalization and large-scale drug discovery applications. 3. RxRx3-core (RxRx3) [15] is a research-friendly subset of RxRx3 with six-channel imaging in HUVEC cells, cover-ing both drug perturbations and CRISPR knockouts. The shared indexing across chemical and genetic conditions facilitates drug-gene association analyses. 
+
+Transcriptomic readouts . We pair imaging data with L1000 [27], a high-throughput perturbational transcriptomics platform that measures 978 landmark genes. L1000 provides bulk-cell gene expression profiles, matching the population-level nature of our imaging readouts. We extract L1000 profiles for compounds in the same cell lines as our imag-ing datasets, enabling transcriptome-guided image learning. To leverage L1000 data with our framework, we fine-tune a single-cell foundation model (scGPT [11]) on perturbation response prediction using L1000 measurements. Although scGPT is pretrained on single-cell atlases, we adapt it to bulk-cell L1000 data and training the model to predict per-turbed expression given basal profiles, drug representations, and doses. This fine-tuned scFM provides the cell-type and dose encoders used in our teacher model (Section 3.3.2). Table 1 summarizes the pairing between imaging and tran-scriptomic data. Importantly, the pairing is weakly paired: images and RNA-seq measurements share the same cell type and compound but often differ in dose, reflecting realistic data collection constraints. This weak pairing is a key chal-lenge our framework addresses through explicit dose condi-tioning. 
+
+4.2. Tasks and Evaluation Metrics 
+
+We evaluate on two complementary tasks that assess gener-alization and mechanistic understanding: 
+
+4.2.1. Task 1: One-shot transfer to unseen intervention 
+
+This task evaluates whether learned image representations generalize to novel perturbations in a low-data regime. We follow a metric-based few-shot learning protocol: given a pretrained and frozen image encoder, we initialize a co-sine similarity-based classifier from 1-shot support exam-ples (one image per unseen intervention class), then optimize only the classification head on query images while keeping the encoder frozen. Features and class prototypes are L2-normalized, and predictions use temperature-scaled cosine similarity. The specific unseen interventions differ by dataset char-acteristics. On CPG-Pilot and RxRx3, we evaluate trans-fer to unseen genetic perturbations (CRISPR knockouts), as these datasets contain limited chemical diversity but exten-sive genetic screens measured with the same imaging proto-col. On CPG-12, which contains more than 30,000 diverse compounds, we evaluate transfer to unseen compounds by holding out a subset of drugs. Both settings assess the core capability of generalizing features to novel interventions. 
+
+4.2.2. Task 2: Unsupervised drug-target gene discovery 
+
+This task evaluates whether image representations capture mechanistic relationships by testing drug-target gene asso-ciation without explicit supervision. Following Kraus et al. [15], we compute embeddings for compound-treated images and gene knockout images, score all drug-gene pairs by co-sine similarity, and evaluate against curated ground-truth as-sociations derived from each dataset’s benchmark annota-tions, which is further filtered for high-confidence links. We report results averaged over 100 random seeds. On RxRx3, compounds appear at multiple doses and may target multiple genes. We compute per-dose drug embed-dings (averaged over replicate images), score associations at each dose, and report dose-averaged Average Precision (AP) and AUC. On CPG-Pilot, compounds are profiled at a sin-gle dose with a single primary target gene; we report AP and Hit@k. This task directly measures whether the learned rep-resentations reflect biological mechanisms, a key advantage of transcriptomic guidance. 
+
+4.3. Baselines and Implementation 
+
+We refer to our framework as TIDE (Transcriptome-Informed Distillation for image Encoding) and compare against two families of methods: 
+
+SSL Methods : MAE [12] and DINO [5], widely adopted for cellular imaging. These methods learn from images alone without transcriptomic or drug information. Backbone ViT CA-ViT Dataset RxRx3 CPG-Pilot RxRx3 CPG-Pilot Metric AP AUC AP Hit@5 AP AUC AP Hit@5 MAE 0.256 0.538 0.079 0.103 0.245 0.518 0.097 0.124 DINO 0.300 0.633 0.109 0.135 0.252 0.545 0.111 0.154 CL (D) 0.252 0.537 0.099 0.127 0.255 0.540 0.103 0.131 CL (R) 0.247 0.532 0.105 0.134 0.250 0.540 0.105 0.135 TIDE 0.317 0.640 0.119 0.149 0.301 0.612 0.120 0.171 
+
+> Table 3. Unsupervised drug-target gene discovery. We report AP and retrieval metrics without explicit supervision on drug-target as-sociations. Best results in bold.
+
+Alignment-based contrastive learning : We implement CLIP-style approaches that align image embeddings to aux-iliary modalities: CL(D): Following recent phenomolecu-lar retrieval work [10, 25], aligns images to drug molec-ular representations; CL(R): Aligns images and transcrip-tomic readouts based on shared drug perturbations [16, 29]. To ensure fair comparison, we evaluate hybrid variants that combine contrastive alignment with DINO self-supervision, which typically improve performance. 
+
+Vision Encoder . All methods use the same backbone ar-chitectures for fair comparison. We evaluate two vision transformers: a standard ViT [9] and a Channel-Agnostic ViT (CA-ViT) [14], a cellular imaging-specific architecture that achieves comparable performance to ViT. Model sizes are matched to dataset scale: ViT-Small for CPG-Pilot and RxRx3, ViT-Base for CPG-12 (CA-ViT-Base is omitted on CPG-12 due to computational cost). All methods train for 400 epochs with matched augmen-tations and optimizers within each method family. We se-lect checkpoints via k-nearest neighbor (k=20) evaluation on a held-out validation split (10 images per perturbation class). For Task 1, we split interventions (not samples) into train/val/test to ensure true generalization evaluation. For Task 2, we use all available data to compute embeddings and evaluate on curated drug-target associations. Detailed hyper-parameters and split information are provided in Appendix. 
+
+4.4. Main Results 
+
+We design experiments to answer two research questions that validate TIDE’s core contributions: • RQ1 : Does transcriptomic guidance improve generaliza-tion to unseen interventions? • RQ2: Do learned image representations capture biologi-cally meaningful mechanisms? Table 2 presents Top-1 and Top-5 accuracy on one-shot classification. All results are averaged over 50 runs. TIDE achieves the best performance across all settings, substan-tially outperforming all baselines. CL(D) attains the second-best results among baselines, which together with TIDE’s performance validates the importance of incorporating per-turbation information for model training. CL(R) performs slightly better than SSL baselines but falls short of drug-based alignment, as the limited availability of paired tran-scriptomic data constrains its training signal compared to CL(D)’s ability to align with molecular representations for all drugs. Among SSL methods, DINO substantially out-performs MAE across all datasets. Although training for the same number of epochs, DINO’s use of local and global crop augmentations results in higher computational cost per epoch, effectively providing richer training signal. Compar-ing backbones, ViT and CA-ViT show comparable overall performance on RxRx3 and CPG-Pilot across most meth-ods. However, with TIDE CA-ViT demonstrates superior re-sults, as its channel-agnostic patchification design achieves better representational capacity under sufficient training. TIDE’s consistent improvements across datasets and back-bones demonstrate that transcriptomic guidance enables im-age models to learn mechanistically grounded features that generalize to novel interventions. Table 3 presents performance on unsupervised drug-target gene discovery. Our model significantly outperforms all baselines on both datasets, although overall performance re-mains modest across all methods. As reported in [7], cross-modal perturbation pairing signals are inherently weak, only slightly above random. Most baseline results on RxRx3 are only marginally better than random, underscoring the task’s difficulty and demonstrating that our model learns mech-anistic features beyond visual supervision alone. Unlike the one-shot transfer task, CL(D) shows no clear advan-tage over DINO or CL(R) in this setting. This reflects the nature of drug-target discovery that while molecular struc-ture alignment helps CL(D) learn drug identity and chemical similarity, identifying biological targets requires pathway-level mechanistic understanding that chemical fingerprints do not directly encode. In contrast, even limited tran-scriptomic signals or morphological patterns learned through augmentation-rich SSL may capture aspects of cellular re-sponse more relevant to target identification, explaining their comparable performance to CL(D) despite the differences observed in Task 1. The substantial improvement TIDE achieves on this challenging task, where baselines barely ex-ceed random performance, confirms that our framework suc-cessfully distills pathway-level mechanistic knowledge from transcriptomics into image representations, enabling identi-fication of biologically meaningful drug-target relationships from morphology alone. 
+
+4.5. Ablation Studies and Analysis 
+
+We conduct ablation studies to dissect the contributions of TIDE’s design components and validate key hypotheses. 
+
+4.5.1. Effect of Transcriptomic Data 
+
+To validate whether richer transcriptomic guidance improves performance, we separately evaluate TIDE on A549 and U2OS cell lines in CPG-Pilot. These two cell lines have dif-ferent overlap with L1000 gene expression profiles: A549 Task one-shot transfer drug-target discovery Cell Line U2OS A549 U2OS A549 Metric Top-1 Top-5 Top-1 Top-5 AP Hit@5 AP Hit@5 DINO 12.8 28.9 12.1 28.2 0.084 0.111 0.133 0.159 TIDE 15.9 36.9 16.3 39.8 0.092 0.120 0.146 0.178 
+
+> Table 4. Performance on CPG-Pilot separately for U2OS and A549.
+
+has more paired compounds than U2OS. By comparing per-formance across these two settings, we can assess whether increased transcriptomic coverage leads to better mechanis-tic learning. Table 4 presents one-shot transfer accuracy and drug-target discovery performance for both cell lines on ViT. Examining the DINO baseline performance, we observe that both cell lines achieve comparable results on one-shot trans-fer, with U2OS even slightly outperforming A549. How-ever, after training with TIDE, A549 that has more paired transcriptomic data, achieves better performance and larger improvements over its DINO baseline. On the drug-target discovery task, while A549 demonstrates advantages on this task even with DINO, it shows more improvements with TIDE compared to U2OS. These findings validate the impor-tance of transcriptomic information: when sufficient paired data is available, TIDE can more effectively distill mechanis-tic knowledge from transcriptomics, leading to stronger gains in both generalization and mechanistic understanding.  
+
+> (a) TIDE with fine-tuned scFM (b) TIDE with pretrained scFM
+> Figure 3. Effect of paired sample size and scFM fine-tuning on one-shot transfer performance of TIDE.
+
+4.5.2. Sample Efficiency and Effect of scFM Fine-tuning 
+
+To understand how the quantity of paired data per drug af-fects performance and validate the necessity of scFM fine-tuning on perturbation response prediction, we vary the num-ber of paired image-transcriptome samples per drug from 0 to 150 on CPG-Pilot. At 0 paired samples, TIDE reduce to DINO. We compare TIDE using a fine-tuned scFM encoder versus one with pretrained-only weights. Figure 3 presents the results. With fine-tuned scFM, TIDE shows substan-tial performance improvement as paired samples increase. This demonstrates that the fine-tuned encoder effectively ex-tracts dose-specific and cell-context information from tran-scriptomic measurements, and more paired samples provide richer supervision for distillation. In contrast, TIDE using pretrained-only scFM shows only marginal improvement, de-spite also benefiting from the additional training images that accompany more paired samples. The minimal gain isolates the effect of increased image data alone and confirms that 
+
+> Figure 4. Left: Microscopy images of A549 cells treated with BMS-536924 and WH-4-023. Right: Embedding visualization by FCFP fingerprint v.s. learned codebook embedding
+
+without fine-tuning on perturbation response prediction, the scFM encoder cannot effectively disentangle dose effects or encode cell-type-specific basal states. 
+
+4.5.3. Analysis and Visualization 
+
+To understand what TIDE’s learned codebook encodes, we visualize drug representations in chemical fingerprint space versus learned codebook space. Figure 4 presents a case study of two compounds, BMS-536924 and WH-4-023, pro-filed on A549 cells in CPG-Pilot. While the morphological images (left) show complex cellular responses with no obvi-ous shared visual patterns to the human, the two drugs share a common mechanism of action: both are ATP-competitive tyrosine kinase inhibitors that modulate downstream signal-ing pathways. The middle panel shows UMAP projection of all CPG-Pilot drugs based on FCFP fingerprints [23]. BMS-536924 and WH-4-023 are distant in chemical space, reflecting their different molecular structures, while in the learned codebook embedding space the two drugs are posi-tioned much closer, indicating that the codebook has learned to group them by their shared mechanistic properties de-spite structural differences. This demonstrates that through end-to-end training with transcriptomic guidance, the code-book moves beyond chemical similarity to capture biological mechanism similarity, organizing drugs by how they perturb cellular pathways rather than merely by molecular structure. 
+
+# 5. Conclusion 
+
+We presented a transcriptome-guided distillation framework that uses perturbational RNA-seq as privileged information to guide image representation learning for drug discovery. By structuring supervision through a chemistry-aware codebook and explicitly conditioning on dose and cell type, our ap-proach handles weakly paired data and avoids identity-based shortcuts that limit existing alignment methods. We pro-vided theoretical analysis showing that transcriptomic guid-ance tightens the risk bound for image-based prediction, and demonstrated improvements over SSL and contrastive base-lines on one-shot transfer to unseen interventions and unsu-pervised drug-target gene discovery. Acknowledgments 
+
+This work was funded in part by the National Science Foun-dation under award number IIS-2145625 and by the National Institutes of Health under awards number R01AI188576 and R01CA301579. 
+
+# References 
+
+[1] Ihab Bendidi, Yassir El Mesbahi, Alisandra K Denton, Karush Suri, Kian Kenyon-Dean, Auguste Genovesio, and Em-manuel Noutahi. A cross modal knowledge distillation & data augmentation recipe for improving transcriptomics rep-resentations through morphological features. arXiv preprint arXiv:2505.21317 , 2025. 1, 2, 16 [2] Mark-Anthony Bray, Shantanu Singh, Han Han, Chadwick T Davis, Blake Borgeson, Cathy Hartland, Maria Kost-Alimova, Sigrun M Gustafsdottir, Christopher C Gibson, and Anne E Carpenter. Cell painting, a high-content image-based assay for morphological profiling using multiplexed fluorescent dyes. 
+
+Nature protocols , 11(9):1757–1774, 2016. 1, 2, 16 [3] Mark-Anthony Bray, Sigrun M Gustafsdottir, Mohammad H Rohban, Shantanu Singh, Vebjorn Ljosa, Katherine L Sokol-nicki, Joshua A Bittker, Nicole E Bodycombe, Vlado Danˇ c´ ık, Thomas P Hasaka, et al. A dataset of images and morphologi-cal profiles of 30 000 small-molecule treatments using the cell painting assay. Gigascience , 6(12):giw014, 2017. 2, 5 [4] Charlotte Bunne, Yusuf Roohani, Yanay Rosen, Ankit Gupta, Xikun Zhang, Marcel Roed, Theo Alexandrov, Mohammed AlQuraishi, Patricia Brennan, Daniel B Burkhardt, et al. How to build the virtual cell with artificial intelligence: Priorities and opportunities. Cell , 187(25):7045–7063, 2024. 1 [5] Mathilde Caron, Hugo Touvron, Ishan Misra, Herv´ e J´ egou, Julien Mairal, Piotr Bojanowski, and Armand Joulin. Emerg-ing properties in self-supervised vision transformers. In Pro-ceedings of the IEEE/CVF international conference on com-puter vision , pages 9650–9660, 2021. 1, 6, 13 [6] Safiye Celik, Jan-Christian Huetter, Sandra Melo, Nathan Lazar, Rahul Mohan, Conor Tillinghast, Tommaso Biancalani, Marta Fay, Berton Earnshaw, and Imran S Haque. Biologi-cal cartography: Building and benchmarking representations of life. In NeurIPS 2022 Workshop on Learning Meaningful Representations of Life , 2022. 1 [7] Srinivas Niranj Chandrasekaran, Beth A Cimini, Amy Goodale, Lisa Miller, Maria Kost-Alimova, Nasim Jamali, John G Doench, Briana Fritchman, Adam Skepner, Michelle Melanson, et al. Three million images and morphological pro-files of cells treated with matched chemical and genetic pertur-bations. Nature Methods , 21(6):1114–1121, 2024. 1, 2, 5, 7, 16 [8] Jiayuan Chen, Thai-Hoang Pham, Yuanlong Wang, and Ping Zhang. Integrating biological knowledge for robust mi-croscopy image profiling on de novo cell lines. In Proceed-ings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 22846–22856, 2025. 1 [9] Alexey Dosovitskiy. An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 , 2020. 7, 12 [10] Philip Fradkin, Puria Azadi Moghadam, Karush Suri, Frederik Wenkel, Ali Bashashati, Maciej Sypetkowski, and Dominique Beaini. How molecules impact cells: Unlocking contrastive phenomolecular retrieval. Advances in Neural Information Processing Systems , 37:110667–110701, 2024. 1, 7 [11] Minsheng Hao, Jing Gong, Xin Zeng, Chiming Liu, Yucheng Guo, Xingyi Cheng, Taifeng Wang, Jianzhu Ma, Xuegong Zhang, and Le Song. Large-scale foundation model on single-cell transcriptomics. Nature methods , 21(8):1481–1491, 2024. 1, 2, 4, 6, 11 [12] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll´ ar, and Ross Girshick. Masked autoencoders are scalable vision learners. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16000– 16009, 2022. 1, 6, 13 [13] Kian Kenyon-Dean, Zitong Jerry Wang, John Urbanik, Kon-stantin Donhauser, Jason Hartford, Saber Saberian, Nil Sahin, Ihab Bendidi, Safiye Celik, Marta Fay, et al. Vitally consistent: Scaling biological representation learning for cell microscopy. 
+
+arXiv preprint arXiv:2411.02572 , 2024. 1, 2 [14] Oren Kraus, Kian Kenyon-Dean, Saber Saberian, Maryam Fallah, Peter McLean, Jess Leung, Vasudev Sharma, Ayla Khan, Jia Balakrishnan, Safiye Celik, et al. Masked autoen-coders for microscopy are scalable learners of cellular biology. In Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , pages 11757–11768, 2024. 1, 2, 7, 12 [15] Oren Kraus, Federico Comitani, John Urbanik, Kian Kenyon-Dean, Lakshmanan Arumugam, Saber Saberian, Cas Wognum, Safiye Celik, and Imran S Haque. Rxrx3-core: Benchmarking drug-target interactions in high-content mi-croscopy. arXiv preprint arXiv:2503.20158 , 2025. 1, 2, 6, 14 [16] Gang Liu, Srijit Seal, John Arevalo, Zhenwen Liang, Anne E Carpenter, Meng Jiang, and Shantanu Singh. Learning molec-ular representation in a cell. ArXiv , pages arXiv–2406, 2024. 1, 2, 7, 16 [17] Nikita Moshkov, Michael Bornholdt, Santiago Benoit, Matthew Smith, Claire McQuin, Allen Goodman, Rebecca A Senft, Yu Han, Mehrtash Babadi, Peter Horvath, et al. Learn-ing representations for image-based profiling of perturbations. 
+
+Nature communications , 15(1):1594, 2024. 1 [18] Zeinab Navidi, Jun Ma, Esteban A Miglietta, Le Liu, Anne E Carpenter, Beth A Cimini, Benjamin Haibe-Kains, and Bo Wang. Morphodiff: Cellular morphology painting with dif-fusion models. bioRxiv , 2024. 16 [19] Stefan Peidli, Tessa D Green, Ciyue Shen, Torsten Gross, Joseph Min, Samuele Garda, Bo Yuan, Linus J Schumacher, Jake P Taylor-King, Debora S Marks, et al. scperturb: har-monized single-cell perturbation data. Nature Methods , 21(3): 531–540, 2024. 2 [20] Ethan Perez, Florian Strub, Harm De Vries, Vincent Du-moulin, and Aaron Courville. Film: Visual reasoning with a general conditioning layer. In Proceedings of the AAAI con-ference on artificial intelligence , 2018. 5, 13 [21] Jiahua Rao, Hanjing Lin, Leyu Chen, Jiancong Xie, Shuangjia Zheng, and Yuedong Yang. Multi-modal contrastive learning with negative sampling calibration for phenotypic drug dis-covery. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 30752–30762, 2025. 16 [22] Joseph M Replogle, Reuben A Saunders, Angela N Pogson, Jeffrey A Hussmann, Alexander Lenail, Alina Guna, Lauren Mascibroda, Eric J Wagner, Karen Adelman, Gila Lithwick-Yanai, et al. Mapping information-rich genotype-phenotype landscapes with genome-scale perturb-seq. Cell , 185(14): 2559–2575, 2022. 1 [23] David Rogers and Mathew Hahn. Extended-connectivity fin-gerprints. Journal of chemical information and modeling , 50 (5):742–754, 2010. 8 [24] Jennifer E Rood, Anna Hupalowska, and Aviv Regev. Toward a foundation model of causal cell and tissue biology with a perturbation cell and tissue atlas. Cell , 187(17):4520–4545, 2024. 1 [25] Ana Sanchez-Fernandez, Elisabeth Rumetshofer, Sepp Hochreiter, and G¨ unter Klambauer. Cloome: contrastive learning unlocks bioimaging databases for queries with chem-ical structures. Nature Communications , 14(1):7339, 2023. 1, 2, 7, 16 [26] Srinivasan Sivanandan, Bobby Leitmann, Eric Lubeck, Mo-hammad Muneeb Sultan, Panagiotis Stanitsas, Navpreet Ranu, Alexis Ewer, Jordan E Mancuso, Zachary F Phillips, Albert Kim, et al. A pooled cell painting crispr screening platform enables de novo inference of gene function by self-supervised deep learning. bioRxiv , pages 2023–08, 2023. 2 [27] Aravind Subramanian, Rajiv Narayan, Steven M Corsello, David D Peck, Ted E Natoli, Xiaodong Lu, Joshua Gould, John F Davis, Andrew A Tubelli, Jacob K Asiedu, et al. Anext generation connectivity map: L1000 platform and the first 1,000,000 profiles. Cell , 171(6):1437–1452, 2017. 1, 2, 6, 16 [28] Christina V Theodoris, Ling Xiao, Anant Chopra, Mark D Chaffin, Zeina R Al Sayed, Matthew C Hill, Helene Manti-neo, Elizabeth M Brydon, Zexian Zeng, X Shirley Liu, et al. Transfer learning enables predictions in network biology. Na-ture , 618(7965):616–624, 2023. 2 [29] Chenyu Wang, Sharut Gupta, Caroline Uhler, and Tommi Jaakkola. Removing biases from molecular represen-tations via information maximization. arXiv preprint arXiv:2312.00718 , 2023. 1, 2, 7, 16 [30] Gregory P Way, Ted Natoli, Adeniyi Adeboye, Lev Litichevskiy, Andrew Yang, Xiaodong Lu, Juan C Caicedo, Beth A Cimini, Kyle Karhohs, David J Logan, et al. Mor-phology and gene expression profiling provide complemen-tary information for mapping cell state. Cell systems , 13(11): 911–923, 2022. 16 [31] Hengshi Yu, Weizhou Qian, Yuxuan Song, and Joshua D Welch. Perturbnet predicts single-cell responses to unseen chemical and genetic perturbations. Molecular Systems Bi-ology , 21(8):960–982, 2025. 12 [32] Jesse Zhang, Airol A Ubas, Richard de Borja, Valentine Svensson, Nicole Thomas, Neha Thakar, Ian Lai, Aidan Win-ters, Umair Khan, Matthew G Jones, et al. Tahoe-100m: A giga-scale single-cell perturbation atlas for context-dependent gene function and cellular modeling. BioRxiv , pages 2025–02, 2025. 1, 2 [33] Yuhui Zhang, Yuchang Su, Chenyu Wang, Tianhong Li, Zoe Wefers, Jeffrey Nirschl, James Burgess, Daisy Ding, Alejan-dro Lozano, Emma Lundberg, et al. Cellflux: Simulating cel-lular morphology changes via flow matching. arXiv preprint arXiv:2502.09775 , 2025. 16 [34] Shuangjia Zheng, Jiahua Rao, Jixian Zhang, Lianyu Zhou, Jiancong Xie, Ethan Cohen, Wei Lu, Chengtao Li, and Yue-dong Yang. Cross-modal graph contrastive learning with cel-lular images. Advanced Science , 11(32):2404845, 2024. 1, 2, 16 A. Proof of Proposition 3.1 
+
+A.1. Theorem Statement 
+
+Proposition A.1 (Transcriptome-Guided Learning Bound) .
+
+Given readout variables I and R conditioned on cell type C,consider a predictor T : ( I, R, C ) 7 → ∆( D) that outputs a distribution over drugs D, where ∆( D) denotes the probabil-ity simplex. Define the marginalized predictor that depends only on (I, C ):     
+
+> ST(D|I, C ) = ER|I,C [T(D|I, R, C )] (1)
+
+Let L[q] = E(I,C,D )∼P [− log q(D|I, C )] denote the log-loss risk for any predictor q that depends only on (I, C ).Then L[ST ] is upper bounded by:      
+
+> L[ST]≤H(D|I, C )+ E(I,R,C )[KL (P(D|I, R, C )|| T(·| I, R, C ))] ,
+> (2)
+
+where H(D|I, C ) is the conditional entropy and the second term is the training objective that can be directly optimized. 
+
+A.2. Proof 
+
+Proof of Proposition 3.1. We start by expressing the log-loss risk of an arbitrary predictor q(D | I, C ) that depends only on (I, C ). By definition, 
+
+L[q] = E(I,C,D )∼P [− log q(D | I, C )] (3) 
+
+= E(I,C )ED|I,C [− log q(D | I, C )] (4) 
+
+= E(I,C )
+
+H(P (D | I, C ), q (· | I, C )) , (5) where H(P (D | I, C ), q (· | I, C )) denotes the cross-entropy between the true conditional P (D | I, C ) and the predictor 
+
+q(· | I, C ). Applying cross-entropy decomposition pointwise in (I, C ), we obtain: 
+
+L[q] = E(I,C )
+
+h
+
+H(D | I, C ) + KL  P (D | I, C ) ∥ q(· | I, C )i
+
+(6) 
+
+= H(D | I, C ) + E(I,C )
+
+h
+
+KL  P (D | I, C ) ∥ q(· | I, C )i
+
+.
+
+(7) We now specialize to the marginalized predictor 
+
+ST (D | I, C ) = ER|I,C 
+
+T (D | I, R, C ).
+
+To bound E(I,C )[KL( P (D|I, C ) ∥ ST (· | I, C ))] , we express both P (D | I, C ) and ST (D | I, C ) as mixtures over R. By the law of total expectation: 
+
+P (D | I, C ) = ER|I,C [P (D | IR, C )] ,ST (D | I, C ) = ER|I,C [T (D | I, R, C )] .
+
+Applying Jensen’s inequality for KL divergence, we have: 
+
+KL( P (D | I, C ) ∥ ST (· | I, C )) ≤ (8) 
+
+ER|I,C 
+
+KL( P (D | I, R, C ) ∥ T (· | I, R, C )) . (9) Taking expectations over (I, C ) on both sides, we obtain 
+
+E(I,C )
+
+h
+
+KL  P (D | I, C ) ∥ ST (· | I, C )i
+
+(10) 
+
+≤E(I,C )ER|I,C 
+
+h
+
+KL  P (D | I, R, C ) ∥ T (· | I, R, C )i
+
+(11) 
+
+=E(I,R,C )
+
+h
+
+KL  P (D | I, R, C ) ∥ T (· | I, R, C )i
+
+. (12) Finally, substituting q = ST into the risk decomposi-tion (7) and using the bound (12), we obtain                        
+
+> L[ST] = H(D|I, C ) + E(I,C )
+> KL  P(D|I, C )∥ST(· | I, C )
+> (13)
+> ≤H(D|I, C ) + E(I,R,C )
+> h
+> KL  P(D|I, R, C )∥T(· | I, R, C )i
+> .
+> (14)
+
+Using again P (D | I, R, C ) = P (D | R, C ), we can rewrite the bound in the equivalent form:             
+
+> L[ST]≤H(D|I, C )+ E(I,R,C )
+> h
+> KL  P(D|I, R, C )∥T(· | I, R, C )i
+> ,
+
+which is exactly the claimed inequality. 
+
+A.3. Discussion 
+
+The bound in Proposition 3.1 separates the risk into two con-ceptually distinct components. The term H(D | I, C ) cap-tures the intrinsic uncertainty under the restricted information set (I, C ) and represents the optimal performance attainable by any predictor that lacks access to R at test time. In con-trast, the second term, 
+
+E(I,R,C )
+
+KL  P (D | I, R, C ) ∥ T (· | I, R, C ) ,
+
+is fully optimizable and quantifies the divergence between the true conditional law and the predictor operating in the augmented information space (I, R, C ). By the convexity of KL divergence, marginalizing the predictor over R incurs no worse penalty than the expected KL at the full-information level, establishing that the advantage of training with tran-scriptomic conditioning is precisely characterized by the re-ducible part of this discrepancy. 
+
+# B. Implementation Details 
+
+B.1. Single-Cell Foundation Model Fine-tuning 
+
+We fine-tune scGPT [11], a transformer-based single-cell foundation model pretrained on large-scale single-cell at-lases, to adapt it for perturbation response prediction on bulk-cell L1000 data. This fine-tuning enables the model to en-code cell-type context (basal gene expression), intervention information (drug and dose), and perturbed transcriptomic states in a unified framework. B.1.1. Data Featurization 
+
+For each cell line C, we use DMSO control samples to rep-resent the unperturbed cellular state. Rather than aggregat-ing controls, we randomly pair each perturbed sample with a DMSO control sample from the same cell line during train-ing. This pairing strategy preserves cellular variability and prevents overfitting to averaged profiles, resulting in basal expression vectors Xc ∈ R978 sampled from the control distribution. For each drug perturbation, we obtain the per-turbed gene expression profile XR ∈ R978 from L1000 mea-surements. These profiles capture the post-perturbation tran-scriptomic state and serve as the prediction target during fine-tuning. We obtain molecular representations for each drug D from its chemical structure. Inspired by Yu et al. [31], we use ChemBERTa with pretrained weights as the molecule en-coder to encode SMILES. The selected drug representation 
+
+fD ∈ Rdf is encoded through a two-layer MLP to obtain a drug embedding eD ∈ Rde . We encode the perturbation dose 
+
+δR using a learned embedding layer. Doses are encoded as continuous values normalized to [0 , 1] . A single-layer MLP maps the dose to an embedding eδ ∈ Rdδ . The drug and dose embeddings are combined through concatenation to form a unified intervention embedding e ∈ Rde+dδ .
+
+B.1.2. scFM Encoding 
+
+The basal gene expression Xc is fed into the pretrained scGPT encoder to obtain a cell-type representation: 
+
+Zc = fscFM (Xc) ∈ Re
+
+where e is the scFM embedding dimension. The basal cell embedding Zc and intervention embedding e are concate-nated to form the complete input representation for the pre-diction task: Zcombined = [ Zc|e] ∈ Re+de+dδ This design al-lows the model to condition perturbation predictions on both the cellular context and the specific intervention (drug iden-tity and dosage). Then we use a decoder network to predict the perturbed gene expression ˆXR directly from the com-bined encoding. The decoder is a MLP. We minimize the mean squared error (MSE) between predicted and observed perturbed gene expression: 
+
+LscFM = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+|| ˆXRi − XRi || 22,
+
+where N is the number of training samples. This direct pre-diction objective allows the model to learn the complete tran-scriptomic response to perturbations, including both the mag-nitude and direction of expression changes across all land-mark genes. 
+
+B.1.3. Training Details 
+
+We fine-tune all parameters of scGPT encoder along with the decoder, allowing the foundation model to adapt to perturbation-specific patterns while retaining its general gene expression knowledge. We split drug-cell line combinations (not individual samples) into train/val/test sets to ensure eval-uation on held-out drugs. After fine-tuning, we extract two types of embeddings for use in TIDE’s teacher model: Cell-type encoding hC = Zc
+
+and Dose encoding hδr = eδ . We encode raw perturbed ex-pression directly in the teacher. 
+
+B.2. Network Architectures 
+
+We provide detailed architectural specifications for all com-ponents of TIDE and baseline methods. Unless otherwise specified, all dimensions are matched to the vision back-bone’s hidden dimension d.
+
+B.2.1. Vision Transformer Backbones 
+
+We evaluate TIDE on two vision transformer architectures: standard Vision Transformer (ViT) and Channel-Agnostic Vision Transformer (CA-ViT). For ViT, we adopt the config-urations from [9]. ViT-Small consists of 12 transformer lay-ers with hidden dimension 384 and 6 attention heads, while ViT-Base uses 12 layers with hidden dimension 768 and 12 attention heads. Both variants use a patch size of 16×16, learnable position embeddings, and GELU activations with LayerNorm. The MLP expansion ratio is set to 4 follow-ing standard practice. Input images are resized to 224×224 resolution. We initialize ViT encoders using random initial-ization. Channel-Agnostic Vision Transformer (CA-ViT) [14] is specifically designed for multi-channel microscopy imaging. Unlike standard ViT which treats all channels as a single RGB-like input, CA-ViT processes each imaging channel in-dependently through channel-specific patch embedding lay-ers before fusing information across channels in deeper lay-ers. This design is particularly suitable for Cell Painting and RxRx data, which contain 5-6 fluorescent channels with dis-tinct biological meanings. We use CA-ViT-Small with the same depth and hidden dimensions as ViT-Small. The chan-nel fusion is performed through learned aggregation after the initial patch embedding stage, allowing the model to weight different channels adaptively. Despite slightly higher param-eter counts due to per-channel embeddings, CA-ViT achieves comparable or better performance than standard ViT on cel-lular imaging tasks under sufficient training. 
+
+B.2.2. Chemistry-Aware Codebook Construction 
+
+The chemistry-aware codebook transforms drug molecular representations into a structured prototype space. Given a drug’s molecular representation fD ∈ Rdf , we apply a two-layer MLP followed by L2 normalization to project it into the same embedding space as the teacher and student en-coders. We experimented with multiple molecular repre-sentation methods, including FCFP, RDKit molecular de-scriptors, pretrained graph isomorphism networks (GIN), and ChemBERTa embeddings. Performance comparisons are re-ported in Appendix D.1. This produces the prototype ma-trix V ∈ RK×d, where K is the number of training drugs. All parameters including the prototype vectors are optimized end-to-end during training. 
+
+B.2.3. Teacher-Student Network 
+
+The teacher network integrates three information sources, images, transcriptomics, and cell type, to produce distribu-tions over the codebook. The image encoder uses the vision transformer backbones described in Section B.2.1, extracting features by averaging image tokens to obtain hI ∈ Rd. To incorporate dose information from images, we apply FiLM-style conditioning [20] where a small dose predictor network (two linear layers of dimensions d → 128 → 1 with ReLU) estimates the dose effect, and then modulates the image fea-tures through learned scale and shift parameters. We encode the perturbed gene expression XR ∈ R978 
+
+through a MLP, and concatenate the embedding with its dose embedding eδ . Then we use a projector to map the concate-nated embedding to obtain hR. The cell-type encoder uses the scFM to encode basal gene expression Xc, producing 
+
+hC ∈ Rd after projection. The fusion network concatenates the three feature vectors [hI |hR|hC ] ∈ R3d and processes them through a two-layer MLP with intermediate dimension 
+
+2d. Each layer is followed by BatchNorm, with ReLU acti-vation and dropout (rate=0.1) after the first layer. The output fused representation ht ∈ Rd is then used to compute cosine similarities with all codebook prototypes. A temperature-scaled softmax with τ = 0 .2 converts these scores into the teacher’s probability distribution Pt over the codebook. The student network operates solely on images. Crucially, the student shares the same image encoder as the teacher, with full parameter sharing during training. This weight shar-ing ensures that improvements in the teacher’s image under-standing directly benefit the student. After extracting image features by vision encoder, we apply a projection head con-sisting of two linear layers. The final output is L2 normalized to produce the student representation hs ∈ Rd. The stu-dent predicts codebook distributions using the same cosine similarity and temperature-scaled softmax as the teacher, but with a lower temperature τs = 0 .07 to produce sharper pre-dictions. In practice, to accelerate training convergence, we supplement the distillation objective with direct supervision: the student’s predicted distribution is also trained with cross-entropy loss against ground-truth drug labels. This auxiliary supervision provides a stronger learning signal in early train-ing stages before the teacher has learned meaningful soft tar-gets, and helps stabilize optimization throughout training. 
+
+B.2.4. Self-Supervised Learning Components 
+
+For DINO [5], we use the standard multi-crop strategy with 2 global crops at 224×224 resolution and 4 local crops at 96×96 resolution. The teacher network uses exponential moving av-erage (EMA) updates with momentum 0.996. Temperature parameters are set to 0.07 for the teacher and 0.1 for the stu-dent, with centering momentum 0.9. For MAE [12], we use the same encoder backbones with a lightweight 8-layer de-coder (hidden dimension 512) and mask ratio 0.75. Both SSL methods use the standard patch size of 16×16. 
+
+B.2.5. Baseline Method Architectures 
+
+For CL(D), which aligns images to drug molecular represen-tations, we use the same vision backbones as TIDE for the image encoder. To maintain consistency with the drug en-coder used in our scFM fine-tuning (Appendix B.1), we em-ploy ChemBERTa as the drug encoder. ChemBERTa pro-vides pretrained contextualized representations of molecu-lar SMILES strings, which we extract from the [CLS] to-ken. Both image and drug features are projected to 256-dimensional embeddings through separate projection heads before computing InfoNCE loss with temperature 0.07. CL(R) aligns images to RNA-seq profiles using contrastive learning. The image encoder and projection head are identi-cal to CL(D). For RNA encoding, contrastive learning typi-cally requires large batch sizes to provide sufficient negative samples, which poses GPU memory constraints when using large foundation models like scGPT. To enable efficient train-ing with batch sizes of 512, we instead use a lightweight two-layer MLP that maps the 978-dimensional L1000 pro-files to dimension d. The encoded RNA features are then projected to 128 dimensions using the same projection head as images before computing the InfoNCE loss with temper-ature 0.07. For hybrid variants combining contrastive learn-ing with DINO (CL(D)+DINO, CL(R)+DINO), we add the DINO loss with weight 0.2 to the contrastive loss. 
+
+# C. Dataset Details 
+
+C.1. Data Preprocessing 
+
+CPG-Pilot and CPG-12 use the standardized Cell Painting protocol with five fluorescent channels targeting different cel-lular compartment. They provide 16-bit multi-channel TIFF images 2. RxRx3 uses a six-channel imaging protocol on HU-VEC cells 3. For Cell Painting datasets (CPG-Pilot and CPG-12), we apply flatfield illumination correction to compensate for uneven lighting and optical aberrations across the field of view. This preprocessing step ensures uniform intensity dis-tributions and removes spatial artifacts that could confound biological signals. To handle intensity variations and remove outliers, we clip extreme pixel values at the 0.01% and 99.9% percentiles per channel before rescaling intensities to the [0, 1] range. Images are resized to 224×224 resolution to match the Vision Transformer input requirements. L1000 data is obtained from the LINCS database in    
+
+> 2https://github.com/broadinstitute/cellpainting-gallery
+> 3https://www.rxrx.ai/rxrx3-core (a) RxRx3 (b) HUVEC (c) U2OS (d) A549
+> Figure 5. Dose ( μM) distribution across imaging and transcriptomic datasets. (a) Dose distribution in RxRx3 imaging data. (b-d) Dose distributions in L1000 transcriptomic profiles for HUVEC, U2OS, and A549 cell lines.
+
+GCTX (Gene Expression Connectivity) format, containing expression measurements for 978 landmark genes across multiple cell lines and perturbations. Each profile represents a bulk-cell population average from treated wells. We apply minimal filtering to L1000 profiles for quality control. The primary criterion is dose-level sample size: we remove dose conditions with fewer than 5 replicate samples to ensure sta-ble statistics. 
+
+C.2. Details of Drug-Target Discovery 
+
+For the unsupervised drug-target gene discovery task, we fol-low the standard preprocessing protocol established by Kraus et al. [15]. This protocol consists of two key steps: crop ag-gregation and batch alignment. For RxRx3, each 512×512×6 microscopy image produces four tiled 256×256×6 crops. We compute embeddings for each crop independently using the trained image encoder, then mean-aggregate embeddings from the same well to obtain a single well-level represen-tation. This aggregation reduces within-well variance and provides more stable perturbation signatures. To align em-beddings across experimental batches and remove systematic technical variation, we employ Principal Component Anal-ysis with Centering and Scaling (PCA-CS). First, we fit a PCA transformation on all DMSO control sample embed-dings without dimensionality reduction, capturing the control distribution’s variance structure. This PCA transformation is then applied to all embeddings (both controls and perturbed samples). Next, for each experimental batch, embeddings are centered and scaled relative to the batch’s DMSO control statistics. This procedure standardizes embeddings and min-imizes batch effects while preserving biological perturbation signals. Following alignment, we compute drug-target asso-ciation metrics on the batch-corrected embeddings. 
+
+C.3. Dose Distribution 
+
+Figure 5 presents the dose distributions across imaging and L1000 transcriptomic datasets. The distributions reveal sub-stantial heterogeneity both within and across modalities, un-derscoring the importance of explicit dose modeling in our framework. For RxRx3 imaging data (Figure 5a), doses are relatively uniformly distributed across the range from 0.0025 
+
+μM to 10.0 μM, with each dose bin containing 150-250 drug perturbations. This balanced coverage enables evalu-ation across different perturbation strengths. In contrast, the L1000 transcriptomic profiles show markedly different dose distributions across cell lines. HUVEC exhibits diverse dose coverage spanning 0.01 μM to 30.0 μM, with notable peaks around 0.12 μM, 0.37 μM, and multiple higher doses. U2OS is heavily concentrated at 10.0 μM, with over 6000 drugs at this single dose and sparse coverage elsewhere, reflecting a standardized screening dosage for this cell line. A549 shows the most dispersed distribution, with substantial measure-ments across 0.003-30.0 μM and a pronounced peak at 30.0 
+
+μM containing over 3000 drugs. These heterogeneous dose distributions have critical implications for multimodal learn-ing. First, when pairing imaging and transcriptomic data, ex-act dose matches are rare. For instance, RxRx3’s peak doses (e.g., 1.0 μM) may not align with HUVEC’s common doses (e.g., 0.12 μM or 10.0 μM), creating systematic dose mis-matches. Second, the dose-dependent nature of drug effects means that treating different doses of the same compound as equivalent, as in identity-based alignment methods, discards critical information about perturbation magnitude. While our framework addresses this challenge through explicit dose conditioning in the teacher module. The teacher encodes dose information separately for images ( δI ) and transcrip-tomics ( δR), allowing it to reason about dose-specific effects even when doses differ across modalities. The scFM fine-tuning further enables disentanglement of dose-dependent transcriptomic responses from cell-type identity. This design is particularly important for HUVEC and A549, where the di-verse dose distributions mean that most paired samples have dose mismatches. 
+
+# D. Additional Experimental Results 
+
+In this section, we provide additional experimental results that complement the main paper. We present ablation studies on codebook design choices, detailed results and analysis of dose-dependent effects, and validation of fine-tuned scFM. 
+
+D.1. Ablation Studies on Drug Codebook 
+
+We investigate key design choices for the chemistry-aware codebook to understand which components contribute to Dataset RxRx3 CPG-12 Metric Top-1 Top-5 Top-1 Top-5 None 5.20 15.82 39.39 65.06 GIN 5.72 16.28 41.26 69.03 RDKit 5.57 16.35 40.09 65.10 ChemBERTa 5.66 16.80 41.00 68.88 FCFP 5.62 16.86 42.09 71.07 Fixed FCFP 5.11 15.71 40.13 66.56 
+
+> Table 5. Performance with different drug molecular representations on CPG-12.
+
+TIDE’s performance. Table 5 presents results on RxRx3 and CPG-12 with different codebook configurations using ViT as the vision encoder. The “Non” baseline directly predicts drug identity through a classification loss without using a codebook structure. Compared to this baseline, all codebook-based variants show improved performance, validating that organizing drugs in a prototype space facilitates soft similarity-based learning. We test four molecular representation methods, GIN, RDKit de-scriptors, ChemBERTa, and FCFP, each paired with a learn-able MLP projection and end-to-end optimization. Perfor-mance across these representations is relatively comparable, with all achieving meaningful improvements over the “Non” baseline. This suggests that TIDE’s framework is robust to the choice of initial molecular encoding, as the learnable codebook adapts representations during training to encode mechanistic similarity beyond pure chemical structure. The comparison between learned FCFP and fixed FCFP code-book is also informative. The fixed variant, where prototypes are frozen at their ECFP initialization, performs substantially worse than the learned version, and even falls below some other learned representations. This validates our design that the codebook must be optimized end-to-end to move be-yond chemical similarity and encode the mechanistic rela-tionships learned from transcriptomic guidance. The fixed codebook cannot capture pathway-level similarities, confirm-ing that learning is essential rather than the framework sim-ply exploiting chemical shortcuts. Overall, FCFP with learn-able projection achieves the best performance across both datasets. Based on these results, we adopt FCFP as the molecular representation for all experiments in main paper. 
+
+D.2. Dose-Specific Performance and Ablation 
+
+To assess how perturbation dose affects drug-target discov-ery performance and validate the necessity of explicit dose conditioning, we analyze results on RxRx3 stratified by dose level. Based on the original RxRx3-core annotations, we cu-rate four dose levels with significant drug-target associations: 0.1, 0.25, 1.0, and 2.5 μM. Figure 6 presents Average Preci-sion (AP) across these doses for multiple methods using ViT                   
+
+> Figure 6. Drug-target discovery performance across dose levels on RxRx3. Average Precision (AP) for drug-target gene retrieval at four curated dose levels using ViT backbone.
+> Dataset RxRx3 CPG-Pilot CPG-12 Metric ↑R2LogFC R2LogFC R2LogFC Fine-tuned 0.835 0.622 0.815 0.572 0.699 0.850
+> Table 6. scFM fine-tuning performance on L1000 perturbation re-sponse prediction. Each column corresponds to a scFM model trained on L1000 data matching the cell lines used in the imaging dataset: RxRx3 (HUVEC), CPG-Pilot (U2OS+A549), and CPG-12 (U2OS).
+
+backbone. Performance trends are consistent across doses for all methods, with 2.5 μM yielding the relatively highest AP values. The “w/o dose” ablation removes dose conditioning from both the scFM encoder and the teacher’s image dose modeling, treating all doses of the same drug equivalently. We can find that its performance drops substantially across all dose levels. This validates that explicit dose disentangle-ment is critical for leveraging the heterogeneous dose dis-tributions in weakly paired data, enabling the model to rea-son about dose-specific effects rather than collapsing them through identity-based matching. 
+
+D.3. scFM Fine-tuning Results 
+
+To validate the quality of our fine-tuned scFM encoder, we report its performance on perturbation response prediction. The model is trained to predict perturbed gene expression given basal expression, drug representation, and dose. As shown in Table 6, the fine-tuned scFM achieves R2 be-tween 0.70-0.84 across cell lines, demonstrating strong pre-dictive performance on novel compounds. These results val-idate that the scFM successfully learns to encode cell-type identity from basal gene expression, capture dose-dependent perturbation magnitude, and predict pathway-level transcrip-tomic changes. This learned capability is essential for TIDE’s teacher model, which relies on the scFM to provide mechanism-aware encodings of cell context, dose informa-tion, and perturbed RNA states during distillation. E. Background on L1000 and Cell Morphology 
+
+L1000 is a high-throughput gene expression profiling tech-nology developed by the Broad Institute as part of the Library of Integrated Network-Based Cellular Signatures (LINCS) program [27]. Different from traditional RNA-seq which measures the entire transcriptome, L1000 uses a cost-effective approach that directly measures expression of 978 carefully selected “landmark” genes using a bead-based detection system. These landmark genes are chosen to be highly informative: their expression patterns can be used to computationally infer the expression of the remaining around 80% of protein-coding genes through statistical mod-els trained on large-scale gene expression databases. Key characteristics of L1000 data include: (i) bulk-cell measure-ments that represent population-averaged gene expression from thousands of cells per well, smoothing out single-cell heterogeneity; (ii) pathway-level resolution capturing coor-dinated changes in gene programs rather than individual gene fluctuations; (iii) dose-dependent responses where the same perturbation at different concentrations produces graded tran-scriptomic changes; and (iv) cell-type specificity where iden-tical perturbations can elicit distinct transcriptomic profiles across different cell lines due to varying basal pathway activ-ity and regulatory networks. Cell Painting [2] is a standardized multiplexed fluores-cence microscopy protocol designed to capture rich morpho-logical information about cellular state. The protocol uses six fluorescent dyes that target distinct cellular components: Hoechst 33342 (nucleus/DNA), concanavalin A/phalloidin (endoplasmic reticulum and cytoskeleton), SYTO 14 (nucle-oli and cytoplasmic RNA), wheat germ agglutinin (Golgi and plasma membrane), MitoTracker Deep Red (mitochondria), and phalloidin (F-actin). By imaging these five channels (some dyes are combined) at high resolution, Cell Painting generates multi-channel images that reveal detailed morpho-logical features including cell shape, size, texture, organelle distribution, and sub-cellular compartmentalization [7]. Cell Painting data is characterized by: (i) scalability to millions of cells and thousands of perturbations per experiment at rel-atively low cost; (ii) phenotypic richness capturing morpho-logical changes invisible to the naked eye but indicative of cellular state; (iii) perturbation sensitivity where subtle com-pound effects manifest as quantifiable morphological shifts. While both technologies profile cellular responses to per-turbations, they capture fundamentally different aspects of cellular state. L1000 provides direct molecular evidence of pathway activation and gene regulatory changes, making it well-suited for identifying mechanisms of action (MoA) at the molecular level. Cell Painting captures integrated pheno-typic outcomes, which can reveal subtle perturbation effects and distinguish compounds with similar molecular targets but different cellular contexts. This complementarity has been quantitatively demonstrated in MoA prediction studies. For instance, Way et al. [30] compared single-modality versus multi-modal profiling, and found that combining Cell Paint-ing and L1000 enables detection of approximately 69% of mechanism categories, whereas using Cell Painting images or L1000 alone detects only 19% or 24% of mechanisms, respectively. This synergy arises because some MoAs pro-duce strong transcriptomic signatures but subtle morpholog-ical changes, while others have pronounced phenotypic ef-fects with modest gene expression alterations. The demon-strated complementarity has motivated extensive research in multi-modal learning approaches published at recent ma-chine learning and computer vision conferences. Contrastive alignment methods [16, 25, 34] are widely adopted: mod-els independently encode images and gene expression, then align representations through contrastive losses that pull to-gether embeddings from the same perturbation while pushing apart different perturbations. Beyond the standard contrastive learning, InfoCORE [29] addresses batch effect confounders in contrastive multi-modal learning. While MINER [21] ex-tends this direction by incorporating hard negative mining strategies to improve cross-modal alignment robustness. An-other line of works focuses on cross-modal knowledge trans-fer, which aims to enhance single-modality representations through distillation. Bendidi et al. [1] proposed using Cell Painting images as a “teache” to guide transcriptomic “stu-dent” encoders via knowledge distillation, leveraging abun-dant imaging data to improve gene expression representa-tions. Conversely, other work [18, 33] explores generative modeling: given perturbed transcriptomic profiles, diffusion models synthesize corresponding cellular morphology im-ages, enabling data augmentation and mechanistic visualiza-tion. These prior works generally focus on either learning joint representations for downstream molecular tasks, with im-ages serving as auxiliary signals, or improving transcriptomic or drug representations through image-based regularization. Our work differs by targeting image representation learn-ing as the primary objective, using transcriptomics as priv-ileged information during training to guide image encoders toward mechanistic understanding, enabling purely image-based drug discovery at deployment while benefiting from transcriptomic knowledge.
