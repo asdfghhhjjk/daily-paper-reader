@@ -1,0 +1,2447 @@
+Title: TissueFormer: Extending single-cell foundation models to predict population-level phenotypes
+
+URL Source: https://www.biorxiv.org/content/10.1101/2025.08.17.670735v2.full.pdf
+
+Number of Pages: 33
+
+Markdown Content:
+Under review 
+
+# TissueFormer: Extending single-cell 1
+
+# foundation models to predict population-level 2
+
+# phenotypes 3
+
+## Ari S. Benjamin 1 and Anthony Zador 1
+
+> 4
+
+1Cold Spring Harbor Laboratory, Cold Spring Harbor, NY 11724, United States 5
+
+Corresponding author and email address: Ari Benjamin - benjami@cshl.edu 67
+
+## Abstract 8
+
+## Background 9
+
+Single-cell RNA sequencing technologies have enabled unprecedented insights into gene expression and 10 
+
+opened new pathways for diagnostics and tissue annotation. At present, most computational 11 
+
+approaches for interpreting single-cell data predict labels or properties based on isolated single-cell 12 
+
+transcriptomic profiles. This approach overlooks the cellular composition within a sample, which is often 13 
+
+critical for inferring tissue identity or other sample-level phenotypes. 14 
+
+## Results 15 
+
+To address this limitation, we introduce TissueFormer, a Transformer-based neural network that infers 16 
+
+population-level labels from groups of single-cell RNA profiles while retaining single-cell resolution. We 17 
+
+applied TissueFormer to two tasks: predicting COVID-19 severity from single-cell RNA sequencing of 18 
+
+blood samples, and predicting cortical area identity from spatial transcriptomic data in mouse brains. 19 
+
+TissueFormer outperformed single-cell foundation models and machine learning methods applied to 20 
+
+pseudobulk and cell type composition. 21 
+
+## Conclusions 22 
+
+TissueFormer’s higher performance promises more accurate diagnostics and enables the automated 23 
+
+construction of high-resolution brain region maps in individual mice directly from spatial transcriptomic 24 
+
+data. Applied to mice with developmental perturbations to visual input, these maps revealed a 25 
+
+significant reduction in predicted visual cortex area, illustrating how individual differences in 26 
+
+neuroanatomy can be quantified. More broadly, TissueFormer provides a framework for predicting any 27 
+
+population-level phenotypes which are influenced by cellular diversity and tissue-level organization. 28 29 
+
+# Keywords 30 
+
+spatial transcriptomics, single-cell foundation models, sample-level diagnostics, brain annotation, tissue 31 
+
+labeling, AI for biology 32 
+
+1 of 33 
+
+.CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint Under review 
+
+# Background 33 
+
+Many important features such as tissue identity, disease state, or treatment response are defined at the 34 
+
+level of cell populations but are driven by patterns of single-cell phenotypes. Observations of population-35 
+
+level phenotypes can thus be used for the annotation and classification of tissue samples. For example, 36 
+
+the proportion of cell types in a population is a useful biomarker for clinical features such as inflammation 37 
+
+(Templeton et al., 2014 ). In the brain, an important problem in this class is the annotation of brain areas 38 
+
+which differ in cell type composition ( Yao et al., 2021b ). However, readouts depending on cell composition 39 
+
+currently remain limited to a handful of canonical patterns identified through decades of observation 40 
+
+rather than discovered systematically through large-scale, data-driven analyses. 41 
+
+With the increasing availability of single-cell RNA sequencing, it is now possible to measure patterns 42 
+
+in single-cell properties at high resolution across large numbers of cells per sample ( Svensson et al., 43 
+
+2018 ). This rich granularity presents a tradeoff for the analysis of phenotypes across tissues, samples, 44 
+
+or individuals, each of which contains many sequenced cells. At one extreme, many computational 45 
+
+pipelines focus on single cells in isolation, taking a cell profile as input and outputting a label specific to 46 
+
+that cell. This is the approach taken by most recent single-cell ‘foundation models’ of mRNA transcription 47 
+
+data ( Lopez et al., 2018 ; Connell et al., 2022 ; Cui et al., 2023 ; Theodoris et al., 2023 ; Rosen et al., 2023 ;48 
+
+Yuan et al., 2024 ; Schaar et al., 2024 ; Ito et al., 2025 ; Hsieh et al., 2024 ), reviewed in ( Szałata et al., 49 
+
+2024 ). These models are fundamentally single-cell in design, and as a result they are unable to detect 50 
+
+signals that emerge only from the composition of cells present. 51 
+
+An opposing strategy is to first compute summary statistics about cell populations across tissues or 52 
+
+samples, then use these for downstream analysis and classification. One such statistic is the average 53 
+
+expression, or pseudobulk expression profile, as is frequently used in differential state analysis ( Crowell 54 
+
+et al., 2020 ). Alternatively, one may calculate compositional features about a population, such as cell 55 
+
+type frequencies, ratios of cell types, putative cell-cell communication networks, and cell type specific 56 
+
+pathway scores ( Cao et al., 2022 ). While informative, both pseudobulk and cell composition measures 57 
+
+obscure single-cell granularity and rely on the researcher to specify which compressed representation of 58 
+
+a population of cells is likely to be informative about sample labels. 59 
+
+In order to maximize the potential of single-cell data, it is important that methods combine the 60 
+
+transfer-learning capabilities and end-to-end trainability of single-cell foundation models with the ability 61 
+
+to compare cells across a population. Certain models exist which are end-to-end trainable and can 62 
+
+compare across cells, such as CellCnn ( Arvaniti and Claassen, 2017 ), scAGG ( Verlaan et al., 2025 ), 63 
+
+and ScRAT ( Mao et al., 2024 ), but these models are not compatible with existing foundation models. 64 
+
+The ability to incorporate knowledge from pretrained models is especially important given the high 65 
+
+dimensionality of the inputs when predicting sample-level phenotypes. In each independent sample, the 66 
+
+input dimensionality is on the order of the number of cells per sample times the number of genes per cell. 67 
+
+By first pretraining on self-supervised tasks, foundation models effectively reduce this dimensionality by 68 
+
+establishing a learned prior over the representation of each cell. 69 
+
+To bridge these approaches we present TissueFormer, a neural network architecture that analyzes 70 
+
+groups of single-cell RNA profiles collectively while utilizing knowledge embedded in pre-trained single-cell 71 
+
+foundation models. The model incorporates a module based on the Geneformer architecture for single-72 
+
+cell analysis ( Theodoris et al., 2023 ), which can be initialized with pre-trained weights. During processing, 73 
+
+each cell is given a learnable representation with this pretrained module. These cell representations 74 
+
+are then processed by several further layers of self-attention, allowing the model to learn to attend 75 
+
+to the relevant cells and their interactions. Importantly, the output of Tissueformer is invariant to the 76 
+
+order of cells presented as input. These design choices allow TissueFormer to learn arbitrary functions 77 
+
+from observations of many cells to sample-level phenotypes while simultaneously leveraging pretrained 78 
+
+single-cell foundation models. 79 
+
+2 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+To validate our approach, we applied TissueFormer to two prediction tasks in which cellular diversity 80 
+
+is likely to be crucial. In the first task, we link spatial transcriptomic data to Allen Brain Atlas labels of 81 
+
+regions of the mouse cortex. This task is a competitive benchmark for the supervised classification 82 
+
+of sampled tissues, though it is important to note that clustering or alignment-style methods have 83 
+
+also been developed for tissue annotation (e.g. Biancalani et al. (2021 ); Hu et al. (2021 ); Lee et al. 84 
+
+(2025 )). As a second task, we compiled three datasets of single-cell transcription within blood samples 85 
+
+of patients with COVID-19 infections of varying severity, and sought to predict infection severity from 86 
+
+gene expression ( COMBAT, 2022 ; Ren et al., 2021 ; Stephenson et al., 2021 ). On both tasks we found 87 
+
+that TissueFormer outperforms both standard supervised methods as well as fine-tuned single-cell 88 
+
+foundation models at predicting sample-level annotations. These results highlight the importance of 89 
+
+sample- or tissue-level features in transcriptomic analysis and establish a framework for integrating 90 
+
+single-cell foundation models into higher-order biological investigations. When applied to brains of mice 91 
+
+with developmental perturbations, TissueFormer’s predicted cortical maps further revealed individual 92 
+
+differences in neuroanatomy that are consistent with past analyses of compositional shifts in these 93 
+
+brains ( Chen et al., 2024 ). 94 
+
+# Methods 95 
+
+Our primary goal is to design and evaluate a model which is generally applicable to the supervised 96 
+
+problem of sample or tissue annotation from single-cell data. In what follows, we first describe the 97 
+
+particular characteristics of this problem that make it challenging for standard methods. 98 
+
+## Multi-cell supervised problem setting 99 
+
+A typical problem in single cell analysis is relating mRNA expression levels in each cell to a cellular 100 
+
+property such as cell type identity ( Figure 1 a). If we denote the cell-by-transcript matrix of counts as 𝐶 ,101 
+
+where each row of 𝐶 𝑖 contains the mRNA transcript counts for a single cell, this problem seeks to find a 102 
+
+function 𝑓 that maps each row 𝐶 𝑖 (a cell) to a particular value 𝑦 𝑖 corresponding to a label. For example, 103 
+
+𝑦 𝑖 could represent the cortical area from which a given cell was obtained. 104 
+
+𝑓 (𝐶 𝑖 ) = 𝑦 𝑖 (1) In some problem settings, it is advantageous to use information from many cells. In this multi-cell 105 
+
+setting, the characteristic equation relates sets of cells to labels. For spatial transcriptomic data, for 106 
+
+example, a set might refer to a group of cells within some spatial distance of one another. Denoting 107 
+
+𝐺 𝑖 as the 𝑖 th such group, and {𝑐 ∈ 𝐺 𝑖 } as the set of cells in this group, the classification or regression 108 
+
+problem seeks to find a function 𝑓 that maps each set of cells to its label 𝑦 𝑖 .109 
+
+𝑓 ({ 𝑐 ∈ 𝐺 𝑖 }) = 𝑦 𝑖 (2) The fundamental difficulty of the multi-cell problem is its high dimensionality. Relative to the single-cell 110 
+
+problem, the dimensionality of input examples increases from the number of genes 𝐷 to 𝐷 × |𝐺 |, where 111 
+
+|𝐺 | is the number of cells in a group. Meanwhile, the number of independent labels decreases from the 112 
+
+total number of cells to the number of disjoint groups, i.e. from 𝑁 to 𝑁  
+
+> |𝐺 |
+
+. The ratio of input dimensions to 113 
+
+independent examples, a proxy for the difficulty of the problem, thus increases as the group size squared, 114 
+
+|𝐺 |2.115 
+
+Most strategies for the multi-cell problem explicitly reducing its dimensionality through aggregation 116 
+
+(as in pseudobulk analyses) or summary statistics (e.g. Cao et al. (2022 )). However, these strategies 117 
+
+destroy information which could be critical in multi-cell problems. Pseudobulk methods obscure the 118 
+
+variance in the signal, whereas cell type composition or other such signals are fixed and non-adjustable 119 
+
+3 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review                                                    
+
+>  
+>         
+
+Figure 1. TissueFormer is a Transformer-based neural network to analyze groups of single-cell RNA profiles. a) Single-cell foundation models focus on cellular targets, yet many properties of tissues relate to cellular diversity. b) TissueFormer learns to extract critical information from each cell into a cell embedding vector. The module that extracts these is in architecture identical to Geneformer, a single-cell foundation model. First, cells are processed by a normalized rank-ordering of their genes into a ’sentence’ of gene tokens, prefixed by a ‘<cls>’ token to pool gene information, then processed by several transformer layers. c) Experiments in this manuscript use a pretrained single-cell model we call Murine Geneformer, created by adapting the 12-layer Geneformer model (pretrained on human cells) to mouse cells via pairing orthologous genes and further pretraining. d) TissueFormer architecture. Cell embeddings for all cells in a group are fed to 6 Transformer encoding units before average-pooling and a linear readout. 
+
+representations of single-cell profiles and are incapable of observing transcriptional dysregulation within 120 
+
+cell types. To take full advantage of single-cell data, a model should ideally be able to attend to any 121 
+
+aspect of the full RNA transcriptome in each cell while comparing across the population. 122 
+
+It is nevertheless crucial take steps to constrain the distribution of learned functions so as to cir-123 
+
+cumvent the curse of dimensionality in multi-cell prediction problems. One way to address this is by 124 
+
+pre-training a foundation model on a self-supervised task before downstream supervised learning. If this 125 
+
+self-supervised task is sufficiently similar to the supervised task at hand, the pretrained model weights 126 
+
+will be close in weight space to a good solution for the supervised task. This reduces the number of 127 
+
+training steps and data needed in the supervised task. 128 
+
+Recent related work has introduced several foundation models tailored for spatial transcriptomic 129 
+
+data. Because these models observe groups of cells, they can be seen as solutions to a subcase of the 130 
+
+multi-cell problem in Equation 2. For example, scGPT-spatial is pretrained to predict gene expression in 131 
+
+held-out cells in the local neighborhood ( Wang et al., 2025 ). Unlike TissueFormer, scGPT-spatial averages 132 
+
+the embedding of several cells in the local neighborhood for the inter-cell problem, rather than employing 133 
+
+self-attention across cells, and thus cannot compare compositional signals. HEIST ( Madhu et al., 2025 )134 
+
+and CI-FM ( You et al., 2025 ) define graph neural networks over a hierarchical graph spanning both nearby 135 
+
+cells and their genes, which in principle enables comparative processing across cells. As explained 136 
+
+below, TissueFormer uses Transformer layers and not graph neural networks, making it compatible with 137 
+
+single-cell foundation models trained on traditional scRNA-seq data. Unlike these works, the design 138 
+
+of TissueFormer is not restricted to spatial transcriptomic data and is applicable to any sample-level 139 
+
+phenotype prediction problem. 140 
+
+## TissueFormer architecture 141 
+
+TissueFormer is a neural network architecture tailored for groups of single-cell RNA transcriptomic 142 
+
+profiles ( Figure 1 ). It is able to attend to information within each cell’s relative mRNA transcription profile, 143 
+
+yet also look across cells to extract information from the diversity and frequency of mRNA profiles in the 144 
+
+4 of 33 
+
+.CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint Under review 
+
+group. Architecturally, this is accomplished by first applying a ‘single-cell module’ to extract information 145 
+
+from each cell, then attending across cells in further layers. This combination of intra- and inter-cell 146 
+
+expressivity creates a regression problem of high dimensionality, yet this is mitigated by the bottleneck 147 
+
+architecture and the easy loading of pre-trained single-cell foundation models into the cell embedding 148 
+
+module. 149 
+
+The building block of TissueFormer which performs these capabilities is the Transformer block 150 
+
+implementing self-attention ( Vaswani et al., 2017 ). Compared to older neural network architectures like 151 
+
+Multi-Layer Perceptrons (MLP), Transformers are distinguished by the shape of their inputs. Whereas an 152 
+
+MLP observes vector-shaped inputs (i.e. a vector of mRNA transcript counts), Transformers operate on 153 
+
+lists of vectors, or equivalently, on matrix-shaped inputs. Self-attention acts to select which vectors in 154 
+
+the list are most relevant in the current context. 155 
+
+In order for single-cell data to be compatible with Transformers, each cell’s vector of mRNA transcript 156 
+
+counts 𝑐 𝑖 must be expanded into a list of vectors. Multiple strategies for this conversion are possible 157 
+
+for single-cell data, as reviewed in Szałata et al. (2024 ). Here we use a rank-ordering approach as in 158 
+
+Geneformer ( Theodoris et al., 2023 ). Each cell’s expressed genes are ordered by their relative expression 159 
+
+normalized by their median expression in a pretraining corpus. Each gene name in this ordered list is 160 
+
+then mapped to a high-dimensional embedding vector via a learnable dictionary. While alternatives to 161 
+
+rank encoding have been tested in other foundation models, rank encoding is common in bioinformatic 162 
+
+pipelines and has generally been found to be robust to common sources of experimental variability 163 
+
+(Ballouz et al., 2015 ). 164 
+
+The single-cell module within TissueFormer is designed to compress each cell’s unique and relevant 165 
+
+information into a cell embedding for later processing ( Figure 1 b). This is achieved by prefixing to each 166 
+
+cell a special token named the <cls> token, following standard design choices ( Devlin et al., 2019 ). The 167 
+
+<cls> token instantiates a working space for the accumulation of information from all genes. During 168 
+
+learning, any error-corrective information passed backwards is bottlenecked through the cell embedding, 169 
+
+ensuring it collects the necessary information from each cell. In sum, the cell embedding vector which is 170 
+
+passed to later layers can be written as a function of the mRNA transcript count vector 𝑐 𝑖 as: 171 
+
+CellEmb [𝑐 𝑖 ] = SingleCellModule[RankEncoding[ 𝑐 𝑖 ]] [<cls> ] (3) The single-cell module shares the Geneformer architecture, meaning that any trained single-cell 172 
+
+model can be loaded into this module. This gives TissueFormer the ability to incorporate model weights 173 
+
+and biological knowledge from pretrained single-cell foundation models. In our experiments we used 174 
+
+a version of Geneformer adapted for mouse brain tissue. We first downloaded the Geneformer 12L 175 
+
+model, which was trained to predict the identity of randomly masked genes (15% of total genes per 176 
+
+cell) on a corpus of 30 million human cells. We then adapted this to mouse tissue by repeating this 177 
+
+methodology on a hand-curated dataset of approximately 3.5 million mouse cells. Using the CellXGene 178 
+
+Census explorer ( Program et al., 2025 ), we aggregated data from several publications (Table 1) ( Yao 179 
+
+et al., 2021b ; Govek et al., 2022 ; Kozareva et al., 2021 ; Steuernagel et al., 2022 ; Yao et al., 2021a , 2023 ;180 
+
+Zhang et al., 2021 ). After tokenizing (see below), we then trained the Geneformer architecture on this 181 
+
+dataset with an identical masked gene prediction objective. Models were trained for 3 epochs using 182 
+
+AdamW, a learning rate of 0.001, and a batch size of 32 cells on two Nvidia V100 cards. We tested training 183 
+
+on the murine dataset from scratch as well as finetuning the human model. In order to finetune the 184 
+
+human model, we gave mouse genes the same initial embedding vector as their human orthologs, where 185 
+
+available, and gave unmatched genes random initializations. Orthologs were obtained from Ensembl 186 
+
+(Harrison et al., 2024 ), with the first selected if multiple orthologous genes existed. This transfer from 187 
+
+human genes significantly improved the model compared to training on mouse genes alone as measured 188 
+
+with the cross-entropy loss on 100,000 held-out cells from the mouse brain datasets. We call this 189 
+
+5 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+finetuned Geneformer pretrained model ‘Murine Geneformer’. When used within TissueFormer, Murine 190 
+
+Geneformer serves as the single-cell module; at group size 𝑁 = 1 , TissueFormer reduces to Murine 191 
+
+Geneformer with a classification head. 192 
+
+TissueFormer attends to information across cells by processing each cell embedding with several 193 
+
+additional Transformer layers ( Figure 1 d). At this stage, TissueFormer is invariant to the order of cells 194 
+
+presented to the model, seeing them only as a bag or set of cells. The output of any Transformer is 195 
+
+inherently equivariant with respect to the order of the input embedding vectors (i.e. rearranging the inputs 196 
+
+causes the outputs to be rearranged in the same order). In order to attain invariance to cell order, such 197 
+
+that rearrangements to the order have no effect on the output, the output of the Transformer layers is 198 
+
+pooled by averaging over cells. A final step is a linear classification layer for classification problems. 199 
+
+Collectively, these design choices allow TissueFormer to attend to any relevant information in each cell’s 200 
+
+transcriptome in a context-dependent manner based on the diversity of cells present and the problem at 201 
+
+hand. 202 
+
+Taken together, the equation representing TissueFormer can be summarized as: 203 
+
+𝑦 𝑖 = LinearClassifier[AvgPool[Transformers[ {CellEmb [𝑐 𝑗 ] for 𝑐 𝑗 ∈ 𝐺 𝑖 }]]] (4) 
+
+## TissueFormer architecture: hyperparameters of this study 204 
+
+TissueFormer contains two main components: a single-cell module and an aggregation module. In 205 
+
+this sense it can be viewed as an end-to-end trainable hierarchical model above single-cell foundation 206 
+
+models. 207 
+
+The single-cell module is based on the BERT architecture. We used identical hyperparameter settings 208 
+
+as used by Geneformer 12L ( Theodoris et al., 2023 ), allowing pretrained weights to be readily employed. 209 
+
+Specifically, we used a 12-layer BERT network with ReLU activations, hidden layer sizes of 512, and a 210 
+
+context window of up to 2048 genes. Each Transformer had multi-head attention with 8 heads, and the 211 
+
+inputs are appended with sinusoidal positional embeddings. 212 
+
+The aggregation model pools across single-cell embeddings. The aggregation module had 6 Trans-213 
+
+former layers, each with a hidden size of 768 units. All training runs on the classification task used the 214 
+
+Adam optimizer with a learning rate of 0.001 and a linear learning rate decay following a learning rate 215 
+
+warmup with warmup ratio 0.1. Our implementation relies on the Hugging Face Transformers library 216 
+
+(Wolf et al., 2020 ), based on Pytorch ( Paszke et al., 2019 ). We used Hydra for configuration management 217 
+
+(Yadan, 2019 ). 218 
+
+## Application to cortical annotation 219 
+
+The mammalian brain is often partitioned into regions with distinct functional roles, connectivity, and 220 
+
+cellular composition. In any particular brain, variations in neuroanatomy may arise due to genetic factors 221 
+
+as well as due to the animal’s environment. These variations underlie the evolution of innate behavior 222 
+
+and reflect the aptitude for adaptation within a lifetime. 223 
+
+Current methods for the annotation of single brains have certain well-known limitations. One common 224 
+
+approach is to register a brain into the average-brain template of the Common Coordinate Framework 225 
+
+(CCF), a 3D reference coordinate system constructed from over 1,000 reference mouse brains ( Wang 226 
+
+et al., 2020 ). Once transformed into CCF coordinates, one can visualize the area boundaries of the Allen 227 
+
+Brain Atlas, which again reflect a canonical, average brain. The drawback of this approach is that it 228 
+
+obscures individual variation, especially the relative size of brain areas to one another. An alternative 229 
+
+approach which enables individual variability is to employ experimental methods that interrogate only a 230 
+
+small brain region in each animal, for example, focal viral projection tracing ( Xu et al., 2020 ) or two-photon 231 
+
+functional imaging for a particular functional modality like visual responses ( Kalatsky and Stryker, 2003 ). 232 
+
+6 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+While accurate, these methods’ limited spatial scope prevents a holistic assessment of anatomy across 233 
+
+the entire cortex. 234 
+
+An alternative strategy that balances whole-brain coverage with single-animal individuality is to 235 
+
+perform in situ single-cell RNA sequencing across a single brain. This method modernizes a classic 236 
+
+approach of defining neuroanatomy through differences in cell type composition, an idea that goes back 237 
+
+at least to Brodmann’s brain atlas ( Brodmann, 1909 ; Zilles and Amunts, 2010 ). Currently, the technical 238 
+
+efficiency of spatial transcriptomics is now high enough to allow the profiling of cells across an entire 239 
+
+mouse brain, and furthermore cheaply enough to cover multiple brains in single studies ( Chen et al., 240 
+
+2024 ). Given such datasets, the remaining challenge in a robust pipeline for labeling brain areas is 241 
+
+computational in nature. 242 
+
+To investigate whether TissueFormer could serve this purpose, we applied TissueFormer to predict 243 
+
+the brain region of cells from their transcriptomes as characterized in a recent dataset of whole-brain 244 
+
+spatial transcriptomics of the brains of several mice ( Chen et al., 2024 ). Over 1 million cells across 245 
+
+the brain, largely in the left hemisphere, were profiled in each of eight mice, four of which were raised 246 
+
+in normal rearing conditions. Each cell profile contains counts from a panel of 104 genes selected 247 
+
+for their ability to distinguish cell type clusters in excitatory cells. With multiple separate brains and 248 
+
+whole-cortex coverage in one hemisphere, this dataset enables a test of whether individual differences 249 
+
+in neuroanatomy can be resolved with spatial transcriptomics. 250 
+
+In addition to mRNA counts, this dataset also contains labels of the brain area of each cell as 251 
+
+established through a registration into the Common Coordinate Framework (CCF). Each brain in Chen 252 
+
+et al. (2024 ) was previously registered to the CCF using standard software that defines a non-rigid 253 
+
+smooth deformation from raw slice coordinates into the CCF. This step normalizes differences in gross 254 
+
+anatomy and brain size. Importantly, once transformed into CCF coordinates, one may associate the 255 
+
+topography of a new brain with the Allen Brain Atlas to obtain brain area annotations ( Wang et al., 2020 ). 256 
+
+These CCF annotations provide the labels we use for training. 257 
+
+It is important to note that CCF boundaries may not reflect ground truth neuroanatomy. While CCF 258 
+
+registration accounts for overall brain shape, it does not account for more fine-grained differences 259 
+
+such as the relative size of brain areas or a shift in a single boundary in one animal versus another. 260 
+
+Nevertheless, these labels are sufficiently accurate to allow a comparison of computational methods. It 261 
+
+is possible as well that the ‘errors’ of a model trained on such data will in fact represent a more accurate 262 
+
+annotation than the CCF, a possibility we will return in Figure 3 in which we examine the predictions of 263 
+
+TissueFormer on held-out brains. 264 
+
+## Data and tokenization 265 
+
+All datasets used in this study are summarized in Table 1. 266 
+
+## Data description: mouse brains 267 
+
+The data published in Chen et al. (2024 ) contain spatial transcriptomic data obtained via BARseq. BARseq 268 
+
+is a probe-based in site sequencing technology based on Illumina chemistry. BARseq establishes mRNA 269 
+
+transcript counts in cells based on the identification of probe sequences at spatially resolved locations, 270 
+
+followed by cell segmentation and assignment of genes to cells. In this dataset, probes were selected to 271 
+
+resolve 104 marker genes chosen to resolve excitatory cells in cortex. After quality control, the overall 272 
+
+dataset contains 10.3 million cells across nine brains, including a pilot brain, four brains of mice raised in 273 
+
+normal rearing conditions, and four brains of mice raised following monocular enucleation. 274 
+
+After downloading spatial transcriptomic data from Chen et al. (2024 ), we first converted all files 275 
+
+into AnnData format ( Virshup et al., 2023 ) with a custom script. We selected the four mice raised in 276 
+
+control conditions, then selected only cortical cells, resulting in over 1.6 million cortical cells across 4 277 
+
+7 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+Table 1. Summary of datasets used in this study. 
+
+Purpose Dataset Cells Tissue / Technology 
+
+Murine Geneformer pretraining ( ∼3.5M total) 
+
+Yao et al. (2021b ) (10x) 1,169,213 Isocortex, hippocampus / 10x 
+
+Yao et al. (2021b ) (SMART-seq) 73,347 Isocortex, hippocampus / SMART-seq 
+
+Yao et al. (2021a ) 406,187 Motor cortex / 10x, SMART-seq 
+
+Kozareva et al. (2021 ) 611,034 Cerebellar cortex / 10x 
+
+Steuernagel et al. (2022 ) 384,925 Hypothalamus / 10x 
+
+Govek et al. (2022 ) 249,071 Developing thalamus / 10x 
+
+Yao et al. (2023 ) 378,918 Whole brain / MERFISH 
+
+Zhang et al. (2021 ) 276,556 Motor cortex / MERFISH 
+
+Brain annotation (supervised) 
+
+Chen et al. (2024 ) (4 control brains) 4,552,679 Cerebral cortex / BARseq (104 genes) 
+
+Chen et al. (2024 ) (4 enucleated brains) 4,566,157 Cerebral cortex / BARseq (104 genes) 
+
+COVID-19 severity prediction (supervised) 
+
+COMBAT (2022 ) 637,266 Peripheral blood / 10x 
+
+Ren et al. (2021 ) 1,456,806 Peripheral blood / 10x 
+
+Stephenson et al. (2021 ) 585,153 Peripheral blood / 10x 
+
+mice. Several metadata annotations for each cell were computed in the original publication. These 278 
+
+include cell type annotations at 3 hierarchical levels, and cellular location within each brain slice in ‘slice 279 
+
+coordinates’ as well as in CCF coordinates after each brain was registered to the Allen Brain Atlas. This 280 
+
+dataset also contains the location within warped ‘flatmap’ coordinates, which use the butterfly projection 281 
+
+from the ccf-streamlines python package to place cells in a 3D coordinate space in which cortical 282 
+
+depth is the third axis ( Wang et al., 2020 ). 283 
+
+For plots in which cells were colored by cell type (e.g. Figure 3 ), we assigned to each cell type a color 284 
+
+so that similar cell types would have similar colors. Specifically, the perceptual distance between any two 285 
+
+cell types’ colors was chosen to match the correlation between the cell types’ pseudobulk expression 286 
+
+vectors. Unlike standard color maps, this ensures that perceptual saliency aligns with biological meaning, 287 
+
+with no salient colors (e.g. red) arbitrarily assigned. Technically, this involves computing the cell type 288 
+
+similarity matrix, embedding this matrix into 3D via multidimensional scaling (MDS) to best preserve 289 
+
+distances, then interpreting this 3D space as the LUV axes of the perceptually uniform LUV color space. 290 
+
+We released a Python package which computes such colormaps called ColorMyCell to accompany this 291 
+
+manuscript ( Benjamin, 2025 ). 292 
+
+This dataset also contains labels of the brain area of each cell. These are inherited from the CCF 293 
+
+coordinate space. We used these annotations as training data when predicting area from cellular 294 
+
+transcription. As downloaded, these areas were at the finest level of the hierarchical tree of brain 295 
+
+annotations and distinguished between cortical layers. In order to obtain the cortical area without regard 296 
+
+to layers, we ascended one level up the hierarchical ‘ancestor’ tree of annotation layers in the Allen Brain 297 
+
+Atlas. The resulting areas, displayed in e.g. Figure 3 , comprise 42 functionally distinct cortical areas. 298 
+
+## Data description: COVID-19 299 
+
+We downloaded three datasets from CellXGene containing single-cell RNA sequencing data from healthy 300 
+
+controls and patients of varying infection severity. The COMBAT Consortium dataset contained 637,266 301 
+
+cells from 85 donors sequenced with 10x 5’ v1 technology (10 healthy, 29 mild COVID-19, and 46 severe 302 
+
+COVID-19) ( COMBAT, 2022 ). The Ren et al. dataset contains 1,456,806 cells from 185 donors sequenced 303 
+
+with 10x 3’ v3 and 10x 5’ v2 technologies (25 healthy, 77 mild COVID-19, and 83 severe COVID-19) ( Ren 304 
+
+8 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+et al., 2021 ). The Stephenson et al. dataset contains 585,153 cells from 106 donors sequenced with 305 
+
+10x 3’ transcription profiling (23 healthy, 55 mild COVID-19, and 28 severe COVID-19) ( Stephenson et al., 306 
+
+2021 ). All three datasets were downloaded from CellXGene and contained pre-computed quality control 307 
+
+filtering. Samples were labeled by patient condition at the time of blood draw. 308 
+
+To standardize labels across datasets, we mapped each dataset’s original severity annotations to 309 
+
+a common schema of control , mild , and severe . In the COMBAT dataset, COVID_SEV and COVID_CRIT 310 
+
+were mapped to severe , while COVID_MILD and COVID_HCW_MILD were mapped to mild . In the Ren et al. 311 
+
+dataset, severe/critical and mild/moderate were mapped to severe and mild , respectively. In the 312 
+
+Stephenson et al. dataset, Severe and Critical were grouped as severe , and Mild and Moderate as 313 
+
+mild ; samples labeled as asymptomatic , non-COVID , or LPS-stimulated were excluded. Donors with 314 
+
+fewer than 1,000 cells were removed from all datasets. Because the severity classes are imbalanced 315 
+
+across datasets, we trained all models with a frequency-balanced objective and report balanced accuracy 316 
+
+(the accuracy computed within each class, then averaged across classes). 317 
+
+## Tokenization 318 
+
+All cells’ mRNA transcript vectors were ‘tokenized’, or converted into a format readable by Transformer 319 
+
+models, with the following procedure. We used an identical strategy as performed by Geneformer, 320 
+
+but wrote custom code to accept data in anndata format ( Virshup et al., 2023 ). First, each cell was 321 
+
+normalized by the total counts in each cell. All mRNA counts were then normalized by a fixed vector 322 
+
+representing the median per-gene counts in a reference data corpus. When fine-tuning Geneformer, it 323 
+
+was empirically better to use the same median count vector used to train Geneformer (i.e. on human 324 
+
+data) rather than re-establish median counts in mouse data. These normalized counts were then rank 325 
+
+sorted, and the indices of the sort (i.e. the output of argsort) was used as the model input. For example, 326 
+
+a model input of [gene 5, gene 2, ... ] describes that the gene 5 had highest relative transcription, followed 327 
+
+by gene 2, and so on. In a modification of the Geneformer pipeline, we ensured genes with zero counts 328 
+
+were given a special token <pad> . We also modified the Geneformer pipeline to prepend a <cls> token. 329 
+
+The ‘sentences’ seen by the model were thus of the form [<cls> , gene 5, gene 2, ..., <pad> ]. The tokens 330 
+
+are mapped to high-dimensional embedding vector via a dictionary learned within TissueFormer. 331 
+
+## Group construction strategy 332 
+
+In order to train and predict with TissueFormer, it is necessary to prepare groups of cells which share 333 
+
+a label. This requires code infrastructure to appropriately group cells according to the proper criteria. 334 
+
+Since single-cell datasets are already quite large, we took an online strategy which loaded the single-cell 335 
+
+dataset (after tokenization) and constructed groups online via a custom sampler and data collator within 336 
+
+the Hugging Face code ecosystem for training TissueFormer. 337 
+
+For the COVID-19 datasets, groups of 𝑁 cells are sampled uniformly at random from each donor. For 338 
+
+brain annotation, our strategy was to select cells in groups which are approximately cortical columns, 339 
+
+reflecting the columnar organization of the cerebral cortex in which neurons within a radial column share 340 
+
+functional properties ( Mountcastle, 1997 ). In order to cover the cortical surface with a roughly equal 341 
+
+density, our pipeline first selected a seed cell at random from the training data, which potentially covers 342 
+
+multiple brains. We next extracted the 𝑁 cells in the same brain which were closest to that cell in the XY 343 
+
+plane of the flatmap coordinate system. This resulted in a group of 𝑁 cells which lie within a column. 344 
+
+The width of the column differed in each group depending on the local density of cells. Note that because 345 
+
+each brain contains a comparable number of cells, the column size in the test brain was comparable to 346 
+
+the column size during training despite there being 3 training brains and 3 times the overall number of 347 
+
+cells. 348 
+
+To test whether the increase in accuracy with group size was driven by cell type diversity rather than 349 
+
+9 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+by averaging away measurement noise, we also constructed homogeneous groups restricted to a single 350 
+
+cell type. For each group, a seed cell was selected at random and the 𝑁 nearest cells of the same type 351 
+
+were chosen, using the second level of the cell type hierarchy (“H2” types from Chen et al. (2024 )). This 352 
+
+removes between-type diversity while preserving within-type variation. A separate TissueFormer model 353 
+
+was trained from scratch on these homogeneous groups for each cell type. 354 
+
+## Predicting area from single cells 355 
+
+To provide a baseline for the multi-cell methods, we trained several machine learning models to predict 356 
+
+area from single-cell data. Benchmark models either saw cell type (H3 types), raw transcriptomic data, or 357 
+
+both in the case of the k-nearest neighbor cell type model. To finetune Murine Geneformer, we removed 358 
+
+the last layer and replaced it with a linear classifier of area. We found best performance with a progressive 359 
+
+training strategy popular in supervised finetuning. For one epoch, we froze all but the last layer, then each 360 
+
+epoch progressively unfroze one Transformer layer in Murine Geneformer. We used a batch size of 32 361 
+
+and learning rate 0.0005. Results of training this model from scratch without pretraining are visible in 362 
+
+Figure 2 —figure Supplement 1 e. 363 
+
+## TissueFormer training 364 
+
+For the brain annotation task, we used leave-one-brain-out cross-validation: in each of four folds, three 365 
+
+brains were used for training (90% of cells) and validation (10% of cells from the same three brains), and 366 
+
+one brain was held out entirely as the test set. Random seeds were fixed across all methods to ensure 367 
+
+identical data splits. 368 
+
+We trained TissueFormer on an NVIDIA H100 card with a batch size of 4096 total cells divided into 369 
+
+𝑁 groups, each with |𝐺 | = 4096∕ 𝑁 cells. A single model trains to completion for this dataset set (1.4 370 
+
+million cells) in 10 epochs in less than an hour. The most efficient training strategy involves saturating the 371 
+
+GPU memory, and this is largely driven by the overall number of cells rather than the number of distinct 372 
+
+groups. We trained all models with varying group size 𝑁 to convergence to ensure a fair comparison. 373 
+
+However, as convergence can be difficult to verify, we attempted to further match the training resources 374 
+
+for each model by comparing models with an equal number of training steps, which is proportional to 375 
+
+the number of cell groups seen. 376 
+
+Due to the imbalance in the size of brain areas, some classes have many more cells than others. A 377 
+
+Bayes optimal model trained on this data would learn an unequal prior over classes, adding a slight bias 378 
+
+to classify cell groups as belonging to the largest areas. This may not be desirable in certain applications 379 
+
+of brain mapping. For example, cells on the boundary between a large area and a small area which have 380 
+
+zero evidence towards one or the other will be classified into the large area due to the prior. This would 381 
+
+cause an inflation of large areas. In Figure 3 we display the results of a model trained with an objective 382 
+
+designed to eliminate this bias and enforce an equal prior. Specifically we down-weighted examples 383 
+
+from large areas with the factor as computed by the compute_class_weight function in scikit-learn 384 
+
+(Pedregosa et al., 2011 ). For 𝑀 total cells, 𝐶 classes, and 𝑀 𝑖 cells in class 𝑖 , this factor is 𝑀 𝐶 ∗𝑀 𝑖 
+
+. This 385 
+
+ensures that the magnitude of the loss function equally reflects examples from all areas. 386 
+
+## Pseudobulk and type composition benchmarks 387 
+
+To ensure a fair comparison with TissueFormer, we constructed train and test sets using the same data 388 
+
+loading pipeline with the same random seed. For the pseudobulk results, we then averaged the mRNA 389 
+
+transcript counts within each group of cells, then trained our benchmark methods. For the cell type 390 
+
+composition models, we extracted the cell type of each cell in the group at the finest available level of 391 
+
+the cell type hierarchy, then constructed a normalized histogram reflecting the relative composition of 392 
+
+cell types in that group. Each bin of this histogram corresponds to one cell type, and its value is the 393 
+
+10 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+fraction of cells in the group belonging to that type, such that the histogram sums to one. For both data 394 
+
+modalities, our benchmark methods were logistic regression and random forests. Specifically, we trained 395 
+
+logistic regression with the lbfgs solver. We used nested cross-validation to determine the regularization 396 
+
+parameter, and found that no regularization was optimal at this dataset size. We also used a random 397 
+
+forest classifier with 200 estimators, max depth of 15, 33% of features seen per tree, and a minimum 398 
+
+samples per split and 5 and per leaf at 2. We used the scikit-learn implementation of both classifiers 399 
+
+(Pedregosa et al., 2011 ). 400 
+
+## Brain map visualization 401 
+
+To create Figure 3 a, we first trained 4 models in a cross-validated scheme, with 1 brain held out each fold. 402 
+
+To achieve a high-resolution coverage, we then predicted on the test brain using every cell in the test 403 
+
+brain once as a center seed of group selection. The prediction on each cell was stored as its label. These 404 
+
+are visualized in Figure 3 —figure Supplement 1 . We then constructed a method to present smooth brain 405 
+
+maps with clear boundaries between areas. Namely, we trained a support vector classifier (SVC) with 406 
+
+a radial basis function kernel on the cells and their predicted labels, then visualized the predictions on 407 
+
+pixels. We used the cuML implementation, a GPU-accelerated method, and used 𝛾 = 0 .00001 and 𝐶 = 1 408 
+
+as hyperparameters of the SVC ( Raschka et al., 2020 ). Intuitively, this method acts to color each pixel 409 
+
+in Figure 3 a by a weighted average of the TissueFormer-predicted labels of the cells surrounding that 410 
+
+pixel. The weights are selected due to a combination of proximity to the pixel and a factor determined by 411 
+
+the algorithm to minimize the rate at which cells are misclassified, i.e. located on a pixel with a different 412 
+
+color (area) than that cell’s TissueFormer-predicted area. To mask regions with low cellular density, 413 
+
+we estimated the spatial density of cells on the flatmap using a Gaussian kernel density estimator 414 
+
+(bandwidth 12, cuML implementation). The resulting density was normalized to [0 , 1] , and pixels with 415 
+
+normalized density below 0.04 were overlaid with a semi-opaque white mask (95% opacity). To convert 416 
+
+predicted area sizes from flatmap pixels to physical units (mm 2), we estimated the physical cortical 417 
+
+surface area represented by each flatmap pixel. Because the butterfly flatmap is a distorted 2D projection 418 
+
+of the curved cortical surface ( Wang et al., 2020 ), pixels in different parts of the flatmap correspond 419 
+
+to different amounts of cortical surface. We computed this correction by mapping each flatmap pixel 420 
+
+back to its corresponding coordinate on the pial surface (at 10 𝜇 m resolution) and estimating the local 421 
+
+surface area element via finite differences between neighboring pixels. The area of a predicted region 422 
+
+was then the sum of these per-pixel surface areas over all pixels classified as that region. 423 
+
+## COVID-19 severity prediction training 424 
+
+For the COVID-19 severity prediction task, we used 5-fold stratified group 𝑘 -fold cross-validation, where all 425 
+
+cells from a single donor were assigned to the same fold and folds were stratified by severity label. Within 426 
+
+the training folds of each split, 10% of donors were held out for validation, again stratified by severity. We 427 
+
+trained TissueFormer with a learning rate of 5 × 10 −5 , a batch size of 512 total cells divided into groups of 428 
+
+size 𝑁 , and the AdamW optimizer. Training used early stopping with a patience of 3 epochs, monitoring 429 
+
+balanced accuracy on the validation donors. We used mixed-precision (fp16) training for group sizes 430 
+
+greater than 1. As with the brain task, we trained models with a frequency-balanced objective and report 431 
+
+balanced accuracy to account for class imbalance across severity levels. 432 
+
+## Deep learning benchmarks 433 
+
+To compare TissueFormer against other end-to-end deep learning methods for multi-cell classification, 434 
+
+we benchmarked three recent architectures: CellCnn ( Arvaniti and Claassen, 2017 ), scAGG ( Verlaan 435 
+
+et al., 2025 ), and ScRAT ( Mao et al., 2024 ). For each method, we matched the number of cells per 436 
+
+11 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+group to the group size 𝑁 used for TissueFormer and trained and evaluated on identical data splits. 437 
+
+Hyperparameters for each method were taken from the original publications. 438 
+
+CellCnn applies a 1D convolution (kernel size 1, 6 filters) over cells followed by top-𝑘 mean pooling 439 
+
+(top 5% of cells per filter) and a linear classifier. We trained with Adam (learning rate 0.01 for brain, 0.001 440 
+
+for COVID), batch size 200, dropout 0.5, L1 and L2 regularization of 10 −4 , and early stopping (patience 5 441 
+
+for brain, 15 for COVID). Inputs were z-score normalized. 442 
+
+scAGG uses a two-layer MLP (input → 1024 → 512, ELU activations) followed by mask-aware mean 443 
+
+pooling and a linear classifier. We trained with Adam (learning rate 0.001), batch size 8, dropout 0.1, 444 
+
+weight decay 5 × 10 −4 , and 2 epochs. Inputs were normalized to counts per 10,000 and log-transformed. 445 
+
+For the COVID datasets, we selected the top 1,000 highly variable genes. 446 
+
+ScRAT employs a Transformer encoder (1 layer, 8 attention heads, hidden dimension 128, feedforward 447 
+
+dimension 256) over cell embeddings produced by a two-layer MLP (input → 256 → 128). Cell representa-448 
+
+tions are mean-pooled and passed to a classification head. We trained with Adam and a cosine learning 449 
+
+rate schedule with 10-epoch warmup (peak learning rate 0.003), batch size 16, dropout 0.3, weight decay 450 
+
+10 −4 , and early stopping after epoch 50 with patience 2. All methods were trained with class-balanced 451 
+
+objectives. 452 
+
+## Leave-one-cell-type-out analysis 453 
+
+To investigate which cell types drive TissueFormer’s predictions, we performed leave-one-cell-type-out 454 
+
+(LOO) perturbation experiments. For each cell type present in a group, we removed all cells of that type 455 
+
+and re-evaluated the model, measuring the change in cross-entropy loss relative to the unperturbed 456 
+
+group. A large increase in loss upon removal indicates that the cell type is important for the correct 457 
+
+prediction. We report results broken out by predicted label, averaging across all groups sharing that label. 458 
+
+For the COVID-19 task, LOO analyses were performed using the 𝑁 = 32 model on the COMBAT dataset. 459 
+
+# Results 460 
+
+We evaluated TissueFormer on two tasks in which cellular diversity is expected to be informative: 461 
+
+predicting cortical area identity from spatial transcriptomic data in mouse brains, and predicting COVID-462 
+
+19 severity from single-cell RNA sequencing of peripheral blood. For the brain annotation task, we 463 
+
+compared TissueFormer against traditional metrics such as cell-type ratios and pseudobulk expression, 464 
+
+as well as other deep learning methods. TissueFormer outperformed single-cell models on both tasks, 465 
+
+confirming the practical value of attending across cells when predicting population-level phenotypes. In 466 
+
+the brain task, we additionally found evidence that standard tissue alignment procedures do not correctly 467 
+
+register tissue into the correct functional areas. 468 
+
+## Single-cell profiles are not informative of cortical area 469 
+
+The utility of attending across cells can be made clear by comparing with the performance of machine 470 
+
+learning methods which are trained to predict the area given only a single cell. To investigate this, we 471 
+
+first split the data into training data (90% of cells in 3 brains), validation data (the remaining 10% of the 472 
+
+same 3 brains), and a held-out test brain ( Figure 2 b). We then trained a range of methods on the task of 473 
+
+predicting the cortical area of a single cell from its transcriptome. 474 
+
+The methods tested ranged in complexity from simple heuristics to modern single-cell foundation 475 
+
+models ( Figure 2 c). We included three standard machine learning benchmarks, namely, a logistic regres-476 
+
+sion model, a random forest model, and k-neighbors classifier. These models map the vector of mRNA 477 
+
+transcript counts to the label after a log(1 + 𝑥 ) transformation and z-scoring, and their hyperparameters 478 
+
+were tuned on the validation set. We also trained two models which make use of the cell types of the 479 
+
+12 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+cell in question. These cell types were previously constructed at three levels of granularity ( Chen et al. 480 
+
+(2024 )); we selected the finest level. The ‘cell type model’ predicts the area of a cell based on the most 481 
+
+common area of cells of the same type in the training set. The ‘cell type k-neighbors’ model labels the 482 
+
+target cell based on the area of the k-closest neighbors with the same cell type in the training set. Finally, 483 
+
+we fine-tuned Murine Geneformer to predict the area of each cell. 484 
+
+Despite the diversity of modeling approaches, all six models performed poorly, with classification 485 
+
+accuracies ranging from 20–31%. This highlights the challenge of predicting cortical area from single-cell 486 
+
+transcriptomes, consistent with previous findings that many cell types are broadly distributed across the 487 
+
+cortex ( Tasic et al., 2018 ; Yao et al., 2021b ; Chen et al., 2024 ). While some types are more localized and 488 
+
+thus were predicted with higher accuracy (for example, RSP/ACA or Retrosplenial/Anterior Cingulate 489 
+
+excitatory cells), overall performance was low. Among the models tested, the Transformer-based Murine 490 
+
+Geneformer achieved the highest accuracy, modestly outperforming the others. This is consistent with 491 
+
+recent results showing strong performance of large pretrained models on downstream tasks ( Theodoris 492 
+
+et al., 2023 ). These results motivated our turn toward models that integrate information across cells. 493 
+
+## Annotating cell groups with TissueFormer 494 
+
+To apply TissueFormer, we first created a pipeline to group cell sharing a label. Specifically, we grouped 495 
+
+cells into cylindrical columns which fall inwards from the surface of the cortex ( Figure 2 d-e). Note that 496 
+
+this strategy can easily be generalized to other shapes for spatial data from other tissues, or to other 497 
+
+sampling strategies for non-spatial data. The cerebral cortex can be viewed as a layered cake draped 498 
+
+over the exterior of the mouse brain, with functional areas as slices ( Figure 2 a). Thus, cortical columns 499 
+
+contain cells in the same functional area. Our pipeline programmatically selects a single cell, then grows 500 
+
+a cylinder centered on that cell up to the minimum radius needed to contain 𝑁 total cells. The density of 501 
+
+this dataset is such that a group of 64 cells spans on average 0.008 mm 2, equivalent to a 56 μm radius. 502 
+
+Each columnar group of 𝑁 cells is labeled with the most common CCF annotation of cells in that group. 503 
+
+We next trained TissueFormer to predict the group’s label from the set of transcriptomic profiles 504 
+
+within the group. We again cross-validated by training on 90% of cells from three brains, validating on 505 
+
+the remaining 10% of cells, and testing on one held-out brain. As we varied the number of cells in each 506 
+
+group from 𝑁 = 1 to 𝑁 = 256 , we observed that the validation accuracy of TissueFormer increased from 507 
+
+around 35% to nearly 80% accuracy ( Figure 2 f). On test brains, the accuracy Tissueformer also increased 508 
+
+markedly with group size from 30% to over 60% accuracy ( Figure 2 g). Providing the cortical depth of 509 
+
+each cell as additional input to the model did not improve results, suggesting that depth represents 510 
+
+redundant information ( Figure 2 —figure Supplement 1 f). Note that random guessing on this 1-of-42 511 
+
+classification task yields 8% accuracy due to imbalanced classes. Similar relative accuracies were seen 512 
+
+when training with a class-balancing weighted objective ( Figure 2 —figure Supplement 1 c). These results 513 
+
+demonstrate that TissueFormer is able to dramatically outperform single-cell models at predicting tissue 514 
+
+identity. 515 
+
+As the group size increased from 𝑁 = 1 to 𝑁 = 256 , the accuracy increased smoothly and roughly 516 
+
+logarithmically with group size, indicating a predictable scaling law with more cells. Performance 517 
+
+saturated at 𝑁 = 128 cells, possibly because at this scale and at this density of cells per brain the groups 518 
+
+sometimes straddle boundaries, at which point group identity begins to lose meaning. Indeed, at 𝑁 = 256 519 
+
+over 70% of groups contained a boundary ( Figure 2 —figure Supplement 1 g). Higher sampling densities 520 
+
+would enable larger group sizes in smaller locales, and thus possibly an even higher saturating accuracy. 521 
+
+Due to this problem of spatial density, it is not possible to verify the maximum group size at which cells 522 
+
+contain no further information about area. Overall, the considerable increase of performance with group 523 
+
+size highlights the importance of the ability to integrate and compare information across single cells. 524 
+
+The cell embedding module in the above experiment was previously pretrained on a masked mRNA 525 
+
+13 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review        
+
+>    
+
+  
+
+>   
+
+
+
+> )
+
+
+
+Figure 2. Comparison of accuracy at predicting brain regions shows that TissueFormer outperforms other methods. a) Cortical cells from coronal slices of one hemisphere (left, colored by area) are visualized as a ‘flatmap’, a top-down projection. Color legend is in Figure 3 .b) Models were evaluated using 4-fold crossvalidation with 3 or 4 brains used for training and validation labels, 1 of 4 brains held out for testing. Shown here are true labels for each cell. c) Comparison of accuracy when predicting the area of a single cell in a test brain from its transcriptome shows that all methods perform poorly, though with Murine Geneformer performing best. d) An example cell group ( 𝑁 = 256 ) plotted in slice coordinates, colored by cell type. e) A sample of groups ( 𝑁 = 32 ) plotted in flatmap coordinates, here colored by the modal area of the group. f) Validation accuracy as a function of group size shows that TissueFormer outperforms logistic regression (LR) given either pseudobulk transcription or a histogram of cell types. g) Test brain accuracy. Error bars in f-g represent standard deviation across 4 folds. h) The average rate of test accuracy improvement with group size for the above TissueFormer (black bar) compared to the accuracy curve slopes of several TissueFormer models trained on homogeneous groups containing only a single cell type. Accuracy curves are visible in supplement 1. i) Average leave-one-cell-type-out (LOO) importance across all predicted areas. Each bar shows the mean increase in loss when all cells of that type are removed from a group. Cell types are ranked by overall importance. 
+
+Figure 2—figure supplement 1. Effect of pretraining on TissueFormer, performance of random forest and deep learning benchmarks, and controls for unequal area size and sampling density. 
+
+Figure 2—figure supplement 2. Leave-one-cell-type-out analysis for brain annotation. 14 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+transcript prediction task on several other datasets containing tens of millions of human and mouse cells. 526 
+
+In principle, this pretraining step could help, hinder, or have little effect on our current supervised task of 527 
+
+predicting brain area. To investigate its impact, we also trained a TissueFormer model from a random 528 
+
+initialization without any pretraining. Surprisingly, the performance of this randomly initialized model was 529 
+
+indistinguishable from the pretrained model for all group sizes ( Figure 2 —figure Supplement 1 d). This is 530 
+
+likely due to the large number of cells in our labeled dataset. To confirm this, we varied the number of 531 
+
+training cells used to train both a pretrained and a randomly initialized TissueFormer from one thousand 532 
+
+cells to the full dataset of over two million. We found that pretraining indeed offered an advantage, but 533 
+
+only in the intermediate range of less than one million cells ( Figure 2 —figure Supplement 1 e). Thus, this 534 
+
+spatial transcriptomic dataset is large enough that transfer learning from Murine Geneformer offers no 535 
+
+advantage. 536 
+
+We next compared the performance of TissueFormer with two standard methods for processing 537 
+
+transcriptomic data of groups of single cells. We first examined pseudobulk analyses, which average 538 
+
+the single-cell profiles in the group to approximate the measurements of a traditional bulk sequencing 539 
+
+experiment. Logistic regression trained on pseudobulk vectors underperformed TissueFormer, yet still 540 
+
+showed a nearly logarithmic increase of accuracy with group size ( Figure 2 f). A random forest model 541 
+
+trained on the same data underperformed logistic regression ( Figure 2 —figure Supplement 1 b). Next, 542 
+
+we trained logistic regression and random forests to predict area from the cell type composition of a 543 
+
+group, which was represented as a histogram of cell types. We used the finest-grain categorization of 544 
+
+cell types from Chen et al. (2024 ) for this analysis. Overall, type composition was less informative of 545 
+
+area than pseudobulk expression ( Figure 2 f). Intriguingly, each method displayed a logarithmic increase 546 
+
+in accuracy with group size despite the differences in their representations of RNA transcription. We also 547 
+
+compared TissueFormer against three end-to-end deep learning methods for multi-cell classification: 548 
+
+CellCnn ( Arvaniti and Claassen, 2017 ), scAGG ( Verlaan et al., 2025 ), and ScRAT ( Mao et al., 2024 ). 549 
+
+TissueFormer outperformed all three across all group sizes ( Figure 2 —figure Supplement 1 i). 550 
+
+The logarithmic increase in accuracy with group size across all methodologies could in principle 551 
+
+be driven by two effects. One possibility is that the diversity and particular composition of cells pro-552 
+
+vided a new signal not available to single cell models. An alternative possibility is that cells contained 553 
+
+independent measurement noise which can be averaged away. Some evidence to the first possibility 554 
+
+is that benchmarks based on cell type composition alone showed such an increase ( Figure 2 f-g). To 555 
+
+further distinguish these factors within TissueFormer, we reasoned that we could artificially restrict 556 
+
+the diversity of cells in each group and then re-test a method’s performance. If the scaling were due to 557 
+
+measurement noise alone, then this would have little effect and performance would likewise increase 558 
+
+with a similar slope on a log-linear plot. We therefore constructed a new method of constructing groups 559 
+
+such that they contain only a single cell type from the second level of granularity in the cell type hierarchy 560 
+
+("H2" types). Note that there is still significant diversity within each H2 type, albeit much less than the 561 
+
+general population. After training a TissueFormer model from scratch on these homogeneous groups, we 562 
+
+found that the test set accuracy given a group of homogeneous type scaled more slowly with increasing 563 
+
+group size 𝑁 , on average ( Figure 2 h). Groups of cells of certain types such as NP cells showed little 564 
+
+improvement with larger size. Other types, such as L6 IT cells, nevertheless show comparable increases, 565 
+
+likely indicating higher and more informative diversity in that population. The areas of some cell types 566 
+
+are more easily predictable than other types due regional localization ( Figure 2 —figure Supplement 1 h). 567 
+
+These analyses confirmed that the increase in accuracy with group size was at least partially driven by 568 
+
+comparative signals across a cell group rather than solely by averaging away technical noise. 569 
+
+To understand which cell types drive TissueFormer’s predictions, we performed leave-one-cell-type-570 
+
+out (LOO) experiments in which all cells of a given type were removed from each group and the change 571 
+
+in loss was measured ( Figure 2 i). When broken out by predicted area ( Figure 2 —figure Supplement 2 ), 572 
+
+15 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+removing L4/5 IT cells caused the largest loss increase in somatosensory areas, while L2/3 IT cells were 573 
+
+most important for visual areas. These patterns are consistent with known regional variation in laminar 574 
+
+cell type composition across the cortex. 575 
+
+The decrease in accuracy between validation and test brain accuracy could have arisen due to multiple 576 
+
+reasons. A first reason is the differences in spatial coverage of data from each brain, visible in Figure 2 b, 577 
+
+which may cause test brains to contain areas not in the training data. However, correcting for this effect 578 
+
+by only testing data with high density in the training set yielded improvements in accuracy of at most 579 
+
+a few percentage points ( Figure 2 —figure Supplement 1 a). Secondly, this could have reflected other 580 
+
+batch effects across brains affecting single-cell measurements, effectively making this test brain an 581 
+
+out-of-distribution test for the methods. Finally, it is also possible that ‘errors’ in classification were due 582 
+
+to actual changes in neuroanatomy which were correctly predicted by the model but were mislabeled by 583 
+
+the pipeline of registering each brain to the CCF. We investigate this possibility in the following section. 584 
+
+## Predicted cortical maps 585 
+
+TissueFormer can be used as an automated pipeline to create maps of cortical anatomy from single-cell 586 
+
+transcription after being trained on reference brains. Note that annotating from reference brains is a 587 
+
+supervised task, not to be confused with the unsupervised task of spatially clustering single-cell data 588 
+
+(see Discussion). In Figure 3 a, we demonstrate this capability and display the predicted cortical maps for 589 
+
+each of 4 mice treated as a held-out test set. Pixels in these maps were colored by a weighted average 590 
+
+of nearby cells’ predictions (see Methods). For visualization we used the predictions of TissueFormer 591 
+
+trained with a class-size-balancing objective ensuring that the prior probability was uniform across 592 
+
+all areas regardless of area size. We found that all four maps were coarsely similar to the reference 593 
+
+annotation (see Figure 2 a), supporting the finding in Figure 2 that TissueFormer is able to predict brain 594 
+
+area more accurately than other approaches. 595 
+
+A close inspection of these cortical maps revealed several notable differences in the predicted 596 
+
+anatomy of each mouse. For example, the boundary between the somatosensory cortex and the motor 597 
+
+cortex is consistently shifted in the posterior-lateral direction in brain 1 relative to the Common Coordinate 598 
+
+Framework (CCF) annotations, yet is consistently shifted in the opposite (anterior-medial) direction in 599 
+
+brain 2 ( Figure 3 b). Additionally, the primary visual area is shifted medially in brain 2, yet laterally in brains 600 
+
+3 and 4. Likewise, the primary auditory area is shifted medially in brain 2 yet is expanded and shifted 601 
+
+laterally in brain 4. These shifts are a predominant cause of why test brain ‘accuracy’ in Figure 2 g is lower 602 
+
+than validation accuracy. 603 
+
+While it is possible that the discrepancies between the CCF annotation and the predicted annotation 604 
+
+are ‘errors’ of the model, it is also possible that this reflects true differences in anatomy between mice or 605 
+
+errors in registration with the CCF. The CCF represents the average anatomy of over 1,000 mouse brains, 606 
+
+obscuring potential individual variability between mice. To investigate this possibility, we examined the 607 
+
+somatosensory-motor boundary in more detail. This boundary can be canonically identified by differences 608 
+
+in cell type composition. In particular, motor cortex is classically considered to lack a Layer 4 ( Brodmann, 609 
+
+1909 ), and thus should show a large decrease in the density of Layer 4/5 IT excitatory cells relative to 610 
+
+Layer 5 IT cells. This easily verifiable boundary was qualitatively visible in coronal slices colored by cell 611 
+
+type ( Figure 3 c). To confirm its location, we examined the density of these two cell types along slices 612 
+
+taken from brain 1 and brain 2 which intersect the sensory/motor boundary ( Figure 3 d). We found that 613 
+
+the CCF boundary was inconsistent across brains relative to the ratio of cell types, but TissueFormer’s 614 
+
+predicted maps showed a consistent 1:1. Furthermore, in the CCF boundaries, we observed a large shift 615 
+
+between mice in the ratio for large distances on either side ( Figure 3 e). In contrast, the density ratios 616 
+
+were consistent in their alignment to the predicted boundaries. Thus, a closer inspection of cell type 617 
+
+distributions around this verifiable boundary revealed a closer alignment with our predicted atlas than 618 
+
+16 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review      
+
+>    
+>       
+
+11223 4  
+
+>       
+>       
+
+Figure 3. Creation of cortical maps from spatial transcriptomics using TissueFormer. a) Predicted cortical areas for each brain when held-out as a test brain. Predicted boundaries are in black, and the reference Common Coordinate Framework (CCF) boundaries are overlaid in white. Areas with low cellular density are masked in white (see Methods). b) In brains 1 (top) and 2 (bottom), the somatosensory-motor boundary is displaced relative to the CCF, but in opposite directions. c) Example slices from brains 1 and 2 which contain the somatosensory-motor boundary boundary. Points are cells, colored by cell type with similar cell types assigned similar colors (see Methods). d) Spatial density along the slices of two cell types, L4/5 IT and L5 IT, in the same colors and slices as (c). e) The cell type ratio (L4/5 IT / L5 IT) aligned to the CCF boundary (left) or predicted boundary (right), showing an inter-animal shift in CCF vs. inter-animal consistency in the predicted maps. 
+
+Figure 3—figure supplement 1. Predicted areas of single cells, highlighting discrepancies (‘errors’) with CCF labels. 
+
+Figure 3—figure supplement 2. Comparison to maps of mRNA transcription of single genes. 17 of 33 
+
+.CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint Under review D076 D077 D078 D079 a b
+
+Figure 4. TissueFormer detects reduced visual cortex area in mice deprived of visual input during development. Predicted cortical maps were generated for four mice binocularly enucleated at birth, each paired with a control littermate, using TissueFormer trained exclusively on the four control brains. Maps are constructed identically to Figure 3 a: predicted boundaries are in black, CCF boundaries are overlaid as thin white lines, and areas with low cellular density are masked in white (see Methods). The predicted area of primary visual cortex (VISp) was significantly smaller in enucleated brains (mean 7.1 mm 2) than in controls (mean 9.0 mm 2; paired 
+
+𝑡 -test across littermates, 𝑝 = 0 .01 , 𝑛 = 4 pairs). 
+
+with the boundaries due to CCF alignment. 619 
+
+To provide further verification of the predicted cortical maps, we examined the spatial distributions of 620 
+
+individual genes known to correlate with area identity ( Figure 3 —figure Supplement 2 ). For example, Tshz2 621 
+
+forms a striking medial-to-lateral gradient with high abundance in anterior - and posterior -cingulate/retrosplenial 622 
+
+areas with steep drops at the boundaries to motor, somatosensory and visual fields ( Yao et al., 2021b ). 623 
+
+Across all four brains, the inter-animal differences in Tshz2 aligned better with the predicted boundary 624 
+
+than the CCF area boundaries. Other genes which are also selectively expressed in retrosplenial areas, 625 
+
+such as as Coro6 and Zfpm2 ( Chen et al., 2022 ), shared this pattern, as did genes with selectively 626 
+
+expressed in the dorsal but not the ventral retrosplenial area, such as Nell1 and Zmat4 ( Hashikawa et al., 627 
+
+2020 ). Meanwhile, the sensory/motor border analyzed in Figure 3 was correlated to the expression 628 
+
+density of Rorb1, Brinp3, and Rcan2 ( Cederquist et al., 2013 ), all of which showed consistent shifts 629 
+
+across animals with the predicted maps but not with CCF boundaries. These examples of genes with 630 
+
+clear spatial boundaries in their patterns of expression lend support to the predicted maps’ veracity. 631 
+
+The BARseq dataset also includes four brains from mice that were binocularly enucleated (both 632 
+
+eyes surgically removed) at birth, each paired with a control littermate. Removing visual input during 633 
+
+development is known to shift the cell-type composition of visual areas toward that of neighboring 634 
+
+cortical areas ( Chen et al., 2024 ), raising the question of how this reorganization manifests at the level of 635 
+
+predicted area maps. We applied TissueFormer, trained on the four control brains, to the four enucleated 636 
+
+brains and generated predicted cortical maps for each ( Figure 4 ). The maps were consistent across 637 
+
+the four enucleated brains. The predicted area of primary visual cortex (VISp) was significantly smaller 638 
+
+in enucleated brains (mean 7.1 mm 2) than in controls (mean 9.0 mm 2; paired 𝑡 -test across littermates, 639 
+
+𝑝 = 0 .01 , 𝑛 = 4 pairs). These automated maps illustrate how TissueFormer can be used to quantify the 640 
+
+effects of developmental perturbations on cortical organization across individual brains. 641 
+
+## Predicting COVID-19 severity from blood transcriptomics 642 
+
+To test whether TissueFormer generalizes beyond spatial brain data, we applied it to a fundamentally 643 
+
+different prediction task: classifying COVID-19 infection severity (control, mild, or severe) from single-cell 644 
+
+RNA sequencing of peripheral blood. This task differs from brain annotation in several important ways. 645 
+
+The data are non-spatial, so cells are grouped by donor rather than by spatial proximity. The organism 646 
+
+is human rather than mouse. The sequencing modality is droplet-based 10x rather than probe-based 647 
+
+BARseq. Finally, the phenotype is a clinical disease state rather than an anatomical label. We compiled 648 
+
+three independent cohorts totaling over 2.6 million cells from 376 donors: COMBAT ( COMBAT, 2022 ), 649 
+
+18 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+Ren et al. ( Ren et al., 2021 ), and Stephenson et al. ( Stephenson et al., 2021 ). Each dataset was evaluated 650 
+
+independently using 5-fold stratified group 𝑘 -fold cross-validation with all cells from a donor assigned to 651 
+
+the same fold (see Methods). 652 
+
+As with brain annotation, we varied the number of sampled cells per group and compared Tissue-653 
+
+Former against pseudobulk and cell type composition baselines ( Figure 5 a, left column). Across all three 654 
+
+cohorts, TissueFormer’s balanced accuracy increased with group size and exceeded that of logistic 655 
+
+regression and random forest models trained on either pseudobulk expression or cell type histograms. 656 
+
+The advantage was most pronounced on the largest dataset, Ren et al., where at 𝑁 = 64 TissueFormer 657 
+
+achieved 70% balanced accuracy compared to 54% for the best classical baseline (logistic regression 658 
+
+on cell type histograms) and 52% for random forest on pseudobulk. This gap persisted at 𝑁 = 256 659 
+
+(69% vs. 58%). A similar pattern held when all three cohorts were combined. On the smaller COMBAT 660 
+
+dataset, TissueFormer and logistic regression on pseudobulk were closer in performance (87% vs. 85% 661 
+
+at 𝑁 = 256 ), suggesting that the advantage of end-to-end learning is greatest when more donors are 662 
+
+available for training. 663 
+
+We next compared TissueFormer against three end-to-end deep learning methods for multi-cell 664 
+
+classification: CellCnn, scAGG, and ScRAT ( Figure 5 a, right column). The two Transformer-based 665 
+
+methods, TissueFormer and ScRAT, consistently outperformed CellCnn and scAGG. scAGG remained 666 
+
+near chance across all cohorts (33–40% balanced accuracy), and CellCnn was variable, performing near 667 
+
+chance on COMBAT (42%) but reaching 61% on Stephenson et al. TissueFormer and ScRAT were not 668 
+
+significantly different from each other: on individual cohorts the two methods achieved similar balanced 669 
+
+accuracy (e.g. 87% vs. 86% on COMBAT, 69% vs. 61% on Ren et al. at 𝑁 = 256 ), with ScRAT slightly ahead 670 
+
+on the combined dataset (75% vs. 69%). These results indicate that Transformer-based architectures are 671 
+
+well suited for multi-cell classification, substantially outperforming alternative deep learning approaches 672 
+
+on this task. 673 
+
+To understand which cell types drive TissueFormer’s severity predictions, we performed leave-one-674 
+
+cell-type-out (LOO) experiments in which all cells of a given type were removed from each group and the 675 
+
+change in loss was measured ( Figure 5 b). Classical monocytes were by far the most important cell type 676 
+
+for correctly classifying severe samples, with their removal increasing the error rate on severe groups 677 
+
+by 49%. For groups labeled mild, classical monocytes, megakaryocyte-erythroid progenitors, and CD4+ 678 
+
+T cells all contributed to accurate prediction. No single cell type was critical for correctly identifying 679 
+
+control samples. Interestingly, removing lymphoid types such as CD4+ or CD8+ T cells from severe 680 
+
+groups actually reduced the loss, suggesting that these cells can be distracting when classifying disease 681 
+
+severity. These patterns are consistent with the known expansion of monocytes and myeloid progenitors 682 
+
+in severe COVID-19 ( COMBAT, 2022 ; Ren et al., 2021 ). 683 
+
+# Discussion 684 
+
+We developed TissueFormer, a neural network architecture that attends to groups of single-cell tran-685 
+
+scriptomic profiles in order to predict a label or annotation common to that group. On a brain area 686 
+
+classification task using multi-brain spatial transcriptomics, TissueFormer achieved 60% accuracy with 687 
+
+groups of 64 cells on held-out test brains, compared to 30% for a matched single-cell model, and outper-688 
+
+formed pseudobulk and cell type composition baselines. On a COVID-19 severity prediction task using 689 
+
+non-spatial blood scRNA-seq from three independent cohorts, TissueFormer likewise outperformed 690 
+
+classical baselines and matched or exceeded other deep learning approaches. In both settings, accu-691 
+
+racy increased with group size, highlighting the importance of attending across cells when predicting 692 
+
+tissue-level properties. 693 
+
+Because TissueFormer accepts arbitrary cell groupings, it can flexibly model phenotypes defined by 694 
+
+anatomical contiguity (as in spatial transcriptomics), by patient sample (e.g., blood draws, biopsies), or by 695 
+
+19 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review ab
+
+Figure 5. TissueFormer predicts COVID-19 severity from single-cell blood transcriptomics. a) Balanced accuracy as a function of group size for three independent cohorts (COMBAT, Ren et al., Stephenson et al.) and their combination. Left column: TissueFormer compared to logistic regression (LR) and random forest (RF) trained on pseudobulk expression or cell type composition histograms. Right column: TissueFormer compared to three end-to-end deep learning methods (CellCnn, scAGG, ScRAT). Error bars represent standard deviation across 5 folds. The condition “all donor cells” uses every cell from a donor as a single group for classical methods; for deep learning methods, which require a fixed group size, predictions are instead averaged over multiple groups of size 𝑁 sampled from the donor. b) Leave-one-cell-type-out (LOO) analysis. Each bar shows the change in loss when all cells of a given type are removed from groups of a given severity class. Positive values indicate that the cell type contributes to correct classification; negative values indicate that its presence is distracting. Classical monocytes are the most important type for classifying severe samples. 20 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+dynamic windows in longitudinal sampling. These applications include a wide range of use cases, from 696 
+
+immunomonitoring in inflammatory disease to potentially the detection of cancer states ( Weinkauff et al., 697 
+
+1999 ; Sun et al., 2025 ). As increasingly comprehensive healthy and disease cell atlases become available, 698 
+
+population-aware models like TissueFormer offer a principled route to integrate those resources into 699 
+
+predictive diagnostics that bridge cellular resolution and clinical decision-making ( Dann et al., 2023 ). 700 
+
+TissueFormer provides a promising tool for automated brain mapping from spatial transcriptomics. 701 
+
+Compared to the labels due to Common Coordinate Framework (CCF) registration, TissueFormer’s 702 
+
+predicted labels displayed individual variability that better correlated with inter-animal differences in local 703 
+
+gene expression and cell type distributions, despite being trained to predict CCF labels. This tool could 704 
+
+thus expedite the study of individual differences in the size and location of transcriptomically-defined 705 
+
+regions in the brain. As a concrete example, TissueFormer’s predicted maps revealed a significant 706 
+
+reduction in the area of primary visual cortex in mice deprived of visual input during development, 707 
+
+consistent with past analyses of cell-type compositional shifts in these brains ( Chen et al., 2024 ). 708 
+
+Our approach to brain mapping is a supervised approach in which reference brains supply ground 709 
+
+truth labels. Note that this is distinct from the approach of aligning tissue without regard to area labels, as 710 
+
+in Tangram ( Biancalani et al., 2021 ) and CAST ( Tang et al., 2024 ). An important caveat of the supervised 711 
+
+approach is the lack of perfect training data. No datasets of spatial transcriptomics are yet available 712 
+
+which have animal-by-animal annotations of neuroanatomy verified by additional modalities such as 713 
+
+projection tracing or functional imaging. Without access to such datasets, we instead trained to predict 714 
+
+the imperfect CCF labels. In general, there is no formal guarantee that the predictions on held-out brains 715 
+
+should reflect a better assessment than the CCF itself. While we are led by our empirical analysis to trust 716 
+
+the model, this must be done with caution until a model can be trained on a dataset with multiple brains 717 
+
+individually annotated with complementing experimental modalities. 718 
+
+In the current study, we did not take up the question of whether different boundaries than the Allen Brain 719 
+
+Atlas would be in any sense better, as in recent spatial clustering methods. Current boundaries are widely 720 
+
+used and important for shared nomenclature. However, the automated clustering and identification of 721 
+
+spatially homogeneous regions within spatial transcriptomic dataset is an interesting and open research 722 
+
+question. Several algorithms have already been developed for this purpose ( Dries et al., 2021 ; Zhao et al., 723 
+
+2021 ; Chitra et al., 2025 ; Hu et al., 2021 ; Dong and Zhang, 2022 ; Singhal et al., 2024 ; ?; Jackson et al., 724 
+
+2024 ). Because these unsupervised methods discover spatial domains without reference labels, their 725 
+
+outputs are not directly comparable to those of supervised methods like TissueFormer, which predicts 726 
+
+known annotations from labeled training data. When algorithms from this family are applied to the 727 
+
+mouse cortex, the resulting regions correspond more to cortical layers than to functional regions ( Ortiz 728 
+
+et al., 2020 ; Partel et al., 2020 ; Lee et al., 2025 ). This is consistent with there being larger differences 729 
+
+in gene expression across layers than across cortical areas. In contrast, the functional specialization 730 
+
+of neurons in cortex varies more across area than across layers within an area; neurons within a 731 
+
+cortical column typically mediate the same cognitive tasks and furthermore respond to similar features 732 
+
+within that task ( Mountcastle, 1997 ; Callaway, 1998 ). Amid this dichotomy between transcriptomic and 733 
+
+functional contiguity in space, we chose in this manuscript to classify functional areas for practical utility 734 
+
+and for the reason of it being a benchmark task that leverages transcriptomic diversity within cellular 735 
+
+ensembles. Nevertheless, it would be interesting in future work to train TissueFormer with self-supervised 736 
+
+or contrastive objectives so as to discover brain areas de novo .737 
+
+# Declarations 738 
+
+## Ethics approval and consent to participate 739 
+
+Not applicable. 740 
+
+21 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+## Consent for publication 741 
+
+Not applicable. 742 
+
+## Availability of data and materials 743 
+
+All code is available at https://github.com/ZadorLaboratory/TissueFormer. Brain spatial transcriptomic 744 
+
+data are hosted on Mendeley Data (https://doi.org/10.17632/5xfzcb4kn8.1 and https://doi.org/10.17632/8bhhk7c5n9.1). 745 
+
+COVID-19 scRNA-seq datasets are publicly available from their original publications. All datasets used in 746 
+
+this study are listed in Table 1. 747 
+
+## Competing interests 748 
+
+The authors declare that they have no competing interests. 749 
+
+## Funding 750 
+
+This project was funded with support from NIH grants 1RF1 MH126883-01A1, 5U19NS123716-04, and 751 
+
+7U01NS132363-02. Computational resources were provided with support from NIH grant S10OD028632-752 
+
+01. 753 
+
+## Authors’ contributions 754 
+
+A.B. and A.Z. conceptualized the study. A.B. implemented the method in code, analyzed data, and prepared 755 
+
+the first draft of the manuscript. A.Z. supervised all research. All authors reviewed the manuscript. 756 
+
+# References 757 
+
+Arvaniti E , Claassen M. Sensitive detection of rare disease-associated cell subsets via representation learn-758 
+
+ing. Nature Communications. 2017 Apr; 8(1):14825. https://www.nature.com/articles/ncomms14825, doi: 759 
+
+10.1038/ncomms14825. 760 
+
+Ballouz S , Verleyen W, Gillis J. Guidance for RNA-seq co-expression network construction and analysis: safety in 761 
+
+numbers. Bioinformatics. 2015; 31(13):2123–2130. 762 
+
+Benjamin A , ColorMyCells: A Python package for biologically faithful colormaps for cell type visualization. Zenodo; 763 
+
+2025. https://doi.org/10.5281/zenodo.15595324, doi: 10.5281/zenodo.15595324. 764 
+
+Biancalani T , Scalia G, Buffoni L, Avasthi R, Lu Z, Sanger A, Tokcan N, Vanderburg CR, Segerstolpe A, Zhang M, 765 
+
+Avraham-Davidi I, Vickovic S, Nitzan M, Ma S, Subramanian A, Lipinski M, Buenrostro J, Brown NB, Fanelli D, Zhuang 766 
+
+X, et al. Deep learning and alignment of spatially resolved single-cell transcriptomes with Tangram. Nature Methods. 767 
+
+2021 Nov; 18(11):1352–1362. https://www.nature.com/articles/s41592-021-01264-7, doi: 10.1038/s41592-021-768 
+
+01264-7. 769 
+
+Brodmann K . Vergleichende Lokalisationslehre der Grosshirnrinde in ihren Prinzipien dargestellt auf Grund des 770 
+
+Zellenbaues. Barth; 1909. 771 
+
+Callaway EM . Local circuits in primary visual cortex of the macaque monkey. Annual review of neuroscience. 1998; 772 
+
+21(1):47–74. 773 
+
+Cao Y , Lin Y, Patrick E, Yang P, Yang JYH. scFeatures: multi-view representations of single-cell and spatial data for 774 
+
+disease outcome prediction. Bioinformatics. 2022 Oct; 38(20):4745–4753. https://doi.org/10.1093/bioinformatics/ 775 
+
+btac590, doi: 10.1093/bioinformatics/btac590. 776 
+
+Cederquist GY , Azim E, Shnider SJ, Padmanabhan H, Macklis JD. Lmo4 Establishes Rostral Motor Cortex Projection 777 
+
+Neuron Subtype Diversity. The Journal of Neuroscience. 2013 Apr; 33(15):6321–6332. https://www.ncbi.nlm.nih. 778 
+
+gov/pmc/articles/PMC3698850/, doi: 10.1523/JNEUROSCI.5140-12.2013. 779 
+
+22 of 33 
+
+.CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint Under review 
+
+Chen SQ , Chen CH, Xiang XJ, Zhang SY, Ding SL. Chemoarchitecture of area prostriata in adult and developing 780 
+
+mice: Comparison with presubiculum and parasubiculum. The Journal of Comparative Neurology. 2022 Oct; 781 
+
+530(14):2486–2517. doi: 10.1002/cne.25346. 782 
+
+Chen X , Fischer S, Rue MCP, Zhang A, Mukherjee D, Kanold PO, Gillis J, Zador AM. Whole-cortex in situ sequencing 783 
+
+reveals input-dependent area identity. Nature. 2024 Apr; https://www.nature.com/articles/s41586-024-07221-6, 784 
+
+doi: 10.1038/s41586-024-07221-6. 785 
+
+Chitra U , Arnold BJ, Sarkar H, Sanno K, Ma C, Lopez-Darwin S, Raphael BJ. Mapping the topography of spatial gene 786 
+
+expression with interpretable deep learning. Nature Methods. 2025 Feb; 22(2):298–309. https://doi.org/10.1038/ 787 
+
+s41592-024-02503-3, doi: 10.1038/s41592-024-02503-3. 788 
+
+COMBAT CMoBAC . A blood atlas of COVID-19 defines hallmarks of disease severity and specificity. Cell. 2022 Mar; 789 
+
+185(5):916–938.e58. doi: 10.1016/j.cell.2022.01.012. 790 
+
+Connell W , Khan U, Keiser MJ, A single-cell gene expression language model. arXiv; 2022. http://arxiv.org/abs/2210. 791 
+
+14330, doi: 10.48550/arXiv.2210.14330, arXiv:2210.14330 [cs, q-bio] version: 1. 792 
+
+Crowell HL , Soneson C, Germain PL, Calini D, Collin L, Raposo C, Malhotra D, Robinson MD. muscat detects 793 
+
+subpopulation-specific state transitions from multi-sample multi-condition single-cell transcriptomics data. 794 
+
+Nature Communications. 2020 Nov; 11(1):6077. https://www.nature.com/articles/s41467-020-19894-4, doi: 795 
+
+10.1038/s41467-020-19894-4. 796 
+
+Cui H , Wang C, Maan H, Pang K, Luo F, Wang B, scGPT: Towards Building a Foundation Model for Single-Cell 797 
+
+Multi-omics Using Generative AI. bioRxiv; 2023. https://www.biorxiv.org/content/10.1101/2023.04.30.538439v2, 798 
+
+doi: 10.1101/2023.04.30.538439, pages: 2023.04.30.538439 Section: New Results. 799 
+
+Dann E , Cujba AM, Oliver AJ, Meyer KB, Teichmann SA, Marioni JC. Precise identification of cell states altered in 800 
+
+disease using healthy single-cell references. Nature genetics. 2023; 55(11):1998–2008. 801 
+
+Devlin J , Chang MW, Lee K, Toutanova K, BERT: Pre-training of Deep Bidirectional Transformers for Language 802 
+
+Understanding. arXiv; 2019. http://arxiv.org/abs/1810.04805, doi: 10.48550/arXiv.1810.04805, arXiv:1810.04805 803 
+
+[cs]. 804 
+
+Dong K , Zhang S. Deciphering spatial domains from spatially resolved transcriptomics with an adaptive graph atten-805 
+
+tion auto-encoder. Nature Communications. 2022 Apr; 13(1):1739. https://doi.org/10.1038/s41467-022-29439-6, 806 
+
+doi: 10.1038/s41467-022-29439-6. 807 
+
+Dries R , Zhu Q, Dong R, Eng CHL, Li H, Liu K, Fu Y, Zhao T, Sarkar A, Bao F, George RE, Pierson N, Cai L, Yuan GC. 808 
+
+Giotto: a toolbox for integrative analysis and visualization of spatial expression data. Genome Biology. 2021 Mar; 809 
+
+22(1):78. https://doi.org/10.1186/s13059-021-02286-2, doi: 10.1186/s13059-021-02286-2. 810 
+
+Govek KW , Chen S, Sgourdou P, Yao Y, Woodhouse S, Chen T, Fuccillo MV, Epstein DJ, Camara PG. Developmental 811 
+
+trajectories of thalamic progenitors revealed by single-cell transcriptome profiling and Shh perturbation. Cell 812 
+
+reports. 2022; 41(10). 813 
+
+Harrison PW , Amode MR, Austine-Orimoloye O, Azov AG, Barba M, Barnes I, Becker A, Bennett R, Berry A, Bhai J, 814 
+
+others. Ensembl 2024. Nucleic acids research. 2024; 52(D1):D891–D899. 815 
+
+Hashikawa Y , Hashikawa K, Rossi MA, Basiri ML, Liu Y, Johnston NL, Ahmad OR, Stuber GD. Transcriptional and 816 
+
+Spatial Resolution of Cell Types in the Mammalian Habenula. Neuron. 2020 Jun; 106(5):743–758.e5. https: 817 
+
+//www.ncbi.nlm.nih.gov/pmc/articles/PMC7285796/, doi: 10.1016/j.neuron.2020.03.011. 818 
+
+Hsieh KL , Chu Y, Li X, Pilié PG, Dai Y, scEMB: Learning context representation of genes based on large-scale 819 
+
+single-cell transcriptomics. bioRxiv; 2024. https://www.biorxiv.org/content/10.1101/2024.09.24.614685v1, doi: 820 
+
+10.1101/2024.09.24.614685, pages: 2024.09.24.614685 Section: New Results. 821 
+
+23 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+Hu J , Li X, Coleman K, Schroeder A, Ma N, Irwin DJ, Lee EB, Shinohara RT, Li M. SpaGCN: Integrating gene expres-822 
+
+sion, spatial location and histology to identify spatial domains and spatially variable genes by graph convolu-823 
+
+tional network. Nature Methods. 2021 Nov; 18(11):1342–1351. https://doi.org/10.1038/s41592-021-01255-8, doi: 824 
+
+10.1038/s41592-021-01255-8. 825 
+
+Ito K , Hirakawa T, Shigenobu S, Fujiyoshi H, Yamashita T. Mouse-Geneformer: A deep learning model for mouse 826 
+
+single-cell transcriptome and its cross-species utility. PLOS Genetics. 2025 Mar; 21(3):e1011420. https://journals. 827 
+
+plos.org/plosgenetics/article?id=10.1371/journal.pgen.1011420, doi: 10.1371/journal.pgen.1011420. 828 
+
+Jackson KC , Booeshaghi AS, Galvez-Merchan A, Moses L, Chari T, Kim A, Pachter L, Identification of spatial homoge-829 
+
+neous regions in tissues with concordex. bioRxiv; 2024. https://www.biorxiv.org/content/10.1101/2023.06.28. 830 
+
+546949v2, doi: 10.1101/2023.06.28.546949, pages: 2023.06.28.546949 Section: New Results. 831 
+
+Kalatsky VA , Stryker MP. New paradigm for optical imaging: temporally encoded maps of intrinsic signal. Neuron. 832 
+
+2003 May; 38(4):529–545. doi: 10.1016/s0896-6273(03)00286-1. 833 
+
+Kozareva V , Martin C, Osorno T, Rudolph S, Guo C, Vanderburg C, Nadaf N, Regev A, Regehr WG, Macosko E. A tran-834 
+
+scriptomic atlas of mouse cerebellar cortex comprehensively defines cell types. Nature. 2021 Oct; 598(7879):214– 835 
+
+219. https://www.nature.com/articles/s41586-021-03220-z, doi: 10.1038/s41586-021-03220-z, number: 7879. 836 
+
+Lee AJ , Dubuc A, Kunst M, Yao S, Lusk N, Ng L, Zeng H, Tasic B, Abbasi-Asl R. Data-driven fine-837 
+
+grained region discovery in the mouse brain with transformers. bioRxiv. 2025; https://www. 838 
+
+biorxiv.org/content/early/2025/02/26/2024.05.05.592608, doi: 10.1101/2024.05.05.592608, _eprint: 839 
+
+https://www.biorxiv.org/content/early/2025/02/26/2024.05.05.592608.full.pdf. 840 
+
+Lopez R , Regier J, Cole MB, Jordan MI, Yosef N. Deep generative modeling for single-cell transcriptomics. Nature Meth-841 
+
+ods. 2018 Dec; 15(12):1053–1058. https://www.nature.com/articles/s41592-018-0229-2, doi: 10.1038/s41592-842 
+
+018-0229-2. 843 
+
+Madhu H , Rocha JF, Huang T, Viswanath S, Krishnaswamy S, Ying R. HEIST: A Graph Foundation Model for Spatial 844 
+
+Transcriptomics and Proteomics Data. arXiv preprint arXiv:250611152. 2025; . 845 
+
+Mao Y , Lin YY, Wong NKY, Volik S, Sar F, Collins C, Ester M. Phenotype prediction from single-cell RNA-seq data using 846 
+
+attention-based neural networks. Bioinformatics. 2024 Feb; 40(2):btae067. https://doi.org/10.1093/bioinformatics/ 847 
+
+btae067, doi: 10.1093/bioinformatics/btae067. 848 
+
+Mountcastle V . The columnar organization of the neocortex. Brain. 1997 Apr; 120(4):701–722. https://academic. 849 
+
+oup.com/brain/article-lookup/doi/10.1093/brain/120.4.701, doi: 10.1093/brain/120.4.701. 850 
+
+Ortiz C , Navarro JF, Jurek A, Märtin A, Lundeberg J, Meletis K. Molecular atlas of the adult mouse brain. Science 851 
+
+Advances. 2020; 6(26):eabb3446. https://www.science.org/doi/abs/10.1126/sciadv.abb3446, doi: 10.1126/sci-852 
+
+adv.abb3446, _eprint: https://www.science.org/doi/pdf/10.1126/sciadv.abb3446. 853 
+
+Partel G , Hilscher MM, Milli G, Solorzano L, Klemm AH, Nilsson M, Wählby C. Automated identification of the 854 
+
+mouse brain’s spatial compartments from in situ sequencing data. BMC Biology. 2020 Dec; 18(1):144. https: 855 
+
+//bmcbiol.biomedcentral.com/articles/10.1186/s12915-020-00874-5, doi: 10.1186/s12915-020-00874-5. 856 
+
+Paszke A , Gross S, Massa F, Lerer A, Bradbury J, Chanan G, Killeen T, Lin Z, Gimelshein N, Antiga L, Desmaison A, 857 
+
+Kopf A, Yang E, DeVito Z, Raison M, Tejani A, Chilamkurthy S, Steiner B, Fang L, Bai J, et al. PyTorch: An Imperative 858 
+
+Style, High-Performance Deep Learning Library. In: Wallach H, Larochelle H, Beygelzimer A, Alché-Buc Fd, Fox 859 
+
+E, Garnett R, editors. Advances in Neural Information Processing Systems , vol. 32 Curran Associates, Inc.; 2019. 860 
+
+https://proceedings.neurips.cc/paper_files/paper/2019/file/bdbca288fee7f92f2bfa9f7012727740-Paper.pdf. 861 
+
+Pedregosa F , Varoquaux G, Gramfort A, Michel V, Thirion B, Grisel O, Blondel M, Prettenhofer P, Weiss R, Dubourg 862 
+
+V, Vanderplas J, Passos A, Cournapeau D, Brucher M, Perrot M, Duchesnay E. Scikit-learn: Machine Learning in 863 
+
+Python. Journal of Machine Learning Research. 2011; 12:2825–2830. 864 
+
+24 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+Program CCS , Abdulla S, Aevermann B, Assis P, Badajoz S, Bell SM, Bezzi E, Cakir B, Chaffer J, Chambers S, others. 865 
+
+CZ CELLxGENE Discover: a single-cell data platform for scalable exploration, analysis and modeling of aggregated 866 
+
+data. Nucleic Acids Research. 2025; 53(D1):D886–D900. 867 
+
+Raschka S , Patterson J, Nolet C. Machine Learning in Python: Main developments and technology trends in data 868 
+
+science, machine learning, and artificial intelligence. arXiv preprint arXiv:200204803. 2020; . 869 
+
+Ren X , Wen W, Fan X, Hou W, Su B, Cai P, Li J, Liu Y, Tang F, Zhang F, Yang Y, He J, Ma W, He J, Wang P, Cao Q, Chen F, 870 
+
+Chen Y, Cheng X, Deng G, et al. COVID-19 immune features revealed by a large-scale single-cell transcriptome 871 
+
+atlas. Cell. 2021 Apr; 184(7):1895–1913.e19. https://www.cell.com/cell/abstract/S0092-8674(21)00148-3, doi: 872 
+
+10.1016/j.cell.2021.01.053. 873 
+
+Rosen Y , Roohani Y, Agarwal A, Samotorčan L, Tabula Sapiens Consortium, Quake SR, Leskovec J, Universal Cell 874 
+
+Embeddings: A Foundation Model for Cell Biology; 2023. http://biorxiv.org/lookup/doi/10.1101/2023.11.28.568918, 875 
+
+doi: 10.1101/2023.11.28.568918. 876 
+
+Schaar AC , Tejada-Lapuerta A, Palla G, Gutgesell R, Halle L, Minaeva M, Vornholz L, Dony L, Drummer F, Bahrami M, 877 
+
+Theis FJ, Nicheformer: a foundation model for single-cell and spatial omics. bioRxiv; 2024. https://www.biorxiv. 878 
+
+org/content/10.1101/2024.04.15.589472v1, doi: 10.1101/2024.04.15.589472, pages: 2024.04.15.589472 Section: 879 
+
+New Results. 880 
+
+Singhal V , Chou N, Lee J, Yue Y, Liu J, Chock WK, Lin L, Chang YC, Teo EML, Aow J, Lee HK, Chen KH, Prabhakar S. 881 
+
+BANKSY unifies cell typing and tissue domain segmentation for scalable spatial omics data analysis. Nature 882 
+
+Genetics. 2024 Mar; 56(3):431–441. https://doi.org/10.1038/s41588-024-01664-3, doi: 10.1038/s41588-024-883 
+
+01664-3. 884 
+
+Stephenson E , Reynolds G, Botting RA, Calero-Nieto FJ, Morgan MD, Tuong ZK, Bach K, Sungnak W, Worlock KB, 885 
+
+Yoshida M, Kumasaka N, Kania K, Engelbert J, Olabi B, Spegarova JS, Wilson NK, Mende N, Jardine L, Gardner 886 
+
+LCS, Goh I, et al. Single-cell multi-omics analysis of the immune response in COVID-19. Nature Medicine. 2021 887 
+
+May; 27(5):904–916. https://www.nature.com/articles/s41591-021-01329-2, doi: 10.1038/s41591-021-01329-2. 888 
+
+Steuernagel L , Lam BYH, Klemm P, Dowsett GKC, Bauder CA, Tadross JA, Hitschfeld TS, del Rio Martin A, Chen W, 889 
+
+de Solis AJ, Fenselau H, Davidsen P, Cimino I, Kohnke SN, Rimmington D, Coll AP, Beyer A, Yeo GSH, Brüning JC. 890 
+
+HypoMap—a unified single-cell gene expression atlas of the murine hypothalamus. Nature Metabolism. 2022 891 
+
+Oct; 4(10):1402–1419. https://www.nature.com/articles/s42255-022-00657-y, doi: 10.1038/s42255-022-00657-y, 892 
+
+number: 10. 893 
+
+Sun X , Axelrod ML, Waks AG, Fu J, DiLullo M, Van Allen EM, Tolaney SM, Mittendorf EA, Xu Y, Balko JM. Dynamic 894 
+
+single-cell systemic immune responses in immunotherapy-treated early-stage HR+ breast cancer patients. npj 895 
+
+Breast Cancer. 2025 Jul; 11(1):65. https://doi.org/10.1038/s41523-025-00776-1, doi: 10.1038/s41523-025-00776-1. 896 
+
+Svensson V , Vento-Tormo R, Teichmann SA. Exponential scaling of single-cell RNA-seq in the past decade. Nature Pro-897 
+
+tocols. 2018 Apr; 13(4):599–604. https://www.nature.com/articles/nprot.2017.149, doi: 10.1038/nprot.2017.149. 898 
+
+Szałata A , Hrovatin K, Becker S, Tejada-Lapuerta A, Cui H, Wang B, Theis FJ. Transformers in single-cell omics: a 899 
+
+review and new perspectives. Nature Methods. 2024 Aug; 21(8):1430–1443. https://www.nature.com/articles/ 900 
+
+s41592-024-02353-z, doi: 10.1038/s41592-024-02353-z. 901 
+
+Tang Z , Luo S, Zeng H, Huang J, Sui X, Wu M, Wang X. Search and match across spatial omics samples at single-cell 902 
+
+resolution. Nature Methods. 2024 Oct; 21(10):1818–1829. https://www.nature.com/articles/s41592-024-02410-7, 903 
+
+doi: 10.1038/s41592-024-02410-7. 904 
+
+Tasic B , Yao Z, Graybuck LT, Smith KA, Nguyen TN, Bertagnolli D, Goldy J, Garren E, Economo MN, Viswanathan S, 905 
+
+others. Shared and distinct transcriptomic cell types across neocortical areas. Nature. 2018; 563(7729):72–78. 906 
+
+25 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+Templeton AJ , McNamara MG, Šeruga B, Vera-Badillo FE, Aneja P, Ocaña A, Leibowitz-Amit R, Sonpavde G, Knox JJ, 907 
+
+Tran B, Tannock IF, Amir E. Prognostic role of neutrophil-to-lymphocyte ratio in solid tumors: a systematic review 908 
+
+and meta-analysis. Journal of the National Cancer Institute. 2014 Jun; 106(6):dju124. doi: 10.1093/jnci/dju124. 909 
+
+Theodoris CV , Xiao L, Chopra A, Chaffin MD, Al Sayed ZR, Hill MC, Mantineo H, Brydon EM, Zeng Z, Liu XS, Ellinor 910 
+
+PT. Transfer learning enables predictions in network biology. Nature. 2023 Jun; 618(7965):616–624. https: 911 
+
+//www.nature.com/articles/s41586-023-06139-9, doi: 10.1038/s41586-023-06139-9. 912 
+
+Vaswani A , Shazeer N, Parmar N, Uszkoreit J, Jones L, Gomez AN, Kaiser L, Polosukhin I. Attention is all you need. 913 
+
+Advances in neural information processing systems. 2017; 30. 914 
+
+Verlaan T, Bouland G, Mahfouz A, Reinders MJT. scAGG: Sample-level embedding and classi-915 
+
+fication of Alzheimer’s disease from single-nucleus data. bioRxiv. 2025; https://www.biorxiv. 916 
+
+org/content/early/2025/01/30/2025.01.28.635240, doi: 10.1101/2025.01.28.635240, _eprint: 917 
+
+https://www.biorxiv.org/content/early/2025/01/30/2025.01.28.635240.full.pdf. 918 
+
+Virshup I , Bredikhin D, Heumos L, Palla G, Sturm G, Gayoso A, Kats I, Koutrouli M, Berger B, others. The scverse 919 
+
+project provides a computational ecosystem for single-cell omics data analysis. Nature biotechnology. 2023; 920 
+
+41(5):604–606. 921 
+
+Wang C, Cui H, Zhang A, Xie R, Goodarzi H, Wang B. scGPT-spatial: Continual Pretrain-922 
+
+ing of Single-Cell Foundation Model for Spatial Transcriptomics. bioRxiv. 2025; https://www. 923 
+
+biorxiv.org/content/early/2025/02/08/2025.02.05.636714, doi: 10.1101/2025.02.05.636714, _eprint: 924 
+
+https://www.biorxiv.org/content/early/2025/02/08/2025.02.05.636714.full.pdf. 925 
+
+Wang Q , Ding SL, Li Y, Royall J, Feng D, Lesnar P, Graddis N, Naeemi M, Facer B, Ho A, others. The Allen mouse brain 926 
+
+common coordinate framework: a 3D reference atlas. Cell. 2020; 181(4):936–953. 927 
+
+Weinkauff R , Estey EH, Starostik P, Hayes K, Huh YO, Hirsch-Ginsber C, Andreeff M, Keating M, Kantarjjan HM, 928 
+
+Freireich EJ, others. Use of peripheral blood blasts vs bone marrow blasts for diagnosis of acute leukemia. 929 
+
+American journal of clinical pathology. 1999; 111(6):733–740. 930 
+
+Wolf T , Debut L, Sanh V, Chaumond J, Delangue C, Moi A, Cistac P, Rault T, Louf R, Funtowicz M, Davison J, 931 
+
+Shleifer S, Platen Pv, Ma C, Jernite Y, Plu J, Xu C, Scao TL, Gugger S, Drame M, et al. Transformers: State-of-932 
+
+the-Art Natural Language Processing. In: Proceedings of the 2020 Conference on Empirical Methods in Natural 933 
+
+Language Processing: System Demonstrations Online: Association for Computational Linguistics; 2020. p. 38–45. 934 
+
+https://www.aclweb.org/anthology/2020.emnlp-demos.6. 935 
+
+Xu X , Holmes TC, Luo MH, Beier KT, Horwitz GD, Zhao F, Zeng W, Hui M, Semler BL, Sandri-Goldin RM. 936 
+
+Viral Vectors for Neural Circuit Mapping and Recent Advances in Trans-synaptic Anterograde Tracers. 937 
+
+Neuron. 2020 Sep; 107(6):1029–1047. https://www.cell.com/neuron/abstract/S0896-6273(20)30527-4, doi: 938 
+
+10.1016/j.neuron.2020.07.010. 939 
+
+Yadan O , Hydra - A framework for elegantly configuring complex applications; 2019. https://github.com/ 940 
+
+facebookresearch/hydra. 941 
+
+Yao Z , Liu H, Xie F, Fischer S, Adkins RS, Aldridge AI, Ament SA, Bartlett A, Behrens MM, Van den Berge K, Bertagnolli 942 
+
+D, de Bézieux HR, Biancalani T, Booeshaghi AS, Bravo HC, Casper T, Colantuoni C, Crabtree J, Creasy H, Crichton 943 
+
+K, et al. A transcriptomic and epigenomic cell atlas of the mouse primary motor cortex. Nature. 2021 Oct; 944 
+
+598(7879):103–110. https://www.nature.com/articles/s41586-021-03500-8, doi: 10.1038/s41586-021-03500-8, 945 
+
+number: 7879. 946 
+
+Yao Z , van Velthoven CTJ, Kunst M, Zhang M, McMillen D, Lee C, Jung W, Goldy J, Abdelhak A, Aitken M, Baker K, 947 
+
+Baker P, Barkan E, Bertagnolli D, Bhandiwad A, Bielstein C, Bishwakarma P, Campos J, Carey D, Casper T, et al. 948 
+
+A high-resolution transcriptomic and spatial atlas of cell types in the whole mouse brain. Nature. 2023 Dec; 949 
+
+624(7991):317–332. https://www.nature.com/articles/s41586-023-06812-z, doi: 10.1038/s41586-023-06812-z. 950 
+
+26 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+Yao Z , van Velthoven CTJ, Nguyen TN, Goldy J, Sedeno-Cortes AE, Baftizadeh F, Bertagnolli D, Casper T, Chiang M, 951 
+
+Crichton K, Ding SL, Fong O, Garren E, Glandon A, Gouwens NW, Gray J, Graybuck LT, Hawrylycz MJ, Hirschstein 952 
+
+D, Kroll M, et al. A taxonomy of transcriptomic cell types across the isocortex and hippocampal formation. 953 
+
+Cell. 2021 Jun; 184(12):3222–3241.e26. https://linkinghub.elsevier.com/retrieve/pii/S0092867421005018, doi: 954 
+
+10.1016/j.cell.2021.04.021. 955 
+
+You Y, Wang ZJ, Fleisher K, Liu R, Thomson M. Building Foundation Models to Characterize Cellu-956 
+
+lar Interactions via Geometric Self-Supervised Learning on Spatial Genomics. bioRxiv. 2025; https: 957 
+
+//www.biorxiv.org/content/early/2025/01/27/2025.01.25.634867, doi: 10.1101/2025.01.25.634867, _eprint: 958 
+
+https://www.biorxiv.org/content/early/2025/01/27/2025.01.25.634867.full.pdf. 959 
+
+Yuan X , Zhan Z, Zhang Z, Zhou M, Zhao J, Han B, Li Y, Tang J, Cell-ontology guided transcriptome foundation model. 960 
+
+arXiv; 2024. http://arxiv.org/abs/2408.12373, doi: 10.48550/arXiv.2408.12373, arXiv:2408.12373 [cs]. 961 
+
+Zhang M , Eichhorn SW, Zingg B, Yao Z, Cotter K, Zeng H, Dong H, Zhuang X. Spatially resolved cell atlas of the mouse 962 
+
+primary motor cortex by MERFISH. Nature. 2021 Oct; 598(7879):137–143. https://www.nature.com/articles/ 963 
+
+s41586-021-03705-x, doi: 10.1038/s41586-021-03705-x. 964 
+
+Zhao E , Stone MR, Ren X, Guenthoer J, Smythe KS, Pulliam T, Williams SR, Uytingco CR, Taylor SEB, Nghiem P, Bielas 965 
+
+JH, Gottardo R. Spatial transcriptomics at subspot resolution with BayesSpace. Nature Biotechnology. 2021 Nov; 966 
+
+39(11):1375–1384. https://doi.org/10.1038/s41587-021-00935-2, doi: 10.1038/s41587-021-00935-2. 967 
+
+Zilles K , Amunts K. Centenary of Brodmann’s map — conception and fate. Nature Reviews Neuroscience. 2010 Feb; 968 
+
+11(2):139–145. https://www.nature.com/articles/nrn2776, doi: 10.1038/nrn2776. 969 
+
+27 of 33 
+
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+.CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint Under review 
+
+> 
+
+Figure 2—figure supplement 1. a) The drop in test brain accuracy relative to validation accuracy is only partially due to differences in sampling density. We selected hexes in the test brain which had high density in the 3 training brains (example at left), specifically, hexes with at least as many cells as the group size. (right) Test accuracy on data in those hexes was marginally higher than for all points, yet still much below validation accuracy. b) Performance of random forests (RF) compared against logistic regression (LR) given identical inputs. c) Performance of a class-balanced model which controls for some areas having more cells in training brains with a modified objective that discounts samples from frequent areas. d) Effect of initializing TissueFormer with a pretrained Murine Geneformer as single-cell module vs. randomly initialized. e) Varying the number of train samples, comparing random initalizations to pretrained initializations, here for 𝑁 = 1 group size. 𝑁 = 1 was chosen to reduce ambiguity and ensure that the number of cells seen equaled the number of groups seen. f) Effect of giving TissueFormer the relative spatial location (relative to the center of mass) within each group of each cell. g) Number of groups in the test brain that contain an area boundary as a function of the group size. h) The accuracy curves of models trained while only ever able to observe groups containing a single cell type. Groups were constructed by selecting a single cell and choosing the nearest N cells of the same time. The high performance of some types, such as RSP/ACA, reflects the fact that these cells are localized in just one area of cortex (retrospenial/anterior cingulate areas). Slopes of these curves are shown in Fig. 2. i) 
+
+Validation (left) and test (right) accuracy as a function of group size for three deep learning benchmarks: CellCnn, scAGG, and ScRAT. TissueFormer (shown in Figure 2 f-g) outperforms all three methods. 
+
+> 970
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review RSP/ACA ML 
+
+L6 IT 
+
+NP PPP/RSP 
+
+ENT DL 
+
+EPd 
+
+Agranular insular area, posterior part 
+
+L6b/CT 
+
+L5 ET 
+
+Low quality 
+
+NP PPP/RSP 
+
+RSP/ACA ML 
+
+Anterior cingulate area, ventral part 
+
+EPd 
+
+DGpo 
+
+L2/3 IT 
+
+L6 CT 
+
+L4/5 IT 
+
+Primary auditory area 
+
+Car3 
+
+L6 IT 
+
+L6 CT 
+
+L5 IT 
+
+L2/3 IT 
+
+Primary motor area 
+
+Car3 
+
+L6 CT 
+
+ENT DL 
+
+L2/3 IT 
+
+L4/5 IT 
+
+Primary somatosensory area, barrel field 
+
+COA 
+
+TT 
+
+L6 IT 
+
+L5 ET 
+
+L4/5 IT 
+
+Primary somatosensory area, lower limb 
+
+EPd 
+
+HIP CA1 
+
+Car3 
+
+L2/3 IT 
+
+L4/5 IT 
+
+Primary somatosensory area, mouth 
+
+AON 
+
+L6 IT 
+
+BLA/BMA/PA 
+
+Car3 
+
+HIP CA1 
+
+Primary somatosensory area, nose 
+
+L6b 
+
+L5 ET 
+
+L2/3 IT 
+
+L4/5 IT 
+
+L6 CT 
+
+Primary somatosensory area, upper limb 
+
+L5 ET 
+
+HIP SUB 
+
+L4/5 IT 
+
+L6 CT 
+
+L2/3 IT 
+
+Primary visual area 
+
+L5 ET 
+
+COA 
+
+LA 
+
+ENT L6b 
+
+RSP/ACA UL 
+
+Retrosplenial area, dorsal part 
+
+RSP/ACA ML 
+
+ENT L6b 
+
+BLAa 
+
+RSP/ACA UL 
+
+L5 ET 
+
+Retrosplenial area, lateral agranular part 
+
+NP 
+
+Unclear 
+
+ENT L6b 
+
+NP PPP/RSP 
+
+TR 
+
+Retrosplenial area, ventral part 
+
+L6 IT 
+
+L5 ET 
+
+L6 CT 
+
+L2/3 IT 
+
+L5 IT 
+
+Secondary motor area 
+
+L6b 
+
+BLA/BMA/PA 
+
+TR 
+
+ENT L6b 
+
+Car3 
+
+Supplemental somatosensory area 
+
+0.0 0.2 0.4 0.6 0.8 1.0 1.2 
+
+Mean loss increase 
+
+ENT DL 
+
+L5 ET 
+
+Unclear 
+
+ENT L6b 
+
+Car3 
+
+Temporal association areas 
+
+0.0 0.2 0.4 0.6 0.8 1.0 1.2 
+
+Mean loss increase 
+
+HIP CA3 
+
+Low quality 
+
+L6b 
+
+L4/5 IT 
+
+Car3 
+
+Ventral auditory area 
+
+0.0 0.2 0.4 0.6 0.8 1.0 1.2 
+
+Mean loss increase 
+
+L6b/CT 
+
+NP PPP/RSP 
+
+HIP SUB 
+
+L4/5 IT 
+
+TR 
+
+Visceral area 
+
+> Top 5 cell types by LOO importance
+
+LOO importance per label 
+
+Figure 2—figure supplement 2. Leave-one-cell-type-out (LOO) analysis for the brain annotation task. Each panel shows the top cell types by LOO importance for a given predicted brain area. Importance is measured as the mean increase in cross-entropy loss when all cells of that type are removed from a group. L4/5 IT cells are consistently important across somatosensory areas, while L2/3 IT cells are most important for visual areas. Error bars represent standard error of the mean across groups. 
+
+971 
+
+.CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint Under review 
+
+Figure 3—figure supplement 1. Across all 4 brains, we show the CCF labels on single cells (left), the predicted labels (middle) and the location of mismatches between the two. We call these discrepancies rather than errors as it is not clear which is closer to ground truth. Notable systematic differences include a gross shift of the Primary Visual Area (magenta), and the somatosensory-motor boundary. In both cases, a shift appears in the discrepancy map as a large amount of discrepancies on one side of an area but very few on the other side, and a large discontinuity at the CCF boundary. 
+
+> 972
+> .CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint
+
+Under review 
+
+.CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint Under review 1 2 3 4 
+
+>  
+
+Figure 3—figure supplement 2. Normalized spatial density of select genes in each animal. Arrows highlight the animal-specific shifts of regional anatomy relative to the CCF (white boundaries), and how these are consistent between genes and with the predictions of Tissueformer (top row, reproduced from 
+
+Figure 3 . The top three rows (Tshz2, Coro6, and Zfmp2) recapitulate the medial shift in the boundary to the retrospenial areas in Brain 1 and the lateral shift in this boundary in Brain 4. The bottom 5 rows recapitulate the shift in the somatosensory/motor boundary, the same as analyzed in cell type distributions in Figure 3. To construct normalized gene densities, we first normalized mRNA transcription levels within each cell. We then plot the average normalized transcription within each hex. Normalization was necessary to reduce confounds of unequal spatial sampling. 
+
+> 973
+
+.CC-BY 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 28, 2026. ;https://doi.org/10.1101/2025.08.17.670735 doi: bioRxiv preprint

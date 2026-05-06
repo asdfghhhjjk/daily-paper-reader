@@ -6,83 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-07 ~ 2026-05-06
-- 运行时间：2026-05-06 09:56:39 UTC
+- 最新运行日期：2026-05-06
+- 运行时间：2026-05-06 20:25:04 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：10
+- 本次总论文数：17
+- 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-聚焦细胞识别与数字病理智能化，本期共研读 21 篇前沿论文。推荐重点关注罕见恶性细胞检测与开放式病理标注框架两大突破方向。建议读者关注 AI 在早期癌检与自动标注中的应用趋势，以洞察医学影像发展的新契机。
-- 详情：[/20260407-20260506/README](/20260407-20260506/README)
+1) 今日聚焦空间生物学与多组学模型，共精读6篇、速读11篇高分论文。  
+2) 值得关注的方向是空间组织学与单细胞模型融合、以及在病理图像与报告生成中的多模态智能探索。  
+3) 建议读者重点了解空间生物数据与AI模型互联的新趋势，以便掌握未来精准医学的关键技术。
+- 详情：[/202605/06/README](/202605/06/README)
 
 ### 精读区论文标签
-1. [Needle in a Haystack -- One-Class Representation Learning for Detecting Rare Malignant Cells in Computational Cytology](/20260407-20260506/2604.07722v1-needle-in-a-haystack----one-class-representation-learning-for-detecting-rare-malignant-cells-in-computational-cytology)  
-   标签：评分：10.0/10、query:cellrep
-   evidence：用于检测细胞学中罕见恶性细胞的一类表征学习
-2. [AnnotateAnyCell: Open-Source AI Framework for Efficient Annotation in Digital Pathology](/20260407-20260506/biorxiv-10-1101-2025-11-02-686114-v3-annotateanycell-open-source-ai-framework-for-efficient-annotation-in-digital-pathology)  
-   标签：评分：9.5/10、query:cellrep
-   evidence：用于数字病理中高效细胞标注和分类的对比学习框架
-3. [MorphDistill: Distilling Unified Morphological Knowledge from Pathology Foundation Models for Colorectal Cancer Survival Prediction](/20260407-20260506/2604.06390v2-morphdistill-distilling-unified-morphological-knowledge-from-pathology-foundation-models-for-colorectal-cancer-survival-prediction)  
+1. [Linking spatial biology and clinical histology via Haiku](/202605/06/2605.00925v1-linking-spatial-biology-and-clinical-histology-via-haiku)  
    标签：评分：9.0/10、query:cellrep
-   evidence：从病理基础模型中提取形态学知识用于生存预测
-4. [Cluster-First Labelling: An Automated Pipeline for Segmentation and Morphological Clustering in Histology Whole Slide Images](/20260407-20260506/2604.09370v1-cluster-first-labelling-an-automated-pipeline-for-segmentation-and-morphological-clustering-in-histology-whole-slide-images)  
+   evidence：空间蛋白质组学与H&E组织学嵌入的三模态对比学习
+2. [CellxPert: Inference-Time MCMC Steering of a Multi-Omics Single-Cell Foundation Model for In-Silico Perturbation](/202605/06/2605.00930v1-cellxpert-inference-time-mcmc-steering-of-a-multi-omics-single-cell-foundation-model-for-in-silico-perturbation)  
    标签：评分：9.0/10、query:cellrep
-   evidence：提取组织学全切片图像中细胞和细胞核的神经嵌入
-5. [Unified Multi-Foundation-Model Slide Representation for Pan-Cancer Recognition and Text-Guided Tumor Localization](/20260407-20260506/2604.22846v1-unified-multi-foundation-model-slide-representation-for-pan-cancer-recognition-and-text-guided-tumor-localization)  
+   evidence：用于单细胞和空间多组学表征的多模态基础模型
+3. [NucEval: A Robust Evaluation Framework for Nuclear Instance Segmentation](/202605/06/2605.03144v1-nuceval-a-robust-evaluation-framework-for-nuclear-instance-segmentation)  
    标签：评分：9.0/10、query:cellrep
-   evidence：将异构基础模型表征整合到共享的切片级表征空间中
-6. [Leveraging Spatial Transcriptomics as Alternative to Manual Annotations for Deep Learning-Based Nuclei Analysis](/20260407-20260506/2604.23481v1-leveraging-spatial-transcriptomics-as-alternative-to-manual-annotations-for-deep-learning-based-nuclei-analysis)  
+   evidence：计算病理学中细胞核实例分割的评估框架
+4. [DCAFA: Differential Community Abundance and Feature Analysis for Histological Images](/202605/06/biorxiv-10-64898-2026-04-28-721329-v1-dcafa-differential-community-abundance-and-feature-analysis-for-histological-images)  
    标签：评分：9.0/10、query:cellrep
-   evidence：利用细胞级空间转录组学进行细胞核分割和分类
-7. [VitaminP: cross-modal learning enables whole-cell segmentation from routine histology](/20260407-20260506/2604.23799v1-vitaminp-cross-modal-learning-enables-whole-cell-segmentation-from-routine-histology)  
-   标签：评分：9.0/10、query:cellrep
-   evidence：跨模态学习用于常规组织学中的全细胞分割
-8. [Adaptive Integration of Heterogeneous Foundation Models to Find Histologically Predictable Genes in Breast Cancer](/20260407-20260506/biorxiv-10-64898-2026-04-05-716435-v1-adaptive-integration-of-heterogeneous-foundation-models-to-find-histologically-predictable-genes-in-breast-cancer)  
-   标签：评分：9.0/10、query:cellrep
-   evidence：整合基础模型以获取组织病理学中的形态学表征
-9. [Deep learning cell type classification using nuclear DNA patterns](/20260407-20260506/biorxiv-10-64898-2026-04-28-721280-v1-deep-learning-cell-type-classification-using-nuclear-dna-patterns)  
-   标签：评分：9.0/10、query:cellrep
-   evidence：使用核DNA模式和CNN进行细胞类型分类
-10. [DCAFA: Differential Community Abundance and Feature Analysis for Histological Images](/20260407-20260506/biorxiv-10-64898-2026-04-28-721329-v1-dcafa-differential-community-abundance-and-feature-analysis-for-histological-images)  
-   标签：评分：9.0/10、query:cellrep
-   evidence：将细胞等实例分组为群落进行分层分析
+   evidence：通过与结果相关的组成和特征层面视角分析组织学图像
+5. [Biological Spatial Priors Regularize Foundation Model Representations for Cross-Site MSI Generalization in Colorectal Cancer](/202605/06/2605.02660v1-biological-spatial-priors-regularize-foundation-model-representations-for-cross-site-msi-generalization-in-colorectal-cancer)  
+   标签：评分：8.5/10、query:cellrep
+   evidence：利用生物空间先验正则化基础模型表征以进行MSI预测
+6. [Semi supervised GAN for smart microscopy, fast and data efficient cell cycle classification](/202605/06/biorxiv-10-64898-2026-04-23-720294-v2-semi-supervised-gan-for-smart-microscopy-fast-and-data-efficient-cell-cycle-classification)  
+   标签：评分：8.5/10、query:cellrep
+   evidence：用于细胞周期阶段分类的半监督生成对抗网络
 
 ### 速读区论文标签
-1. [UniSemAlign: Text-Prototype Alignment with a Foundation Encoder for Semi-Supervised Histopathology Segmentation](/20260407-20260506/2604.09169v1-unisemalign-text-prototype-alignment-with-a-foundation-encoder-for-semi-supervised-histopathology-segmentation)  
+1. [Explainable Prototype Booster: Enhancing Latent Representations of Foundation Models for Gene Expression Prediction](/202605/06/biorxiv-10-64898-2026-04-27-720478-v1-explainable-prototype-booster-enhancing-latent-representations-of-foundation-models-for-gene-expression-prediction)  
+   标签：评分：8.5/10、query:cellrep
+   evidence：增强基础模型的潜表征以从H&E图像预测基因表达
+2. [Federated Distillation for Whole Slide Image via Gaussian-Mixture Feature Alignment and Curriculum Integration](/202605/06/2605.00578v1-federated-distillation-for-whole-slide-image-via-gaussian-mixture-feature-alignment-and-curriculum-integration)  
    标签：评分：8.0/10、query:cellrep
-   evidence：用于半监督组织病理学分割的双模态语义对齐框架
-2. [Self-supervised Pretraining of Cell Segmentation Models](/20260407-20260506/2604.10609v1-self-supervised-pretraining-of-cell-segmentation-models)  
+   evidence：用于全切片图像特征对齐的联邦蒸馏
+3. [Semantic Context-aware mOdality fUsion Transformer (SCOUT): A Context-Aware Multimodal Transformer for Concept-Grounded Pathology Report Generation](/202605/06/2605.01144v1-semantic-context-aware-modality-fusion-transformer-scout-a-context-aware-multimodal-transformer-for-concept-grounded-pathology-report-generation)  
    标签：评分：8.0/10、query:cellrep
-   evidence：用于细胞实例分割和表征自适应的自监督框架
-3. [Early Detection of Acute Myeloid Leukemia (AML) Using YOLOv12 Deep Learning Model](/20260407-20260506/2604.16082v1-early-detection-of-acute-myeloid-leukemia-aml-using-yolov12-deep-learning-model)  
+   evidence：将细粒度细胞模式与切片级组织结构相结合
+4. [TissueFormer: Extending single-cell foundation models to predict population-level phenotypes](/202605/06/biorxiv-10-1101-2025-08-17-670735-v2-tissueformer-extending-single-cell-foundation-models-to-predict-population-level-phenotypes)  
    标签：评分：8.0/10、query:cellrep
-   evidence：使用YOLOv12和基于细胞的分幅对AML细胞进行分类
-4. [Is SAM3 ready for pathology segmentation?](/20260407-20260506/2604.18225v1-is-sam3-ready-for-pathology-segmentation)  
-   标签：评分：8.0/10、query:cellrep
-   evidence：评估SAM3在病理图像中细胞核层级的分割能力
-5. [Dino-NestedUNet: Unlocking Foundation Vision Encoders for Pathology Tumor Bulk Segmentation via Dense Decoding](/20260407-20260506/2605.00894v1-dino-nestedunet-unlocking-foundation-vision-encoders-for-pathology-tumor-bulk-segmentation-via-dense-decoding)  
+   evidence：从单细胞谱组中推断群体级标签
+5. [Automatic Bevacizumab Response Prediction in Ovarian Cancer from Digital Pathology Images via Novel AI-based Computational Pipeline](/202605/06/biorxiv-10-64898-2026-04-29-721782-v1-automatic-bevacizumab-response-prediction-in-ovarian-cancer-from-digital-pathology-images-via-novel-ai-based-computational-pipeline)  
    标签：评分：7.5/10、query:cellrep
-   evidence：该论文探讨了利用视觉基础模型进行组织病理学图像分割的计算病理学方法。
-6. [HistDiT: A Structure-Aware Latent Conditional Diffusion Model for High-Fidelity Virtual Staining in Histopathology](/20260407-20260506/2604.08305v1-histdit-a-structure-aware-latent-conditional-diffusion-model-for-high-fidelity-virtual-staining-in-histopathology)  
+   evidence：从数字病理图像预测药物反应的计算流水线
+6. [Validation of Whole-Slide Foundation Models for Image Retrieval in TCGA Data](/202605/06/2605.00902v1-validation-of-whole-slide-foundation-models-for-image-retrieval-in-tcga-data)  
    标签：评分：7.0/10、query:cellrep
-   evidence：用于虚拟染色的结构感知潜条件扩散模型
-7. [DSVTLA: Deep Swin Vision Transformer-Based Transfer Learning Architecture for Multi-Type Cancer Histopathological Cancer Image Classification](/20260407-20260506/2604.09468v1-dsvtla-deep-swin-vision-transformer-based-transfer-learning-architecture-for-multi-type-cancer-histopathological-cancer-image-classification)  
+   evidence：全切片基础模型和基于patch聚合方法的验证
+7. [CenSegNet: a generalist high-throughput deep learning framework for centrosome phenotyping at spatial and single-cell resolution in heterogeneous tissues](/202605/06/biorxiv-10-1101-2025-09-15-676250-v3-censegnet-a-generalist-high-throughput-deep-learning-framework-for-centrosome-phenotyping-at-spatial-and-single-cell-resolution-in-heterogeneous-tissues)  
    标签：评分：7.0/10、query:cellrep
-   evidence：用于多类型癌症组织病理图像分类的Swin-Vision Transformer
-8. [Learning Class Difficulty in Imbalanced Histopathology Segmentation via Dynamic Focal Attention](/20260407-20260506/2604.13479v1-learning-class-difficulty-in-imbalanced-histopathology-segmentation-via-dynamic-focal-attention)  
+   evidence：免疫组化图像中中心体表型分析的深度学习框架
+8. [Molecular Translators as a Computational Primitive for Biomarker Discovery: Learnability Gains Under Conserved Information Ceilings](/202605/06/biorxiv-10-64898-2026-04-27-720188-v1-molecular-translators-as-a-computational-primitive-for-biomarker-discovery-learnability-gains-under-conserved-information-ceilings)  
    标签：评分：7.0/10、query:cellrep
-   evidence：使用动态焦点注意力的组织病理学图像语义分割
-9. [Intervention-Aware Multiscale Representation Learning from Imaging Phenomics and Perturbation Transcriptomics](/20260407-20260506/2604.22832v1-intervention-aware-multiscale-representation-learning-from-imaging-phenomics-and-perturbation-transcriptomics)  
+   evidence：将H&E全切片图像转换为生物结构化的分子表征
+9. [A multitask single-cell analysis framework with knowledge graph as a prior](/202605/06/biorxiv-10-64898-2026-04-25-720773-v1-a-multitask-single-cell-analysis-framework-with-knowledge-graph-as-a-prior)  
    标签：评分：6.5/10、query:cellrep
-   evidence：从影像表型组学和细胞类型变化中进行多尺度表征学习
-10. [Shortcut Learning in Glomerular AI: Adversarial Penalties Hurt, Entropy Helps](/20260407-20260506/2604.07936v1-shortcut-learning-in-glomerular-ai-adversarial-penalties-hurt-entropy-helps)  
+   evidence：用于细胞状态程序的单细胞多任务分析框架
+10. [Magnification-Invariant Image Classification via Domain Generalization and Stable Sparse Embedding Signatures](/202605/06/2604.25817v1-magnification-invariant-image-classification-via-domain-generalization-and-stable-sparse-embedding-signatures)  
    标签：评分：6.0/10、query:cellrep
-   evidence：用于肾小球病变分类的计算病理学方法
-11. [Semantic Segmentation for Histopathology using Learned Regularization based on Global Proportions](/20260407-20260506/2604.24347v1-semantic-segmentation-for-histopathology-using-learned-regularization-based-on-global-proportions)  
+   evidence：组织病理学中的放大倍率无关图像分类
+11. [Retrieval-Guided Generation for Safer Histopathology Image Captioning](/202605/06/2605.00893v1-retrieval-guided-generation-for-safer-histopathology-image-captioning)  
    标签：评分：6.0/10、query:cellrep
-   evidence：使用学习正则化的组织病理学语义分割
+   evidence：用于组织病理学图像描述生成的计算病理学方法
 
 
 <div class="dpr-home-promo-card">
