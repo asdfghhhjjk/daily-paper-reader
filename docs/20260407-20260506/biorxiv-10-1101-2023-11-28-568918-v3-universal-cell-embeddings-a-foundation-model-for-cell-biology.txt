@@ -1,0 +1,1847 @@
+Title: Universal Cell Embeddings: A Foundation Model for Cell Biology
+
+URL Source: https://www.biorxiv.org/content/10.1101/2023.11.28.568918v3.full.pdf
+
+Number of Pages: 32
+
+Markdown Content:
+# Universal Cell Embeddings: 1
+
+# A Foundation Model for Cell Biology 2
+
+Yanay Rosen 1,∗, Yusuf Roohani 2,∗, Ayush Agrawal 1, Leon Samotorˇ can 1,3
+
+Tabula Sapiens Consortium 3, Stephen R. Quake 4,5,6,†, Jure Leskovec 1,† 
+
+> 4
+> 1
+
+Department of Computer Science, Stanford University, Stanford, CA, USA 5 
+
+> 2
+
+Department of Biomedical Data Science, Stanford University, Stanford, CA, USA 6 
+
+> 3
+
+Chan Zuckerberg BioHub, San Francisco, CA, USA 7 
+
+> 4
+
+Department of Bioengineering, Stanford University, Stanford, CA, USA 8 
+
+> 5
+
+Department of Applied Physics, Stanford University, Stanford, CA, USA 9 
+
+> 6
+
+Chan Zuckerberg Initiative, Redwood City, CA, USA 10 
+
+> †
+
+Corresponding author. Email: jure@cs.stanford.edu, quake@stanford.edu 11 
+
+> ∗
+
+These authors contributed equally 12 
+
+Abstract 13 
+
+Developing a universal representation space for cells which encompasses the tremendous 14 
+
+molecular diversity of cell types within the human body and more generally, across species, 15 
+
+would be transformative for cell biology. Recent work using single-cell transcriptomic ap-16 
+
+proaches to create molecular definitions of cell types in the form of cell atlases has provided 17 
+
+the necessary data for such an endeavor. Here, we present the Universal Cell Embedding 18 
+
+(UCE) foundation model. UCE was trained on a corpus of cell atlas data from human and 19 
+
+other species in a completely self-supervised way without any data annotations. UCE’s mod-20 
+
+eling approach is to create a unified biological latent space that can represent cells across 21 
+
+diverse tissues and species. This universal cell embedding captures important biological vari-22 
+
+ation despite the presence of experimental noise across diverse datasets. An important aspect 23 
+
+of UCE’s universality is that new cells can be mapped to this embedding space with no addi-24 
+
+1
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+tional data labeling, model training or fine-tuning. We applied UCE to create the Integrated 25 
+
+Mega-scale Atlas, embedding 36 million cells, with more than 1,000 uniquely named cell 26 
+
+types, from hundreds of experiments, dozens of tissues and eight species. We uncovered new 27 
+
+insights about the organization of cell types and tissues within this universal cell embedding 28 
+
+space, and leveraged it to infer function of newly discovered cell types. UCE’s embedding 29 
+
+space exhibits emergent behavior, uncovering biology that it was never explicitly trained for, 30 
+
+such as identifying developmental lineages and embedding data from novel species not in-31 
+
+cluded in the training set. Overall, by enabling a universal representation for every cell state 32 
+
+and type, UCE provides a valuable tool for analysis, annotation and hypothesis generation 33 
+
+over single cell data. 34 
+
+2
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+# Introduction 35 
+
+Cells are the fundamental unit of life and biologists have long conceptualized cells as members 36 
+
+of different universal landscapes [1–4]. A notable example of this is the Waddington landscape, 37 
+
+which presents a theoretical framework for the developmental lineages of cells as they transition 38 
+
+from pluripotent stages such as stem cells to more terminally differentiated end points [5]. Broadly, 39 
+
+the field of cell biology has sought to map the range of phenotypes that cells might exhibit, their 40 
+
+interrelationships, and the shifts between these states during development and disease [6–10]. 41 
+
+The substantial growth in the size of single-cell RNA sequencing (scRNA-seq) datasets 42 
+
+presents a fresh opportunity to revisit these questions. Detailed transcriptomic snapshots of cells 43 
+
+are now widely available from a range of timepoints, tissues, donors, and species [11–13]. These 44 
+
+rich, high-dimensional states are typically distilled into low-dimensional vectors or embeddings to 45 
+
+facilitate computational analysis [14, 15]. However, existing computational approaches struggle to 46 
+
+jointly analyze these diverse datasets. The unified representations they produce are often unable 47 
+
+to extend to new datasets due to species-specific constraints or the presence of dataset-specific 48 
+
+artifacts (or batch effects) which can obscure the underlying biological signal [16, 17]. 49 
+
+Some computational methods for scRNA-seq data have managed to overcome these limita-50 
+
+tions, but at the cost of requiring model tuning for each new dataset, thus rendering the representa-51 
+
+tions non-universal [15,18,19]. As a result, whenever a new experiment is performed and new data 52 
+
+is collected, it requires dedicated, resource-intensive data labeling and model training to perform 53 
+
+even the most standard analyses, such as clustering or annotation. This process is time consuming 54 
+
+and inefficient, and results in sub-optimal analyses based on small, limited and private datasets. 55 
+
+Recent advances in the field of artificial intelligence have enabled general-purpose foun-56 
+
+3
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+dation models (such as ChatGPT [20, 21], PaLM [22], and SAM [23]) that can learn universal 57 
+
+representations that are then applied to diverse downstream tasks and analyses. These foundation 58 
+
+models are not specifically trained for these downstream tasks, thus presenting clear instances of 59 
+
+emergent capabilities [24]. This foundation model strategy has also found valuable applications 60 
+
+in biological contexts such as learning representations of protein and DNA sequences [25, 26]. 61 
+
+Although recent work has applied foundation model architectures to single cell genomic data, the 62 
+
+unique characteristics of these data require a specialized modeling approach to fully realize their 63 
+
+potential [27, 28]. Directly modeling gene expression as text in the form of a sequence of genes is 64 
+
+both inefficient from a learning perspective and often relies on inaccurate biological assumptions. 65 
+
+Here, we present Universal Cell Embedding (UCE), a foundation model for single-cell gene 66 
+
+expression that is designed to address questions in cell and molecular biology. UCE is uniquely 67 
+
+able to generate representations of new single-cell gene expression datasets with no model fine-68 
+
+tuning or retraining while still remaining robust to dataset and batch-specific artifacts. Moreover, 69 
+
+it does so while requiring no cell type annotation and no input dataset preprocessing, such as gene 70 
+
+selection. UCE can be applied to any set of protein-coding genes from any species, even if they 71 
+
+are not homologs of genes seen during training. UCE learns a universal, intrinsically meaningful 72 
+
+representation of cell biology that enables insights extending beyond experimentally observed data. 73 
+
+The representations learned by UCE display an emergent organization of cell types and states 74 
+
+that is consistent with known biology. These cell embeddings can be used to accurately predict 75 
+
+cell types/states without additional model retraining, showing improved performance in dataset 76 
+
+integration against existing atlas-scale integration methods. UCE also enables the mapping of new 77 
+
+data into a universal embedding space, already populated with annotated reference states. This 78 
+
+4
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+strategy addresses issues such as noisy measurements that limit data alignment between different 79 
+
+experiments and reduces the reliance on small sets of marker genes to translate insights between 80 
+
+studies [29]. UCE can foster novel cross-dataset discoveries and overcome the limitations currently 81 
+
+faced when working with small, isolated datasets. For example, a cell type classifier trained to 82 
+
+predict specific immune cell types can be seamlessly applied to a completely new dataset. 83 
+
+# Results 84 
+
+A biologically-informed foundation model for single cell gene expression. 85 
+
+Integrating single-cell RNA sequencing (scRNA-seq) datasets is challenging for two primary 86 
+
+reasons: scRNA-seq data does not always contain the same genes, or features, and those features 87 
+
+are plagued by dataset-specific experimental artifacts or batch effects, which means models have to 88 
+
+be built separately for each dataset. UCE overcomes these challenges by abstracting cells as ‘bags 89 
+
+of RNA’ [30]. UCE (Fig. 1a) converts the RNA gene expression of a single cell into an expression-90 
+
+weighted sample of its corresponding genes. Next, UCE represents the sample’s genes by their 91 
+
+protein products, using a protein language model. This allows UCE to meaningfully represent any 92 
+
+protein-coding gene, from any species based on sequence alone, regardless of whether the species 93 
+
+had appeared in the training data. After integrating additional metadata on gene chromosomal 94 
+
+locations, the representation is processed by a large transformer model [31]. UCE can then map 95 
+
+any cell—from any tissue or species—into a shared universal space without further training. 96 
+
+UCE takes as input (1) scRNA-seq count data and (2) the corresponding protein embeddings, 97 
+
+generated by a protein language model, ESM2 [32], for the genes in the data set. The ESM2 protein 98 
+
+language model takes amino acid sequences as an input and produces a numerical representation 99 
+
+5
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+called a protein embedding. Given the expression count data for a cell, UCE takes a weighted 100 
+
+and normalized sample, with replacement, of the cell’s genes. This sample can only contain genes 101 
+
+which had nonzero expression and can contain multiple copies of each gene. These genes are 102 
+
+then tokenized by converting them to the protein embedding representation of the protein that 103 
+
+they code for [33]. Genes belonging to the same chromosome are grouped together by placing 104 
+
+them between special tokens and then sorted by genomic location. A special token representing 105 
+
+the entire cell, the ’CLS’ token, is attached to the beginning of the cell representation [34]. This 106 
+
+combined representation is passed into a transformer neural network. The embedding of a cell is 107 
+
+taken as the embedding of the CLS token at the final layer of the transformer (Fig. 1a). 108 
+
+UCE is trained in a fully self-supervised manner, without using any cell type or dataset-based 109 
+
+annotations. While incorporating cell type labels into the model design or training could seem 110 
+
+advantageous, most datasets lack such annotations. Ultimately, it is preferable for the organization 111 
+
+of cells within UCE to emerge organically, independent of human labeling. 112 
+
+UCE is a 33 layer model consisting of over 650 million parameters. UCE was trained across 113 
+
+more than 300 datasets that are largely collected from the CellXGene corpus [35] consisting of 114 
+
+over 36 million cells, for 40 days across 24 A100 80GB GPUs (Methods, Extended Data Table 115 
+
+2, SI Table 2). We also performed extensive ablation experiments to validate UCE architecture 116 
+
+choices, understand training behavior, and quantify the benefits of ESM2 protein embeddings (SI 117 
+
+Tables 3, 4, 8, 9, 10, Supplementary figures 17, 18). The model’s weights and implementation are 118 
+
+freely available and the model is hosted as an openly available resource for the community. 119 
+
+UCE creates an Integrated Mega-scale Atlas (IMA) of 36 million cells. 120 
+
+We apply UCE to generate an Integrated Megascale Atlas (IMA) of 36 million cells sampled 121 
+
+6
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+from diverse biological conditions, demonstrating the emergent organization of UCE cell repre-122 
+
+sentations (Fig. 1b). We find that cells within the UCE space naturally cluster under biological 123 
+
+conditions such as cell type, while mixing among experimental conditions such as batch (Fig. 1 b). 124 
+
+Since UCE is trained using only unlabeled data, this organization represents an emergent behavior 125 
+
+of the model. We inspect how tissue residency can influence the state of cell types. Cells in the 126 
+
+IMA have been prelabeled by their cell type. As these labels were never used for training the UCE 127 
+
+model, we use them to validate the quality of the learned representation. Although macrophages 128 
+
+found in different tissues are characterized by diverse transcriptional identities [36], they align 129 
+
+closely in the UCE space (Extended Data Table 1). For example, human macrophages are found 130 
+
+in 73 different tissues and among these tissues, 72% (53) of tissue-specific macrophage centroids 131 
+
+were embedded closest to a macrophage centroid from another tissue. Similar cross-tissue homo-132 
+
+geneity can also be identified in other prolific cell types, like endothelial cells or neurons. This 133 
+
+shows that UCE, without explicit training or labels, identifies that macrophages have a unique cel-134 
+
+lular identity that is shared between tissues. More broadly, it is an example of a UCE’s emergent 135 
+
+organization that is consistent with known biology, even though not explicitly trained for. 136 
+
+UCE embeds new datasets without additional model training. 137 
+
+We evaluated the quality of UCE representations by directly mapping new datasets which 138 
+
+were not part of the training set into the embedding, without any additional training or refinement 139 
+
+of the UCE model. This is called a ’zero shot’ capability, since the model was never trained on 140 
+
+any samples from the new dataset (Fig. 2a). While a variety of deep learning models have been 141 
+
+proposed for this cell embedding task, we choose to compare the performance of UCE to other self-142 
+
+supervised transformer-based methods. This is because they do not rely on cell type annotation and 143 
+
+7
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+are trained on large datasets. In particular, we compare against Geneformer [27] and scGPT [28]. 144 
+
+Geneformer represents cells as lists of genes sorted by their expression, while scGPT represents 145 
+
+cells as lists of genes with binned expression values. 146 
+
+We assess the performance of these methods on a completely new and yet unreleased dataset 147 
+
+(as of the training of the model), Tabula Sapiens v2, which contains diverse human data from 148 
+
+581,430 cells, 27 tissues, 167 batches, and 162 unique cell types. Tabula Sapiens is collected in 149 
+
+a highly standardized way and represents one of the largest ‘gold-standard’ expert annotated cell 150 
+
+atlases available. We use established metrics for embedding quality that measure the conservation 151 
+
+of cell type information and the correction of batch effects (Methods). We found that UCE substan-152 
+
+tially outperforms the next-best Geneformer method by 13.9% in the overall score, 16.2% in the 153 
+
+biological conservation score, and 10.1% on batch correction score (SI Table 1). UCE embeddings 154 
+
+distinctly separate cell types more effectively than other methods (Supplementary fig. 1, 2). To 155 
+
+further evaluate the value of UCE’s zero-shot embeddings, we compare them to fine-tuned meth-156 
+
+ods that rely on cell type labels and dataset-specific training. Remarkably, UCE performs slightly 157 
+
+better than these established approaches, including scVI [15] and scArches [18] (SI Table 1). 158 
+
+Tabula Sapiens v2 includes cells measured using both droplet or plate-based sequencing 159 
+
+methods. Thus correcting technology-based batch effects is a difficult task. UCE zero-shot embed-160 
+
+dings of Tabula Sapiens v2 Ovary tissue, which contains 45 , 757 cells profiled using 10x-primev3 161 
+
+and 3, 610 cells profiled using Smart-seq3, successfully correct batch effects at the same level as 162 
+
+fine-tuned methods, while more accurately representing cell types. When scored using the single 163 
+
+cell integration benchmark (SCIB), UCE’s batch correction scores are close to that of scVI and 164 
+
+scArches, while its bio conservation scores are higher (SI Table 5). Furthermore, we demonstrate 165 
+
+8
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+how UCE can simply transfer cell-type labels. We train a simple logistic classifier on the UCE 166 
+
+embeddings of the Immune Cell Atlas [37], and then apply the classifier to cell embeddings from 167 
+
+Tabula Sapiens v2. We observe that the classifier accurately classifies Tabula Sapiens v2 cells as 168 
+
+memory and naive B cells (Supplementary Fig. 2b), which is confirmed by marker gene analysis 169 
+
+(Supplementary Fig. 2c). 170 
+
+Beyond Tabula Sapiens v2, we evaluate UCE on held-out (not seen during training) com-171 
+
+plex datasets with hundreds of cell types [12, 38] and on an additional large-scale benchmark that 172 
+
+measures how well embedding spaces capture cell-type relationships across samples in million-173 
+
+cell datasets with hundreds of cell types and batches [11, 12, 39], finding that UCE outperforms 174 
+
+Geneformer and scGPT and matches the performance of fine-tuned methods such as scVI (Sup-175 
+
+plementary Note 6; Supplementary Tables 10 and 12). 176 
+
+UCE embeds diverse cell types from organisms that were not part of the training data. 177 
+
+UCE can also align datasets from previously unseen species without additional training. This 178 
+
+capability arises because UCE is genome-agnostic: each gene is translated into its corresponding 179 
+
+protein sequence and embedded within a universal protein space. As a result, the representation is 180 
+
+species-independent and does not rely on identifying homologous gene pairs. Because UCE can 181 
+
+analyze cell atlas data from species outside its training set, its performance on this task provides a 182 
+
+stringent test of how well its emergent representations capture underlying biological principles. 183 
+
+UCE’s training data is composed of datasets from eight species: human, mouse, mouse 184 
+
+lemur, zebrafish, pig, rhesus macaque, crab-eating macaque and western clawed frog (Supplemen-185 
+
+tary Figure 19). We apply UCE to embed datasets from three novel species that were not included 186 
+
+in the training set. For each species, we generate a zero-shot embedding and then determine the 187 
+
+9
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+nearest cell type centroid from the IMA for each of the dataset’s existing annotated cell types. 188 
+
+Within a dataset of green monkey lymph node and lung cells [40], for 13 of the 17 cell 189 
+
+type centroids, the closest centroid from another species corresponds to the same cell type in the 190 
+
+green monkey. This match extends to all 17 centroids when considering the three nearest centroids 191 
+
+(Extended Data Table 1, Fig. 2c, 2d). Moreover, a population of lymph node cells that were 192 
+
+originally labelled as B cells, form a distinct cluster in UCE space (Supplementary Fig. 3b). 193 
+
+Differential expression analysis revealed that this cluster predominantly expresses T cell markers, 194 
+
+Cd3d , Fyb1 , Il7r , Hcst and Gzmk (Supplementary Fig. 3a, 3c) [41, 42]. 195 
+
+In the case of naked mole rat spleen and circulating immune cells [43], for 17 of 24 cell types, 196 
+
+the nearest cross-species centroid matches the naked mole rat cell type (Extended Data Table 1, 197 
+
+Supplementary Fig. 4b). In the case of chicken, we embed two different chicken data sets, the chick 198 
+
+retina [44] and the developing chick heart [45] (Supplementary figs. 5a, 5b). Different eye-specific 199 
+
+neurons within the chick retina map to mouse lemur neurons, such as chick oligodendrocytes, 200 
+
+which are closest to mouse lemur oligodendrocytes (Extended Data Table 1). In chicken heart, 201 
+
+12 of 15 cell type centroids are matched within the nearest two cross species centroids (Extended 202 
+
+Data Table 1). No bird species were included when training UCE. 203 
+
+We compare UCE’s performance to a state-of-the-art supervised method for cross-species 204 
+
+label transfer, SATURN [33, 46] and SAMap [19]. For each of the four datasets, we integrate 205 
+
+them with a paired human dataset from the same tissue from Tabula Sapiens v1, except for chicken 206 
+
+retina, which was paired with retina data from Orozco et al [47]. In comparison to UCE, which is 207 
+
+zero-shot and unsupervised, SATURN is a supervised method: it is aware of each species’ cell type 208 
+
+annotations individually. Both SATURN and SAMap are finetuned methods, trained from scratch 209 
+
+10 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+on the human and novel species dataset and designed explicitly to map cell types together. Still, 210 
+
+UCE outperforms both methods for cell type label transfer between the human and the new species 211 
+
+for three out of four datasets, (Supplementary Note 5, Supplementary Table 14). UCE produces 212 
+
+coherent zero-shot embeddings even for highly divergent species such as Drosophila [48] (Supple-213 
+
+mentary Fig. 20). At the same time, fine-grained cell-type transfer across such large evolutionary 214 
+
+distances remains challenging, reflecting both reduced cross-species alignment performance and 215 
+
+inherent ambiguity in defining reliable “ground-truth” correspondences between distantly related 216 
+
+cell-type ontologies (Extended Data Table 4). 217 
+
+UCE learns a meaningful organization of cell types in previously unseen data. 218 
+
+Moving beyond metrics focused on individual cell type clusters, we also examined the struc-219 
+
+ture of the universal embedding space as a whole, through the relative positioning of different cells 220 
+
+within it. A meaningful arrangement of cell types emerges upon embedding of all cells from the 221 
+
+Tabula Sapiens v2 dataset from lung tissue (Fig. 3a). Not only do distinct cell types like T cells, 222 
+
+monocytes and endothelial cells cluster together, but higher-level categories, such as immune cells 223 
+
+and epithelial cells, are also clearly distinguished. When compared to the cell hierarchy derived 224 
+
+using the Cell Ontology [49], UCE identified clusters showed greater similarity (measured using 225 
+
+the adjusted Rand index) than other zero-shot embedding methods (Supplementary fig. 14). 226 
+
+To further assess the organization of all cells within the embedding, we compared distances 227 
+
+between pairs of cell types across all tissues in the embedding space to their distances in the Cell 228 
+
+Ontology tree (Fig. 3b). We hypothesized that cells that are known to be similar based on the 229 
+
+cell ontology would likely also be closer together in the embedding space, and that the degree of 230 
+
+closeness would be correlated with ontological similarity. The results validate this relationship: at 231 
+
+11 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+each additional unit of separation between cell types in the cell ontology tree, there is a significant 232 
+
+increase in the embedding distance in UCE between those cell types (Fig. 3b). We observed this 233 
+
+trend up to 5 hops in the ontology tree, after which it plateaued (Supplementary fig. 6), likely due 234 
+
+to the curse of dimensionality and variations in ontological refinement across branches (SI Note 235 
+
+3). 236 
+
+The precision of the organization of cell types in the Tabula Sapiens v2 lung dataset was 237 
+
+evaluated by comparing it with other lung datasets in the IMA (Fig. 3c, Supplementary Fig. 8). 238 
+
+Four different endothelial cell subtypes are observed to map correctly to their corresponding coun-239 
+
+terparts in the IMA (Fig. 3c). Similarly, lung ciliated cells correctly map to their counterpart in the 240 
+
+larger corpus despite the presence of four different subtypes of ciliated cells. Further analysis of 241 
+
+the alignment of cell-type centroids between Tabula Sapiens v2 and the IMA in all tissues showed 242 
+
+an exact alignment for 41% of cell types (Methods). This alignment, based on the three near-243 
+
+est neighbor cell type centroids, is 65% more accurate compared to that measured in the original 244 
+
+gene expression space (Fig. 3d). When focusing on the nearest centroid, the alignment accuracy 245 
+
+improves by 92%. Many inexact matches are caused by differences in the labeling resolution of 246 
+
+different datasets in the IMA (SI Tables 6, 7, Extended Data Table 8). These results demonstrate 247 
+
+that UCE can effectively learn a universal representation of cell biology that not only enables dis-248 
+
+crimination between individual cell types but also captures their relative similarities across scales 249 
+
+with the potential to reveal deeper insights into development and function. 250 
+
+A workflow for decoding the function of newly discovered cell types. 251 
+
+UCE’s zero-shot embedding capabilities unlock novel computational analyses of scRNA-seq 252 
+
+data and aid in hypothesis generation. UCE differs from other methods in that the same cell type 253 
+
+12 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+can also be compared against all previously assayed cells across tissues, disease states and species. 254 
+
+UCE is not biased by existing annotations, opening the door to discovery of a novel function (Fig. 255 
+
+4a). With existing fine-tuning-based methods, every searched dataset would need to be integrated, 256 
+
+requiring repeated model retraining. Thus, UCE enables a new workflow for scRNA-seq data 257 
+
+analysis that performs an unbiased search across the universe of cell biology. 258 
+
+We present an example of this analysis by using the recently identified kidney Norn cell as 259 
+
+a case study. The kidney Norn cell is the long-sought erythropoietin ( Epo ) producing cell in the 260 
+
+kidney, and is characterized as fibroblast-like. We perform a zero-shot embedding of mouse renal 261 
+
+cells from [50], which produces a cluster of cells corresponding to Norn cells (Fig. 4b). 262 
+
+Using a simple logistic classifier trained on the embedding of mouse renal cells, we predict 263 
+
+the existence of Norn cell clusters in many kidney datasets. Since this classifier takes universal 264 
+
+cell embeddings as input, we can directly apply it to all 36 million cells in the IMA, in a manner 265 
+
+unbiased by cell-type annotations ascribed by previous studies. To evaluate the model’s predictions 266 
+
+that these are Norn, or Norn-like cells, we investigate the expression of canonical Norn cell marker 267 
+
+genes. Cells classified as Norn cells in the top 13 kidney datasets by Norn abundancy demonstrate 268 
+
+preferential expression of the Norn markers Dcn , Lpar1 , Col1a1 , Cxcl12 , and Cfh (Extended Data 269 
+
+Table 3). Notably, Epo transcripts, which are often missing from data sets and are lowly expressed, 270 
+
+are not typically differentially expressed in these cells. Epo cannot readily be used as a marker gene 271 
+
+for Norn cells because of a variety of factors, including low overall expression, even in hypoxic 272 
+
+Norn cells, the bursty nature of Epo transcription, and the fast degradation of Epo messenger 273 
+
+RNA upon reoxygenation [50]. Cxcl14 , another marker of Norn cells, displays mixed expression 274 
+
+patterns in these predicted Norn cells (Fig. 4c). The same pattern of marker gene expression is 275 
+
+13 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+also found in cells from other tissues, including lung and heart datasets (Fig. 4c). Furthermore, 276 
+
+these predicted cells also share a common set of genes that are lowly expressed in mouse renal 277 
+
+Norn cells (SI, Fig. 9). The tissues with the highest number of predicted Norn cells were gonad, 278 
+
+heart and lung. Finally, we also identify differences in gene expression specific to each tissue 279 
+
+(Supplementary fig. 10). While Epo expression has been previously observed in the heart and lung 280 
+
+tissue, the mechanisms and cell types associated with this expression, and their relation to kidney 281 
+
+Norn cells have not been previously determined [51]. 282 
+
+UCE helps interrogate alternate lung disease outcomes. 283 
+
+Lastly, we apply UCE and our Norn cell classifier to investigate Norn-like cells in lung 284 
+
+diseases. We generate an embedding of lung cells sampled from patients with idiopathic pulmonary 285 
+
+fibrosis (IPF), chronic obstructive pulmonary disease (COPD), or patients from a control group 286 
+
+[52]. We identify Norn-like lung cells that preferentially express Norn markers in all three groups 287 
+
+(Fig. 4d). For these Norn-like lung cells, we identify differences across disease groups (Fig. 288 
+
+4e). COPD and IPF are both associated with elevated bloodstream Epo , but COPD has levels 289 
+
+higher than IPF. Furthermore, in patients with IPF, secondary erythrocytosis is absent or reduced 290 
+
+compared to patients with COPD [53–55]. Given the identification of Norn-like cells in the lung, 291 
+
+and Norn cell’s production of Epo , it is possible that this difference in disease prognosis could be 292 
+
+related to disease associated differences in Norn-like cells. 293 
+
+IPF predicted norn-like cells do not have significantly different expression of norn marker 294 
+
+genes compared to COPD patients, except for Cxcl14 , which they express at a significantly higher 295 
+
+rate. However, they do preferentially express collagen genes ( Col1a1 , Col5a1 , Col1a2 , Col3a1 ), 296 
+
+and have significantly lower expression of the gene Egln1 , which encodes the oxygen sensing 297 
+
+14 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+enzyme PHD2 (Fig. 4e, Supplementary Table 13) [50]. 298 
+
+Taken together, these results indicate that cells with similar transcriptional states to Norn cells 299 
+
+can be found in other tissues in the body, and such cells may play a previously undescribed role 300 
+
+in disease. UCE greatly facilitates an analysis of this scale and diversity because it is a universal 301 
+
+model that is agnostic to tissue, species or disease state. In order to ground this analysis, results 302 
+
+are confirmed using expression of canonical marker genes (Supplementary Fig 9) . 303 
+
+# Discussion 304 
+
+UCE is a single-cell foundation model that is built from the ground up to represent cell biology 305 
+
+across the wide array of single-cell datasets. We envision UCE as an embedding approach that 306 
+
+enables researchers to map any new data, including entire atlases, into an accurate, meaningful and 307 
+
+universal space. The embedding space that emerges from UCE is highly structured and diverse and 308 
+
+aligns cell types across tissues and species. Additionally, these cell types organize themselves in a 309 
+
+pattern that reflects existing biological knowledge. 310 
+
+By building UCE, we enable novel analyses of scRNA-seq data. UCE’s zero-shot embed-311 
+
+dings are an important new capability because they enable an intrinsically meaningful represen-312 
+
+tation that can extend insights beyond the data that have already been observed and annotated 313 
+
+experimentally. Our results demonstrate that UCE can achieve such a generalizable representation 314 
+
+across different datasets while maintaining accuracy comparable to methods that require retraining 315 
+
+for each specific dataset. To ensure that UCE’s embeddings, or any downstream models trained on 316 
+
+them, remain universally shareable, we have designed UCE to be used as-is, without any model 317 
+
+fine-tuning. This allows UCE representations to serve as a universal way of connecting any single-318 
+
+cell gene expression dataset. 319 
+
+15 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+While UCE represents a significant advance toward universal cell embeddings, several caveats 320 
+
+temper its promise and highlight directions for improvement. Current benchmarks primarily eval-321 
+
+uate UCE’s ability to recover expert-annotated cell types, but these tasks are inherently limited 322 
+
+by the granularity and subjectivity of available cell labels. As such, they may not fully capture 323 
+
+the model’s capacity to represent subtler biological processes, such as cellular responses to per-324 
+
+turbations or cross-modality integration. Moreover, like other large-scale biological foundation 325 
+
+models, UCE operates largely as a “black box,” making it difficult to interpret how or why certain 326 
+
+embeddings arise. Addressing this opacity will require the development of new interpretability 327 
+
+tools that connect learned representations to mechanistic biological understanding. UCE’s training 328 
+
+data, while extensive, is biased toward mammalian species—particularly human and mouse—and 329 
+
+to specific tissues such as brain, raising concerns about its generalizability to underrepresented 330 
+
+species and contexts. Methodological improvements in dataset construction could help alleviate 331 
+
+these biases while reducing computational burden. Finally, although UCE improves alignment 332 
+
+across datasets by capturing shared biological signal, it does not replace traditional batch effect 333 
+
+correction methods, which remain useful for handling known experimental confounders. Simi-334 
+
+larly, its reliance on gene sampling based on expression means that some fine-grained quantitative 335 
+
+variation is lost, potentially limiting the resolution of certain cell state distinctions. 336 
+
+In 2002, Nobel laureate Sydney Brenner identified many of the core motivations for the 337 
+
+creation of cell atlases and virtual cells. Virtual cells should be the goal of biological foundation 338 
+
+modeling, because cells are the “real units of function and structure in an organism” [56]. Brenner 339 
+
+also identified the need for such models to be computationally efficient, predictive, and able to 340 
+
+generate new cell types. We believe that UCE represents a significant advancement in the progress 341 
+
+16 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+towards a virtual cell [57]. Through learning a universal representation of every cell state and type, 342 
+
+we expect that UCE will be a valuable tool for analysis, annotation and hypothesis generation as 343 
+
+the scale and diversity of single-cell datasets continues to grow. 344 
+
+17 
+
+.CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint Integrated Mega-scale Atlas: 36M Cells 
+
+> UMAP1 UMAP2
+
+1000 Cell Types 300 Datasets 50 Tissues 8 Species 
+
+# The Universal Cell Embedding Model 
+
+> GP
+
+Transformer 
+
+33 Layers 650M Parameters 
+
+Objective 
+
+Was G P expressed in cell C? CLS Pool   
+
+> Embedding of Cell C GPProtein Embedding
+
+Expression 
+
+G1 G7 G3 
+
+> Chr. A Chr. B
+> { } {  }
+
+G1 G1 G2 G4 G5 
+
+Cell Representation 
+
+Sample genes by expression, sort by genomic location. 
+
+# { }{ }
+
+Training Only 
+
+Mask 20% of expressed genes. Sample many G pfrom the cell’s genes. 
+
+> Genes
+> Expr > 0 Expr = 0
+
+G1 G2 G3 G4 G5 G6 G7 G8    
+
+> GHYSR
+
+Represent each gene token using large protein language models 
+
+Input 
+
+RNA Expression of a single cell 
+
+# abFigure 1: The Universal Cell Embedding Model is a large foundation model for single cell biology (a) Overview of the Universal Cell Embedding (UCE) model. UCE has a unique, biologically motivated representation of cells (blue) and training scheme (purple). Given the gene expression for a single cell, UCE samples with replacement genes that were expressed, weighted by their level of expression. Each gene is represented using a ‘token’ corresponding to its protein product. Gene tokens are represented numerically by using ESM2 protein embeddings, a 15 billion parameter protein language model that takes amino acid sequences as an input. The gene tokens are sorted by genomic location and grouped by chromosome. Chromosome groups are delineated by specific chromosome start tokens and end tokens, joined, and then passed into a transformer neural network. The embedding of the cell is determined by taking the final layer output of a special CLS token that is appended before all the other tokens. To train the UCE model, a portion of genes that were expressed are masked. The model next combines the protein embeddings corresponding to each of these genes with the embedding of the cell, and passes this joint representation through a neural network that predicts if a given gene was expressed in the cell or not. This objective function is then used to update the weights of the model. 
+
+(b) UMAP visualizations of the universal cell embedding space. We apply UCE to embed 36 million cells, with more than 1,000 uniquely named cell types, from hundreds of datasets, dozens of tissues and eight species (Supplementary Figure 19), creating an Integrated Mega-scale Atlas (IMA) spanning the universe of cell biology. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+# aCell Type 
+
+scVI scArches UCE Geneformer scGPT 
+
+> UMAP
+
+New Data 
+
+Must Retrain the Model 
+
+Zero-shot 
+
+Same Representation 
+
+Existing Data 
+
+Fine-tuned 
+
+Altered Representation 
+
+Map new data directly 
+
+# c d
+
+> plasma cell b cell macrophage myeloid cell ILC dendritic cell t cell cd4 t cell cd8 t cell nkt cell fibroblast endothelial cell plasma cell b cell macrophage ILC dendritic pDC t cell NK cell progenitor 0.8 0.6 0.4 0.2 0.0
+
+UCE Accurately Transfers Human Lymph Node Annotations Predicted Cell Type Green Monkey Cell Type 
+
+Green Monkey Mediastinal Lymph Node 
+
+> UMAP
+> B Cell Dendritic ILC Progenitor T Cell pDC Macrophage NK Cell Plasma Cell
+
+Map new species directly 
+
+# bFigure 2: Zero-shot cell embedding capabilities of UCE (a) Comparison of zero-shot and fine-tuned single-cell embedding models. A zero-shot embedding model maps new data directly to the representation space, with no ad-ditional model training. In contrast, fine-tuned models must first be retrained on a given dataset, and only then can be applied on that dataset, fundamentally altering the model’s representation space. (b) UMAP embeddings of UCE and other methods for Tabula Sapiens v1 and v2, colored by cell type. UCE zero-shot embeddings outperform other methods when scored using metrics from the single cell integration benchmark (Supplementary Table 1) [16]. (c) 
+
+UMAP of cells from a new species, green monkey colored by cell type. UCE is able to generate high-quality zero-shot embeddings of novel species that were never seen during training. The UCE embedding for green monkey mediastinal lymph node [40] recaptures cell type clusters. Notably, a population of cells annotated as B cells (blue) clusters nearby to T cells. This breakaway cluster of putative T cells expresses canonical T cell markers including Cd3 , Fyb1 , Il7r ,
+
+Hcst and Gzmk (Supplementary Fig. 3). (d) Green monkey lymph node cells can be accurately annotated using the IMA. A logistic classifier is first trained to predict cell types based on UCE embeddings of human lymph node cells. The classifier is then directly applied on green monkey cells to predict the cell types. Predicted cell types have high agreement with the original cell type annotations, demonstrating that UCE can be used to transfer cell type annotations to novel species. 
+
+19 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+# c
+
+> ***  *** Tree Distance in Cell Ontology Embedding Distance in UCE
+
+# a bMap New Dataset Directly 
+
+# d
+
+Map New Dataset Directly Correct alignments between Tabula Sapiens v2 and IMA within the fi rst 3 nearest neighbors 
+
+> 12345*** Epithelial Cells
+> Endothelial Cells
+> Immune Cells Connective Tissue Leukocytes Granulocytes Monocytes Endothelial Secretory Epithelial Alveolar Epithelial Muscle Mesenchymal
+
+Integrated Mega-Scale Atlas Integrated Mega-Scale Atlas *** (n=900) (n=3872) (n=8679) (n=11676) (n=11182) Figure 3: UCE learns meaningful organization of cell types (a) The UCE space generated for new, previously unseen data shows a meaningful arrangement of cell types. Lung data was used from new donors from the Tabula Sapiens Consortium. Dendrogram of hierarchical clustering of all annotated cell types in the UCE embedding space. Closely connected cell types in the dendrogram show meaningful relationships both at finer and coarser scale reso-lutions. (b) Evaluation of the organization of cell types in the embedding space when compared to Cell Ontology. The x-axis depicts the density of Euclidean distances between all pairs of cells across all tissues for these new donors from the Tabula Sapiens Consortium. The y-axis shows the corresponding tree distance between cell types as found in the Cell Ontology. Stars denote statistical significance, which was established using a one-sided t-test, p values in increasing order of distance: 10 −106 , 10 −201 , 10 −25 , 10 −131 (c) Mapping data from new donors to the Integrated Mega-scale Atlas (IMA) across multiple lung datasets. Red labels correspond to data from new donors, grey are from IMA datasets. All cell type labels from multiple datasets are displayed as-is, with no modifications or reformatting of text. Accurate alignment between the new dataset and IMA is observed at finer resolution. Four different subtypes of endothelial cells are shown to correctly map to their corresponding counterparts in the complete mega-scale atlas. In the case of lung ciliated cells, they map more closely to their matching counterpart as compared to all other ciliated cell subtypes also present in the IMA. (d) Quantification of cell type alignment between new dataset and IMA. Accuracy in 3-nearest centroid matches between new dataset and IMA cell types at the finest level of original annotation. Results are measured across all 27 tissues in Tabula Sapiens v2 for both the UCE space and the original gene expression space. Tissues are ordered by accuracy in the UCE space. 20 
+
+.CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint b Mouse Renal Cells, 
+
+Kragesteen et al. UCE Embeddings 
+
+## d
+
+Adams et al. Lung Disease Pseudobulk Gene Expression in Norn-like Cells 
+
+## e
+
+Predicted Norn Cells LFC UMAP1 UMAP2 
+
+1. Describe Novel Cell Type 
+
+3. Search Across Cellular Biology 
+
+2. Identify in Datasets from Same Tissue 
+
+Log Fold Change (LFC) of Norn Marker Genes in Predicted Norn Cells 
+
+> Missing Gene Kidney Datasets
+> Heart Datasets  Lung Datasets
+
+## ac 
+
+> COPD Control IPF Mean expression, log, in group
+> 08DCN LPAR1 COL1A1 CXCL14 CXCL12 CFH EPO COL5A1 COL5A2 COL1A2 COL3A1 EGLN1
+
+Figure 4: Norn Cell Case Study: UCE unlocks new analyses of single cell datasets (a) Overview of a novel single cell analysis workflow that UCE facilitates. Analysis begins with (1) the identification of a novel cell type (circled) within the embedding space, using methods such as clustering and confirmation using marker gene analysis. (2) Next, the novel cell type can be easily identified in other datasets profiled from the same tissue (for example, kidney). A simple classifier, such as a logistic classifier, is trained to predict cell types from universal cell embeddings, and is then applied to embeddings from other datasets of the same tissue (kidney), to confirm the cell type’s existence and improve its characterization. (3) Finally, the same simple classifier can be applied to the embeddings of cells from any other tissue, to find cell types with similar biological functions or patterns of gene expression. (b) Identification of novel Norn cells in mouse kidney. UMAP visualization of zero-shot embedding of mouse renal cells from Kragesteen et al. [50]. Norn cells form a distinct cluster within the embedding space (circled), and a logistic cell type classifier trained on the dataset recaptures Norn cell labels 98.3% of the time. (c) Identification of Norn cells and Norn-like cells across tissues. A logistic classifier is trained to predict Norn cells from universal cell embeddings, and is then applied to other kidney datasets (left) and datasets from lung and heart (right). The log fold change of known Norn marker genes between cells predicted to be Norn cells and the remaining cells within each dataset is visualized. Cells which are predicted to be Norn-like preferentially express Norn markers in kidney, as well as in lung and heart. Notably, Cxcl14 
+
+has a mixed pattern of expression among some datasets. (d) Cells predicted to be Norn-like cells within a lung disease dataset [52] express known Norn markers, as demonstrated by log fold change (LFC). (e) Pseudobulk differential gene expression (Supplementary Table 13) in predicted Norn-like cells, grouped by disease status. Norn markers have similar expression levels across disease status, except for Cxcl14 , which has significantly higher expression in IPF versus COPD or control, and Cxcl12 , which is expressed more highly in IPF versus control. Norn-like cells in IPF patients preferentially express genes encoding collagen compared to COPD patients ( Col1a1 , Col5a1 , Col1a2 ,
+
+Col3a1 ). Egln1 is expressed at a lower rate in IPF norn-like cells compared to COPD norn-like cells. 21 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+# Methods 345 
+
+Overview of UCE. 346 
+
+UCE (Universal Cell Embedding) is a machine learning model for mapping single-cell gene 347 
+
+expression profiles into a universal embedding space, denoted as U. In this space, each cell ci is 348 
+
+represented as a demb -dimensional vector, where demb = 1280 . For all analyses we use the 1280 349 
+
+dimensional UCE representation and not a 2 dimensional embedding such as that generated from 350 
+
+tSNE or UMAP. Users of UCE should rely on the full 1280 dimensional representations to judge 351 
+
+distances between cells, rather than data visualization using these methods, especially when they 352 
+
+expect to see strong biological differences. 353 
+
+The model takes as input a dataset D with N cells {ci}Ni=1 . Cells in D can be drawn from 354 
+
+one or more distinct scRNA-seq experiments. Each cell ci in D is described by a gene expression 355 
+
+vector xi ∈ NKi , where Ki is the number of genes measured in ci and can differ across D. The gene 356 
+
+expression vectors xi ∈ NKi are not subset to those with high variance. UCE defines a function 357 
+
+fu : {NKi → Rdemb }Ni=1 that maps each gene expression vector xi to its cell embedding vector hi.358 
+
+Model input: Gene representation. 359 
+
+The expression of gene g in cell ci is denoted by xig, where g represents any protein-coding 360 
+
+gene. The corresponding token embedding pg is a pretrained embedding for the protein(s) encoded 361 
+
+by the gene g. These embeddings are derived from a pretrained protein language model that takes 362 
+
+an amino acid sequence as input and returns a dp-dimensional embedding vector as output. To 363 
+
+create pg, we take the average of all proteins coded by gene g. In the context of UCE, we can 364 
+
+formulate this as a dictionary that maps each gene g to a dp-dimensional protein embedding vector. 365 
+
+Specifically, we employ the ESM2 model, which yields embeddings of size dp = 5120 [32, 33]. 366 
+
+Protein language models are chosen for gene representation because they can generate uni-367 
+
+versal representations of any protein sequence. Therefore, for new species, all that is required is 368 
+
+to have the amino acid sequence of that species’ protein coding genes. These genes do not need 369 
+
+to have solved structures and orthology does not need to be calculated between them and the ex-370 
+
+isting training data. Model training ablations demonstrate that among a class of different protein 371 
+
+language models, UCE models trained with ESM2-15B performed the best (Supplementary Fig. 372 
+
+18). Model ablation experiments further demonstrate that the use of protein embeddings to tok-373 
+
+enize genes has significant benefits for the more poorly represented species in the training corpus, 374 
+
+as a small ablation model trained with protein embeddings outperformed a model with randomly 375 
+
+initialized embeddings on all species except for human (Supplementary Fig. 18). Additionally, the 376 
+
+use of protein embeddings enables a unique capability: embedding new species not found in the 377 
+
+training data (Fig. 2.) 378 
+
+Model input: Cell representation. 379 
+
+For each cell ci in the input dataset D, we identify two distinct sets of protein-coding genes: 380 
+
+the expressed genes G+ 
+
+> i
+
+and the non-expressed genes G− 
+
+> i
+
+. These sets are defined as follows: 381 
+
+G+ 
+
+> i
+
+= {g | xig > 0} (1) 
+
+G− 
+
+> i
+
+= {g | xig = 0 } (2) For producing the cell embedding, a multi-set of 1024 non-unique genes Gsi are sampled 382 
+
+22 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+from the expressed genes G+ 
+
+> i
+
+, with replacement. The probability of sampling a gene g ∈ G+ 
+
+> i
+
+is 383 
+
+weighted by the log normalized expression of that gene, which can be formulated as: 384 
+
+P (g | ci) = log( xig + 1) 
+
+P
+
+> g∈G+
+> i
+
+log( xig + 1) (3) where xig is the expression count of gene g in cell ci, and the sum in the denominator is over 385 
+
+all genes in G+ 
+
+> i
+
+.386 
+
+Note that for a given cell, different random seeds can yield different sampled gene subsets 387 
+
+and thus slightly different representations (Supplementary Table 11); however, using a fixed seed 388 
+
+selects the same genes each time and produces an identical embedding for repeated runs on the 389 
+
+same cell. 390 
+
+Once the multi-set Gsi is compiled for each cell ci, we arrange the genes within each chro-391 
+
+mosome according to their genomic positions. Different chromosomes are specified using special 392 
+
+chromosome start and end tokens. Start tokens are unique to each chromosome and species. Every 393 
+
+chromosome group is combined into a single sequence, with chromosome order randomly deter-394 
+
+mined. A cell-level CLS token is appended to the start of the sequence. It is designed to capture 395 
+
+the cell-level embedding upon training the model. The final sequence of genes ordered by genomic 396 
+
+location and separated by chromosome is referred to as the cell sentence Si for cell ci.397 
+
+Ordering the genes using this information does appear to have a positive effect on model 398 
+
+performance (Supplementary Note 4, Supplementary Table 3). Transformer models do not require 399 
+
+any ordering of their inputs, and this metadata was only added to the model in order to enable 400 
+
+potential applications, such as examining chromosomal aberrations or synteny between species. 401 
+
+Future models of this type may choose to exclude this metadata, or include it using other methods 402 
+
+besides positional encodings. 403 
+
+Transformer Architecture. 404 
+
+Each cell sentence Si is fed into a transformer that consists of nlay layers. Each layer con-405 
+
+tains a multi-head self-attention mechanism with nhead attention heads and a feedforward network 406 
+
+operating over a hidden space of dimensionality dhid . We also initialize sinusoidally-varying po-407 
+
+sitional embeddings. Gene token embeddings are compressed using a single layer MLP to demb -408 
+
+dimensional vectors before passing through the transformer. 409 
+
+While the transformer architecture is highly performative, it requires significant computa-410 
+
+tional cost to train and evaluate. One important aspect of this cost is the quadratic increase in the 411 
+
+runtime of transformers’ attention operations proportional to the number of tokens. Such a rela-412 
+
+tionship requires that the number of genes sampled by UCE, 1024 , be relatively limited, especially 413 
+
+given that individual cells might have more than 1024 uniquely expressed genes. Future model ar-414 
+
+chitectures could explore increasing this context length, or using models with sub-quadratic scaling 415 
+
+such as state space models [58] 416 
+
+Model output: Cell embedding. 417 
+
+The final output from the model is the cell embedding vector hicell ∈ U which corresponds 418 
+
+to the demb -dimensional embedding of the CLS token in the final layer of the model following 419 
+
+decoding with an additional MLP. 420 
+
+When cells with unrealistic random gene expression patterns, such as those generated by 421 
+
+shuffling the expression of real cells, are inputted, the resulting cell embeddings default to a het-422 
+
+23 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+erogeneous, out of distribution output (Supplementary Fig. 11). 423 
+
+Model training: Cell representation. 424 
+
+At the time of training, we generate a set GM + 
+
+> i
+
+⊂ G+ 
+
+> i
+
+by randomly selecting a certain 425 
+
+percentage ( rmask ) of genes from G+ 
+
+> i
+
+, without replacement. This set is used for computing the loss 426 
+
+during training, and is masked from the cell representation. 427 
+
+The probability of sampling a gene g ∈ G+ 
+
+> i
+
+\ GM + 
+
+> i
+
+(Equation 3) is then updated to be: 428 
+
+P (g | ci) = log( xik)
+
+P  
+
+> g∈G+
+> i\GM+
+> i
+
+log( xij ), (4) We also establish two additional gene sets to be used for loss computation: GL+ 
+
+> i
+
+∈ G and 429 
+
+GL− 
+
+> i
+
+∈ G. GL+ 
+
+> i
+
+and GL− 
+
+> i
+
+are randomly selected from the masked set of expressed genes GM + 
+
+> i
+
+and 430 
+
+the set of unexpressed genes G− 
+
+> i
+
+respectively. Both GL+ 
+
+> i
+
+and GL− 
+
+> i
+
+are of equal size, specifically 431 
+
+Nloss /2. In the case of GL− 
+
+> i
+
+, the sampling is done without replacement unless |G− 
+
+> i
+
+| < N loss /2.432 
+
+Similarly GL− 
+
+> i
+
+, is also sampled without replacement unless |GM + 
+
+> i
+
+| < N loss /2. In this case, GM +
+
+> i433
+
+is used as-is along with additional samples drawn with replacement from the full set of expressed 434 
+
+genes G+ 
+
+> i
+
+.435 
+
+Model training: Loss Function. 436 
+
+UCE is trained to reconstruct the binarized expression of genes in a cell, when those genes 437 
+
+are masked from the model by setting their expression to 0. To calculate the loss function for a 438 
+
+given cell ci, the cell embedding vector hiemb is individually concatenated with every gene g within 439 
+
+both GL+ 
+
+> i
+
+and GL− 
+
+> i
+
+. These concatenated vectors then serve as input to a feedforward multilayer 440 
+
+perceptron (MLP), which computes the probability that gene g is expressed within cell ci.441 
+
+hicell represents the embedding vector for cell ci and pg represents the token embedding for 442 
+
+gene g. Then the concatenated vector zig that serves as input to the MLP for cell ci and gene g is: 443 
+
+p′ 
+
+> g
+
+= MLP (pg) (5) 
+
+zig = [ hicell || pg′] (6) where || denotes the concatenation operation and p′ 
+
+> g
+
+is the compressed protein embedding. 444 
+
+The MLP then processes this concatenated input to produce the predicted probability that 445 
+
+gene g is expressed: 446 
+
+p(yig) = MLP (zig) (7) This probability is then used in the binary cross-entropy loss function. The true classification 447 
+
+labels for each gene’s expression status in cell ci are represented by the vector yi. UCE is trained 448 
+
+to accurately predict the expression of genes in GL+ 
+
+> i
+
+and the lack of expression in GL− 
+
+> i
+
+. The model 449 
+
+is trained using a binary cross-entropy loss, which is averaged across all Nloss genes and all N450 
+
+cells in the minibatch as follows: 451 
+
+L = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1
+
+Nloss Nloss X
+
+> j=1
+
+yij log( p(yij )) + (1 − yij ) log(1 − p(yij ))  (8) 24 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+For further details on hyperparmeter choices please see Supplementary Table 2. Different hy-452 
+
+perparameter choices for this masked loss can impact final model quality. Reducing the masking 453 
+
+percentage from 20% to 10% or increasing it to 40% did not improve model performance (Sup-454 
+
+plementary Note 4, Supplementary Table 4). In future models, an alternate loss, for example, a 455 
+
+generative decoder style loss, could be used, and might improve performance since no genes would 456 
+
+be masked during training. 457 
+
+Creating the IMA and dataset preprocessing. 458 
+
+The Integrated Mega-scale Atlas (IMA) used to train UCE was created by combining scRNA-459 
+
+seq datasets from multiple publicly available sources. The majority of IMA data (33.9 million cells 460 
+
+and 285 datasets) is human and mouse data downloaded from CZI Cell X Gene (CxG) Census [35] 461 
+
+version ”2023-07-10” (July 10th, 2023). Duplicate cells were removed by selecting primary cells 462 
+
+only. The remainder of the IMA is composed of 2.3 million cells from 28 datasets, from eight 463 
+
+different species: human, mouse, zebrafish, rhesus macaque, crab-eating macaque, mouse lemur, 464 
+
+frog, and pig. 465 
+
+For datasets from the CxG Census, preprocessing only involved filtering cells by minimum 466 
+
+gene counts (200) and genes by a minimum cell counts of 10. No highly variable gene selection 467 
+
+was applied. For datasets collected from other sources, preprocessing was not uniform (Supple-468 
+
+mentary Note 1). 469 
+
+For visualization of the IMA (Fig. 1b), predicting green monkey cell types (Fig. 2d), match-470 
+
+ing new species centroids (Extended Data Table 1), and prediction of Norn-like cells (Fig. 4, 471 
+
+Supplementary Fig. 9) a representative sample of the IMA was used in place of the full 36 million 472 
+
+cells. This representative sample was used in order to speed up computationally intensive tasks like 473 
+
+UMAP calculation. The sample was created by randomly choosing 10,000 cells from each dataset, 474 
+
+without replacement. For datasets with fewer than 10,000 cells, the entire dataset was included. In 475 
+
+total, this representative sample has 2,969,114 cells. The average number of cells per dataset in the 476 
+
+sample is 9486. For visualization and centroid calculation, cell types in the sample were coarsened 477 
+
+by mapping them to a set of 51 coarse cell types (Extended Data Table 5). 478 
+
+Model Evaluation. 479 
+
+• Zero-shot embedding quality and clustering For evaluating the quality of embeddings, we 480 
+
+used metrics from the single-cell integration benchmark [16]. 481 
+
+• Cell type organization For each cell type dendrogram the Euclidean distance was used to 482 
+
+perform hierarchical clustering across all cells. 483 
+
+• Comparison to cell ontology Here, we used the tree distance between any two cell types 484 
+
+in Cell Ontology [49]. We used the most up to date version of Cell Ontology at the time 485 
+
+of writing this paper (Release date: 2024 /08 /16 ). To determine the Euclidean distance 486 
+
+distribution, we sampled 100,000 random pairs of cells from Tabula Sapiens v2. 487 
+
+• Zero-shot cell type alignment to IMA For each cell type θ, a centroid was identified sepa-488 
+
+rately for data from Tabula Sapiens v2 (TSv2) cTθ and from IMA cIθ . For each cell type that 489 
+
+is present in both TSv2 and the IMA, the 3 nearest neighbor cell type centroids NTθ to the 490 
+
+centroid in Tabula Sapiens cTθ were identified. These neighbors could be either from Tabula 491 
+
+Sapiens or from the IMA. 492 
+
+25 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+If this set of neighbors NTθ to the anchor centroid from TSv2 data cTθ contains the centroid 493 
+
+for the same cell type in IMA data cIθ , then this was counted as a correct match. 494 
+
+This analysis was performed per tissue, both in the UCE embedding space as well as in 495 
+
+the original expression space (after log-normalization). In case of the original data rep-496 
+
+resentation, the set of 5704 shared genes across all 184 human datasets in the Integrated 497 
+
+Mega-scale Atlas (IMA) were used to represent each cell. The expression counts in each cell 498 
+
+are normalized by total counts over all genes, so that every cell has the same total count after 499 
+
+normalization. This is followed by a log transformation. This follows standard Scanpy data 500 
+
+preprocessing guidelines [59]. 501 
+
+• Scanpy Analyses and Package Versions Unless otherwise stated, all analyses were done 502 
+
+using Python versions 3.7+ and scanpy version 1.93+ . Default settings were always used 503 
+
+unless otherwise specified. For differential expression analyses, the scanpy function 504 
+
+sc.pp.highly variable genes was used with default settings with the flavor seurat v3. 505 
+
+Scanpy was also used to generate all umaps. First, sc.pp.neighbors was run, using default 506 
+
+settings except for setting use rep to the correct embedding value, such as the embedding 507 
+
+from UCE. Then sc.tl.umap was used with default settings to generate the umap. 508 
+
+The evaluation framework for UCE is released with the following versions: 509 
+
+numpy 1.26 .4, scipy 1.14 .1, pandas 2.2.2, tqdm 4.66 .5, torch 2.1.1, scanpy 1.10 .2, accelerate 510 
+
+0.24 .0, and for downloading model files: requests 2.25 .1, urllib3 1.26 .6.511 
+
+Description of other models. 512 
+
+• Geneformer Geneformer [27] is a transformer based foundation model. Geneformer rep-513 
+
+resents a cell as a list of genes sorted by their expression. Geneformer was trained using 514 
+
+masked language modeling, on 30 million cells. For all analyses, the GF-12L-30M-i2048 515 
+
+model was used. 516 
+
+• tGPT tGPT [60] is a transformer based foundation model. tGPT represents cells, like Gene-517 
+
+former, as a list of genes sorted by expression. However, tGPT is trained as an autoregressive 518 
+
+langauge model, rather than a masked langauge model. tGPT was trained on 22 .3 million 519 
+
+cells. 520 
+
+• scGPT scGPT [28] is a transformer based foundation model. scGPT represents cells as a 521 
+
+list of the expression values of its genes. scGPT is trained to iteratively decode those genes’ 522 
+
+expressions when some are masked, using generative pretraining. scGPT was trained on 33 523 
+
+million cells. For all analyses, the whole-human model was used. 524 
+
+• scVI scVI [15] is a variational autoencoder. scVI is trained to reconstruct gene expression 525 
+
+values using a zero-inflated negative binomial loss. scVI was used with default parameters 526 
+
+for all experiments. scVI version 1.01+ was used. scVI input datasets were transformed 527 
+
+only by taking the highly variable gene subset using sc.pp.highly variable genes with the 528 
+
+flavor seurat v3, and then the scVI model was trained with default settings (number hidden 529 
+
+variables 10). 530 
+
+26 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+• scArches scArches builds on top of the scVI architecture to enable transfer learning of cell 531 
+
+types. As used in this work, scArches first trains an scVI model on a reference dataset, fine-532 
+
+tunes a cell-type aware scANVI model using the cell types from the reference dataset, and 533 
+
+then further finetunes this model on a transfer dataset using architecture surgery. scArches 534 
+
+was used with default parameters for all experiments. scArches version 0.5.1 was used, and 535 
+
+was trained using the same scVI model for the dataset as a starting point. 536 
+
+• PCA For comparisons to PCA, default scanpy settings and best practices were used. The 537 
+
+dataset was normalized using sc.pp.normalize total which normalized cell counts to the 538 
+
+median count value for the dataset. Expression values were then log normalized using 539 
+
+sc.pp.log1p, and pca was calculated with sc.pp.pca, which defaults to the top 50 principal 540 
+
+components. 541 
+
+Differential expression analysis of predicted Norn cells. 542 
+
+A logistic classifier was trained to predict cell types from UCE embeddings on mouse kidney 543 
+
+cells. This classifier was then applied to UCE embeddings from the representative sample of IMA 544 
+
+datasets. Datasets were then split by tissue, and the datasets with the most predicted norn cells in 545 
+
+each tissue were used for differential expression analysis. The top 13 kidney datasets, top 6 lung 546 
+
+and top 6 heart datasets were chosen. 547 
+
+For each individual (full) dataset, RNA counts were log normalized, and then differential ex-548 
+
+pression was run using default settings as implemented in Scanpy [59], comparing predicted Norn 549 
+
+cells to all other cells in the dataset. The results of these differential expression tests were used 550 
+
+to determine the log fold change of marker genes in predicted Norn cells (Fig. 4c, Supplementary 551 
+
+Fig. 9). 552 
+
+27 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+# Data availability 553 
+
+The full list of datasets used to train UCE are in Extended Data Table 2. Most of these datasets are 554 
+
+available to download from CellXGene [35]. Tabula Sapiens v2, used for model evaluation, will 555 
+
+be made available upon publication. 556 
+
+Datasets analyzed in the paper are publicly available to download. The green monkey lung 557 
+
+and lymph node dataset is available with accession code GSE156755. The naked mole rat dataset 558 
+
+is available with accession code GSE132642. The chicken retina dataset is available with acces-559 
+
+sion code GSE159107. The chicken heart dataset is available with accession code GSE149457. 560 
+
+The mouse kidney dataset is available with accession code GSE193321. The human lung disease 561 
+
+dataset is available with accession code GSE136831. 562 
+
+# Code availability 563 
+
+UCE was written in Python using the PyTorch library. The source code is available on Github 564 
+
+at https://github.com/snap-stanford/uce Code for reproducing figures and anal-565 
+
+yses is available on Github at https://github.com/yhr91/uce_reproduce/tree/ 566 
+
+master .567 
+
+# Acknowledgements 568 
+
+We thank Rok Sosiˇ c, Kexin Huang, Charlotte Bunne, Hanchen Wang, Michihiro Yasunaga, Michael 569 
+
+Moor, Minkai Xu, Mika Jain, George Crowley, Maria Brbi´ c, Jonah Cool, Nicholas Sofroniew, 570 
+
+Andrew Tolopko, Ivana Jelic, Ana-Maria Istrate and Pablo Garcia-Nieto for discussions and for 571 
+
+providing feedback on our manuscript. We acknowledge support from Robert C. Jones for help 572 
+
+with accessing and analyzing the Tabula Sapiens v2 dataset. We acknowledge support from the 573 
+
+Chan Zuckerberg Initiative, including help with accessing and processing CxG datasets. We grate-574 
+
+fully acknowledge the support of DARPA under Nos. N660011924033 (MCS); NSF under Nos. 575 
+
+OAC-1835598 (CINES), CCF-1918940 (Expeditions), Stanford Data Science Initiative, Wu Tsai 576 
+
+Neurosciences Institute, Amazon, Genentech, GSK, Hitachi, Juniper Networks, and KDDI. Y. 577 
+
+RH. acknowledges funding support from GlaxoSmithKline. L.S. was supported by the American 578 
+
+Slovenia Education Foundation (ASEF). Icons created with BioRender.com. 579 
+
+# Author information 580 
+
+Y.RS., Y.RH., S.Q. and J.L. conceived the study. Y.RS, Y.RH., S.Q. and J.L. performed research, 581 
+
+contributed new analytical tools, designed algorithmic frameworks, analyzed data and wrote the 582 
+
+manuscript. Y.RS. and Y.RH. performed experiments and developed the software. A.A. and L.S. 583 
+
+contributed to code and performed analyses. T.S. provided annotated data. 584 
+
+28 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+# References 585 586 
+
+1. Vaishnav, E. D. et al. The evolution, evolvability and engineering of gene regulatory dna. 587 
+
+Nature 603 , 455–463 (2022). 588 
+
+2. Onuchic, J. N., Luthey-Schulten, Z. & Wolynes, P. G. Theory of protein folding: the energy 589 
+
+landscape perspective. Annual review of physical chemistry 48 , 545–600 (1997). 590 
+
+3. Moris, N., Pina, C. & Arias, A. M. Transition states and cell fate decisions in epigenetic 591 
+
+landscapes. Nature Reviews Genetics 17 , 693–703 (2016). 592 
+
+4. Treutlein, B. et al. Reconstructing lineage hierarchies of the distal lung epithelium using 593 
+
+single-cell rna-seq. Nature 509 , 371–375 (2014). 594 
+
+5. Waddington, C. H. The strategy of the genes (Routledge, 1957). 595 
+
+6. Schaum, N. et al. Single-cell transcriptomics of 20 mouse organs creates a tabula muris: The 596 
+
+tabula muris consortium. Nature 562 , 367 (2018). 597 
+
+7. Regev, A. et al. The human cell atlas. elife 6, e27041 (2017). 598 
+
+8. Rood, J. E., Maartens, A., Hupalowska, A., Teichmann, S. A. & Regev, A. Impact of the 599 
+
+human cell atlas on medicine. Nature medicine 28 , 2486–2496 (2022). 600 
+
+9. Tanay, A. & Regev, A. Scaling single-cell genomics from phenomenology to mechanism. 601 
+
+Nature 541 , 331–338 (2017). 602 
+
+10. Plass, M. et al. Cell type atlas and lineage tree of a whole complex animal by single-cell 603 
+
+transcriptomics. Science 360 , eaaq1723 (2018). 604 
+
+11. Consortium*, T. S. et al. The tabula sapiens: A multiple-organ, single-cell transcriptomic atlas 605 
+
+of humans. Science 376 , eabl4896 (2022). 606 
+
+12. Siletti, K. et al. Transcriptomic diversity of cell types across the adult human brain. Science 607 
+
+382 , eadd7046 (2023). 608 
+
+13. Li, H. et al. Fly cell atlas: A single-nucleus transcriptomic atlas of the adult fruit fly. Science 609 
+
+375 , eabk2432 (2022). 610 
+
+14. Eraslan, G., Avsec, ˇ Z., Gagneur, J. & Theis, F. J. Deep learning: new computational modelling 611 
+
+techniques for genomics. Nature Reviews Genetics 20 , 389–403 (2019). 612 
+
+15. Lopez, R., Regier, J., Cole, M. B., Jordan, M. I. & Yosef, N. Deep generative modeling for 613 
+
+single-cell transcriptomics. Nature methods 15 , 1053–1058 (2018). 614 
+
+16. Luecken, M. D. et al. Benchmarking atlas-level data integration in single-cell genomics. Na-615 
+
+ture methods 19 , 41–50 (2022). 616 
+
+17. Argelaguet, R., Cuomo, A. S., Stegle, O. & Marioni, J. C. Computational principles and 617 
+
+challenges in single-cell data integration. Nature biotechnology 39 , 1202–1215 (2021). 618 
+
+18. Lotfollahi, M. et al. Mapping single-cell data to reference atlases by transfer learning. Nature 619 
+
+biotechnology 40 , 121–130 (2022). 620 
+
+29 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+19. Tarashansky, A. J. et al. Mapping single-cell atlases throughout metazoa unravels cell type 621 
+
+evolution. Elife 10 , e66747 (2021). 622 
+
+20. Brown, T. et al. Language models are few-shot learners. Advances in neural information 623 
+
+processing systems 33 , 1877–1901 (2020). 624 
+
+21. OpenAI. Gpt-4 technical report (2023). 2303.08774 .625 
+
+22. Anil, R. et al. Palm 2 technical report. arXiv preprint arXiv:2305.10403 (2023). 626 
+
+23. Kirillov, A. et al. Segment anything. arXiv preprint arXiv:2304.02643 (2023). 627 
+
+24. Bommasani, R. et al. On the opportunities and risks of foundation models. arXiv preprint 628 
+
+arXiv:2108.07258 (2021). 629 
+
+25. Avsec, ˇ Z. et al. Effective gene expression prediction from sequence by integrating long-range 630 
+
+interactions. Nature methods 18 , 1196–1203 (2021). 631 
+
+26. Rives, A. et al. Biological structure and function emerge from scaling unsupervised learning 632 
+
+to 250 million protein sequences. Proceedings of the National Academy of Sciences 118 ,633 
+
+e2016239118 (2021). 634 
+
+27. Theodoris, C. V. et al. Transfer learning enables predictions in network biology. Nature 1–9 635 
+
+(2023). 636 
+
+28. Cui, H. et al. scgpt: Towards building a foundation model for single-cell multi-omics using 637 
+
+generative ai. bioRxiv 2023–04 (2023). 638 
+
+29. Stegle, O., Teichmann, S. A. & Marioni, J. C. Computational and analytical challenges in 639 
+
+single-cell transcriptomics. Nature Reviews Genetics 16 , 133–145 (2015). 640 
+
+30. Quake, S. R. The cell as a bag of rna. Trends in Genetics 37 , 1064–1068 (2021). 641 
+
+31. Vaswani, A. et al. Attention is all you need. Advances in neural information processing 642 
+
+systems 30 (2017). 643 
+
+32. Lin, Z. et al. Evolutionary-scale prediction of atomic-level protein structure with a language 644 
+
+model. Science 379 , 1123–1130 (2023). 645 
+
+33. Rosen, Y. et al. Toward universal cell embeddings: integrating single-cell RNA-seq datasets 646 
+
+across species with SATURN. Nature Methods 21 , 1492–1500 (2024). 647 
+
+34. Devlin, J., Chang, M.-W., Lee, K. & Toutanova, K. Bert: Pre-training of deep bidirectional 648 
+
+transformers for language understanding. arXiv preprint arXiv:1810.04805 (2018). 649 
+
+35. Biology, C. S.-C. et al. Cz cellxgene discover: A single-cell data platform for scalable explo-650 
+
+ration, analysis and modeling of aggregated data. bioRxiv 2023–10 (2023). 651 
+
+36. Gordon, S., Pl¨ uddemann, A. & Martinez Estrada, F. Macrophage heterogeneity in tissues: 652 
+
+phenotypic diversity and functions. Immunological reviews 262 , 36–55 (2014). 653 
+
+37. Conde, C. D. et al. Cross-tissue immune cell analysis reveals tissue-specific features in hu-654 
+
+mans. Science 376 , eabl5197 (2022). 655 
+
+38. Schroeder, M. E. et al. Astrocyte regional specialization is shaped by postnatal development. 656 
+
+BioRxiv (2024). 657 
+
+30 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+39. Wang, H., Leskovec, J. & Regev, A. Metric mirages in cell embeddings. BioRxiv (2024). 658 
+
+40. Speranza, E. et al. Single-cell rna sequencing reveals sars-cov-2 infection dynamics in lungs 659 
+
+of african green monkeys. Science translational medicine 13 , eabe8146 (2021). 660 
+
+41. Uhl´ en, M. et al. Tissue-based map of the human proteome. Science 347 , 1260419 (2015). 661 
+
+42. Andreatta, M. et al. Interpretation of t cell states from single-cell transcriptomics data using 662 
+
+reference atlases. Nature Communications 12 , 2965 (2021). 663 
+
+43. Hilton, H. G. et al. Single-cell transcriptomics of the naked mole-rat reveals unexpected 664 
+
+features of mammalian immunity. PLoS Biology 17 , e3000528 (2019). 665 
+
+44. Yamagata, M., Yan, W. & Sanes, J. R. A cell atlas of the chick retina based on single-cell 666 
+
+transcriptomics. Elife 10 , e63907 (2021). 667 
+
+45. Mantri, M. et al. Spatiotemporal single-cell rna sequencing of developing chicken hearts iden-668 
+
+tifies interplay between cellular differentiation and morphogenesis. Nature communications 669 
+
+12 , 1771 (2021). 670 
+
+46. Zhong, H. et al. Benchmarking cross-species single-cell RNA-seq data integration methods: 671 
+
+towards a cell type tree of life. Nucleic Acids Research 53 (2025). 672 
+
+47. Orozco, L. D. et al. Integration of eQTL and a single-cell atlas in the human eye identifies 673 
+
+causal genes for age-related macular degeneration. Cell reports 30 , 1246–1259.e6 (2020). 674 
+
+48. Li, H. et al. Fly cell atlas: A single-nucleus transcriptomic atlas of the adult fruit fly. Science 675 
+
+375 , eabk2432 (2022). 676 
+
+49. Bard, J., Rhee, S. Y. & Ashburner, M. An ontology for cell types. Genome biology 6, 1–5 677 
+
+(2005). 678 
+
+50. Kragesteen, B. K. et al. The transcriptional and regulatory identity of erythropoietin producing 679 
+
+cells. Nature medicine 1–10 (2023). 680 
+
+51. Haine, L. et al. Cytoprotective effects of erythropoietin: What about the lung? Biomedicine 681 
+
+& Pharmacotherapy 139 , 111547 (2021). 682 
+
+52. Adams, T. S. et al. Single-cell rna-seq reveals ectopic and aberrant lung-resident cell popula-683 
+
+tions in idiopathic pulmonary fibrosis. Science advances 6, eaba1983 (2020). 684 
+
+53. Tassiopoulos, S. et al. Erythropoietic response to hypoxaemia in diffuse idiopathic pulmonary 685 
+
+fibrosis, as opposed to chronic obstructive pulmonary disease. Respiratory Medicine 95 , 471– 686 
+
+475 (2001). 687 
+
+54. Abdel-Aziz, C., Okaily, N. & Kasem, A. Erythropoietin: role in idiopathic pulmonary fibrosis 688 
+
+revisited. The Egyptian Journal of Chest Diseases and Tuberculosis 69 , 716 (2020). 689 
+
+55. Tsantes, A. E. et al. Red cell macrocytosis in hypoxemic patients with chronic obstructive 690 
+
+pulmonary disease. Respiratory medicine 98 , 1117–1123 (2004). 691 
+
+56. Brenner, S. Nature’s gift to science (nobel lecture). Chembiochem 4, 683–687 (2003). 692 
+
+57. Bunne, C. et al. How to build the virtual cell with artificial intelligence: Priorities and oppor-693 
+
+tunities. Cell 187 , 7045–7063 (2024). 694 
+
+31 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint
+
+58. Gu, A., Goel, K. & R´ e, C. Efficiently modeling long sequences with structured state spaces. 695 
+
+arXiv (2021). 696 
+
+59. Wolf, F. A., Angerer, P. & Theis, F. J. SCANPY: large-scale single-cell gene expression data 697 
+
+analysis. Genome Biology 19 , 15 (2018). 698 
+
+60. Shen, H. et al. Generative pretraining from large-scale transcriptomes for single-cell decipher-699 
+
+ing. iScience 26 , 106536 (2023). 700 
+
+32 
+
+.CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted April 8, 2026. ;https://doi.org/10.1101/2023.11.28.568918 doi: bioRxiv preprint

@@ -1,0 +1,257 @@
+Title: Dino-NestedUNet: Unlocking Foundation Vision Encoders for Pathology Tumor Bulk Segmentation via Dense Decoding
+
+URL Source: https://arxiv.org/pdf/2605.00894v1
+
+Published Time: Tue, 05 May 2026 00:05:29 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Dino-NestedUNet : Unlocking Foundation Vision Encoders for Pathology Tumor Bulk Segmentation via Dense Decoding 
+
+Tianyang Wang 1,2, Ziyu Su 1, Abdul Rehman Akbar 1,2, Usama Sajjad 1,2,Usman Afzaal 1,2, Lina Gokhale 1, Charles Rabolli 1, Wei Chen 1, Anil Parwani 1,and M. Khalid Khan Niazi 1,2 
+
+> 1
+
+Department of Pathology, College of Medicine, The Ohio State University Wexner Medical Center, Columbus, OH, USA  
+
+> 2
+
+Department of Biomedical Engineering, The Ohio State University, Columbus, OH, USA 
+
+Tianyang.Wang@osumc.edu 
+
+Abstract. Vision foundation models (VFMs), such as DINOv3, pro-vide rich semantic representations that are promising for computational pathology. However, many current adaptations pair frozen VFMs with lightweight decoders, creating a capacity mismatch that often limits boundary fidelity for infiltrative tumor bulk segmentation. This paper presents Dino-NestedUNet , a framework that couples a pre-trained DINOv3 encoder with a Nested Dense Decoder. Instead of sparse skip connections and linear upsampling, the proposed decoder forms a dense grid of intermediate pathways to enable continuous feature reuse and multi-scale recalibration, aligning high-level semantics with low-level mor-phological textures during reconstruction. We evaluate Dino-NestedUNet on three histopathology cohorts (multi-center CHTN, institutional OSU, and CAMELYON16) and observe consistent improvements over UNet++ and standard Dino-UNet variants, particularly under cross-domain shift. To further assess external generalization, we perform zero-shot evaluation by training on CHTN and directly testing on unseen TIGER WSIBULK and OSU CRC cohorts without fine-tuning. These results suggest that dense decoding is a key ingredient for unlocking foundation encoders in boundary-sensitive pathology segmentation. 
+
+Keywords: Tumor segmentation · Vision foundation models · Dense decoding · DINOv3 · Histopathology. 
+
+1 Introduction 
+
+Accurate segmentation of tumor bulk in Whole-Slide Images (WSIs) is funda-mental for quantifying the Tumor Microenvironment (TME). Quantitative met-rics derived from these regions, particularly the Tumor-Stroma Ratio (TSR) and the spatial distribution of Tumor-Infiltrating Lymphocytes (TILs), serve as in-dependent prognostic predictors [9, 5]. Unlike anatomical segmentation in radiol-ogy, delineating tumor nests in histopathology presents unique challenges due to  
+
+> arXiv:2605.00894v1 [cs.CV] 27 Apr 2026 2T. Wang et al.
+
+inherent biological ambiguity and interpatient heterogeneity. Aggressive tumors exhibit invasive growth patterns where malignant cells disperse into adjacent stroma, forming jagged, discontinuous interfaces that are difficult to distinguish from reactive tissue. Historically, automated segmentation has relied on task-specific Convolu-tional Neural Networks (CNNs), particularly U-Net and its nested variants [8, 13]. Recently, the field is shifting toward adapting large-scale Vision Foundation Models (VFMs), ranging from domain-specific models trained on massive histol-ogy archives [3] to general-purpose vision experts. Self-supervised encoders, such as DINOv3 [11], produce dense, high-fidelity representations that have shown promise in fine-grained tasks like nuclei detection [12] and mitotic figure clas-sification [1]. These developments suggest that DINOv3 possesses the requisite textural sensitivity for tissue-level segmentation. However, current adaptations often pair these powerful frozen encoders with simplistic, linear upsampling de-coders [4]. We argue that such architectures suffer from a critical "capacity mis-match": the lightweight decoder lacks the structural complexity to reconstruct the intricate, pixel-perfect boundaries of invasive margins from the encoder’s high-level semantics, frequently resulting in over-smoothed predictions. To bridge this gap, we propose Dino-NestedUNet , a hybrid framework that integrates the robust semantic representation of DINOv3 with the struc-tural refinement capabilities of a Nested Dense Decoder (UNet++). Instead of a sparse upsampling path, our architecture establishes a dense grid of intermedi-ate nodes to enforce continuous feature recalibration across multiple resolutions. This design effectively acts as a structural calibrator, progressively fusing deep semantics with low-level textural cues to recover biologically plausible bound-aries from coarse region-level supervision. Our contributions are three-fold: (1) we introduce Dino-NestedUNet, a novel architecture designed to bridge the gap between powerful foundation encoders and simple decoders in histopathology segmentation; (2) by leveraging a nested decoding strategy, we show that the model can resolve infiltrative tumor margin ambiguity and achieve precise boundary recovery from coarse, region-level super-vision; and (3) through comprehensive experiments on an internal OSU cohort, a multi-center CHTN dataset, and the CAMELYON16 benchmark, we demon-strate that Dino-NestedUNet significantly surpasses state-of-the-art foundation model adaptations in both predictive performance and cross-dataset generaliza-tion. 
+
+2 Methodology 
+
+2.1 Overview 
+
+The proposed Dino-NestedUNet framework (Fig. 1) is a hybrid segmentation architecture designed to bridge the gap between foundation model semantics and fine-grained boundary reconstruction. The workflow consists of three integrated stages: (1) Feature Extraction , using a frozen DINOv3 backbone coupled with Title Suppressed Due to Excessive Length 3Whole-Slide Image 
+
+> Tile Image
+> Mask
+> (a) Patch Extraction
+> DINOv3
+> (ViT-S/16)
+> DINO Adapter
+> D, H/4, W/4
+> D, H/8, W/8
+> D, H/16, W/16
+> D, H/32, W/32
+> Spatial Prior Module
+
+...  
+
+> FAPM
+> FAPM
+> FAPM
+> FAPM
+> 𝒙 𝟎 ,𝟎
+> 𝒙 𝟏 ,𝟎
+> 𝒙 𝟐 ,𝟎
+> 𝒙 𝟑 ,𝟎
+> 𝒙 𝟎 ,𝟏
+> 𝒙 𝟏 ,𝟏
+> 𝒙 𝟐 ,𝟏
+> 𝒙 𝟎 ,𝟐
+> 𝒙 𝟏 ,𝟐
+> 𝒙 𝟐 ,𝟐
+> 𝒙 𝟎 ,𝟑
+> 𝒙 𝟏 ,𝟑
+> 𝒙 𝟎 ,𝟒
+> (b) Dino-NestedUNet
+> Trainiable
+> Frozen
+> Skip Connection
+> Up-sampling
+> 𝒙 ୧,𝐣 Convolution
+
+Fig. 1. Overview of the Dino-NestedUNet framework. (a) Annotation-guided patch extraction process. (b) The proposed architecture couples a frozen DINOv3 en-coder with a Fidelity-Aware Projection Module (FAPM) and a Nested Dense Decoder. The decoder employs dense skip connections to recursively aggregate multi-scale fea-tures for precise boundary reconstruction. 
+
+a dual-branch Adapter to extract spatially-enriched semantic features; (2) Fea-ture Projection , employing a Fidelity-Aware Projection Module (FAPM) [4] to modulate and project these high-dimensional features into decoder-compatible spaces without information loss; and (3) Nested Reconstruction , utilizing a dense residual decoder to recursively fuse semantic context with textural details for precise margin delineation. 
+
+2.2 DINOv3 Encoder and Adapter 
+
+We leverage DINOv3 (ViT-S/16) [11] as the frozen feature extractor ( EDino ). To overcome the lack of intrinsic spatial hierarchy in standard ViT outputs, we adopt a dual-branch adapter architecture. A Spatial Prior Module (SPM) 
+
+processes the input image X to capture low-level geometric information, gen-erating a hierarchy of multi-scale feature maps {Ci}Ni=1 . In parallel, the frozen DINOv3 backbone extracts high-level semantic features {Fvit ,i }Ni=1 . These two streams are fused via a series of Interaction Blocks (IB i). In each block, the spa-tial features from the previous stage ( C′
+
+i−1) serve as queries ( Q) to sample con-textual information from the DINOv3 semantic features ( K, V ) via deformable cross-attention ( Ade ): 
+
+C′
+
+i = IB i(C′
+
+i−1, F vit ,i ) = Ade (Q = C′
+
+i−1, K = Fvit ,i , V = Fvit ,i ) (1) This iterative process yields a set of spatially-precise and semantically-rich fea-tures {C′
+
+i}Ni=1 at refined scales ( 1/4, 1/8, 1/16 , 1/32 ). 
+
+2.3 Fidelity-Aware Projection Module (FAPM) 
+
+The enriched features C′
+
+i reside in a high-dimensional space incompatible with standard decoders. To reduce dimensionality while preserving fine-grained de-tails, we minimize information loss using the FAPM. For each scale i, the feature 
+
+C′
+
+i is decomposed into a shared context Zctx,i and scale-specific details Zsp,i via 4 T. Wang et al. 
+
+orthogonal 1 × 1 convolutions ( Wctx , Wsp ): 
+
+Zctx,i = W Tctx C′
+
+> i
+
+, Zsp,i = W Tsp,i C′ 
+
+> i
+
+(2) The shared context Zctx,i is then used to dynamically modulate the specific details. A small generator Gi produces affine parameters (γi, β i) = Gi(Zctx,i ),which recalibrate Zsp,i :
+
+Zmod,i = γi ⊙ Zsp,i + βi (3) Finally, the modulated features undergo spatial refinement via depthwise sep-arable convolutions ( Cdwsep ) and Squeeze-and-Excitation (SE) recalibration. A residual connection ensures signal fidelity, yielding the final decoder inputs Si:
+
+Si = SE (Cdwsep (Zmod,i )) + Pi(Zmod,i ) (4) where Pi represents a projection shortcut. These high-fidelity features S =
+
+{Si}Ni=1 form the dense inputs to our Nested Decoder. 
+
+2.4 Nested Dense Decoder 
+
+Standard U-Net decoders rely on sparse skip connections, often failing to recover fine-grained boundary irregularities. We introduce a Nested Dense Decoder (Fig. 1b) to enforce dense feature reuse. The decoder is structured as a grid of con-volutional nodes xi,j , where i indexes the down-sampling layer and j the dense layer ( j = 0 corresponds to Si). Unlike linear topologies, each node xi,j aggregates feature maps from all 
+
+preceding nodes at the same resolution level, concatenated with the upsampled feature from the lower level. Formally, for any dense node j > 0:
+
+xi,j = H
+
+U(xi+1 ,j −1), x i, 0, x i, 1, . . . , x i,j −1
+
+| {z }
+
+> Dense Skip Connections
+
+ (5) where H(·) denotes a VGG-style block (Conv-BN-ReLU), U(·) is bilinear up-sampling, and [·] represents channel-wise concatenation. This dense connectivity ensures that the high-fidelity textural cues preserved in Si (i.e., xi, 0) are re-injected at every reconstruction stage, preventing feature dilution and enabling precise delineation of infiltrating tumor margins. 
+
+2.5 Loss Function 
+
+We optimize the segmentation network with a Dice-based compound loss. For the Standard setting (used by the original Dino-UNet), we use Dice + multi-class Cross-Entropy: 
+
+Lstd = LCE (Y, ˆY ) + LDice (Y, ˆY ). (6) For fair comparison with UNet++ and our decoder, we also report a BCE variant trained with Dice + Binary Cross-Entropy: 
+
+Lbce = LBCE (Y, ˆY ) + LDice (Y, ˆY ). (7) Title Suppressed Due to Excessive Length 5          
+
+> Table 1. Patch-level statistics for the three training cohorts with stratified train/val/test splits (7:1:2). TIGER (93 WSIs, 1,270 patches) is reserved exclusively for zero-shot generalization evaluation.
+
+Dataset WSIs Train Val Test CHTN 300 7,300 1,043 2,084 OSU 49 6,229 890 1,780 CAMELYON16 111 3,356 478 960 
+
+3 Experiments 
+
+3.1 Datasets 
+
+We conducted experiments on three training cohorts and one held-out general-ization benchmark, covering diverse cancer types, tissue origins, and acquisition centers. All patches were resized to 1024 × 1024 pixels for network training and evaluation, and all datasets were split at the slide level to prevent data leak-age. After patch extraction, the three training cohorts contained 10,427 patches from CHTN, 8,899 patches from OSU, and 4,794 patches from CAMELYON16. For each cohort, patches were assigned according to the slide-level split with a train/validation/test ratio of 7:1:2. 
+
+CHTN. The Cooperative Human Tissue Network (CHTN) annotated subset [7] comprises 300 WSIs spanning 14 cancer types with pixel-level tumor annotations, digitized at 20 × magnification (0.5 μm/px). This cohort serves as the primary training set, offering substantial histologic diversity across tumor morphologies. After slide-level splitting, CHTN yielded 7,300 training patches, 1,043 validation patches, and 2,084 test patches. 
+
+OSU. An institutional cohort of 49 colorectal cancer (CRC) WSIs from The Ohio State University Wexner Medical Center, digitized at 40 × magnification and manually annotated by expert pathologists. This dataset provides an in-house clinical validation benchmark. After slide-level splitting, OSU yielded 6,229 training patches, 890 validation patches, and 1,780 test patches. 
+
+CAMELYON16. We utilized the 111 tumor-positive H&E-stained sentinel lymph node WSIs from the CAMELYON16 benchmark [2], acquired across two centers at 40 × magnification (0.243 μm/px), covering tumor boundary, pure tumor, and normal tissue regions. After slide-level splitting, CAMELYON16 yielded 3,356 training patches, 478 validation patches, and 960 test patches. 
+
+TIGER. To assess zero-shot cross-dataset generalization, we evaluated on 93 tumor-positive WSIs from the TIGER WSIBULK dataset [10], acquired at 20 ×
+
+magnification (0.5 μm/px), yielding 1,270 patches. No fine-tuning was performed; all evaluations used the model trained exclusively on CHTN. 6 T. Wang et al. 
+
+3.2 Implementation Details 
+
+The implementation was conducted on a Linux system using Python 3.10 and PyTorch 2.0 with CUDA 11.8, accelerated by an Nvidia A100-PCIE-40GB GPU. Following [4], the DINOv3 backbone parameters were initialized from LVD-1689M pre-trained weights and kept frozen throughout the training process. The remaining trainable modules were initialized using the default PyTorch initial-ization scheme. For optimization, these modules were trained using Stochastic Gradient Descent (SGD) with a Nesterov momentum of 0.99, an initial learning rate of 1 × 10 −4, and weight decay of 3 × 10 −5, governed by a poly learning rate schedule. In contrast, the UNet++ [13] baseline was optimized using Adam [6] with an initial learning rate of 3 × 10 −4 and weight decay of 1 × 10 −4. All models were trained for 100 epochs with a batch size of 8, with model weights saved only upon achieving a new best Dice score on the validation set. 
+
+3.3 Evaluation Metrics 
+
+We evaluate tumor bulk segmentation using four standard pixel-level metrics: Dice Similarity Coefficient (Dice), Recall, Precision, and Accuracy. Let T P , T N ,
+
+F P , and F N denote the numbers of true-positive, true-negative, false-positive, and false-negative pixels, respectively, computed by comparing the predicted mask ˆY with the ground-truth mask Y . The metrics are defined as: 
+
+Dice = 2T P 
+
+2T P + F P + F N , (8) 
+
+Recall = T P T P + F N , (9) 
+
+Precision = T P T P + F P , (10) 
+
+Accuracy = T P + T N T P + T N + F P + F N . (11) Dice measures overlap between prediction and ground truth, Recall reflects the ability to capture tumor pixels, Precision quantifies the reliability of predicted tumor regions, and Accuracy summarizes overall pixel-wise correctness. 
+
+4 Results and Discussion 
+
+Quantitative Analysis. Table 2 summarizes quantitative performance on CHTN, OSU, and CAMELYON16. Dino-NestedUNet achieves the strongest overall re-sults, with clear gains on the more challenging cohorts. On CHTN, our method improves Dice from 0.8995 (UNet++) to 0.9455 and consistently increases Recall, Precision, and Accuracy, indicating both better tumor coverage and fewer false positives. Notably, the variance is also reduced (Dice std: 0.1241 vs 0.1655/0.2207), Title Suppressed Due to Excessive Length 7
+
+Table 2. Quantitative segmentation performance (mean ± std) on CHTN, OSU, and Camelyon16 datasets. We compare our proposed method against the classical Nested U-Net (UNet++) baseline [13] and the standard Dino U-Net [4]. Note that "Standard" denotes the original Dino U-Net trained with Dice+CrossEntropy loss, while "Stan-dard + BCE" uses BCE+Dice loss to ensure fair comparison with UNet++ and our method. Bold indicates the best performance, and underline indicates the second-best performance.                                                                                                                                                      
+
+> Dataset Model Dice Recall Precision Accuracy CHTN
+> UNet++ [13] 0.8995 ±0.1655 0.9373 ±0.1110 0.8974 ±0.1783 0.9224 ±0.0862 Dino-UNet (Standard) [4] 0.8664 ±0.2207 0.9067 ±0.2107 0.8479 ±0.2454 0.8715 ±0.1783 Dino-UNet (BCE) 0.8934 ±0.2129 0.9134 ±0.2094 0.8828 ±0.2236 0.9017 ±0.1801
+> Dino-NestedUNet (Ours) 0.9455 ±0.1241 0.9708 ±0.0920 0.9415 ±0.1405 0.9407 ±0.1256 OSU
+> UNet++ [13] 0.9445 ±0.0693 0.9472 ±0.0816 0.9489 ±0.0794 0.9408 ±0.0672 Dino-UNet (Standard) [4] 0.9363 ±0.0875 0.9450 ±0.0918 0.9401 ±0.1061 0.9295 ±0.0938 Dino-UNet (BCE) 0.9511 ±0.0728 0.9660 ±0.0725 0.9442 ±0.0902 0.9468 ±0.0753
+> Dino-NestedUNet (Ours) 0.9505 ±0.0719 0.9633 ±0.0752 0.9451 ±0.0888 0.9470 ±0.0711 Camelyon16
+> UNet++ [13] 0.8204 ±0.2552 0.8573 ±0.1896 0.7866 ±0.2541 0.9102 ±0.1215 Dino-UNet (Standard) [4] 0.7642 ±0.2822 0.7873 ±0.2700 0.8412 ±0.2629 0.9042 ±0.1125 Dino-UNet (BCE) 0.8254 ±0.2475 0.9043 ±0.1381 0.8287 ±0.2636 0.9326 ±0.0956
+> Dino-NestedUNet (Ours) 0.8462 ±0.2288 0.9088 ±0.1434 0.8497 ±0.2398 0.9383 ±0.0921
+
+Table 3. Cross-dataset generalization of Dino-NestedUNet trained only on CHTN and directly evaluated on unseen external cohorts without fine-tuning. 
+
+Training Set External Test Set mDice mIoU 
+
+CHTN TIGER WSIBULK (n=93) 0.8176 0.7773 CHTN OSU CRC (n=49) 0.8643 0.8168 
+
+suggesting more stable segmentation across heterogeneous slides. On CAME-LYON16, Dino-NestedUNet also delivers the best performance across all re-ported metrics (Dice 0.8462, Accuracy 0.9383), outperforming the strongest baseline (Dino-UNet with BCE) and demonstrating improved generalization under domain shift. On OSU, Dino-NestedUNet remains competitive with the best-performing baseline. While Dino-UNet (BCE) attains a marginally higher Dice and Recall, our method yields the highest Accuracy (0.9470) and com-parable Precision, reflecting a favorable balance between sensitivity and over-segmentation control. Overall, these results indicate that dense decoding can better translate foundation-model features into boundary-faithful tumor masks, particularly when appearance varies across cohorts. 
+
+Cross-dataset generalization. To assess whether Dino-NestedUNet learns transferable tumor-bulk representations rather than dataset-specific appearance patterns, we performed zero-shot external validation. The model was trained only on CHTN and directly evaluated on TIGER WSIBULK and OSU CRC without fine-tuning. The CHTN-trained model achieved an mDice of 0.8176 and an mIoU of 0.7773 on TIGER WSIBULK, and an mDice of 0.8643 and an mIoU of 0.8168 on OSU CRC. These results indicate that the proposed architecture maintains strong segmentation performance under external domain shift, supporting its ability to generalize across unseen cohorts. 8 T. Wang et al.      
+
+> Fig. 2. Comparative segmentation results on CHTN (rows 1–2), OSU (rows 3–4), and CAMELYON16 (rows 5–6), highlighting infiltrative tumor bound-aries. Columns: (a) Input patch, (b) Ground truth, (c) UNet++ [13], (d) Dino-UNet (Standard) [4], (e) Dino-UNet (BCE), and (f) Ours (Dino-NestedUNet). Red and Yel-low dashed boxes indicate false positives and false negatives, respectively. Compared with prior methods, our model suppresses artifacts and more accurately follows com-plex tumor boundaries.
+
+Qualitative Analysis. Qualitative comparisons in Fig. 2 further support these findings. UNet++ and Dino-UNet variants exhibit typical failure modes in histopathology tumor bulk segmentation, including spurious activations in normal regions (false positives, red boxes) and missed thin or ambiguous tumor extensions (false negatives, yellow boxes). Dino-UNet (Standard) is prone to noisy foreground fragments in challenging regions, while the BCE variant reduces some false positives but may still miss small boundary structures. In contrast, Dino-NestedUNet produces cleaner masks with tighter boundary adherence and fewer isolated artifacts across all three datasets, consistent with the improved Precision/Accuracy and reduced variance observed quantitatively. This pattern also extends to the WSI level: as shown in Fig. 3, the predicted masks closely align with the ground truth and accurately capture the overall tumor extent across diverse CHTN specimens. Title Suppressed Due to Excessive Length 9(a) (b) (c) 
+
+Fig. 3. Representative whole-slide segmentation results on the CHTN co-hort. Representative CHTN whole-slide images showing (a) the original WSI (Hema-toxylin & Eosin stain); (b–c) segmentation masks (white = tumor, black = non-tumor background): (b) ground truth and (c) ours (Dino-NestedUNet). (a) (b) (c) (d)          
+
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Dice Similarity Coefficient
+> CHTN
+> (a) (b) (c) (d)
+> OSU
+> (a) (b) (c) (d)
+> Camelyon16
+> (a) UNet++ (b) Dino-UNet (Standard) (c) Dino-UNet (BCE) (d) Dino-NestedUNet (Ours)
+
+Fig. 4. Distribution of Dice Similarity Coefficients. Boxplots illustrating the performance spread of (a) UNet++, (b) Standard Dino-UNet, (c) Dino-UNet (BCE), and (d) Dino-NestedUNet across the three testing cohorts. 
+
+Distribution and Stability Analysis. To further investigate the robust-ness of our model beyond mean metrics, we visualize the distribution of Dice scores in Fig. 4. On the multi-center CHTN and public CAMELYON16 datasets, our Dino-NestedUNet (Column d) exhibits a visibly superior distribution profile. The median Dice scores are consistently higher than those of the UNet++ (a) 10 T. Wang et al. 
+
+and Standard Dino-UNet (b) baselines. More importantly, the box plots for our method are more compact with shorter lower whiskers, indicating a significantly higher performance floor. This suggests that the dense nested decoding strategy effectively mitigates "corner case" failures where standard models collapse (e.g., Dice < 0.6), ensuring reliable segmentation even on difficult samples. On the internal OSU dataset, while the mean performance is competitive with the BCE variant (c), our model maintains a tighter interquartile range, reflecting high consistency across the cohort. In contrast, the Standard Dino-UNet (b) shows a dispersed distribution with numerous low-scoring outliers, confirming that the vanilla linear decoder struggles to maintain stability when handling complex histological variations. 
+
+5 Conclusion 
+
+We presented Dino-NestedUNet for pathology tumor bulk segmentation and showed that improving the decoder is an effective way to better exploit strong frozen vision encoders for boundary-sensitive prediction. Across three cohorts, the model produced cleaner and more boundary-faithful tumor masks than ex-isting baselines, with the clearest gains observed on the more heterogeneous eval-uation settings. These findings suggest that dense nested decoding is a practical design choice for adapting foundation-model features to pathology segmentation. Future work will extend this framework beyond patch-level inference and further evaluate its robustness across broader datasets and tumor types. 
+
+6 Disclosure of Interests 
+
+The authors have no competing interests in the paper. 
+
+References   
+
+> 1. Balezo, G., Feki, H., Bourgade, R., Monnier, L., Blons, M., Blondel, A., Decencière, E., Planas, A.P., Walter, T.: Efficient fine-tuning of dinov3 pretrained on natural images for atypical mitotic figure classification (midog 2025 task 2 winner). arXiv preprint arXiv:2508.21041 (2025) 2. Bejnordi, B.E., Veta, M., Van Diest, P.J., Van Ginneken, B., Karssemeijer, N., Litjens, G., Van Der Laak, J.A., Hermsen, M., Manson, Q.F., Balkenhol, M., et al.: Diagnostic assessment of deep learning algorithms for detection of lymph node metastases in women with breast cancer. Jama 318 (22), 2199–2210 (2017) 3. Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F., Jaume, G., Song, A.H., Chen, B., Zhang, A., Shao, D., Shaban, M., et al.: Towards a general-purpose foundation model for computational pathology. Nature medicine 30 (3), 850–862 (2024) 4. Gao, Y., Li, H., Yuan, F., Wang, X., Gao, X.: Dino u-net: Exploiting high-fidelity dense features from foundation models for medical image segmentation. arXiv preprint arXiv:2508.20909 (2025)
+
+Title Suppressed Due to Excessive Length 11 5. Graham, S., Vu, Q.D., Jahanifar, M., Weigert, M., Schmidt, U., Zhang, W., Zhang, J., Yang, S., Xiang, J., Wang, X., et al.: Conic challenge: Pushing the frontiers of nuclear detection, segmentation, classification and counting. Medical image analy-sis 92 , 103047 (2024) 6. Kingma, D.P.: Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 (2014) 7. National Cancer Institute: Cooperative human tissue network (CHTN). https://www.chtn.org (2024) 8. Ronneberger, O., Fischer, P., Brox, T.: U-net: Convolutional networks for biomedi-cal image segmentation. In: International Conference on Medical image computing and computer-assisted intervention. pp. 234–241. Springer (2015) 9. Salgado, R., Denkert, C., Demaria, S., Sirtaine, N., Klauschen, F., Pruneri, G., Wienert, S., Van den Eynden, G., Baehner, F.L., Pénault-Llorca, F., et al.: The evaluation of tumor-infiltrating lymphocytes (tils) in breast cancer: recommen-dations by an international tils working group 2014. Annals of oncology 26 (2), 259–271 (2015) 10. Shephard, A., Jahanifar, M., Wang, R., Dawood, M., Graham, S., Sidlauskas, K., Khurram, S.A., Rajpoot, N., Raza, S.E.A.: Tiager: Tumor-infiltrating lymphocyte scoring in breast cancer for the tiger challenge. arXiv preprint arXiv:2206.11943 (2022) 11. Siméoni, O., Vo, H.V., Seitzer, M., Baldassarre, F., Oquab, M., Jose, C., Khali-dov, V., Szafraniec, M., Yi, S., Ramamonjisoa, M., et al.: Dinov3. arXiv preprint arXiv:2508.10104 (2025) 12. Xu, K., Chiou, E., Varamesh, A., Acqualagna, L., Rajpoot, N.: Tissue aware nu-clei detection and classification model for histopathology images. arXiv preprint arXiv:2511.13615 (2025) 13. Zhou, Z., Rahman Siddiquee, M.M., Tajbakhsh, N., Liang, J.: Unet++: A nested u-net architecture for medical image segmentation. In: International workshop on deep learning in medical image analysis. pp. 3–11. Springer (2018)

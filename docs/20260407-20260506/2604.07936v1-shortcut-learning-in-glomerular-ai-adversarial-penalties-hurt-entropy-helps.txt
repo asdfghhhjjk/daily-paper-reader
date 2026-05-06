@@ -1,0 +1,152 @@
+Title: Shortcut Learning in Glomerular AI: Adversarial Penalties Hurt, Entropy Helps
+
+URL Source: https://arxiv.org/pdf/2604.07936v1
+
+Published Time: Fri, 10 Apr 2026 00:43:16 GMT
+
+Number of Pages: 4
+
+Markdown Content:
+## SHORTCUT LEARNING IN GLOMERULAR AI: ADVERSARIAL PENALTIES HURT, ENTROPY HELPS 
+
+## Mohammad Daouk 1, Jan Ulrich Becker 2, Neeraja Kambham 3,Anthony Chang 4, Hien Nguyen 1,∗, Chandra Mohan 1,∗
+
+> 1
+
+## University of Houston, Houston, TX, USA 
+
+> 2
+
+## University Hospital Cologne, Cologne, Germany 
+
+> 3
+
+## Stanford University, Stanford, CA, USA 
+
+> 4
+
+## The University of Chicago, Chicago, IL, USA 
+
+ABSTRACT 
+
+Stain variability is a pervasive source of distribution shift and potential shortcut learning in renal pathology AI. We ask whether lupus nephritis glomerular lesion classifiers exploit stain as a shortcut, and how to mitigate such bias without stain or site labels. We curate a multi-center, multi-stain dataset of 9,674 glomerular patches (224 ×224) from 365 WSIs across three centers and four stains (PAS, H&E, Jones, Trichrome), labeled as proliferative vs. non-proliferative. We evaluate Bayesian CNN and ViT backbones with Monte Carlo dropout in three settings: (1) stain-only classification; (2) a dual-head model jointly predicting lesion and stain with supervised stain loss; and (3) a dual-head model with label-free stain regularization via entropy maximization on the stain head. In (1), stain identity is trivially learnable, confirming a strong candidate shortcut. In (2), varying the strength and sign of stain supervision strongly modulates stain performance but leaves lesion metrics essentially unchanged, indicating no measurable stain-driven shortcut learning on this multi-stain, multi-center dataset, while overly adversarial stain penalties inflate predictive uncertainty. In (3), entropy-based regular-ization holds stain predictions near chance without degrading lesion accuracy or calibration. Overall, a carefully curated multi-stain dataset can be inherently robust to stain shortcuts, and a Bayesian dual-head architecture with label-free entropy regularization offers a simple, deployment-friendly safeguard against potential stain-related drift in glomerular AI. 
+
+Index Terms — Stain invariance, Shortcut learning, Bias mitigation, Domain generalization, Renal pathology, Glomeru-lar lesion classification, Lupus nephritis. 
+
+# 1 Introduction 
+
+Histopathological evaluation of kidney biopsies is essential yet labor-intensive and variable. Deep learning has enabled automated detection and classification in whole-slide images (WSIs); in renal pathology, models have matched or exceeded expert performance in selected tasks [1]. For glomeruli, 
+
+> *These authors jointly supervised this work.
+
+CNNs achieve strong detection across several stains and promising lesion classification performance [2, 3, 4, 5, 6]. However, stain and site variation (processing, protocols, scanners) produce color and texture shifts that impair gen-eralization; stain normalization and augmentation only partly resolve this and can be task-dependent [7, 8, 9]. Even after color handling, residual site-specific signatures can remain and bias predictions [10]. Such signals may drive shortcut learning , where models rely on convenient but spurious cues (e.g., stain or site) rather than underlying pathology, threaten-ing fairness and robustness. In lupus nephritis, glomerular lesions are graded across multiple stains (PAS, H&E, Jones, Trichrome). Glomerular AI models trained on such data could, in principle, exploit stain identity as a shortcut when predicting proliferative vs. non-proliferative lesions. It remains unclear (i) whether mod-ern models actually rely on stain in this setting and (ii) how to mitigate such shortcuts without requiring stain/site labels or image translation pipelines at deployment. In this work we study shortcut learning from stain in lupus nephritis glomerular lesion classification using a large, multi-center, multi-stain dataset and a Bayesian dual-head architec-ture that explicitly probes and regularizes stain information. We adapt shortcut-testing ideas to treat stain as a putative con-founder and propose a label-free stain regularization based on entropy maximization. Our contributions are threefold: • We perform, to our knowledge, the first systematic study of stain-based shortcut learning for lupus nephritis glomeru-lar lesion classification on a multi-center, multi-stain dataset of 9,674 glomerular patches labeled as prolifera-tive vs. non-proliferative. • We introduce a Bayesian dual-head framework (lesion + stain) that uses loss re-weighting to test the coupling between stain predictability and lesion performance, while monitoring predictive uncertainty via Monte Carlo dropout. • We propose a practical, label-free stain regularization based on entropy maximization on a stain head, enforcing stain invariance without stain or site labels and without 
+
+> arXiv:2604.07936v1 [cs.CV] 9 Apr 2026
+
+image translation, and show that it preserves lesion accu-racy and calibrated uncertainty. 
+
+# 2 Related Work 
+
+Glomerular lesion classification has progressed from clas-sical KNN approaches ( ∼88% accuracy for proliferative lesions) to CNN-based systems reaching ∼90–93% for non-sclerosed vs. sclerosed glomeruli and improving clinical workflows [1, 4, 5, 6]. These works primarily optimize in-domain accuracy, with limited focus on robustness to stain or site variation. Cross-center color shifts are known to harm generalization; color augmentation and normalization help but are task- and dataset-dependent, while RandStainNA / RandStainNA++ unify normalization and augmentation to encourage stain-agnostic models [7, 8, 11, 12]. Nevertheless, residual site signatures can persist and act as shortcuts [10], motivating methods that explicitly suppress domain cues. Bias mitigation strategies include in-processing domain-adversarial methods such as DANN, which reduce domain predictability but require domain labels and careful tun-ing [13, 14]; image-level stain-transfer and GAN-based aug-mentation, which can reduce stain sensitivity but add com-plexity and potential artifacts [15, 16]; and augmentation-based domain generalization, where RandStainNA/++ often outperform either normalization or augmentation alone [11, 12]. IRM-style approaches such as ReConfirm suppress shortcut cues without confounders at test time [17]. In con-trast, we focus specifically on stain as a putative shortcut for glomerular lesion classification and combine explicit short-cut testing via dual-head loss re-weighting with a label-free entropy objective on a stain head, requiring neither stain/site labels nor image translation. 
+
+# 3 Methodology 
+
+## 3.1 Problem formulation 
+
+We consider patch-level classification of lupus nephritis glomeruli into proliferative vs. non-proliferative lesions. Each patch x is associated with a lesion label y and a stain label s ∈ { PAS, H&E, Jones, Trichrome }. Our aims are to (i) test whether deep models exploit s as a shortcut when predicting y, and (ii) learn stain-agnostic representations that preserve lesion performance, without requiring stain labels at deployment. 
+
+## 3.2 Bayesian backbones and uncertainty 
+
+We treat a family of convolutional and transformer backbones (ResNet, DenseNet, EfficientNet, RegNetY, ResNeXt, ViT) as Bayesian neural networks via Monte Carlo (MC) dropout at inference ( T = 50 ). Predictive uncertainty is estimated as the variance of the T stochastic forward passes. This simple Bayesian approximation allows us to track how stain-related interventions affect not only accuracy but also uncertainty, which we use as an early warning signal for destabilized rep-resentations. 
+
+## 3.3 Dual-head architecture 
+
+We build a shared feature extractor fθ followed by two task-specific heads: a lesion head hℓ and a stain head hs. Given a patch x, the shared trunk produces features z = fθ (x);the lesion head outputs pℓ(y | z) and the stain head outputs 
+
+ps(s | z). We compare a single-head model that predicts stain only (Experiment 1) and a dual-head model that jointly pre-dicts lesion and stain (Experiments 2–3). The total loss for the dual-head model is 
+
+L = μ1 Llesion + μ2 Lstain , (1) where Llesion is cross-entropy on lesion labels, and Lstain dif-fers by experiment. 
+
+## 3.4 Shortcut testing via loss re-weighting 
+
+To test whether stain acts as a shortcut, we follow the shortcut-testing paradigm of Brown et al. [18] and treat μ2 as a knob that makes stain easier or harder to learn. In Experiment 2, we set Lstain to supervised cross-entropy on stain labels and sweep μ2 over positive, zero, and negative values. Positive 
+
+μ2 rewards accurate stain prediction, whereas negative μ2 pe-nalizes it. If lesion performance improves when stain is em-phasized and degrades when stain is suppressed, this indicates reliance on stain as a shortcut; flat lesion performance across 
+
+μ2 suggests robustness to stain cues. 
+
+## 3.5 Label-free stain entropy regularization 
+
+In Experiment 3, we replace supervised stain cross-entropy with Reverse Cross-Entropy (RCE), implemented as entropy maximization on the stain head predictions: 
+
+H(pstain ) = −
+
+> K
+
+X
+
+> k=1
+
+pstain  
+
+> k
+
+log pstain  
+
+> k
+
+. (2) We use μ2 ≤ 0 so that minimizing L encourages high-entropy (near-uniform) stain predictions, effectively pushing the rep-resentation to become stain-invariant. Crucially, this objective does not require stain labels and can be applied at deployment time when stain or site metadata may be unavailable. 
+
+## 3.6 Training and evaluation protocol 
+
+Data are split at the WSI level: 85% development (train/validation via stratified 5-fold cross-validation) and 15% held-out test. Each backbone produces five cross validation (CV) variants. We optimize with Adam (batch 32), ReduceLROnPlateau scheduler, and early stopping (patience 7, max 50 epochs) implemented on validation loss, using mixed precision for efficiency on an NVIDIA Quadro RTX 8000. Metrics include accuracy, precision, recall, F1, AUC, and Bayesian predictive uncertainty. 
+
+# 4 Experiments and Results 
+
+## 4.1 Dataset 
+
+We curated 9,674 glomerular image patches (224 ×224 px) from 365 WSIs across three centers (University Hospital Fig. 1 . Experiment 2. Positive μ2 boosts stain metrics; strongly negative μ2 (adversarial CE) harms stain metrics and raises lesion predictive uncertainty. of Cologne, Stanford University, University of Chicago). Patches span four stains; PAS (2,412; 24.9%), H&E (2,252; 23.3%), Jones (2,270; 23.5%), and Trichrome (2,740; 28.3%), and are labeled as proliferative (1,907; 19.7%) or non-proliferative (7,767; 80.3%). This multi-center, multi-stain dataset provides a realistic testbed for stain-related shortcut learning. 
+
+## 4.2 Experiment 1: Can the model recognize stain type? 
+
+We first train a single-head Bayesian classifier to predict stain (PAS/H&E/Jones/Trichrome) from glomerular patches. Across backbones, performance is near-perfect (accuracy/AUC/-precision/recall/F1 ≈ 1.0) with very low predictive uncer-tainty ( ∼ 0.001 ). This confirms that stain identity is trivially learnable from color/texture cues and thus represents a plau-sible shortcut for downstream tasks. 
+
+## 4.3 Experiment 2: Does stain supervision in-duce shortcuts for lesion? 
+
+We next train a dual-head model with supervised lesion cross-entropy and supervised stain cross-entropy, sweeping μ2 over positive, zero, and negative values as in Section 3. Positive μ2
+
+increases stain accuracy and AUC; negative μ2 drives stain performance below chance, consistent with learning an in-verted label signal. At μ2 = 0 , stain AUC is ≈ 0.5 with ac-curacy/precision/recall ≈ 0.25 (chance level) and F1 ≈ 0.20 
+
+(slightly under chance for four classes). Across models and folds, lesion accuracy, AUC, precision, recall, and F1 show no significant changes as μ2 varies, in-dicating no measurable shortcut learning from stain to lesion classification on this multi-stain, multi-center dataset. How-ever, lesion predictive uncertainty increases as μ2 becomes more negative (from ∼0.06 at μ2 = 0 to ∼0.5 when stain performance is pushed far below chance) and is negatively correlated with lesion accuracy. Penalizing stain prediction thus destabilizes lesion feature learning, raising uncertainty without improving lesion metrics. 
+
+## 4.4 Experiment 3: Label-free mitigation of stain features 
+
+Finally, we retain the dual-head architecture but replace su-pervised stain loss with entropy maximization (label-free 
+
+Fig. 2 . Experiment 3. Label-free RCE drives stain predic-tions to chance without altering lesion performance or uncer-tainty. RCE), sweeping μ2 ≤ 0 in a moderate range. Stain F1 is pulled back to chance ( ≈ 0.25 ), and AUC/accuracy/precision/-recall remain at chance; unlike Experiment 2, stain perfor-mance does not collapse below chance. Lesion metrics re-main stable and indistinguishable from the μ2 = 0 baseline, and lesion predictive uncertainty stays low ( ∼ 0.06 ), avoid-ing the inflation seen with negative-weighted supervised stain loss. These results indicate that label-free entropy regulariza-tion can remove stain information without adversarial over-correction and without harming lesion performance or confi-dence. 
+
+# 5 Discussion and Conclusion 
+
+Stain is easy; shortcuts are not inevitable. Models can per-fectly recognize stain (Experiment 1), yet lesion classification on our multi-stain, multi-center dataset does not depend on stain cues (Experiment 2). This suggests that dataset diver-sity itself discourages stain-based shortcuts for this task. 
+
+Adversarial supervision can backfire. Driving a super-vised stain head with strongly negative μ2 forces stain pre-dictions below chance and inflates lesion uncertainty, while offering no improvement in lesion metrics. This behavior is consistent with known pathologies of adversarial training with explicit labels. 
+
+Label-free entropy is a safer safeguard. Replacing su-pervised stain cross-entropy with entropy maximization (Ex-periment 3) produces stain-agnostic representations that hold stain performance at chance, keep lesion metrics unchanged, and preserve calibrated uncertainty. This achieves the goal of mitigating potential shortcut signals without access to stain labels and without degrading lesion accuracy. 
+
+Bayesian uncertainty as an early warning. Uncertainty rises when adversarial pressure destabilizes representations (Experiment 2) and stays low when the mitigation is be-nign (Experiment 3), suggesting that predictive variance is a useful diagnostic for monitoring representational drift under domain-invariance interventions. 
+
+Practical takeaway. For lupus nephritis glomerular lesion classification, a carefully curated multi-stain, multi-center dataset can already be robust against stain-driven shortcuts. When additional safeguards are desired (e.g., for deployment under future stain/site shifts), a Bayesian dual-head model with label-free stain entropy regularization offers a simple, unsupervised, and deployment-friendly strategy to mitigate potential stain-related drift while preserving accuracy and confidence. 
+
+# 6 Compliance with Ethical Standards 
+
+This study was performed in line with the principles of the Declaration of Helsinki. The retrospective use of de-identified human subject data was approved by the institutional review boards (IRBs) of the University of Houston, University Hos-pital Cologne, Stanford University, and the University of Chicago. All data were anonymized prior to analysis. 
+
+# 7 Acknowledgments 
+
+This work was supported by NIH R01DK134055. Dr. Mohan has consultancy or sponsored research agree-ments or equity with Boehringer-Ingelheim, Progentec Diag-nostics, and Voyager Therapeutics. Dr. Mohan is on the Med-ical Scientific Advisory Council of the Lupus Foundation of America. Dr. Mohan’s research is supported by NIH RO1 AR074096 and DK134055. 
+
+# 8 References 
+
+[1] Jon N. Marsh, Ta-Chiang Liu, Parker C. Wilson, S. Joshua Swamidass, and Joseph P. Gaut, “Development and valida-tion of a deep learning model to quantify glomerulosclerosis in kidney biopsy specimens,” JAMA Network Open , vol. 4, no. 1, pp. e2030939–e2030939, 01 2021. [2] Jaime Gallego, Anibal Pedraza, Samuel Lopez, Georg Steiner, Lucia Gonzalez, Arvydas Laurinavicius, and Gloria Bueno, “Glomerulus classification and detection based on convolu-tional neural networks,” Journal of Imaging , vol. 4, no. 1, 2018. [3] Yoshimasa Kawazoe, Kiminori Shimamoto, Ryohei Yam-aguchi, Yukako Shintani-Domoto, Hiroshi Uozaki, Masashi Fukayama, and Kazuhiko Ohe, “Faster r-cnn-based glomerular detection in multistained human whole slide images,” Journal of Imaging , vol. 4, no. 7, 2018. [4] G. Barros, B. Navarro, A. Duarte, et al., “Pathospotter-k: A computational tool for the automatic identification of glomeru-lar lesions in histological images of kidneys,” Scientific Re-ports , vol. 7, pp. 46769, 2017. [5] Shruti Kannan, Laura A. Morgan, Benjamin Liang, McKen-zie G. Cheung, Christopher Q. Lin, Dan Mun, Ralph G. Nader, Mostafa E. Belghasem, Joel M. Henderson, Jean M. Francis, Vipul C. Chitalia, and Vijaya B. Kolachalama, “Segmenta-tion of glomeruli within trichrome images using deep learn-ing,” Kidney International Reports , vol. 4, no. 7, pp. 955–962, 2019. [6] Jon N. Marsh, Matthew K. Matlock, Satoru Kudose, Ta-Chiang Liu, Thaddeus S. Stappenbeck, Joseph P. Gaut, and S. Joshua Swamidass, “Deep learning global glomerulosclerosis in trans-plant kidney frozen sections,” IEEE Transactions on Medical Imaging , vol. 37, no. 12, pp. 2718–2728, 2018. [7] David Tellez, Geert Litjens, P´ eter B´ andi, Wouter Bulten, John-Melle Bokhorst, Francesco Ciompi, and Jeroen van der Laak, “Quantifying the effects of data augmentation and stain color normalization in convolutional neural networks for compu-tational pathology,” Medical Image Analysis , vol. 58, pp. 101544, 2019. [8] Md. Ziaul Hoque, Anja Keskinarkaus, Pia Nyberg, and Tapio Sepp¨ anen, “Stain normalization methods for histopathology image analysis: A comprehensive review and experimental comparison,” Information Fusion , vol. 102, pp. 101997, 2024. [9] W. Voon, Y. C. Hum, Y. K. Tee, et al., “Evaluating the effec-tiveness of stain normalization techniques in automated grad-ing of invasive ductal carcinoma histopathological images,” 
+
+Scientific Reports , vol. 13, pp. 20518, 2023. [10] F. M. Howard, J. Dolezal, S. Kochanny, et al., “The impact of site-specific digital histology signatures on deep learning model accuracy and bias,” Nature Communications , vol. 12, pp. 4423, 2021. [11] Yiqing Shen, Yulin Luo, Dinggang Shen, and Jing Ke, “Rand-stainna: Learning stain-agnostic features from histology slides by bridging stain augmentation and normalization,” in Medical Image Computing and Computer Assisted Intervention – MIC-CAI 2022 , Linwei Wang, Qi Dou, P. Thomas Fletcher, Ste-fanie Speidel, and Shuo Li, Eds., Cham, 2022, pp. 212–221, Springer Nature Switzerland. [12] Chong Wang, Shuxin Li, Jing Ke, Chen Zhang, and Yiqing Shen, “Randstainna++: Enhance random stain augmentation and normalization through foreground and background differ-entiation,” IEEE Journal of Biomedical and Health Informat-ics , vol. 28, no. 6, pp. 3660–3671, 2024. [13] Yaroslav Ganin, Evgeniya Ustinova, Hana Ajakan, Pascal Ger-main, Hugo Larochelle, Franc ¸ois Laviolette, Mario March, and Victor Lempitsky, “Domain-adversarial training of neural net-works,” Journal of Machine Learning Research , vol. 17, no. 59, pp. 1–35, 2016. [14] Maxime W. Lafarge, Josien P. W. Pluim, Koen A. J. Eppenhof, and Mitko Veta, “Learning domain-invariant representations of histological images,” Frontiers in Medicine , vol. 6, pp. 162, 2019. [15] Jelica Vasiljevi´ c, Friedrich Feuerhake, C´ edric Wemmert, and Thomas Lampert, “Towards histopathological stain invariance by unsupervised domain augmentation using generative adver-sarial networks,” Neurocomputing , vol. 460, pp. 277–291, 2021. [16] Eric Tzeng, Judy Hoffman, Ning Zhang, Kate Saenko, and Trevor Darrell, “Deep domain confusion: Maximizing for do-main invariance,” 2014. [17] Samira Zare and Hien Van Nguyen, “Removal of confounders via invariant risk minimization for medical diagnosis,” in Med-ical Image Computing and Computer Assisted Intervention – MICCAI 2022 , Linwei Wang, Qi Dou, P. Thomas Fletcher, Ste-fanie Speidel, and Shuo Li, Eds., Cham, 2022, pp. 578–587, Springer Nature Switzerland. [18] A. Brown, N. Tomasev, J. Freyberg, et al., “Detecting short-cut learning for fair medical ai using shortcut testing,” Nature Communications , vol. 14, pp. 4314, 2023.
