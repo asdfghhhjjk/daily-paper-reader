@@ -1,0 +1,645 @@
+Title: Decoding Condition-Specific Cellular Crosstalk in Spatial Omics via Bilinear Edge Classification
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.05.03.722470v1.full.pdf
+
+Number of Pages: 32
+
+Markdown Content:
+# Decoding Condition-Specific Cellular Crosstalk in Spatial Omics via Bilinear Edge Classification 
+
+Jonathan Karin 1, Roy Friedman 1, Mor Nitzan 1,2,3,∗
+
+> 1
+
+School of Computer Science & Engineering, The Hebrew University of Jerusalem 
+
+> 2
+
+Racah Institute of Physics, The Hebrew University of Jerusalem 
+
+> 3
+
+Faculty of Medicine, The Hebrew University of Jerusalem 
+
+> ∗
+
+Corresponding author: mor.nitzan@mail.huji.ac.il 
+
+Abstract 
+
+Tissues are multicellular structured communities whose function emerges from a combi-nation of individual cellular characteristics along with their corresponding spatial configu-ration, affecting their interactions and response patterns. During processes such as disease progression or aging, tissues can undergo structural reorganization, including changes in co-localization of different cell types, assembly or destruction of functional niches, and disrup-tion of intercellular communication axes. Such changes can manifest primarily in the spatial reorganization of cells rather than in the transcriptional states of individual cells. While computational tools for spatial transcriptomics have made significant progress in character-izing tissue architecture, most approaches for characterizing changes in tissue states across biological conditions operate at the level of individual cells or rely on discrete cell type labels, thus limiting the ability to detect coordinated transcriptional changes between neighboring cells that distinguish one condition from another. We present Casei , a bilinear classification framework operating on cellular proximity graphs, which directly models condition-specific cell-cell interactions in spatial omics data by focusing on interactions (edges), rather than cells (nodes), as the fundamental unit of biological inference. To capture such condition-specific signals, we leverage a model whose inductive bias aligns with cellular interactions through coordinated gene-gene relationships of neighboring cells. Casei enables the dis-covery of condition-associated multicellular interactions and spatial expression programs, and characterizes the loss of multicellular function and structure. Applied to mammalian liver fibrosis, atherosclerosis, and brain aging, Casei reveals biologically meaningful spatial reorganization, including the shift from endothelial- to macrophage-dominated networks in atherosclerotic plaques, disruption of hepatocyte zonation in fibrosis, and oligodendrocyte-microglia crosstalk in aging white matter. 
+
+# 1 Introduction 
+
+Characterizing the transition of tissues from healthy functioning units to collective malfunction, as can happen during disease progression, could reveal early biomarkers for tissue-level failure and routes for potential intervention strategies for delaying or reversing such processes [1, 2]. Some aspects of such tissue-level transitions manifest at the level of individual cell states; gene expression programs shift, cell type proportions change, and cellular subpopulations emerge [3– 6]. Recent computational methods have made substantial progress in detecting these cell-level state shifts from single-cell transcriptomic data, for example, by using graph signal processing to estimate the likelihood of observing each cell under different experimental conditions (MELD [7]) or identifying disease-affected cell subpopulations by refining case-control labels (HiDDEN [8]). Recently we have shown through Annotatability [9] that condition-associated biological states can be identified by analyzing the training dynamics of a neural network learning to clas-sify the gene expression profiles of cells exposed to different conditions, e.g. healthy vs. diseased. 1
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Annotatability is based on the observation that cells whose expression profiles are strongly as-sociated with a specific condition are classified correctly early and consistently throughout the training process, whereas cells whose expression is not associated with any of the labeled con-ditions receive unstable, fluctuating predictions across training epochs. Therefore, features extracted from the training dynamics of neural networks over a single-cell dataset can be used as a measure of condition-association at single-cell resolution [9]. However, some tissue-level physiological changes are not manifested merely in individual cellular states, but rather in the structural reorganization of the tissue, involving changes of adjacency structures of different cell types, assembly of functional niches, and disruption of intercellular communication pathways. For example, in triple-negative breast cancer, the spa-tial distribution of CD8 T cells within the tumor microenvironment differs between treatment responders and non-responders [10], and in colorectal cancer, tumors reorganize into spatially defined multicellular neighborhoods with characteristic cell compositions and local interactions that correlate with malignancy and clinical outcome [11]. Characterization of such cellular reorganization can be probed by spatial transcriptomics technologies [12, 13], providing spatially-aware gene expression measurements. While spatial reorganization can be accessible via co-localization statistics between different cell types [14], this process requires discrete cell type labels and is therefore sensitive to the granularity of annotation. Since cells generally exhibit continuous variability in their transcriptional states, categorical co-localization counts cannot capture coordinated changes in gene expression be-tween neighboring cells that are more subtle than cell type-level co-localization patterns. As a more elaborate alternative, detecting condition-associated spatial phenotypes can be done using a machine learning classifier, yet this poses an inductive bias problem; While such classifiers learn to distinguish between conditions based on patterns in the input data, the pat-terns that can be revealed by a classifier depend on assumptions encoded in its architecture regarding the signal of interest. Therefore, identifying condition-specific multicellular spatial organization relies on encoded assumptions about the target forms of spatial phenotypes. For example, patterns learned by models that represent each cell independently reflect condition-associated changes that manifest in individual cell states, while patterns learned by models that aggregate features of neighboring cells, like graph neural networks, reflect condition-associated signals that lie in combined properties of spatial cellular neighborhoods. Therefore, the archi-tecture of the model does not merely influence classification accuracy, but determines which types of biological variations can be extracted from the data. Here we focus on condition-specific tissue reorganization that is reflected in coordinated gene-gene co-expression patterns between neighboring cells. Therefore, we construct a model whose inductive bias aligns with the co-expression relationships between neighboring cells, by shifting the object of inference from cells to the interactions between them. Therefore, rather than asking which cells are condition-specific, we ask: which pairwise relationships between neighboring cells, namely which edges in the cellular spatial proximity graph (where nodes rep-resent cells and edges connect spatially-proximal cells [15]), are condition-specific? We present 
+
+Casei (Condition-Associated Spatial Edge Inference), a bilinear classifier that explicitly models coordinated gene-gene interactions between neighboring cells (Fig. 1) motivated by an energy-based model for pairwise interactions (Methods 4.5). For each condition, Casei learns a separate low-rank interaction matrix encoding the coordinated gene expression patterns between neigh-boring cells that are predictive of that condition. Edges are then ranked based on features extracted from the model’s training dynamics and filtered to retain only cell-cell interactions most robustly associated with each condition. This results in a condition-adjusted cellular prox-imity graph, that can be plugged directly into any existing graph-based spatial analysis tool, enabling condition-associated spatial analysis. Applying Casei to the analysis of diverse spatial transcriptomics data reveals biologically meaningful spatial reorganization patterns, including the shift from endothelial-dominated to 2
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+macrophage-dominated networks in atherosclerotic plaques, the disruption of hepatocyte zona-tion and loss of Kupffer cell interactions in liver fibrosis, and oligodendrocyte-microglia crosstalk in aging brain white matter. Beyond identifying signal-specific cell-cell interactions, Casei can be used to extract condition-associated enriched genes and infer condition-specific spatial ex-pression programs. 
+
+# 2 Results 
+
+2.1 Overview of Casei: a confidence-based cell-cell edge classification frame-work 
+
+Casei takes as input a collection of N spatial transcriptomics samples {(Xℓ, S ℓ, y ℓ)}Nℓ=1 , where 
+
+Xℓ ∈ Rnℓ×d is the gene expression matrix of sample ℓ with nℓ cells and d genes, Sℓ ∈ Rnℓ×2
+
+are the associated physical coordinates for each cell (or pseudo-cell) which we consider to be 2-dimensional (yet can be generalized to 1 or 3 dimensions given other measurement types), and yℓ ∈ { 1, . . . , C } is a condition label for each sample ( e.g. healthy or diseased). First, we construct N k -nearest-neighbor ( k-NN) spatial proximity graphs {Gℓ}Nℓ=1 based on the spatial coordinates Sℓ for each sample independently, where each node i in Gℓ corresponds to a cell with gene expression profile xi ∈ Rd from the corresponding gene expression matrix Xℓ, and each edge (i, j ) connects two spatially proximal cells (xi, xj ), inheriting the condition label of their sample (Fig. 1, Step 1). 
+
+Gene-Gene Interaction Modeling via a Bilinear Architecture. For each condition c,we learn a pairwise cell interaction representation Mc, which is modeled as symmetric positive semi-definite and bilinear through the matrix Mc = WcW ⊤ 
+
+> c
+
+∈ Rd×d, where Wc ∈ Rd×r and 
+
+r ≪ d, in turn making Mc low-rank, to keep computation tractable. This parameterization ex-plicitly captures coordinated gene-gene co-expression between neighboring cells while remaining interpretable; (Mc)k,m directly encodes the strength of coordinated expression between gene k
+
+in one cell and gene m in its neighboring cell, thus enabling direct identification of gene pairs that drive condition-specific interactions. For each edge (i, j ) in the spatial proximity graph, we define the interaction score for condition c between neighboring cells with gene-expression profiles xi, xj ∈ Rd as: score c(xi, xj ) = xTi Mcxj = xTi (WcW Tc )xj = ( W Tc xi)T (W Tc xj ) (1) The interaction matrices Mc are then optimized as classifiers between the different conditions using the standard cross-entropy classification loss: 
+
+LCasei = −
+
+> Q
+
+∑
+
+> (i,j )
+> C
+
+∑
+
+> c=1
+
+I [c = cij ] · log exp[ −score c(xi, xj )] 
+
+∑ 
+
+> ℓ
+
+exp[ −score ℓ(xi, xj )] (2) where Q is the total number of edges over all k-NN spatial proximity graphs, cij ∈ { 1, · · · , C }
+
+is the input condition label for each edge, and I [c = cij ] equals 1 when c = cij and 0 otherwise (Fig. 1, Step 2). Training Casei in this way is theoretically grounded through energy-based modeling of pairwise interactions, where the accumulated interaction score for a whole tissue depicts the energy of the transcriptomic sample (Methods 4.5). 
+
+Confidence Quantification Through Training Dynamics Analysis. Not all cell-cell interactions, or edges, in a tissue are condition-associated. To identify proximal cell pairs whose co-expression patterns are associated with a specific condition, we exploit information that can be gained from the training dynamics of the classifier [9, 16]. Specifically, we train the bilinear classifier by minimizing the cross-entropy loss LCasei via stochastic gradient descent, updating the weight matrices {Wc} across E epochs. At each epoch e, the model assigns a probability 
+
+p(e)(cij | xi, xj ) to the input condition label of each edge (i, j ). As training progresses, this prob-ability tends to increase over epochs for edges that are predictive of the condition and therefore 3
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+condition-associated, while remaining low or fluctuating for non-predictive edges [9, 16]. As proposed in Annotatability [9] in the context of individual cells, averaging the predictions across epochs, rather than using only the final model’s predictions, captures continuous biological vari-ation masked by discrete labels. We therefore define the confidence of edge (i, j ) as the mean predicted probability across all training epochs, E:confidence (xi, xj ) = 1
+
+E
+
+> E
+
+∑
+
+> e=1
+
+p(e)(cij | xi, xj ) (3) where p(e)(cij | xi, xj ) is the prediction probability for the input condition label cij that the model assigns to the edge (i, j ) at epoch e.Finally, we construct a condition-adjusted graph (Fig. 1, Step 3; Methods 4.8), which is a subgraph of the per-sample spatial proximity graph, by retaining only high-confidence edges (Methods 4.2) to enable spatial signal-aware downstream analysis (Fig. 1, Step 4). 4
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Figure 1: Overview of Casei , a framework for the identification of condition-specific cell-cell interactions in spatially-informed gene expression data, using a training dynamics-based bilinear classifier, illustrating the pipeline from spatial graph construction and bilinear model training to edge filtering and downstream analysis. 5
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+2.2 Bilinear edge classification accurately recovers diverse spatial reorgani-zation patterns 
+
+We first evaluated the performance of Casei using mouse organogenesis seqFISH (sequential fluorescence in situ hybridization) data [17] which we perturbed in-silico. The dataset comprises spatial transcriptomics measurements of 19,416 cells, profiling 351 genes and spanning 22 an-notated cell types across the developing brain, heart tube, gut tube, and neural tube [17]. The synthetic perturbations, or different cases, we used were designed to isolate different aspects of spatial tissue reorganization, and were each applied to a subregion of the tissue (Fig. 2a-e , Methods 4.6): Case 1: randomly shuffles cell positions within a predefined region; Case 2: 
+
+replaces the expression profiles of a fraction penrich of cells within a predefined region with pro-files sampled with replacement from a target cell type; Case 3: swaps the expression profiles of cells belonging to two predefined cell types within a predefined region; Case 4: enriches spatial co-localization of two predefined cell types by relocating cells of one type into the neighborhood of the other within a predefined region. These four types of perturbations alter the spatial organization of cells, while keeping the distribution of cell states in the tissue unchanged, which in turn allows to probe the sensitivity of different models to detecting different modes of spatial reorganization (see Methods 4.6 for full simulation details). We frame the evaluation as an edge classification task between paired control (original data) and case (synthetically perturbed) tissues. Models were evaluated by their ability to identify (assign higher confidence) to perturbed edges, defined as edges with at least one incident cell that was synthetically perturbed. Edge classification was evaluated for each of the perturbation types using the AUROC score of edges ranked by assigned confidence relative to the ground truth set of perturbed edges (Methods 4.6), averaged over four independently generated synthetic replicate tissues. We first note that any method operating at the cell level, such as Annotatability [9], MELD [7], or HiDDEN [8], would not be able to detect these spatial perturbations, since the global distribution of gene expression profiles does not change, by design, in the perturbed settings. We therefore compared the predictions of spatial perturbations of Casei to seven architec-tural variants (see Methods 4.6), spanning two families: The first family consists of node-level baselines that score individual cells and derive edge confidence as the mean of the two incident nodes’ scores; Node-Mean uses a standard MLP applied independently to each cell. GCN [18], 
+
+GAT [19], and GraphSAGE [20] are graph neural networks that propagate information along the spatial cellular proximity graph before classification; these architectures form the backbone of many recent spatial omics tools for tissue domain identification, batch integration, and cell-cell communication inference [21–26], and we include them as representative node-level spatial baselines. The second family consists of edge-level MLP baselines that aggregate the expression profiles of neighboring cell pairs before classification, via element-wise summation ( MLP-Sum ), concatenation ( MLP-Concat ), or element-wise multiplication ( MLP-Product ). 
+
+Casei outperforms all other baselines in identifying perturbed edges across all four spa-tial perturbation cases described above (Fig. 2e), as well as two additional cases, including tissue-wide spatial permutation of cells and localized cell type-specific ligand-receptor expres-sion induction (see Methods 4.6, Supplementary Fig. 6). 6
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Figure 2: Evaluating identification of synthetic perturbations over spatial transcrip-tomics data. (a-d) Visualization of the synthetic perturbations setup based on a mouse organogenesis seqFISH dataset [17]. (a) Unperturbed control tissue, colored by cell type. (b) 
+
+Case 1: Area mixing perturbation, where cells are shuffled locally. (c) Case 2: Cell type enrich-ment perturbation, where a specific cell type population is enriched locally. (d) Case 3: Cell type swapping perturbation, where the locations of cells of two cell types are exchanged within a local tissue region. (e) Case 4: Interaction enrichment perturbation, generating co-localization enrichment of pairs of cells of two specific cell types. (f) Benchmarking performance across the four perturbation scenarios. Barplots display the Area Under the ROC Curve (AUROC) for edge-level perturbation detection ( n = 10 replicates). The proposed Casei (bilinear model) architecture is compared against a node-centric MLP baseline ( Node Mean ), three node-level graph neural network baselines ( GCN [18], GAT [19], GraphSAGE [20]), and three edge-level MLP variants ( MLP_Sum, MLP_Concat, MLP_Product ). For node-level baselines (Node Mean, GCN, GAT, GraphSAGE), edge confidence is computed as the average confidence of the two incident node confidences. The dashed red line indicates performance of a random classifier (AUROC=0.5). 
+
+2.3 Casei Reveals Reorganization of Microvascular Interaction Networks in Human Atherosclerosis 
+
+In healthy arteries endothelial cells line the vessels and maintain stable contacts with their neighbors [27]. However, this organization can break down in disease and transition to dense inflammatory neighborhoods dominated by macrophages [28]. Specifically, atherosclerosis is characterized by remodeling of the cellular architecture of the vessel wall, initiated by lipopro-teins accumulating in the inner lining of the artery, which triggers an inflammatory response. This, in turn, leads to infiltration of macrophages and inward migration of smooth muscle cells, which together form the core of growing plaques [29]. We studied the spatial cellular reorganization in atherosclerosis using Casei through the analysis of an atherosclerosis single-cell resolution Xenium spatial transcriptomics dataset [30], 7
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+comprised of 12 atherosclerotic plaque samples and 4 healthy control coronary artery samples (see Supplementary Note 8). We trained Casei to classify neighboring cell pairs as originating from healthy or plaque tis-sue (Fig. 3b, c). Then, we filtered the k-NN-spatial proximity graph constructed over all cells to retain a subgraph composed of the top 5% of edges confidently classified as healthy, generating a healthy-adjusted graph that reflects cell-cell interactions associated with the healthy condition (Methods 4.8). In the same manner, we constructed a plaque-adjusted graph composed of the edges most confidently classified as associated with plaques. Applying neighborhood enrichment analysis to these condition-adjusted graphs, which can be implemented through Squidpy [15], then reveals which cell types tend to co-localize among condition-associated interactions. Specif-ically, applying neighborhood enrichment to the healthy-adjusted graph (Fig. 3b, d, g) reveals that the cellular interaction landscape in healthy tissue is dominated by endothelial-endothelial interactions (Fig. 3b, d, g), as well as interactions between endothelial cells (EC) with both vas-cular muscle cells (VSMC) and macrophages (EC-VSMCs and EC-macrophages, Fig. 3h). The enriched endothelial-endothelial interactions reflect the structure of healthy vessel walls, where endothelial cells form an intact lining (Fig. 3b, d), which is lost with the introduction of plaque. Furthermore, Casei can be used to extract gene pairs that are associated with condition-specific interactions, based on differences in the healthy-associated and disease-associated interaction matrices, which we call the differential interaction matrix (Methods 4.7). This analysis re-vealed ITLN1 (Intelectin-1) as a central hub in healthy-associated interactions, appearing in all top 10 gene-gene interaction pairs whose coordinated expression across neighboring cells is most strongly associated with the healthy condition (Fig. 3f). ITLN1 is an adipokine with vascular expression that exerts anti-inflammatory, anti-atherogenic effects, including reduction of macrophage foam cell formation and vascular inflammation [31]. ITLN1 coordinated expres-sion with extracellular matrix components ( LUM , MMP12 , MMP13 ) and immune regulators (CCR2 , CD68 , CCL18 ), identified by Casei , point to a possible coordinating role at the in-terface of endothelial barrier integrity, matrix homeostasis, and baseline immune surveillance. In contrast, cellular neighborhood enrichment of the plaque-adjusted graph showed a shift to-ward macrophage-dominated neighborhoods (Supplementary Note 8, Fig. 3f, i). This spatial reorganization reflects the transition from vascular homeostasis to chronic inflammatory mi-croenvironments that is characteristic of atherosclerosis [32, 33]. Next, based on patient-level smoking history for the plaque samples [30], we studied whether the spatial reorganization of plaques differs between smokers and non-smokers. We trained Ca-sei to classify between smoker and non-smoker plaques, constructing both smoker-adjusted and non-smoker-adjusted spatial cellular graphs. Analysis of the smoker-adjusted graph revealed en-richment of VSMC-VSMC (specifically contractile and inflamed VSMCs) interactions in smoker plaques (Fig. 3i,j; Supplementary Note 8), while the non-smoker-adjusted graph showed enrich-ment of macrophage-macrophage interactions (Fig. 3k). These results suggest that smoking may be associated with a shift toward VSMC-centered spatial organization within plaques, relative to the macrophage-dominated interaction patterns observed in non-smoker plaques. 8
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Figure 3: Casei reveals condition-associated spatial reorganization of cellular inter-action networks in human atherosclerosis. (a) UMAP visualization of the atherosclerosis Xenium dataset [30] colored by cell type. (b-e) Spatial scatter plots of representative control (P4; left) and plaque (P7; right) patient samples showing healthy vessel vs. diseased tissue structure, colored by (b,c) cell type as in (a), and (d,e) training dynamics confidence scores, where cells are colored in light blue, and high-confidence condition-specific edges are colored in black. (f) Spatial scatter plot of a representative healthy tissue sample, where cells are colored by the expression level of ITLN1 (red) and LUM (green), the top-ranked gene pair based on the healthy-associated differential interaction matrix (see Methods 4.7). (g-i) Case-adjusted neighborhood enrichment heatmaps showing the shift from endothelial-dominated interactions in control tissue (g) to macrophage-dominated interactions in plaques (h) , and VSMC-centered interactions in smoker plaques (i) . (j-k) Projection of the high-confidence interactions (black lines) onto the UMAP embedding (a) for smoker (j) and non-smoker (k) plaques, visualiz-ing the connectivity shifts between macrophage-centered interactions in non-smoker plaques to VSMC-centered interactions in smoker plaques. 9
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+2.4 Inference of context-associated cell-cell interactions identifies the break-down of functional tissue niches in liver fibrosis 
+
+Liver fibrosis is a progressive disease in which excessive extracellular matrix deposition leads to tissue remodeling and a breakdown of normal liver architecture [2]. Beyond changes in indi-vidual cell states, fibrosis disrupts the spatial organization of the tissue, dismantling functional niches. Identifying the healthy cell-cell interactions that are selectively lost during fibrosis could highlight functional niches whose disruption underlies disease progression. We applied Casei to spatial transcriptomics data that includes 3 healthy control liver tissue samples and 4 samples of fibrotic liver tissue (Fig. 4a-e), generated using MERFISH technology with 300 genes profiled per sample [2]. We trained Casei to discriminate between healthy and fibrotic liver tissues (Methods 4.2). We focused our downstream analysis on cell–cell interactions that character-ize healthy liver tissue through the healthy-adjusted spatial graph (Methods 4.8), highlighting cellular interactions that are lost during fibrosis. Neighborhood enrichment analysis over the healthy-adjusted graph (Methods 4.8) revealed two dominant cell-cell interactions: hepatocyte-hepatocyte and hepatocyte-macrophage interactions (Fig. 4f, left panel). The hepatocyte-hepatocyte interactions recovered by Casei in the healthy-adjusted spatial graph (Fig. 4c,f) reflect organized functional hepatocyte layers, where cells are spatially zonated 
+
+and perform distinct metabolic tasks based on their spatial location along the central-portal lobule axis [34–36]. These interactions are lost in fibrosis by scar tissue and vascular changes, disrupting the spatial gradients of hepatocyte zonation [37]. Similarly, hepatocyte-macrophage interactions enriched in the healthy-adjusted graph (Fig. 4c, f) reflect homeostatic crosstalk between hepatocytes and Kupffer cells, resident liver macrophages, which reside within the sinusoids in close contact with hepatocytes and regulate metabolism and immune defense [38]. The absence of this specific interaction signature in the fibrotic case may reflect the disruption of the sinusoidal niche, as during fibrosis, resident Kupffer cells are of-ten depleted or replaced by infiltrating inflammatory macrophages, severing the normal spatial communication required for liver stability [39]. The hepatocyte-macrophage cellular interac-tion was not identified by cell-level quantification using either MELD [7] or Annotatability [9] (Sup. Fig. 7, Methods 8). Next, we constructed a network of genes, where gene pairs are differentially connected according to their condition-associated co-expression patterns (Methods 4.7; Fig. 4g, Supple-mentary Table 1). Those can be divided into three functional classes: hepatocytes-associated genes (e.g. A2M , KCNE1 [40, 41]), immune markers (e.g. CD4 , IL4R ), and extracellular matrix (ECM)/structural components (e.g. LAMB1 , GATA4 , PDGFRB [42]) whose pairwise interac-tions recapitulate the healthy hepatic niche (Fig. 4f). Specifically, the gene-gene interaction network exhibits strong interaction strengths (namely large amplitudes within the differential interaction matrix, reflecting strongly coordinated expression across neighboring cells; Meth-ods 4.7) for pairs of hepatocyte-hepatocyte coordinated gene expression within the organized hepatocyte layers; hepatocyte-ECM and immune-ECM pairs of genes reflecting the structural organization of the perisinusoidal ’Space of Disse’ area in the liver, required for hepatocyte-endothelium contact [42, 43]; and hepatocyte-immune pairs of genes capturing the homeostatic crosstalk between hepatocytes and resident Kupffer cells described above. Together, these gene pairs paint a coherent molecular picture of the healthy liver niche that is dismantled in fibrosis - that is, the crosstalk between hepatocytes with other hepatocytes, ECM and immune cells is disrupted during liver fibrosis. 10 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Figure 4: Application of Casei to liver fibrosis spatial transcriptomics reveals disease-associated interaction patterns. (a,b) UMAP visualization of the MERFISH liver dataset [2], colored by (a) disease status and (b) annotated cell types. (c) Projection of the healthy-associated cell-cell interactions learned by Casei (black lines) onto the UMAP embedding, col-ored as in (a) according to cell types. The cell-cell interaction patterns visualize the connectivity between the macrophage cluster and hepatocyte clusters. (d-e) Spatial scatter plots displaying cell type distribution in representative liver tissue sections from the diseased (fibrotic, b) and healthy (c) samples, colored according to cell types as in (a). (f) Neighborhood enrichment heatmap computed over the learned healthy-adjusted graph (left), versus the original spatial proximity graph over the cells in the healthy tissues. The healthy-adjusted graph contains two main interactions: hepatocyte-hepatocyte (reflecting preserved liver zonation) and hepatocyte-macrophage (reflecting homeostatic crosstalk). (g) Network analysis of the top molecular drivers characterizing the healthy hepatocyte-macrophage niche. The diagram highlights the A2M-CD4 and A2M-IL4R axes as key mediators of the interaction between hepatocytes (blue) and im-mune cells (red), anchored by structural ECM components (grey). 
+
+2.5 Casei Identifies Region-Specific Rewiring of Glial Interaction Networks in the Aging Mouse Brain 
+
+We next studied spatial reorganization of cellular interactions along aging through the analysis of a spatial transcriptomics brain atlas of young (3.4-5.4 months) and aged (28.5-34.5 months) mice [1] (Fig. 5a, c). After training Casei to distinguish aged from young brain tissue, we con-structed young-adjusted and aged-adjusted cellular proximity graphs (Methods 4.8). Analysis of these graphs revealed that aging-associated cellular interactions were not spread uniformly across the brain, but were instead concentrated in specific anatomical regions. To infer which regions are most affected by aging-associated interaction rewiring, we identified those with a high proportion of cells participating in high-confidence edges (Fig. 5d), and characterized them by their cell type composition (Fig. 5b) and neighborhood enrichment patterns (Fig. 5f). 11 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+We found that the corpus callosum /anterior commissure (CC/ACO) region in the aged brain is dominated by oligodendrocyte-microglia and oligodendrocyte-oligodendrocyte crosstalk [44], while the ventricular niche (VEN) shifts from NSC-neuroblast-ependymal interactions in young mice to a pro-inflammatory ependymal-ependymal interaction pattern along aging, character-ized by upregulation of interferon-stimulated genes ( Ifitm3, Stat1, Bst2 ; Supplementary Fig. 8c). Focusing on oligodendrocyte-microglia interactions, we identified the genes that are upregu-lated in cells participating in these spatial edges (Methods 8) using the following approach: for each cell type, we compared cells that participate in high-confidence oligodendrocyte-microglia edges (“interacting”) to cells of the same type that do not (“bystander”), and performed Wilcoxon rank-sum differential expression analysis between the two groups (Methods 4.10, Supplementary Fig. 8a,b). This analysis reveals that interacting microglia upregulate Lyz2 
+
+(Log2FC 2.308), a marker of activated myeloid cells consistent with a shift toward a phagocytic state engaged in clearing accumulating myelin fragments [45]. Our analysis further revealed that this interaction is characterized by a shift toward a pro-inflammatory, antigen-presenting phenotype, indicated by the enrichment of B2m (Log2FC 1.213) and H2-K1 (Log2FC 1.392), as previously suggested [46] (Supplementary Fig. 8a). Using Casei , we also observed that inter-acting oligodendrocytes upregulate the complement component gene C4b (Log2FC 2.749) pre-viously associated with age-related synaptic loss and cognitive decline [47], the stress-responsive lipocalin Apod (Log2FC 1.109), a marker of oligodendrocyte stress and neuroprotection in ag-ing white matter [48, 49], and the serine protease Klk6 (Log2FC 1.915), associated with myelin turnover [50](Supplementary Fig. 8b). Beyond individual interactions, we used our framework to identify coordinated gene expres-sion programs that organize the spatial architecture of aged versus young brain tissue, through the eigendecomposition of the differential interaction matrix (Methods 4.9). The aged-specific program was primarily characterized by the cellular response to type I interferon (Fig. 5i), con-sistent with interferon’s established role in age-related cognitive decline and neural stem cell quiescence [51–53]. In contrast, the young-specific program was significantly enriched for the gene ontology terms positive regulation of peptidyl-tyrosine phosphorylation , positive regulation of intracellular signal transduction , and gliogenesis (Supplementary Fig. 8). These findings in-dicate that the spatial architecture shifts from growth-promoting signaling in the young brain to a pro-inflammatory state in the aged brain. Many of the condition-associated interactions identified by Casei were not recovered by statistical approaches applied directly to the spatial proximity graph, including significance overlap testing and differential z-score analysis between conditions (Supplementary Notes 8, Supplementary Fig. 9). Neither approach recovered key interactions including aged-associated oligodendrocyte-oligodendrocyte and oligodendrocyte-microglia interactions, or young-associated ependymal crosstalk (Supplementary Fig. 9). These interactions are detected by Casei because its confidence-based filtering operates at the level of cell states rather than cell type labels. For example, Casei identifies distinct subsets of ependymal-ependymal edges as associated with both young and aged tissues, reflecting different transcriptional contexts within the same cell type pair. 12 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Figure 5: Condition-associated interactions in the aging mouse brain. (a) UMAP visu-alization of the mice brain MERFISH dataset colored by cell type [1]. (b) Cell type proportions in young vs. aged mice according to subregions. (c) Spatial scatter plot visualization of a coro-nal brain section of aged mouse (age 32.6) colored by subregion mapping. (d) Proportions of cells with at least one incident edge included in the condition-adjusted cellular proximity graph computed by Casei for aged (top) versus young (bottom) mice, per subregion. (e) Spatial scatter plot, as in (c), where cells are colored in light blue and high confidence edges are colored in black. (f) Neighborhood enrichment heatmap computed over the learned young-adjusted graph (left) and aged-adjusted graph (right). (g) Spatial scatter plot, as in (c), colored by cell types (microglia: red, oligodendrocytes: blue, others: gray). (h) Projection of a represen-tative sample of 500 high-confidence interactions (black lines) onto the UMAP embedding for young-associated (left) and aged-associated (right) edges, visualizing the connectivity shifts from NSC-neuroblast-ependymal interactions in young tissue to oligodendrocyte-microglia-centered interactions in aged tissue. 13 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+# 3 Discussion 
+
+We presented Casei , a computational framework for the identification of condition-specific cell-cell interactions in spatially-informed gene expression data. By learning a bilinear interaction term between the gene expression profiles of neighboring cell pairs, Casei assigns a training dynamics-based confidence score to each edge in the spatial cellular proximity graph that re-flects the degree to which it represents a condition-associated cell-cell interaction. Applied to diverse spatially-informed transcriptomics datasets, Casei revealed biologically interpretable spatial reorganization patterns, including the shift from endothelial to macrophage-dominated networks in atherosclerosis, disruption of hepatocyte zonation in fibrosis, and region-specific oligodendrocyte-microglia interactions in aging white matter. We note that Casei identifies spatial co-occurrence patterns and their condition-associated reorganization, which does not necessarily reflect direct cell-cell communication, as cells may co-localize due to shared microenvironmental preferences or structural constraints rather than active signaling. Additionally, preprocessing steps such as cell segmentation may introduce artifacts, as incorrectly assigned transcripts between neighboring cells can artificially inflate interaction signals. Nevertheless, Casei remains effective under these conditions, and we expect its performance to improve further as spatial transcriptomics data quality continues to advance. Another challenge for future work is disentangling condition-associated spatial reorganiza-tion from changes in individual cell states, for example, by integrating Casei with complemen-tary approaches that score condition-association at the level of individual cells. While in this work we focused on pairwise interactions, in future work Casei can be extended to higher-order interactions, to enable the detection of multi-cellular niches and tissue modules. By shifting the focus of detection from individual cells to the relationship between them ,
+
+Casei reveals interaction patterns that are condition-specific. Casei can be applied across a wide range of biological settings where different conditions or samples reflect changes of tissue architecture, due to either environmental factors, external perturbations or internal reorganiza-tion. Therefore, our framework can be used to characterize the changes in the spatial makeup of tissues across conditions, uncover mechanisms underlying the spatial reorganization of cells and cell types along axes of biological variation such as development, identify region-specific signaling pathways, and highlight factors driving disease onset reflected in multicellular rewiring. 
+
+# 4 Methods 
+
+4.1 Rationale for the Casei framework 
+
+Condition-specific changes in tissue architecture often manifest not in individual cell states but in the interactions between neighboring cells. To capture these signals, we classify edges rather than nodes in the spatial cellular proximity graph. The bilinear form directly models gene-gene co-variation between neighbors, following from the pairwise energy-based modeling described in Section 4.5. The low-rank constraint over the bilinear form keeps the model compact and interpretable, and the training dynamics confidence-based filtering retains only cell-cell edges that are robustly associated with a given condition. 
+
+4.2 Algorithm 
+
+1. Input 
+
+• Gene expression matrices {Xs ∈ Rns×d}, where ns is the number of cells in sample s
+
+and d is the number of genes. 
+
+• Spatial coordinates {Ss ∈ Rns×D}, the physical location of each cell in sample s,where D ∈ { 2, 3} is the number of spatial dimensions and depends on the mea-14 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+surement technology. Each edge (i, j ) ∈ Es is labeled with its sample’s condition 
+
+cij = ys
+
+2. Preprocessing and Graph Construction 
+
+• Normalize gene expression: X ← log(10 4 · X/ sum (X) + 1) .
+
+• Construct k-NN spatial graphs Gs = ( Vs, E s) from coordinates Ss.
+
+• Label each edge with its sample’s condition ys.3. Bilinear Model Training 
+
+• Initialize weight matrices Wc ∈ Rd×r for each condition c
+
+• For each epoch e = 1 to E:
+
+– For each edge (i, j ):
+
+∗ Compute bilinear score: bij = ( W Tc xi)T (W Tc xj ).
+
+∗ Compute probability: p(e) 
+
+> ij
+
+= Softmax (bij )ys
+
+∗ Store p(e) 
+
+> ij
+
+for confidence tracking. 
+
+– Update all weight matrices {Wc}Cc=1 by minimizing the cross-entropy loss over all edges: L = − ∑ 
+
+> (i,j )
+
+log p(e) 
+
+> ij
+
+via backpropagation, with L1 ( λL1 = 10 −5) and L2 ( λL2 = 10 −4) regularization on {Wc}.4. Confidence Computation and Filtering 
+
+• For each edge (i, j ): compute confidence (xi, xj ) = 1
+
+> E
+
+∑Ee=1 p(e) 
+
+> ij
+
+.
+
+• Rank edges by confidence within each condition. 
+
+• Retain only the top p% (defaulting to 5%) of edges with the highest confidence scores for each condition. This filtered adjacency structure is referred to as the condition-adjusted graph (see Methods 4.8), which is used for all downstream analyses. 5. Output 
+
+• Condition-specific filtered edge sets. 
+
+• Edge confidence scores {confidence (xi, xj )}.
+
+• Gene-gene interaction matrices {Mc = WcW Tc }.6. Downstream analysis 
+
+• Identify condition-related cellular neighborhood enrichment. 
+
+• Extract condition-related top gene pairs. 
+
+• Extract condition-associated spatial expression programs. 
+
+4.3 Data Preprocessing and Graph Construction 
+
+Gene expression matrices are normalized using the formula X ← log(10 4 · X/ sum (X) + 1) .Spatial proximity graphs were generated by constructing k-nearest neighbor ( k-NN) graphs based on cellular physical coordinates, where nodes represent cells and edges connect spatially adjacent cells. Each edge is then assigned a label ys corresponding to the experimental condition of the sample from which it originated. 15 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+4.4 Architecture choices 
+
+We employ a bilinear architecture that explicitly captures interactions between spatially neigh-boring cells i and j. For gene expression profiles xi, x j ∈ Rd, the interaction score is defined as: score c(xi, xj ) = xTi WcW Tc xj = ( xTi Wc)( W Tc xj ) (4) where Wc ∈ Rd×r is a low-rank matrix ( r ≪ d). We selected this architecture for two primary reasons: 
+
+• Feature Interaction Modeling: Unlike MLP-based approaches (e.g., concatenation or summation) which treat features independently prior to non-linear transformation, the bilinear layer explicitly models multiplicative gene-gene interactions essential for captur-ing coordinated spatial patterns [54]. While MLPs can in principle approximate such interactions, doing so requires exponentially growing model complexity compared to the quadratic scaling of explicit multiplicative architectures [55]. 
+
+• Mechanistic Interpretability: The bilinear structure allows for direct, weight-based interpretability. The learned matrix WcW Tc reveals specific gene pairs associated with spatial reorganization, and its symmetric nature enables eigendecomposition to extract orthogonal gene programs for functional analysis [54]. Validation on semi-synthetic datasets demonstrates that this architecture significantly outper-forms MLP baselines, particularly in detecting spatial reorganization that does not alter indi-vidual cell state distributions (Fig. 2f). To encourage sparsity in the learned interaction matrices and prevent overfitting, the cross-entropy loss is augmented with L1 ( λL1 = 10 −5) and L2 ( λL2 = 10 −4) penalties on W .
+
+4.5 Probabilistic modeling 
+
+We model a whole tissue as a graph, where each node xi ∈ Rg represents a cell with g genes, and nodes i, j are connected by an edge (i, j ) ∈ E when the spatial location of cell j is one of the k-nearest neighbors of cell i.To model the effects of neighboring cells on each other, we model the energy of the whole tissue as an Ising model composed of cells interacting through the bilinear matrix: 
+
+E (x1, · · · , x N ) = ∑
+
+> (i,j )∈E
+
+xTi W W T xj (5) This, in turn, can be transformed to a probability assigned to the states of all cells in the tissue, given by: 
+
+p (x1, · · · , x N ) = 1
+
+Z exp [ −E (x1, · · · , x N )] = 1
+
+Z exp 
+
+− ∑
+
+> (i,j )∈E
+
+xTi W W T xj
+
+ (6) where Z is a normalization constant. The above is the max-entropy distribution under the constraint of pairwise interactions, and can thus be considered the simplest model for possible cross-talk between neighboring cells in a tissue. In this work, we aim to identify which spatial cellular interactions are context-associated, namely which are enriched in specific conditions, or cases , for instance enriched in diseased versus healthy or in young versus old tissues. We do so by inferring interaction matrices W
+
+that optimally distinguish between different cases. Under this construction, and assuming for simplicity that the data contains samples of two different conditions ( c1, c 2) and that both 16 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+conditions are a-priori equally likely, then the probability for case 1 given the cellular states in the tissue x = {x1, · · · , x N } is: 
+
+p (c1|x) = p (x|c1)
+
+p (x|c1) + p (x|c2) (7) 
+
+=
+
+> 1
+> Zc1
+
+exp [ −Ec1 (x)] 
+
+> 1
+> Zc1
+
+exp [ −Ec1 (x)] + 1
+
+> Zc2
+
+exp [ −Ec2 (x)] (8) 
+
+=
+
+[
+
+1 + Zc1
+
+Zc2
+
+· exp [ Ec1 (x) − Ec2 (x)] 
+
+]−1
+
+(9) where Wci is the interaction matrix optimized for case i, Eci (x) is the energy of the state x
+
+under the Ising model optimized for case i, and Zci is the normalization coefficient for case i.The normalizing coefficients (or partition functions) Zc1 and Zc2 are intractable in this scenario and difficult to estimate. Instead, we will use an approximate approach. Since Equation 8 takes the form of a standard softmax function, given different samples for each case, we opt to infer Wc1 and Wc2 through discriminative training (Equation 2), with the standard cross-entropy loss. The interaction matrices found in this manner will in turn serve as an approximation of the true underlying probabilities p(x|c1) and p(x|c2) (through Equation 6), up to a normalization constant. Furthermore, note that the main factor driving the classification in Equation 9 is the differ-ence in energies, given by: 
+
+Ec1 (x) − Ec2 (x) = ∑
+
+> (i,j )∈E
+
+xTi
+
+(
+
+Wc1 W Tc1 − Wc2 W Tc2
+
+)
+
+xj (10) Consequently, the symmetric matrix: 
+
+∆ = Wc1 W Tc1 − Wc2 W Tc2 (11) can be further analyzed to infer which specific genes underlie the differentiation between the cases. Moreover, large tissues can be broken down into smaller subsections, each modeled as a smaller Ising model, meaning that at test time, different regions within the same tissue can be individually classified. 
+
+4.6 Semi-Synthetic Data Generation and Benchmarking 
+
+Data Sampling and Graph Construction 
+
+All synthetically perturbed tissues (see 2.2) were generated based on the mouse organogenesis seqFISH dataset [17] as a biological template, accessed via Squidpy [15]. For each replicate, 
+
+ncells = 15 ,000 (3 sub-replicates of 5,000 cells per condition) cells were drawn with replacement from the source dataset, preserving the original expression profiles and spatial coordinates. A spatial proximity graph was then constructed using k-nearest neighbors ( k = 5 ) applied to physical coordinates. Ten independent simulation experiments were performed per perturbation scenario. 
+
+Ground Truth Perturbed Edges 
+
+For all perturbation cases except for case 5, the ground truth perturbed edges are considered as k-NN edges incident to at least one cell that was synthetically perturbed. Case 5 defines perturbed edges directly as the union of removed and newly added edges. This classification of ground truth perturbed edges may introduce false positives, edges labeled as perturbed despite carrying no detectable signal. For example, when the modified cell’s new expression profile 17 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+remains similar to its original profile or to that of its neighbor, leaving the co-expression pattern across the edge unchanged. However, it cannot introduce false negatives, since every edge carrying a detectable perturbation signal must have at least one modified cell as an endpoint, and such edges are included in our ground truth perturbed set. This setting conservatively lowers AUROC for all estimators equally, leaving their relative ranking a valid basis for comparison. 
+
+Perturbation Scenarios 
+
+In Section 2.2 we presented four procedures for generating synthetic perturbations over spatial omics datasets which simulate spatial reorganization of the tissue: 
+
+• Case 1 - Area Mixing : Within a predefined region, cell positions are randomly per-muted while their expression profiles remain unchanged. This spatial mixing disrupts the structure of the local cellular spatial graph without changing the distribution of cellular states. 
+
+• Case 2 - Cell Type Enrichment : A fraction penrich (0.5) of cells within a predefined region is replaced by cells of a predefined type. The gene expression profiles for the newly introduced cells are randomly sampled from the measured population of cells of the target type in the dataset. 
+
+• Case 3 - Expression Profile Swapping : For each cell of type ct1 within a predefined region, its expression profile is swapped with that of a randomly selected neighboring cell of type ct2 , with probability pswap = 0 .5.
+
+• Case 4 - Cell-Cell Interaction Enrichment : For each cell of type ct1 within a predefined region, each of its spatial neighbors is replaced by a randomly selected cell of type ct2 within the same tissue region with probability pneighbors , by swapping their spatial coordinates. All of these perturbation cases change the spatial organization of cells, while the abundances of different cell types and the distributions of their expression profiles are preserved. Beyond the above synthetic perturbations, we considered two additional spatial reorganiza-tion cases: 
+
+• Case 5 - Random Edge Permutation : A fraction pedges of existing edges are randomly selected and removed from the spatial proximity graph. An equal number of new edges are then added by randomly sampling pairs of cells that were not previously connected, directly rewiring the adjacency structure while preserving the total number of edges. 
+
+• Case 6 - Ligand–Receptor Induction : For each edge connecting a cell of type ct1 to a cell of type ct2 within a predefined region,a Poisson-sampled count δ ∼ Poisson (λinduce )
+
+is artificially added to gene gA in the ct1 cell and gene gB in the ct2 cell. This creates a spatially localized co-expression signal present only at specific cell-cell interfaces. 
+
+Architectural Comparison and Benchmarking 
+
+To evaluate the predictions based on the bilinear gene-gene interactions form (see 2.2), we com-pared Casei against alternative architectures for combining node features into edge predictions: 
+
+• Bilinear (Casei): Explicitly models pairwise interactions via f (xi, xj ) = xTi WcW Tc xj ,where xi, xj ∈ Rd are the gene expression profiles of the two neighboring cells, Wc ∈ Rd×r
+
+is a low-rank projection matrix with rank r = 64 , and d is the number of genes. A separate weight matrix Wc is learned for each condition c ∈ { 1, . . . , C }, yielding a condition-specific interaction matrix Mc = WcW Tc ∈ Rd×d.18 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+• Node_Mean (Baseline): A node-level MLP classifier trained to predict the condition label from each cell’s gene expression profile xi ∈ Rd independently, without considering neighboring cells. Edge confidence is derived as the mean of the two incident node scores: 
+
+cedge  
+
+> ij
+
+= ( ci + cj )/2. This represents the null hypothesis that edge-level perturbation detection reduces to detecting cell-level signals. 
+
+• Graph Neural Network (GNN) baselines: Three node-level GNN classifiers that ag-gregate information from spatially-proximal cells along the k-NN spatial proximity graph before predicting each cell’s condition. Each model consists of two graph-convolutional lay-ers (hidden dimension 64) followed by a linear classification head, with dropout ( p = 0 .3)applied between layers. Edge confidence is derived, as in Node_Mean , by averaging the predicted probabilities of the two incident nodes across training epochs. These three GNN architectures form the foundation of many spatial-omics methods, including spatial do-main identification (e.g., STAGATE [21], SpaGCN [56], conGI [23], GraphST [24]), batch integration, and cell-cell communication inference (e.g., HoloNet [22], DeepLinc [57]). The three architectures differ in their neighborhood aggregation scheme: 
+
+– GCN [18]: applies symmetric-normalized spectral graph convolutions, where each node’s representation is updated as a normalized weighted average of its neighbors’ features. 
+
+– GAT [19]: replaces fixed normalization with learned multi-head self-attention co-efficients (4 heads in the first layer, 1 in the second), allowing the model to weigh neighbors adaptively. 
+
+– GraphSAGE [20]: uses an inductive mean-aggregation scheme that concatenates a node’s own features with the mean of its neighbors’ features. 
+
+• MLP-based variants: Three multilayer perceptron (MLP) architectures (3 fully con-nected layers with ReLU activations) that differ only in how the feature vectors of the two nodes are aggregated before being passed through the network: element-wise sum 
+
+f (xi + xj ) (MLP_Sum ), concatenation f ([ xi∥xj ]) (MLP_Concat ), and element-wise product f (xi ⊙ xj ) (MLP_Product ). All models were trained using the same hyperparameters (Adam optimizer, learning rate 
+
+10 −3, batch size 512, 100 epochs). Confidence scores were computed as the mean predicted probability for the input label across all training epochs following [9]. Performance was evalu-ated using the Area Under the Receiver Operating Characteristic curve (AUROC) for edge-level perturbation detection, averaged over four simulation replicates for each type of synthetic per-turbation. 
+
+4.7 Extracting gene pairs underlying condition-associated spatial reorgani-zation 
+
+To infer the gene pairs expressed in neighboring cells associated with reorganization, we begin by computing the differential interaction matrix 
+
+∆ = Mc1 − Mc2 = Wc1 W Tc1 − Wc2 W Tc2 (12) which captures changes in gene-gene relationships of neighboring cells between the test and ref-erence conditions. When comparing against multiple reference conditions C2 = {c(1) 2 , . . . , c (m)2 },the averaged reference interaction matrix is computed as Mc2 = 1
+
+> |C2|
+
+∑ 
+
+> c∈C2
+
+Mc. The differen-tial interaction matrix ∆ contains both positive values (interactions strengthened in c1) and negative values (interactions weakened in c1). 19 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+To focus on the condition-specific programs enhanced in c1, we extract the positive compo-nent of the differential matrix as ∆+ = max(∆ , 0) , where the operator max is taken element-wise.The top condition-specific gene pairs are identified as those with the largest entries ∆+ 
+
+> ij
+
+in this matrix. To visualize these relationships, we construct a weighted gene interaction network where nodes represent genes, edges (each one represents pairs of genes) connect the top n gene pairs (default n = 10 ), with edge weight set to ∆+ 
+
+> ij
+
+, reflecting the strength of their condition-association co-expression across neighboring cells. 
+
+4.8 Condition-Adjusted Graph Construction 
+
+After training, each edge in the spatial proximity graph is assigned a confidence score reflecting how associated its co-expression pattern is with a given condition based on features of its training dynamics (see Methods 4.2). Edge confidence scores are stored in a confidence matrix over all cell pairs. For each condition c, we retain the top p% (default p = 5 ) of edges ranked by confidence, yielding a condition-adjusted graph , which is a subgraph of the original spatial proximity graph that reflects condition-associated interactions. The number of high-confidence edges incident to each cell is recorded per cell as a summary statistic, enabling downstream identification of spatially condition-associated regions. The condition-adjusted graph is used as input to all subsequent neighborhood enrichment analyses (see 2.3, 2.4, 2.5). 
+
+4.9 Interaction programs 
+
+We perform spectral decomposition of the symmetric matrix ∆+ (the positive component of the differential interaction matrix, see Methods 4.7) to extract orthogonal gene programs. Specifi-cally, we compute the eigendecomposition ∆+ = V ΛV T , where Λ = diag (λ1, . . . , λ d) is a diago-nal matrix of real eigenvalues (guaranteed by the symmetry of ∆+) sorted in descending order of magnitude |λ1| ≥ · · · ≥ | λd|, and V = [ v1 | · · · | vd] ∈ Rd×d is an orthogonal matrix whose columns vk ∈ Rd are the corresponding eigenvectors. Each eigenvector ⃗v k = [ vk, 1, . . . , v k,d ]T
+
+defines a gene program, where the magnitude of component vk,i represents the contribution (loading) of gene gi to program k.
+
+Gene Signature Extraction 
+
+For each of the top K eigenvectors in V , we extract gene signatures by ranking genes according to their absolute loading values |vk,i | in descending order. The top n genes with highest absolute loadings define the gene signature Gk = {gi : |vk,i | ranks in top-n} for program k. We retain both the gene identities and their corresponding loading weights {(gi, v k,i )} for downstream interpretation. To assign biological meaning to each program, we perform functional enrichment analysis against Gene Ontology Biological Processes 2023 [58] and KEGG 2021 [59] using the hypergeometric test, applying Benjamini-Hochberg FDR correction and retaining pathways with adjusted p < 0.05 .
+
+4.10 Identification of Interaction-Associated Gene Expression 
+
+To identify genes whose expression is upregulated in cells participating in a given cell-cell in-teraction type, we classified cells within each condition as either “Interacting” or “Bystander” based on the condition-adjusted spatial interaction network. For a given cell type pair ( ct1 –
+
+ct2 ), a cell of type ct1 was labeled “Interacting” if it had at least one high-confidence edge to a cell of type ct2 in the condition-adjusted graph, and “Bystander” otherwise. We then performed differential expression analysis (Wilcoxon rank-sum test) comparing Interacting versus Bystander cells within each cell type, requiring a minimum of 3 cells per group. 20 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+# 5 Data Availability 
+
+The mouse organogenesis seqFISH dataset used for semi-synthetic benchmarking is publicly available through Squidpy ( https://squidpy.readthedocs.io ) and the original repository [17]. The human atherosclerosis Xenium spatial transcriptomics dataset is available from [30] via GEO under accession number GSE 294466 . The human liver fibrosis MERFISH dataset is avail-able from [2] via Dryad at https://doi.org/10.5061/dryad.37pvmcvsg. The mouse brain aging spatial transcriptomics atlas is available from [1] via Zenodo at https://zenodo.org/records/13883177. 
+
+# 6 Code Availability 
+
+All code for Casei is publicly available on GitHub at https://github.com/nitzanlab/casei. 
+
+# 7 Acknowledgments 
+
+We would like to thank Naomi Habib, Guy Pelc, Serafima Dubnov, and Reshef Mintz for insightful discussions. This work was supported by The Israeli Council for Higher Education Ph.D. fellowship (J.K.), the EMBO Young Investigator Programme, the Abisch-Frenkel Foundation, and the European Union (ERC, DecodeSC, 101040660) (M.N.). Views and opinions expressed are, however, those of the author(s) only and do not necessarily reflect those of the European Union or the European Research Council. 
+
+# References 
+
+[1] Eric D Sun, Olivia Y Zhou, Max Hauptschein, Nimrod Rappoport, Lucy Xu, Paloma Navarro Negredo, Ling Liu, Thomas A Rando, James Zou, and Anne Brunet. Spatial transcriptomic clocks reveal cell proximity effects in brain ageing. Nature , 638(8049):160– 171, 2025. [2] Brianna R Watson, Biplab Paul, Raza Ur Rahman, Liat Amir-Zilberstein, Åsa Segerstolpe, Eliana T Epstein, Shane Murphy, Ludwig Geistlinger, Tyrone Lee, Angela Shih, et al. Spatial transcriptomics of healthy and fibrotic human liver at single-cell resolution. Nature Communications , 16(1):319, 2025. [3] Andrew L Koenig, Irina Shchukina, Junedh Amrute, Prabhakar S Andhey, Konstantin Zaitsev, Lulu Lai, Geetika Bajpai, Andrea Bredemeyer, Gabriella Smith, Cameran Jones, et al. Single-cell transcriptomics reveals cell-type-specific diversification in human heart failure. Nature cardiovascular research , 1(3):263–280, 2022. [4] Emma Dann, Ana-Maria Cujba, Amanda J Oliver, Kerstin B Meyer, Sarah A Teichmann, and John C Marioni. Precise identification of cell states altered in disease using healthy single-cell references. Nature genetics , 55(11):1998–2008, 2023. [5] Emma Dann, Neil C Henderson, Sarah A Teichmann, Michael D Morgan, and John C Marioni. Differential abundance testing on single-cell data using k-nearest neighbor graphs. 
+
+Nature biotechnology , 40(2):245–253, 2022. [6] Kamil Lisek, Ilan Theurillat, Tancredi Massimo Pentimalli, Svea Beier, Daniel León-Periñán, Anna Antonatou, Serafima Dubnov, Marion Müller, Florian Hubl, Artemis Xhuri, et al. Spatiotemporal dynamics of tumor microenvironment remodeling. bioRxiv , pages 2025–07, 2025. 21 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+[7] Daniel B Burkhardt, Jay S Stanley III, Alexander Tong, Ana Luisa Perdigoto, Scott A Gigante, Kevan C Herold, Guy Wolf, Antonio J Giraldez, David van Dijk, and Smita Kr-ishnaswamy. Quantifying the effect of experimental perturbations at single-cell resolution. 
+
+Nature biotechnology , 39(5):619–629, 2021. [8] Aleksandrina Goeva, Michael-John Dolan, Judy Luu, Eric Garcia, Rebecca Boiarsky, Ra-jat M Gupta, and Evan Macosko. Hidden: a machine learning method for detection of disease-relevant populations in case-control single-cell transcriptomics data. Nature Com-munications , 15(1):9468, 2024. [9] Jonathan Karin, Reshef Mintz, Barak Raveh, and Mor Nitzan. Interpreting single-cell and spatial omics data using deep neural network training dynamics. Nature Computational Science , 4(12):941–954, 2024. [10] Dora Hammerl, John WM Martens, Mieke Timmermans, Marcel Smid, Anita M Trapman-Jansen, Renée Foekens, Olga I Isaeva, Leonie Voorwerk, Hayri E Balcioglu, Rebecca Wijers, et al. Spatial immunophenotypes predict response to anti-pd1 treatment and capture distinct paths of t cell evasion in triple negative breast cancer. Nature communications , 12 (1):5668, 2021. [11] Inbal Avraham-Davidi, Simon Mages, Johanna Klughammer, Noa Moriel, Shinya Imada, Matan Hofree, Evan Murray, Jonathan Chen, Karin Pelka, Arnav Mehta, et al. Spatially defined multicellular functional units in colorectal cancer revealed from single cell and spatial transcriptomics. ELife , 14:RP104815, 2025. [12] Lambda Moses and Lior Pachter. Museum of spatial transcriptomics. Nature methods , 19 (5):534–546, 2022. [13] Anjali Rao, Dalia Barkley, Gustavo S França, and Itai Yanai. Exploring tissue architecture using spatial transcriptomics. Nature , 596(7871):211–220, 2021. [14] Mayar Ali, Merel Kuijs, Soroor Hediyeh-Zadeh, Tim Treis, Karin Hrovatin, Giovanni Palla, Anna C Schaar, and Fabian J Theis. Graphcompass: spatial metrics for differential analyses of cell organization across conditions. Bioinformatics , 40(Supplement_1):i548–i557, 2024. [15] Giovanni Palla, Hannah Spitzer, Michal Klein, David Fischer, Anna Christina Schaar, Louis Benedikt Kuemmerle, Sergei Rybakov, Ignacio L Ibarra, Olle Holmberg, Isaac Vir-shup, et al. Squidpy: a scalable framework for spatial omics analysis. Nature methods , 19 (2):171–178, 2022. [16] Swabha Swayamdipta, Roy Schwartz, Nicholas Lourie, Yizhong Wang, Hannaneh Ha-jishirzi, Noah A Smith, and Yejin Choi. Dataset cartography: Mapping and diagnosing datasets with training dynamics. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pages 9275–9293, 2020. [17] Tim Lohoff, Shila Ghazanfar, A Missarova, Noushin Koulena, Nico Pierson, Jonathan A Griffiths, Evan S Bardot, C-HL Eng, Richard CV Tyser, Ricard Argelaguet, et al. Integra-tion of spatial and single-cell transcriptomic data elucidates mouse organogenesis. Nature biotechnology , 40(1):74–85, 2022. [18] Thomas N. Kipf and Max Welling. Semi-supervised classification with graph convolutional networks. In International Conference on Learning Representations (ICLR) , 2017. [19] Petar Veličković, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua Bengio. Graph attention networks. In International Conference on Learning Rep-resentations (ICLR) , 2018. 22 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+[20] William L. Hamilton, Rex Ying, and Jure Leskovec. Inductive representation learning on large graphs. In Advances in Neural Information Processing Systems (NeurIPS) , 2017. [21] Kangning Dong and Shihua Zhang. Deciphering spatial domains from spatially resolved transcriptomics with an adaptive graph attention auto-encoder. Nature Communications ,13(1):1739, 2022. [22] Haochen Li, Zhihang Zhang, Mike Squires, Xi Chen, and Xiaoyu Zhang. Holonet: Decoding cell-cell communication by spatial transcriptomics with graph neural networks. bioRxiv ,2022. [23] Zheng Fang, Adam J. Ford, Tianyou Hu, Hanqing Zhang, Ya-Yuan Liu, Hangjia Shi, Hongfang Liu, et al. Conditional graph neural networks for spatial transcriptomics analysis. 
+
+bioRxiv , 2023. [24] Yahui Long, Kok Siong Ang, Mengwei Li, Kian Long Kelvin Chong, Raman Sethi, Cheng-wei Zhong, Hang Xu, Zhiwei Ong, Karishma Sachaphibulkij, Ao Chen, et al. Spatially in-formed clustering, integration, and deconvolution of spatial transcriptomics with graphst. 
+
+Nature communications , 14(1):1155, 2023. [25] Ziyang Tang, Tonglin Zhang, Baijian Yang, Jing Su, and Qianqian Song. Spaci: deciphering spatial cellular communications through adaptive graph model. Briefings in Bioinformatics ,24(1):bbac563, 2023. [26] Hang Xu, Yahui Long, Jiayi Wei, et al. Graph neural networks in single-cell and spatial transcriptomics: a review. Briefings in Bioinformatics , 2024. [27] Andreas J Flammer, Todd Anderson, David S Celermajer, Mark A Creager, John Dean-field, Peter Ganz, Naomi M Hamburg, Thomas F Lüscher, Michael Shechter, Stefano Tad-dei, et al. The assessment of endothelial function: from research into clinical practice. 
+
+Circulation , 126(6):753–767, 2012. [28] Leah I Susser, Katey J Rayner, et al. Through the layers: how macrophages drive atherosclerosis across the vessel wall. The Journal of clinical investigation , 132(9), 2022. [29] Kathryn J Moore and Ira Tabas. Macrophages in the pathogenesis of atherosclerosis. Cell ,145(3):341–355, 2011. [30] Jessica Pauli, Daniel Garger, Fatemeh Peymani, Justus Wettich, Nadja Sachs, Johannes Wirth, Katja Steiger, Christina Hillig, Hanrui Zhang, Ira Tabas, et al. Single cell spatial transcriptomics integration deciphers the morphological heterogeneity of atherosclerotic carotid arteries. Nature Communications , 2025. [31] Kaho Watanabe, Rena Watanabe, Hanae Konii, Remina Shirai, Kengo Sato, Taka-aki Matsuyama, Hatsue Ishibashi-Ueda, Shinji Koba, Youichi Kobayashi, Tsutomu Hirano, et al. Counteractive effects of omentin-1 against atherogenesis. Cardiovascular research ,110(1):118–128, 2016. [32] Lea Dib, Lada A Koneva, Andreas Edsfeldt, Yasemin-Xiomara Zurke, Jiangming Sun, Mihaela Nitulescu, Moustafa Attar, Esther Lutgens, Steffen Schmidt, Marie W Lind-holm, et al. Lipid-associated macrophages transition to an inflammatory state in human atherosclerosis, increasing the risk of cerebrovascular complications. Nature cardiovascular research , 2(7):656–672, 2023. 23 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+[33] Dawn M Fernandez, Adeeb H Rahman, Nicolas F Fernandez, Aleksey Chudnovskiy, El-ad David Amir, Letizia Amadori, Nayaab S Khan, Christine K Wong, Roza Shamailova, Christopher A Hill, et al. Single-cell immune landscape of human atherosclerotic plaques. 
+
+Nature medicine , 25(10):1576–1588, 2019. [34] Keren Bahar Halpern, Rom Shenhav, Orit Matcovitch-Natan, Beáta Tóth, Doron Lemze, Matan Golan, Efi E Massasa, Shaked Baydatch, Shanie Landen, Andreas E Moor, et al. Single-cell spatial reconstruction reveals global division of labour in the mammalian liver. 
+
+Nature , 542(7641):352–356, 2017. [35] Shani Ben-Moshe, Yonatan Shapira, Andreas E Moor, Rita Manco, Tamar Veg, Keren Ba-har Halpern, and Shalev Itzkovitz. Spatial sorting enables comprehensive characterization of liver zonation. Nature metabolism , 1(9):899–911, 2019. [36] Rita Manco and Shalev Itzkovitz. Liver zonation. Journal of Hepatology , 74(2):466–468, 2021. [37] Ahmed Ghallab, Maiju Myllys, Christian H. Holland, Ayham Zaza, Walaa Murad, Reham Hassan, Yasser A. Ahmed, Tahany Abbas, Eman A. Abdelrahim, Kai Markus Schneider, et al. Influence of liver fibrosis on lobular zonation. Cells , 8(12):1556, 2019. [38] Martin Guilliams, Johnny Bonnardel, Birthe Haest, Bart Vanderborght, Camille Wagner, Anneleen Remmerie, Anna Bujko, Liesbet Martens, Tinne Thoné, Robin Browaeys, et al. Spatial proteogenomics reveals distinct and evolutionarily conserved hepatic macrophage niches. Cell , 185(2):379–396, 2022. [39] Frank Tacke and Henning W Zimmermann. Macrophage heterogeneity in liver injury and fibrosis. Journal of hepatology , 60(5):1090–1096, 2014. [40] Sylvie Naveau, Thierry Poynard, Clarisse Benattar, Pierre Bedossa, and Jean-Claude Cha-put. Alpha-2-macroglobulin and hepatic fibrosis: diagnostic interest. Digestive diseases and sciences , 39(11):2426–2432, 1994. [41] W-Z Lan, H Abbas, A-M Lemay, MM Briggs, and CE Hill. Electrophysiological and molecular identification of hepatocellular volume-activated k+ channels. Biochimica et Biophysica Acta (BBA)-Biomembranes , 1668(2):223–233, 2005. [42] Manuel Winkler, Theresa Staniczek, Sina Wietje Kürschner, Christian David Schmid, Hiltrud Schönhaber, Julio Cordero, Linda Kessler, Arthur Mathes, Carsten Sticht, Michelle Neßling, et al. Endothelial gata4 controls liver fibrosis and regeneration by preventing a pathogenic switch in angiocrine signaling. Journal of hepatology , 74(2):380–393, 2021. [43] Cristina Ortiz, Robert Schierwagen, Liliana Schaefer, Sabine Klein, Xavier Trepat, and Jonel Trebicka. Extracellular matrix remodeling in chronic liver disease. Current tissue microenvironment reports , 2(3):41–52, 2021. [44] Janos Groh and Mikael Simons. White matter aging and its impact on brain function. 
+
+Neuron , 113(1):127–139, 2025. [45] Shima Safaiyan, Simon Besson-Girard, Tuğberk Kaya, Ludovico Cantuti-Castelvetri, Lu Liu, Hao Ji, Martina Schifferer, Garyfallia Gouna, Fumere Usifo, Nirmal Kannaiyan, et al. White matter aging drives microglial diversity. Neuron , 109(7):1100–1117, 2021. [46] Collyn M Kellogg, Kevin Pham, Adeline H Machalinski, Hunter L Porter, Harris E Blanken-ship, Kyla B Tooley, Michael B Stout, Heather C Rice, Amanda L Sharpe, Michael J Beck-stead, et al. Microglial mhc-i induction with aging and alzheimer’s is conserved in mouse models and humans. Geroscience , 45(5):3019–3043, 2023. 24 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+[47] Yi Zheng, Ting Liu, Lunan Luo, Feiyang Li, Cheng Tang, Changling Xu, Cheng Chen, Lu Yang, Ying Xiao, Ziyan Wang, et al. Complement c4b as a key mediator of synaptic loss and cognitive decline in brain aging. Molecular Therapy , 33(12):6314–6331, 2025. [48] Maria D Ganfornina, Sonia Do Carmo, Eva Martinez, Jorge Tolivia, Ana Navarro, Eric Rassart, and Diego Sanchez. Apod, a glia-derived apolipoprotein, is required for peripheral nerve functional integrity and a timely response to injury. Glia , 58(11):1320–1334, 2010. [49] Sarah Dassati, Andreas Waldner, and Rüdiger Schweigreiter. Apolipoprotein d takes center stage in the stress response of the aging and degenerative brain. Neurobiology of aging , 35 (7):1632–1642, 2014. [50] Yusuke Tanaka, Eriko Furube, Shigetaka Yoshida, and Masahiro Ohgidani. Expression of kallikrein in glial cells and its influence on oligodendrocyte myelination. Journal of Neurochemistry , 169(7):e70150, 2025. [51] Georgios Kalamakis, Daniel Brüne, Srikanth Ravichandran, Jan Bolz, Wenqiang Fan, Fred-erik Ziebell, Thomas Stiehl, Francisco Catalá-Martinez, Janina Kupke, Sheng Zhao, et al. Quiescence modulates stem cell maintenance and regenerative capacity in the aging brain. 
+
+Cell , 176(6):1407–1419, 2019. [52] Kuti Baruch, Aleksandra Deczkowska, Eyal David, Joseph M Castellano, Omer Miller, Alexander Kertser, Tamara Berkutzki, Zohar Barnett-Itzhaki, Dana Bezalel, Tony Wyss-Coray, et al. Aging-induced type i interferon response at the choroid plexus negatively affects brain function. Science , 346(6205):89–93, 2014. [53] Neil Dani, Rebecca H Herbst, Cristin McCabe, Gilad S Green, Karol Kaiser, Joshua P Head, Jin Cui, Frederick B Shipley, Ahram Jang, Danielle Dionne, et al. A cellular and spatial map of the choroid plexus across brain ventricles and ages. Cell , 184(11):3056–3074, 2021. [54] Michael T Pearce, Thomas Dooms, Alice Rigg, Jose Oramas, and Lee Sharkey. Bilinear MLPs enable weight-based mechanistic interpretability. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview.net/forum? id=gI0kPklUKS .[55] Siddhant M Jayakumar, Wojciech M Czarnecki, Jacob Menick, Jonathan Schwarz, Jack Rae, Simon Osindero, Yee Whye Teh, Tim Harley, and Razvan Pascanu. Multiplicative in-teractions and where to find them. In International conference on learning representations ,2020. [56] Jian Hu, Xiangjie Li, Kyle Coleman, Amelia Schroeder, Nan Ma, David J Irwin, Edward B Lee, Russell T Shinohara, and Mingyao Li. Spagcn: Integrating gene expression, spatial location and histology to identify spatial domains and spatially variable genes by graph convolutional network. Nature methods , 18(11):1342–1351, 2021. [57] Runze Li and Xiuwei Yang. Dissecting the single-cell transcriptome network of cell-to-cell communication with deeplinc. Genome Biology , 23(1):124, 2022. [58] The Gene Ontology Consortium. The gene ontology knowledgebase in 2023. Nucleic Acids Research , 51(D1):D1057–D1062, 2023. doi: 10.1093/nar/gkac1049. [59] Minoru Kanehisa, Miho Furumichi, Yoko Sato, Mayu Ishiguro-Watanabe, and Mao Tanabe. Kegg: integrating viruses and cellular organisms. Nucleic Acids Research , 49(D1):D545– D551, 2021. doi: 10.1093/nar/gkaa970. 25 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+[60] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style, high-performance deep learning library. Advances in neural informa-tion processing systems , 32, 2019. [61] Martin R Bennett, Sanjay Sinha, and Gary K Owens. Vascular smooth muscle cells in atherosclerosis. Circulation research , 118(4):692–702, 2016. 
+
+# 8 Supplementary Notes 
+
+Table 1: Top 10 gene pairs associated with healthy-associated cell-cell interactions in the liver fibrosis MERFISH dataset [2], extracted from the positive component of the differential interac-tion matrix ∆+ (see Methods 4.7). Gene i and Gene j denote the two genes whose coordinated expression across neighboring cells is most strongly associated with healthy tissue, and weight corresponds to the entry ∆+ 
+
+> ij
+
+.
+
+Rank Gene i Gene j Weight 
+
+1 IL4R LAMB1 0.019154 2 A2M KCNE1 0.019139 3 CD4 KCNE1 0.019066 4 A2M GATA4 0.019030 5 A2M IL4R 0.019028 6 KCNE1 LAMB1 0.018946 7 GATA4 LAMB1 0.018937 8 LAMB1 PDGFRB 0.018882 9 A2M PDGFRB 0.018873 10 CD4 GATA4 0.018831 
+
+Implementation Details 
+
+Hyperparameters 
+
+The default hyperparameters used across all experiments are summarized in Table 2. 
+
+Confidence Score Computation 
+
+At each training epoch e ∈ { 1, . . . , E }, the softmax probability assigned to the true label yij is recorded for every edge (i, j ):
+
+p(e)(yij | xi, xj ) = exp[ score yij (xi, xj )] 
+
+∑ 
+
+> c
+
+exp[ score c(xi, xj )] (13) The confidence of each edge is then taken as the mean predicted probability across all epochs: confidence (xi, xj ) = 1
+
+E
+
+> E
+
+∑
+
+> e=1
+
+p(e)(yij | xi, xj ) (14) This temporal averaging reduces the influence of transient early-training fluctuations and pre-vents the over-confidence artifact commonly observed in neural networks trained with cross-entropy loss [9]. After training, edges are ranked by training dynamics confidence within each condition, and the top p = 5% are retained to form the condition-associated graph. 26 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Table 2: Default hyperparameters of Casei 
+
+Hyperparameter Value Description 
+
+Graph Construction 
+
+k (spatial k-NN) 5 Number of spatial neighbors per cell 
+
+Model Architecture 
+
+Rank r 64 Rank of bilinear factorization Weight initialization N (0 , 0.001) Initialization of W for numerical stability 
+
+Training 
+
+Optimizer Adam Learning rate 10 −3
+
+Batch size 512 Number of edges per mini-batch Epochs E 100 Total training epochs Loss Cross-entropy Multi-class edge classification 
+
+Regularization 
+
+λL1 10 −5 L1 penalty on W (sparsity) 
+
+λL2 10 −4 L2 penalty on W (weight decay) 
+
+Confidence Filtering 
+
+Top-p threshold 5% Fraction of highest-confidence edges retained 
+
+Semi-Synthetic Benchmarking Details 
+
+For the semi-synthetic analysis (Section 2.2), three replicate tissues of 15,000 cells each were generated per perturbation scenario. Gene expression for each cell was sampled from a Pois-son distribution fitted to a mouse organogenesis seqFISH dataset [17]. Spatial k-NN graphs were constructed with k = 5 neighbors. Ground truth perturbed edges were defined as edges in the k-NN graph that have at least one incident cell that was synthetically modified by the perturbation. All baseline models (MLP_Sum, MLP_Concat, MLP_Product, Node_Mean, GCN, GAT, GraphSAGE) were trained with identical hyperparameters as Casei (Adam op-timizer, learning rate 10 −3, batch size 512, 100 epochs, hidden dimension 64). Performance was evaluated using the Area Under the ROC Curve (AUROC) averaged over four synthetic replicates. 
+
+Downstream Analysis Details Neighborhood Enrichment. Condition-associated neighborhood enrichment was computed using Squidpy’s gr.nhood_enrichment function [15] applied to the filtered condition-specific edge sets, using 1,000 permutations. 
+
+Top Gene Pairs. The differential interaction matrix ∆+ = max( Mc1 −Mc2 , 0) was computed based on the learned weight matrices. Gene pairs were ranked by the magnitude of their corresponding entry in ∆+.
+
+Interaction Programs. Eigendecomposition of ∆+ was performed using torch.linalg.eigh [60]. Eigenvectors were sorted by descending eigenvalue magnitude. Gene set enrichment analysis was performed against Gene Ontology Biological Processes 2023 [58] and KEGG 2021 [59] using the hypergeometric test with Benjamini–Hochberg FDR correction ( α = 0 .05 ). 27 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Interaction-Driven Differential Expression. Differential expression between Interacting and Bystander cells was assessed using the Wilcoxon rank-sum test, requiring a minimum group size of 3 cells. p-values were corrected using Benjamini–Hochberg FDR. 
+
+Methodological Comparison 
+
+To evaluate the utility of explicit edge modeling, we compared the performance of Casei relative to MELD [7] and Annotatability [9]. These node-centric approaches were adapted by calculating the score for each edge as the average of the scores of its two incident nodes. As shown in Sup. Fig. 7, this averaging approach did not recover the specific hepatocyte-macrophage interaction signature in the liver fibrosis dataset (see 2.4). While node-centric methods are effective at identifying cell populations associated with a particular condition, they may lack the precision required to distinguish specific cellular crosstalk from general spatial co-occurrence. 
+
+Software and Hardware 
+
+All models were implemented in PyTorch [60]. Spatial graph construction was based on 
+
+sklearn.neighbors.kneighbors_graph [60] and Squidpy [15]. Our code is publicly available at https://github.com/nitzanlab/Casei .
+
+Atherosclerotic Plaques 
+
+For the analysis in Results 2.3, we used the Xenium spatial transcriptomics dataset from Pauli et al. [30], comprising 16 tissue sections from human carotid arteries: 12 advanced atherosclerotic plaque samples and 4 early lesion or control samples. Four patients contributed paired samples (both early and advanced lesions), while the remaining eight patients contributed advanced plaque samples only. Two custom Xenium gene panels were designed, each containing probes for 548 genes: Panel 1, which we used in our analysis, was designed for cell type identification based on matched scRNA-seq data, and Panel 2 captured atherosclerotic disease-associated transcripts. The dataset includes patient-level smoking history metadata for plaque samples, which we used in a secondary analysis comparing smoker and non-smoker plaques. In total, 120,164 cells were profiled across all samples after quality control and filtering (see Pauli et al. for full preprocessing details). The plaque-adjusted neighborhood enrichment is dominated by three macrophage subtypes. MAC_HMOX1 macrophages are subluminally positioned cells primarily involved in heme degra-dation and lipid handling [30]. MAC_TREM2HI macrophages are lipid-associated cells located deeper in the shoulder regions of fibrous caps, implicated in extracellular matrix remodeling [30]. MAC_C1Q macrophages are characterized by their role in apoptotic cell clearance and effero-cytosis [30]. The smoker-adjusted neighborhood enrichment is dominated by interactions between three VSMC (Vascular Smooth Muscle Cells) subtypes. Contractile VSMCs (VSMC_contr) repre-sent the classical, quiescent smooth muscle phenotype maintaining arterial wall integrity [30]. Inflamed VSMCs (VSMC_inflamed) co-express classical VSMC markers alongside immune-related transcripts, representing a disease-associated phenotypic state [30]. The enrichment of interactions between and within these subtypes is consistent with previous reports of VSMC phenotypic switching in atherosclerotic lesions [61]. 
+
+Comparison with Statistical Neighborhood Enrichment Approaches 
+
+To assess whether standard spatial statistics can recover the condition-specific interactions iden-tified by Casei in the aging mouse brain (see 2.5), we applied two complementary analyses to 28 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+the original, unfiltered k-NN spatial proximity graphs. First, we performed Squidpy’s neigh-borhood enrichment independently on young and aged tissues and classified each cell type pair based on whether it reached statistical significance (BH-FDR < 0.05 ) in young only, aged only, both, or neither condition (Fig. 9c). Second, we computed a differential enrichment score by subtracting the aged z-score from the young z-score for each cell type pair, such that positive values indicate young-biased and negative values indicate aged-biased interactions (Fig. 9d). Neither approach identified the key interactions revealed by Casei . The significance over-lap analysis (Fig. 9c) classified oligodendrocyte-microglia and oligodendrocyte-oligodendrocyte as significant in both conditions, failing to distinguish it as an aging-specific interaction. The differential z-score analysis (Fig. 9d) was dominated by neuronal and NSC interactions, with oligodendrocyte-microglia and oligodendrocyte-oligodendrocyte pairs showing only modest dif-ferential scores that do not stand out among the many cell type pairs. The young-associated ependymal-ependymal interaction, which Casei identified, was also not identified by either statistical approach. 
+
+# 9 Supplementary Figures 
+
+Figure 6: Analysis of synthetically perturbed spatial transcriptomics data. Synthetic perturbations setup based on mouse organogenesis seqFISH dataset [17]. Benchmarking per-formance across two perturbation scenarios. Barplots display the Area Under the ROC Curve (AUROC) for edge-level perturbation detection ( n = 10 replicates). 29 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Figure 7: Benchmarking identification of condition-associated cell-cell interactions in liver fibrosis. (a–c) Healthy-associated neighborhood enrichment heatmaps computed on the liver fibrosis MERFISH dataset [2], comparing (a) Casei (b) Annotatability, and (c) MELD. The edge scores for Annotatability and MELD were calculated as the averaged scores of the two incident nodes (see Sup. 8). 30 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Figure 8: Condition-associated spatial interactions in the aging mouse brain spatial transcriptomics atlas [1]. (a–c) Dot plots comparing gene expression in cells with high-confidence spatial edges (Interacting) versus those without (Bystander) for microglia, oligo-dendrocytes (for microglia-oligodendrocytes interactions), and ependymal cells (for ependymal-ependymal interactions). (d-g) Characterization of the young-specific (d-e) and aged-specific (f-g) interaction programs showing top gene loadings (left) and associated GO Biological Pro-cesses (right). 31 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted May 6, 2026. ;https://doi.org/10.64898/2026.05.03.722470 doi: bioRxiv preprint
+
+Figure 9: Standard spatial statistics fail to recover condition-associated cell-cell in-teractions identified by Casei in the aging mouse brain spatial transcriptomics at-las [1]. (a,b) Neighborhood enrichment heatmaps computed on the condition-adjusted graphs for (a) young-associated and (b) aged-associated interactions. (c) Significance overlap analysis classifying each pair of cell types by whether it is significantly enriched (BH-FDR < 0.05 ) in young only, aged only, both, or neither condition, computed over the full k-NN spatial proximity graph. (d) Differential neighborhood enrichment computed over the full k-NN spatial proximity graph. Positive (negative) values indicate young- (aged-) biased interactions. 32
