@@ -1,0 +1,134 @@
+Title: Learning to Segment using Summary Statistics and Weak Supervision
+
+URL Source: https://arxiv.org/pdf/2605.03059v1
+
+Published Time: Wed, 06 May 2026 00:06:35 GMT
+
+Number of Pages: 5
+
+Markdown Content:
+# Learning to Segment using Summary Statistics and Weak Supervision 
+
+Omkar Kulkarni 1[0009 −0007 −1405 −6442] , Edward Raff 2[0000 −0002 −9900 −1972] , and Tim Oates 1[0000 −0002 −8655 −747 X] 
+
+> 1
+
+University of Maryland, Baltimore County, Baltimore MD, USA 
+
+{omkar.kulkarni,oates}@umbc.edu  
+
+> 2
+
+Crowdstrike, Austin TX, USA edward.raff@crowdstrike.com 
+
+Abstract. Medical experts often manually segment images to obtain diagnostic statistics and discard the resulting annotations. We aim to train segmentation models to alleviate this burden, but constrained to the retained summary statistics (e.g., the area of the annotated region). Empirical results suggest that statistics alone are insufficient for this task, but adding weak information in the form of a few pixels within the area of interest significantly improves performance. We use a novel loss function that combines terms for image reconstruction quality, matching to summary statistics, and overlap between the predicted foreground and the weak supervisory signal. Experiments on standard image, ultrasound (breast cancer), and Computed Tomography (CT) scan (kidney tumors) data demonstrate the utility and potential of the approach. 
+
+Keywords: Weak Supervision · Image Segmentation · Medical Images 
+
+· Limited Labels 
+
+## 1 Introduction 
+
+Our work is motivated by an attempted collaboration with physicians at the University of Maryland School of Medicine. Multiple research projects, such as [6, 7, 9], involved months of manual effort by physicians and physician trainees to label images pixel-by-pixel and categorize cell types. The ultimate goal of this activity was to produce a clinically relevant ratio for the subject under study. Our interest in helping these physicians accelerate their work by using AI to segment the images was thwarted by the discovery that the original segmentation masks, the ground truth labels we would train and evaluate on, were routinely discarded as “not relevant” to the clinical question. Only the ratio was saved . The effort to relabel even a few hundred images was measured in half-year increments, depending on the project and the required details. This problem motivates our work to develop a new approach to semi-supervised segmentation that directly addresses this common clinical scenario. Despite the difficulty of learning under these constraints, our results can be surprisingly useful — as demonstrated in Figure 1.     
+
+> arXiv:2605.03059v1 [cs.CV] 4 May 2026 2Omkar Kulkarni et al.
+> (a) Input Im-age
+> (b) Ground truth
+> (c) Weak mask (d) Our Method
+> (e) Only weak mask
+> (f) Only statis-tics
+> Fig. 1. Example images from the BUSI dataset, showing that we can obtain reasonably accurate segmentations even under highly restrictive and minimal learning signals from the physician.
+
+Numerous prior works have investigated medical image segmentation as sum-marized in [8], however, these are all fully supervised methods. Recent ap-proaches toward weakly/semi supervised segmentation use skeletonization meth-ods to encode domain knowledge, regularization algorithms, or incomplete labels (most similar to our work) [3]. To wit, none have dealt with the kind of label scarcity or interdisciplinary hurdles to leveraging historical data. In tackling this problem, we find that a combination of self-supervised and weak signals can deliver practical and reasonable results. 
+
+## 2 Methods and Architecture 
+
+We use a percentage of ROI (Region of Interest) as a summary statistic that represents the ROI’s size relative to the image’s size. Physicians conducting research often record this information for analysis, e.g., the percentage of fat cells vs. regular cells in [9]. Physicians calculate this by labeling the image, and then the labeled image is discarded for perceived uselessness, recording only the summary statistic for posterity. It is simply the fraction of pixels in the ROI to the total number of pixels in the image. Mathematically, this is defined as 
+
+¯M = 1
+
+> I×J
+
+PIi=1 
+
+PJj=1 Mi,j . As noted, our experiments use a ratio equal to the ground-truth fraction of pixels in the segmentable class. A degenerate solution we encountered is that the sigmoid prediction mask would learn to produce a constant value near the target ratio. While this got the correct “summary statistic”, it failed to meaningfully segment any of the image content. To tackle this, we came up with a ‘weak mask’ that contains information about the location and shape of the ROI. Let X be the medical image, M be its corresponding ground truth mask, and Mw be the weak mask. It is easier to obtain a coarse localization of the ROI, typically at its center, than to accurately hand-annotate and obtain M . Thus for a given X, it is easier to obtain Mw than to obtain M , i.e., Mw ⊂ M . Since M already exists for the datasets used in this research, we obtain Mw from M by eroding M to mimic how a radiology technician would obtain Mw from X - annotate only some pixels of the ROI, primarily the ones at the center. Learning to Segment using Summary Statistics and Weak Supervision 3
+
+We also want to ensure that the predictions are highly confident, so we avoid output values close to 0.5 or any other constant ratio. To achieve this, we imple-ment a “confidence” loss function. We initialize a constant matrix Ic with each element equal to 0.5 and with the same size as Mp. If Mp is the predicted mask, the confidence loss here is defined as Lc = 1size( Ic)
+
+P 
+
+> i,j
+
+(Ic)2 
+
+> i,j
+
+− 1size( Ic)
+
+P 
+
+> i,j
+
+(Ic −
+
+Mp)2 
+
+> i,j
+
+. Thus, each element that is 0.5 accrues the maximum penalty possible of 0.25. This encourages the model to output near-0 or near-1 values across the matrix and avoids degenerate solutions. The second form of self-supervision is a reconstruction loss , Lr (I, Y ) = ∥I − Y ∥1, as in an autoencoder. If the net-work can use the intermediate representation to reconstruct the input, it has likely learned to encode structural patterns in the input image that can im-prove segmentation. Since the loss Lr and the preceding confidence loss Lc are used in all experiments, they will not be stated explicitly when their inclusion would clutter the page or diagram. We now describe the weak supervision loss ( Lws ) between the predicted mask and the weak mask as follows: Let Mp
+
+be the predicted mask, M be the ground truth mask, and Mw be the weak mask. We only have the weak mask and assume no knowledge of the remain-ing pixels. Hence, we consider only the pixels for which we know information when computing a loss. We do an element-wise multiplication of the weak mask with the predicted mask, thus zeroing out all other pixels. The loss is then 
+
+Lws (Mw, M p) = −[Mw ⊙ log( Mw ⊙ Mp) + (1 − Mw) log(1 − Mw ⊙ Mp)] , where ‘⊙’ denotes element-wise multiplication. By enforcing that the weak mask is suf-ficiently small for a domain expert to quickly mark the unambiguous portion of an image (i.e., ‘center mass’ avoiding the edges), we replicate and evaluate how much expert physician relabeling may be needed in future studies. The statis-tics loss ( Ls) we use is simply the L1 loss between the percentage of ROI in the predicted mask and the actual mask, Ls(M, M p) = ∥ ¯M − ¯Mp∥1.
+
+## 3 Results 
+
+We demonstrate our method on two datasets. The Breast Ultrasound Tumor (BUSI) dataset [1] and the KiTS23 dataset [5]. Volumetric data are treated as 2D in our tests by selecting the volume slice with the largest ROI. We use the DeepLabV3 [2] architecture with a ResNet-50 [4] backbone across all our experiments. In addition to the primary predictions from segmentation maps, we use the auxiliary output as an autoencoder, forcing it to reconstruct the input image. This helps preserve the image’s 2D structure, which is useful for segmentation under weak supervision. We use IoU (Intersection over Union) as our standard evaluation metric. For both medical imagery datasets, the best performance is seen in the setting where both losses, Ls and Lws , are used. The summary statistics loss ( Ls) appears to be more significant than the weak supervision loss ( Lws ). Table 1 summarizes our results from each dataset in all the settings tested. An example image from the KiTS dataset is shown in Fig. 2, which illustrates the benefits and risks of our strategy. The top row shows the ground-truth and 4 Omkar Kulkarni et al. 
+
+Table 1. IoU achieved with three weak mask sizes ([4-12%]), ablating where either one of the losses is disabled, as well as with a fully supervised scenario. The table shows that we can achieve results that are not far from those of fully supervised learning by combining the Ls and Lws loss functions. Also to be noted is that both loss functions are necessary to achieve this result. Dataset Ls only 4% 8% 12% Lws only Fully Supervised BUSI 36.95 45.70 48.13 45.29 26.33 63.15 KiTS23 12.65 29.22 37.23 28.43 8.75 59.85 
+
+(a) Input CT scan 
+
+(b) Kidney mask 
+
+(c) Tumor mask 
+
+(d) Weak kid-ney mask 
+
+(e) Weak tu-mor mask 
+
+(f) Kidney: 
+
+Ls
+
+(g) Kidney: 
+
+Lws 
+
+(h) Kidney: 
+
+Ls, L ws 
+
+(i) Tumor: Ls (j) Tumor: 
+
+Lws 
+
+(k) Tumor: 
+
+Ls, L ws 
+
+Fig. 2. A sample from the KiTS dataset, showing reasonably accurate segmentation masks even under highly restrictive and minimal learning signals. While the tumor prediction is less accurate, the kidney prediction is very close to the ground truth mask. 
+
+weak ground-truth used in training. The bottom row shows the kidney and tumor predictions for the three combinations of Ls and Lws . Notice that the kidney mask is produced with high accuracy despite the limited labeling, whereas the tumor prediction has devolved to predicting the kidneys, resulting in a much lower 7% IoU compared to 66% for the kidney. At the macro scale, the image poses the problem that the mask is small over a non-visually distinct portion of the image for the tumor, which has a similar scale ratio of mask foreground to background pixels. This makes it difficult for the model to determine which actual content is intended to be segmented, espe-cially since there is no negative signal in invalid regions to select (i.e., the weak segmentation loss Lws has only positive signals, with no negative signals). When combined with the reconstruction loss, this means the model can misattribute a segmentation signal to a different, more visually distinct, but similarly sized organ (in this case, the kidneys). Learning to Segment using Summary Statistics and Weak Supervision 5
+
+This result indicates that, in our current results, medical tasks with more visually distinct content will be better application areas. This is still a large time savings, as informed by our physician counterparts, especially when considering irregular cell structures that may have highly irregular borders but be visually distinct from the surrounding tissue. 
+
+## 4 Conclusion 
+
+Our results show that it is possible to obtain reasonably accurate segmenta-tions with weak supervision without high-quality ground truth for medical image data. Our method performs best when the content of interest is visually distinct from the surrounding tissue in medical images. We successfully demonstrate our method on ultrasound and CT scan imagery under a highly restrictive labeling scenario prevalent in hospitals today, proving that there is still value in the lim-ited labels available. We plan to expand this to 3D data, and develop this further for probabilistic masking in the future. 
+
+## References 
+
+1. Al-Dhabyani, W., Gomaa, M., Khaled, H., Fahmy, A.: Dataset of breast ultrasound images. Data in Brief 28 , 104863 (2020) 2. Chen, L.C., Papandreou, G., Schroff, F., Adam, H.: Rethinking atrous convolution for semantic image segmentation (2017), https://arxiv.org/abs/1706.05587 3. Das, A., Gorade, V., Kumar, K., Chakraborty, S., Mahapatra, D., Roy, S.: Confidence-guided semi-supervised learning for generalized lesion localization in x-ray images. In: MICCAI. pp. 242–252 (2024) 4. He, K., Zhang, X., Ren, S., Sun, J.: Deep residual learning for image recognition. In: CVPR. pp. 770–778 (2016). https://doi.org/10.1109/CVPR.2016.90 5. Heller, N., et al.: The kits21 challenge: Automatic segmentation of kidneys, renal tumors, and renal cysts in corticomedullary-phase ct (2023) 6. Klein, A., Jauregui, J.J., Raff, E., Henn, R.F., Hasan, S.A., Gilotra, M.: Early outcomes and complications of obese patients undergoing shoulder arthroplasty: A meta-analysis. Journal of Clinical Orthopaedics and Trauma (Sep 2019) 7. Kolakowski, L., et al.: Neer award 2018: Benzoyl peroxide effectively decreases pre-operative cutibacterium acnes shoulder burden: a prospective randomized controlled trial. Journal of Shoulder and Elbow Surgery 27 (9) (2018) 8. Rayed, M.E., Islam, S.S., Niha, S.I., Jim, J.R., Kabir, M.M., Mridha, M.: Deep learn-ing for medical image segmentation: State-of-the-art advancements and challenges. Informatics in Medicine Unlocked 47 , 101504 (2024) 9. Valencia, A.P., Lai, J.K., Iyer, S.R., Mistretta, K.L., Spangenburg, E.E., Davis, D.L., Lovering, R.M., Gilotra, M.N.: Fatty infiltration is a prognostic marker of muscle function after rotator cuff tear. The American Journal of Sports Medicine 
+
+46 (9) (2018)

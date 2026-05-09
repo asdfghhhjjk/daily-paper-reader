@@ -1,0 +1,501 @@
+Title: From Boundaries to Semantics: Prompt-Guided Multi-Task Learning for Petrographic Thin-section Segmentation
+
+URL Source: https://arxiv.org/pdf/2604.14805v1
+
+Published Time: Fri, 17 Apr 2026 00:45:15 GMT
+
+Number of Pages: 32
+
+Markdown Content:
+# From Boundaries to Semantics: Prompt-Guided Multi-Task Learning for Petrographic Thin-section Segmentation 
+
+Yili Ren a, Shiqi Wen b, Li Hou a, Dingwen Xiao b, Weiming Zhang b, Caleb Chen Cao c, Lin Wang d, Zilu Zheng a, Qianxiao Su a, Mingjun Zhao a, Lei Chen ∗,b,c 
+
+> a
+
+Research Institute of Petroleum Exploration and Development (RIPED), 
+
+> b
+
+The Hong Kong University of Science and Technology (Guangzhou), 
+
+> c
+
+The Hong Kong University of Science and Technology, 
+
+> d
+
+Nanyang Technological University, 
+
+Abstract 
+
+Grain-edge segmentation (GES) and lithology semantic segmentation (LSS) are two pivotal tasks for quantifying rock fabric and composition. However, these two tasks are often treated separately, and the segmentation quality is implausible albeit expensive, time-consuming, and expert-annotated datasets have been used. Recently, foundation models, especially the Segment Anything Model (SAM), have demonstrated impressive robustness for boundary alignment. However, di-rectly adapting SAM to joint GES and LSS is nontrivial due to 1) severe domain gap induced by extinction-dependent color variations and ultra-fine grain bound-aries, and 2) lacking novel modules for joint learning on multi-angle petrographic image stacks. In this paper, we propose Petro-SAM , a novel two-stage, multi-task framework that can achieve high-quality joint GES and LSS on petrographic images. Specifically, based on SAM, we introduce a Merge Block to integrate seven polarized views, effectively solving the extinction issue. Moreover, we in-troduce multi-scale feature fusion and color-entropy priors to refine the detection 
+
+> ∗
+
+Corresponding author. 
+
+Email Address : renyili@petrochina.com.cn (Yili Ren), 
+
+swen750@connect.hkust-gz.edu.cn (Shiqi Wen), houli_up@163.com 
+
+(Li Hou), dxiaoaf@connect.hkust-gz.edu.cn (Dingwen Xiao), 
+
+wzhang915@connect.hkust-gz.edu.cn (Weiming Zhang), cao@ust.hk (Caleb Chen Cao), linwang@ntu.edu.sg (Lin Wang), zhengzilu@petrochina.com.cn 
+
+(Zilu Zheng), suqianxiao@petrochina.com.cn (Qianxiao Su), 
+
+zmjdean@petrochina.com.cn (Mingjun Zhao), leichen@cse.ust.hk (Lei Chen) 
+
+> arXiv:2604.14805v1 [cs.CV] 16 Apr 2026
+
+of ultra-fine grain boundaries. Finally, we leverage these high-quality edge pri-ors to guide semantic segmentation, effectively extending the framework to the dual-task domain via joint optimization. To train Petro-SAM, we constructed the 
+
+first multi-angle thin-section dataset suitable for both GES and LSS, uniquely en-riching conventional edge annotations with lithology semantic labels. Extensive evaluation on the public CPPID edge dataset and our dataset show that our Petro-SAM consistently outperforms traditional edge detectors, SAM-based baselines, and state-of-the-art semantic segmentation models. In particular, our Petro-SAM yields sharper grain boundaries and more accurate lithology segmentation maps. 
+
+Keywords: Petrographic thin-section images analysis, Grain-edge segmentation, Lithology semantic segmentation, Segment Anything Model, Multi-task learning, 
+
+1. Introduction 
+
+Petrographic thin-section image understanding [1] is essential for quantitative rock characterization in sedimentology, structural geology, and reservoir anal-ysis. Under cross-polarized light, mineral grains exhibit extinction behaviour, interference colours, and angle-dependent textural variations, making utilizing multi-angle polarized imaging a compelling strategy to provide complementary cues for two fundamental tasks: grain-edge segmentation (GES) and lithology se-mantic segmentation (LSS) . GES relies on extinction-aligned boundary contrast for precise grain delineation, while LSS depends on polarization-induced colour shifts and birefringence patterns to differentiate mineral phases. Because both cues stem from the same polarization–mineral interaction, multi-angle imaging si-multaneously captures grain-boundary contrast and mineral-discriminative signa-tures, naturally supporting unified GES–LSS modelling. Despite their close phys-ical relationship, GES and LSS remain under-explored and are almost always treated independently . Existing GES studies either rely on classical edge detec-tors or CNN-based methods such as HED and BDCN [2, 3], and more recently extinction-consistency networks designed specifically for multi-angle polarized images [1]. However, they focus exclusively on boundary detection. Conversely, LSS methods typically adapt semantic segmentation architectures such as U-Net and HRNet [4, 5], but often fail to capture fine-grained boundaries. Therefore, no existing framework jointly learns both GES and LSS from multi-angle polarized thin-section images. This gap leads to a natural yet unexplored problem: how to construct a multi-task framework in which GES and LSS jointly leverage multi-angle polarized cues to improve each other’s performance? 
+
+2Image BDCN ECPN SAM SAUGE Petro -SAM Edge GT Mask2Former Swin -UNet Petro -SAM Semantic GT Figure 1: Comparison of grain-edge segmentation (left) and lithology semantic segmentation (right) on multi-angle polarized thin-section images. 
+
+A major challenge behind this gap is the lack of comprehensive datasets. High-quality petrographic annotation requires expert delineation of grain boundaries and mineral classes, making large-scale labeling costly and time-consuming. Ex-isting datasets such as CPPID [1] cover only edge detection. To support multi-task learning, we construct a new multi-angle petrographic dataset (Sec . 3.1) con-taining over 1,400 matched polarized sets (7 views per set) with fine-grained edge masks and four-class lithology annotations . This dataset substantially broadens task diversity and provides a solid foundation for unified GES–LSS modelling. Meanwhile, segmentation foundation models have rapidly advanced with the emergence of the Segment Anything Model (SAM) [6], which exhibits strong ro-bustness in boundary alignment through its promptable segmentation paradigm. Such capability makes SAM a promising starting point for grain-edge modelling. However, directly adapting SAM to joint GES and LSS on petrographic thin-section images remains nontrivial. First, a severe domain gap arises from extinction-dependent colour variation and ultra-fine grain boundaries, which often leads to fragmented, over- or under-segmented masks when SAM is applied without adap-tation. Second, SAM lacks a principled mechanism for joint learning from multi-angle polarized image stacks , as it operates on single-view RGB inputs and produces instance-level masks without lithologic semantics. To address these challenges, we propose Petro-SAM , a novel two-stage, multi-task framework for high-quality joint GES and LSS on petrographic thin-section images. Stage 1 (Sec.3.2.1) trains an edge-focused model built on SAM: a Merge Block integrates seven polarized views via global attention to reduce extinction-induced fluctuations, while an Adaptation Block aligns SAM features with petro-graphic textures. A Refine Block then performs multi-scale fusion to capture ultra-3fine, discontinuous contours, producing reliable grain-edge prompts. In Stage 2 
+
+(Sec.3.2.2), the edge mask decoder employs an Entropy Block to exploit cross-angle color consistency, and extends SAM’s prompt encoder to ingest the edge prior of Stage 1. Semantic mask decoder leverages the Adaptation Block , which combines edge prior and semantic feature, and outputs a reliable LSS result. Boundary-aware and consistency supervision improve both contour fidelity and mineral-phase separability. Extensive experiments on CPPID and our new multi-angle dataset show that Petro-SAM consistently surpasses traditional edge detectors, SAM-based base-lines, and state-of-the-art semantic segmentation models, as shown in Figure 1. Ablation studies verify the effectiveness of both stages, confirming that extinction-aware edge prompts and multi-task optimization jointly contribute to sharper grain boundaries and more accurate lithology segmentation maps. Together, these re-sults demonstrate that Petro-SAM provides a unified and annotation-efficient so-lution for automated petrographic thin-section interpretation. In summary, our contributions are three-fold :• We construct a new multi-angle petrographic thin-section dataset with over 1,400 matched polarized sets (seven views per set), providing fine-grained grain-edge masks and four-class lithology semantic annotations to enable unified evaluation of GES and LSS. • We propose Petro-SAM , a two-stage SAM-based framework for multi-angle thin-section analysis: Stage 1 fuses seven views via a Merge Block ,adapts features with an Adaptation Block , and refines ultra-fine contours us-ing a Refine Block to generate edge prompts; Stage 2 strengthens GES with an Entropy Block and a prompt-encoder extension, while using aligned fea-tures to support LSS. • Extensive experiments on diverse datasets demonstrate state-of-the-art per-formance for both GES and LSS tasks, with consistent gains over SAM-based baselines and strong semantic/edge models under polarization-driven domain shifts. 
+
+2. Related Works 
+
+2.1. Boundary Detection for Petrographic Images 
+
+Petrographic boundary detection targets fine-grained features, but is hindered by complex textures, inconsistent contrast, and polarization-induced variations. In 4the early stages, research primarily focused on traditional image processing meth-ods, which utilized changes in pixel intensity or luminance to determine grain boundaries (e.g., edge-based methods [7]), or achieved segmentation by mini-mizing energy functions (energy-based methods [8]), as well as clustering sim-ilar pixels to generate tight borders (region-based methods [9]). Subsequently, the field entered a transitional phase where researchers began to adopt hand-crafted feature-based machine learning methods. They manually extracted fea-tures such as color and texture, and then employed data-supervised algorithms like artificial neural networks [10] or k-means clustering [11, 12] to predict seg-mentation maps. More recently, with the emergence of deep learning (e.g., VG-GNet [13], ResNet [14]), the field underwent a paradigm shift toward end-to-end learning. Within this shift, HED [2] appeared as the first CNN-based edge detec-tion network, followed by works such as RCF [15], BDCN [3], PiDiNet [16], and SAUGE [17], which continued to improve performance by enhancing encoders and modifying backbone architectures. While these deep learning methods have shown effectiveness on images, they still face challenges in petrographic scenarios: ultra-fine grains, and polarization-induced domain shift remain hard to tackle, and high-resolution further introduce tiling artifacts; additionally, these approaches demand costly pixel-level ground truths and are highly sensitive to post-processing steps. To address these issues, we have constructed a relevant rock dataset, and therefore our method adopts a two-stage teacher–student scheme: a SAM-encoder-based teacher fuses multi-angle views and adapts to an edge-specialized network to produce high-quality edge prompts, which are then combined with color-entropy priors in the student for refined boundary extraction. 2.2. Semantic Segmentation for Petrographic Images 
+
+Semantic segmentation of petrographic images assigns a mineral label to each pixel, but faces challenges from multi-scale grain structures, inter-class visual similarity, and scarce annotations. The method lineage spans classical FCN [18] and encoder–decoder families [4] and atrous/ASPP designs [19] for larger re-ceptive fields, to multi-resolution context models [5], and further to Transformer-based or hybrid segmenters [20, 21] capturing long-range dependencies. Specif-ically, FCN [18] established the foundation for end-to-end pixel classification; DeepLabV3 [19] further enlarges the receptive field via atrous convolutions and ASPP; CCNet [22] captures non-local context with criss-cross attention; Swin-UNet [23] couples hierarchical Transformers with a U-shaped decoder to achieve global–local balance; and Mask2Former [24] unifies the segmentation process 5with a query-based mask framework, improving cross-class consistency. Addi-tionally, domain adaptation and low-shot strategies (style transfer [25], adversarial adaptation [26], self-training [27], prototypical learning [28]) mitigate microscope-condition shifts and data scarcity, while post-processing and priors (CRF [29], morphology [30], topology/boundary-aware losses [31]) refine grain borders and small objects. Despite the aforementioned progress in mineral-phase recognition, inter-class confusion and intra-class variability persist; tiny and slender phases are easily missed; high-resolution whole-slide inference is memory-intensive; purely se-mantic supervision often blurs boundaries. To improve data efficiency and cross-domain transfer, promptable general segmentation paradigms have gained trac-tion. Thus, our second stage introduces a multi-task decoder: conditioned on the stage-1 edge prompts and multi-angle features, we jointly optimize boundary de-tection and lithology segmentation, enhancing grain-boundary alignment while preserving regional consistency. 2.3. Segment Anything Model (SAM) 
+
+Segment Anything Model (SAM) has revolutionized the image segmentation paradigm by reformulating the task into a prompt-driven general problem, achiev-ing exceptional Zero-Shot transfer capabilities and strong boundary alignment due to its large-scale data pre-training. To adapt SAM to specific domains, vari-ous strategies have been explored, including lightweight fine-tuning via LoRA or Adapters [32, 33], tackling prompt dependency through Prompt Engineering [34] or cascaded prompting [35], and using knowledge distillation [36] to transfer its rich feature representations to more efficient models. In rock image analysis, SAM has been applied to rock fragment segmentation [37], mineral grain iden-tification [38], and utilized for digital rock analysis with edge semantics [39]. However, applying SAM or its variants to complex rock thin-section analysis faces inherent limitations: (1) Masks are often over-smoothed or leak, struggling to capture low-contrast mineral grain boundaries, and the auto-masking mode fre-quently leads to over-segmentation or a granularity mismatch [38]; (2) SAM lacks semantic information, as its mask output cannot directly perform lithology identi-fication [37]; and (3) Existing methods, primarily based on single images, ignore critical domain priors, such as the essential multi-angle polarized light information and local color variations. To address these challenges, we propose Petro-SAM. Our model uses the SAM Vision Encoder as a transferable feature backbone within a two-stage multi-task framework. 
+
+62.4. Multi-task Learning 
+
+Multi-Task Learning (MTL) is a powerful paradigm that jointly trains re-lated tasks (e.g., boundary detection, semantic segmentation) on shared repre-sentations to leverage complementary supervision, thereby improving model gen-eralization and stability [40]. The evolution of MTL has progressed from sim-ple hard parameter sharing to sophisticated soft sharing mechanisms (e.g., Sluice [41], MTAN[42] MTLoRA [43]), and advanced optimization techniques, such as ConsMTL [44] and CoNAL [45], have emerged to effectively mitigate the long-standing problems of gradient conflict and negative transfer. In segmentation, MTL is particularly effective at coupling boundary guidance with region refine-ment to simultaneously boost local precision and regional consistency [46] by utilizing structural priors [47]. However, applying MTL to fine-grained petrographic image analysis and in-tegrating large model priors presents critical challenges: Traditional MTL frame-works struggle to effectively integrate the general priors from large models (like SAM) with domain-specific structural priors (e.g., color boundaries), and opti-mization conflicts remain detrimental to the high-precision boundary localiza-tion and accurate semantic classification required for petrography. To address these challenges, we propose the MTL-based Petro-SAM framework. This frame-work adopts a design with a shared backbone and dual heads, employing specific mechanisms to manage conflicts. This "Prompt + Multi-Task" design fosters the co-evolution of boundary and regional representations, achieving both precise boundary modeling and robust lithology recognition in petrographic images. 
+
+3. Methodology 
+
+3.1. Our Dataset Construction 
+
+During our research, we identified a critical limitation: no single existing dataset simultaneously caters to both grain edge detection and lithological recog-nition tasks in rock thin-section images. To address this gap and the need for high-precision, multi-dimensional analysis, we constructed a new dataset consistent in design with the public CPPID (Cross-polarized Petrographic Image Dataset) [1]. While CPPID focuses solely on edge delineation, our dataset introduces a key ex-tension: we incorporated semantic lithology labels alongside the pixel-level edge annotations. These semantic categories cover quartz, feldspar, debris, and back-ground. Of the 2,000 samples initially collected, 1,400 high-quality image groups were precisely retained, divided into 1,120 for training and 280 for testing. This 7(a) (b) (c) (d) (e) (f) (g) (h) (i)Figure 2: Dataset visualization of multi-angle polarized thin-section samples with seven cross-polarized views (a–g), and corresponding grain-edge (h) and lithology semantic (i) annotations. 
+
+dual-label approach is crucial for supporting the joint learning of edge extraction and multi-class semantic segmentation within our framework. Data preparation and acquisition strictly followed relevant industry and group standards (e.g., SY/T 5913, SY/T 5368) to ensure scientific rigor and reproducibil-ity. Images were captured using an Axio Scan 7 automated scanning system [48], obtaining multi-channel information (one plane-polarized image and six cross-polarized images) under the same field of view, as shown in Figure 2. These full-frame images were then cropped and sliced into 512 × 512 pixel blocks for model training. We avoided direct manual annotation from scratch due to the immense time cost and potential for human error inherent in pixel-level tasks. Instead, we implemented a " SAM pre-labeling + expert manual refinement " strategy. We first utilized the SAM model for automatic rough delineation of grain contours, and then employed professional annotators for strict, pixel-by-pixel review and 8Images     
+
+> ⋯
+> SAM ViT Encoder
+> Patch Embedding
+> Position
+> Embedding
+> Transformer
+> Blocks
+> 1×1 Conv
+> Layer Norm
+> 3×3 Conv
+> Layer Norm
+> ❄
+> ECPN Encoder
+> Merge Block
+> Adaptation
+> Block
+> ECPN Decoder
+> C
+> Edge Mask
+> Refine Block
+> Petro -SAM (Stage 1)
+> Merge Block
+> Adaptive
+> AvgPool
+> 1×1 Conv
+> 1×1 Conv
+> Global
+> AvgPool
+> Image -wise
+> Summation
+> Adaptive
+> AvgPool
+> 1×1 Conv 3×3 Conv
+> 1×1 Conv
+> C
+> Attention
+> Adaptation Block
+> "
+> #
+> ❄ Freeze
+> Train
+> Pointwise Summation
+> Pointwise Multiplication
+> CConcatenation
+> $
+> Adaptation
+> Block
+
+Figure 3: Visualization of Petro-SAM’s Stage 1 framework, Refine Block, Merge Block, and Adaptation Block. 
+
+correction (e.g., ensuring boundary fitting error is under 3 pixels). This process guarantees the high accuracy and standardization of our dataset, providing a ro-bust foundation for advanced intelligent recognition in geological analysis. 
+
+3.2. Petro-SAM Framework Design 
+
+In this section, we discuss the proposed network Petro-SAM for rock edge seg-mentation and lithology identification of petrographic images. The construction of Petro-SAM can be divided into two stages. For the first stage, given a group of multi-angled rock petrographic images X ∈ R7×H×W ×3 (7 is the number of im-ages per group), we train a model PT based on SAM’s vision transformer encoder [49], as visualized in Figure 3, and it outputs an edge mask logit MT ∈ RH×W .Another model PS , visualized in Figure 4 for both edge detection and lithology se-mantic segmentation, is trained in the second stage. The branch for edge detection takes MT to prompt feature and output refined edge mask logit MS ∈ RH×W , su-pervised by both MT and ground truth MG. In the semantic segmentation branch, 
+
+PS integrates the outputs of the SAM image encoder and the encoder of the edge detection branch to provide a semantic mask YS ∈ RH×W ×C (C for the number of lithology classes. We outline the pipeline of the first stage for Petro-SAM in Sec-9tion 3.2.1. Then, the second stage is detailed in Section 3.2.2. Lastly, in Section 3.3, we discuss the optimization objective for two stages. 
+
+3.2.1. Stage 1: Teacher Model for Edge Detection 
+
+In stage 1, X is first input into the SAM encoder, which consists of a patch embedding layer, several transformer blocks, convolution layers, and norm layers. We take the shallow feature Ss ∈ R7×He×We×Cs after position embedding addition and deep feature Sd ∈ R7×He×We×Cd , where (He, W e) is the shape of the feature map and Cs and Cd are the number of channels for shallow feature and deep feature, respectively. Ss contains low-level information of simple edge patterns and Sd captures high-level semantic information about entity relationships. Merge Block is designed to combine the features from images of different angles. At the same time, we take the shallow feature Es and deep feature Ed of the encoder of ECPN [1]. Adaption Block transports S∗ from the SAM embedding space to ECPN’s. Refine Block refines the deep feature based on the shallow one to extract information related to edge localization. The mask decoder takes the result of the Refine block to output the edge mask logit MT .
+
+Merge Block. Merge Block, which is shown in Figure 3, is designed to combine the SAM feature of images from different angles. Given feature S∗ ∈ R7×He×We×C∗ ,it first extracts the global embedding through global average pooling and com-presses the number of channels to 1 through 1 × 1 convolution to obtain image-level weight W ∈ R7. W measures the importance of each image through global embedding. Then the integration of features from different angles can be formu-lated as: 
+
+S′∗ =
+
+P7 
+
+> n=1
+
+eW[n]S∗[n]
+
+P7 
+
+> n=1
+
+eW[n] ∈ RHe×We×C∗ (1) 
+
+Adaptation Block. It adapts the SAM feature to the ECPN feature space, as shown in Figure 3. It first employs adaptive average pooling to align the feature map shape of S′∗ to E∗. Furthermore, 1 × 1 convolution is utilized to extract channel-wise relationships, and 3 × 3 convolution captures spatial patterns. The concatenated output S′′ ∗ is provided to another 1 × 1 convolution to align the channel number to that of E∗. At last, Adaption Block attends ECPN feature E∗ to 
+
+S′′ ∗ and performs residual addition as follows: 
+
+E′∗ = E∗ ⊕ Atten (E∗, S′′ ∗, S′′ ∗) (2) 
+
+Refine Block. Refine Block refines the deep-layer feature based on that of the shallow-layer. The shape E′s is aligned with E′d through adaptive average pooling. 10 Images    
+
+> ⋯ECPN
+> Encoder Entropy
+> Block
+> SAM Prompt
+> Encoder
+> Mask Output Head
+> Edge Mask Decoder
+> Edge Mask
+> ℒ"$%"
+> Entropy
+> Extractor
+> Images Entropy
+> ⋯
+> Pseudo Mask
+> ℒ&!"'$(
+> ❄ Freeze
+> Train
+> Semantic Loss
+> Edge Loss
+> Teacher Model
+> ❄
+> ❄
+> SAM Image
+> Encoder
+> Semantic Mask Decoder
+> Adaptation
+> Block Mask Output Head
+> Merge Block  Semantic Mask
+> ℒ!"#
+> Semantic GT
+> Edge GT
+
+Figure 4: Visualization of Petro-SAM’s Stage 2 framework 
+
+Then, the concatenation and 1 × 1 convolution are operated to integrate shallow and deep information, which is followed by element-multiplication to outstand edge-related feature. The process is formulated in Equation 3. 
+
+E′′ d = E′d ⊗ Conv 1×1(Concat (E′s, E′d)) (3) 
+
+3.2.2. Stage 2: Multi-Task Petro-SAM 
+
+In Stage 2, our model further enhances its capability to analyze thin-section images of rocks. As shown in Figure 4, the model processes multi-angled thin-section images as input and not only outputs grain contour masks but also gener-ates lithology identification masks. 
+
+Edge Detection Branch. For the edge extraction task, given the input multi-angled rock petrographic X, Petro-SAM leverages the proportion of different col-ors surrounding each pixel to construct a measure of color entropy E ∈ R7×H×W ×3,illustrated in Algorithm 1. This approach incorporates the prior knowledge em-bedded in the color entropy, which reflects the boundaries present in the image. By integrating this prior color information, the model enhances its ability to ac-curately extract contours and delineate grain boundaries in complex thin-section images. Entropy Block, visualized in Figure 5, integrates the features extracted by the ECPN encoder with the color entropy information. It achieves this by per-forming pixel-level feature reorganization to ensure dimensional alignment, fol-lowed by the employment of convolutional layers to summarize the color entropy 11 Algorithm 1 Image Entropy Map Extraction Algorithm 
+
+Require: A thin-section image Xi ∈ RH×W ×3 of rock and a compression factor 
+
+τ ∈ { x|1 ≤ x ≤ 7 and x ∈ N+} for bit-shifting to quantize colors. 
+
+Ensure: Color entropy map Ei ∈ RH×W . 
+
+> 1:
+
+Perform bit-shifting by τ on each color channel of Xi to reduce color resolu-tion.  
+
+> 2:
+
+Combine RGB channels into a single scalar quantized representation: 
+
+Ci = 256 × Xi[R] + 256 2τ × Xi[G] + Xi[B]
+
+, where Xi[∗] marks the corresponding color channel.  
+
+> 3:
+
+Count the number of unique values in Ci, denote as c. 
+
+> 4:
+
+Convert Ci into one-hot encoding color map Ci,o ∈ { 0, 1}H×W ×c. 
+
+> 5:
+
+Initiate all-one area matrix A ∈ 1H×W ×1, color kernel kc ∈ 17×7×c, and area kernel ka ∈ 17×7×1. 
+
+> 6:
+
+Construct unique color count Ci,c by convoluting over Ci,o by kernel kc within 
+
+c groups.  
+
+> 7:
+
+Construct the area matrix Ac of receptive fields by by convoluting over A by kernel ka. 
+
+> 8:
+
+Obtain color entropy map Ei through: 
+
+Ei[x, y ] = −
+
+> 7
+
+X
+
+> n=1
+
+Ci,c [x, y, n ]
+
+Ac[x, y ] log Ci,c [x, y, n ]
+
+Ac[x, y ]
+
+12 4×4 Conv Pixel 
+
+> Reshuffle
+
+Entropy Block  
+
+> 2×2 Conv
+> Image Entropy "
+> ECPN Feature
+> #!
+> 1×1 Conv
+> Image -wise
+> Average
+> Sigmoid
+> ⋯
+
+Figure 5: Visualization of Entropy Block’s structure. 
+
+information. Finally, feature refinement is conducted through pixel-wise multipli-cation, effectively enhancing the representation of relevant features. Next, follow-ing the design of SAM, the edge mask logit MT from the first stage teacher model 
+
+PT is used as a prompt to refine and adjust the contours, ensuring the accuracy and clarity of the boundaries. The architecture of the prompt encoder and mask output head is the same as SAM’s. 
+
+Lithology Segmentation Branch. For the lithology segmentation task, Petro-SAM adopts a Stage 1-like Merge Block to integrate multi-angled image features from the SAM vision transformer encoder. Adaptation Block fuses outputs from multiple encoders, enabling the decoder to produce lithology recognition results. This process leverages multi-dimensional image data and color features for accu-rate mineral composition differentiation. 
+
+3.3. Optimization Objectives 
+
+For the first stage, given the ground truth edge mask MG ∈ { 0, 1}H×W and model output logit MT , loss function Ledge, 1 consists of a class-balanced cross-entropy loss function [50, 51] Ledge,c and distance map penalized compound loss 
+
+Ledge,d . Ledge,c can be formulated as 
+
+Ledge,c (MT , M G) = −β1
+
+X
+
+> MG[x,y ]=1
+
+log ( MT [x, y ]) − β0
+
+X
+
+> MG[x,y ]=0
+
+log (1 − MT [x, y ]) 
+
+(4) where β0 and β1 are the ratio of positive and negative samples in MG[x, y ], re-spectively. Ledge,d introduces a penalty for the distance to the edge localization to 13 direct the model to concentrate on the rock’s boundaries. It can be formulated as 
+
+Ledge,d (MT , M G) = − X
+
+> (x,y )
+
+1
+
+D[x, y ] + ϵ log ( MT [x, y ]) (5) where ϵ is the parameter to prevent zero division and D is the distance map that measures the distance of a pixel to the nearest boundary. Ledge, 1 is the direct summation of Ledge,c and Ledge,d .The second stage is designed for the edge segmentation task and the semantic segmentation task. For the former, the model output MS is supervised by both 
+
+MT and MG. The loss function Ledge, 2 is shown in Equation 7 where λT is an adaptation factor that decays with the training process. 
+
+Ledge, 2 =( Ledge,c (MS , M G) + Ledge,d (MS , M G))+ (6) 
+
+λT (Ledge,c (MS , M T ) + Ledge,d (MS , M T )) (7) For the latter, based on Petro-SAM’s semantic branch output MS and ground truth 
+
+YG ∈ { 0, 1}H×W ×C , the loss function of semantic segmentation Lsem is the sum-mation of cross entorpy loss Lsem,ce and dice loss Lsem,d , defined as 
+
+Lsem,ce = − 1
+
+HW 
+
+X
+
+> (x,y )
+> C
+
+X
+
+> c=1
+
+YG[x, y, c ] log( MS [x, y, c ]) (8) 
+
+Lsem,d = 1 − 1
+
+C
+
+> C
+
+X
+
+> c=1
+
+2 P 
+
+> (x,y )
+
+YG[x, y, c ]MS [x, y, c ]
+
+P
+
+> (x,y )
+
+(YG[x, y, c ]2 + MS [x, y, c ]2 + ϵ) (9) where ϵ is the same parameter as in Equation 5. This optimization strategy signif-icantly improves the accuracy and stability of composition recognition, ensuring the model performs exceptionally well in the analysis of complex rock images. The total loss for stage 2 model training is formulated in Equation 10, where λe is the balancing factor. 
+
+L = λeLedge, 2 + Lsem (10) 
+
+4. Experiment 
+
+4.1. Experimental Setup 
+
+Dataset. Our experiments were conducted using two complementary datasets: the public CPPID dataset and the constructed petrographic thin-section dataset. The 14 CPPID dataset contains 30,625 images grouped into 4,375 paired samples, with 3,500 groups allocated for training and 875 for testing. Each image is provided with pixel-level edge annotations, enabling supervised learning of fine-grained boundary structures across diverse mineral textures. In addition, we employed our dataset comprising 1,400 image groups acquired under consistent petrographic imaging conditions. Among these, 1,120 groups were used for training and 280 for testing. This dataset includes not only pixel-level edge labels but also detailed semantic annotations. The semantic categories cover quartz, feldspar, debris, and background, allowing joint learning of edge detection and multi-class semantic segmentation. The complementary characteristics of the two datasets—large-scale edge supervision from CPPID and rich mineralogical semantics from our dataset—provide a comprehensive benchmark for evaluating the effectiveness and robustness of our proposed segmentation framework. 
+
+Implementation Details. Petro-SAM was implemented using the PyTorch frame-work. The encoder integrates two sources of pretrained weights: the ViT [49] backbone from the SAM [6] and an EfficientNetV2 [52] backbone, both of which provide strong initialization for handling complex petrographic textures. We adopted the Adam optimizer with β = (0 .9, 0.999) , ϵ = 1 e − 8, and a weight decay of 
+
+2e − 4. The initial learning rate was set to 2e − 4, and we applied a cosine an-nealing warm-restarts scheduler with a minimum learning rate of 2e − 6 to ensure stable convergence during later training phases. The entire training process was divided into two stages. In Stage 1, the model was trained for 50 epochs with a batch size of 4 to learn robust mineral boundaries and semantic structures. Stage 2 further refined the model for 50 epochs using the same batch size, with λe being 0.0004. All experiments were conducted on a single NVIDIA A800-80GB GPU, and the full training pipeline required approximately 20 hours. 
+
+4.2. Boundary Detection Results 
+
+Table 1 details the quantitative comparison of our proposed method against Traditional (e.g., BDCN [3], ECPN [1]) and SAM-based approaches on Our Dataset and the public CPPID. Our Method, specifically the Petrao-SAM (vit-h) vari-ant, achieves state-of-the-art (SOTA) performance across all key metrics on both datasets. On Our Dataset, Petrao-SAM (vit-h) secured the highest mIoU of 48.2% and F1-Score of 0.650. This marks a substantial margin over the best traditional method, BDCN (mIoU: 20.7%), and significantly outperforms SAM-based ap-proaches (e.g., SAM vit-h, mIoU: 7.1%), underscoring its enhanced capability for dense prediction tasks. Furthermore, to ensure a fair and generalized assessment of our framework on an external, publicly available domain, we also validated our 15 Table 1: Comparisons of the boundary detection performance of the proposed Petro-SAM and prior arts.                                                                                                                                                                                                           
+
+> Method Our Dataset CPPID mIoU F1-Score Precision Recall Accuracy mIoU F1-Score Precision Recall Accuracy
+> Traditional Methods
+> XDoG [53] 2.8% 0.053 0.034 0.212 0.962 6.5% 0.121 0.156 0.121 0.930 SE [54] 1.8% 0.036 0.018 0.985 0.238 6.9% 0.128 0.069 0.986 0.340 HED [2] 5.5% 0.103 0.056 0.773 0.800 16.5% 0.282 0.173 0.795 0.796 RCF [15] 5.3% 0.101 0.056 0.559 0.851 16.4% 0.281 0.170 0.823 0.786 BDCN [3] 20.7% 0.343 0.212 0.899 0.950 33.5% 0.501 0.340 0.956 0.904 Dexined [50] 17.9% 0.303 0.182 0.915 0.938 25.0% 0.399 0.253 0.959 0.852 PiDiNet [16] 13.9% 0.244 0.141 0.909 0.918 20.1% 0.333 0.205 0.908 0.816 ECPN [1] 22.0% 0.360 0.238 0.741 0.961 35.3% 0.521 0.362 0.931 0.914
+> SAM-based Methods
+> SAM [6] vit-b 5.3% 0.099 0.055 0.565 0.846 11.5% 0.205 0.160 0.328 0.880 vit-l 6.9% 0.129 0.074 0.518 0.895 12.9% 0.226 0.199 0.290 0.907 vit-h 7.1% 0.131 0.075 0.535 0.893 13.7% 0.239 0.197 0.324 0.900 SAUGE [17] vit-b 6.6% 0.123 0.067 0.826 0.826 16.0% 0.275 0.166 0.839 0.778 vit-l 6.5% 0.121 0.066 0.815 0.824 16.0% 0.274 0.166 0.824 0.782
+> Our Method
+> Teacher Model vit-b 27.8% 0.432 0.308 0.724 0.972 41.4% 0.584 0.427 0.927 0.934 vit-l 29.7% 0.454 0.328 0.740 0.974 43.7% 0.606 0.450 0.933 0.939 vit-h 31.1% 0.471 0.344 0.753 0.975 44.2% 0.611 0.457 0.923 0.941 Petro-SAM vit-b 42.6% 0.592 0.552 0.638 0.987 41.7% 0.589 0.430 0.936 0.938 vit-l 45.3% 0.624 0.573 0.684 0.989 43.8% 0.609 0.451 0.938 0.940 vit-h 48.2% 0.650 0.630 0.672 0.990 44.4% 0.615 0.460 0.928 0.942
+
+method on the CPPID dataset. The data proves that this effectiveness is main-tained, with Petrao-SAM (vit-h) achieving an impressive mIoU of 44.4% and F1-Score of 0.615, setting a new performance record against the highest competing traditional method, ECPN (mIoU: 35.3%). These consistent improvements across two diverse datasets affirm that our proposed method provides a powerful and robust solution for accurate segmentation. Beyond the strong quantitative results, the qualitative visualization in Figure 6 further confirms the superior performance and high fidelity of our model. The outputs of traditional edge detectors (BDCN, PiDiNet, ECPN) often suffer from over-segmentation and noise, while the raw SAM and SAUGE models fail dramat-ically, producing chaotic and low-fidelity boundaries that are inconsistent with the Ground Truth (GT). In contrast, the edge detection results from our Petrao-SAM model closely resemble the GT, producing clean, continuous, and simplified grain contours that successfully exclude the noise prevalent in competing methods. The alignment between the SOTA metrics and the high-quality visualization across both self-collected and public domains mutually affirms that our proposed Petro-SAM framework provides a robust and reliable solution for accurate geological grain edge segmentation. 16 Image BDCN PiDiNet ECPN SAM SAUGE Teacher Petro -SAM GT Figure 6: Qualitative edge results comparing existing methods with our Petro-SAM. 
+
+4.3. Semantic Segmentation Results 
+
+Table 2 compares our proposed Petro-SAM method against classic models (e.g., FCN [18], DeepLabV3 [19]), Mask2Former [24], and the foundational SAM model [6]. The results clearly demonstrate that our approach achieves state-of-the-art (SOTA) performance across all evaluation metrics. Petro-SAM (vit-h) se-17 Table 2: Comparisons of the semantic segmentation performance of the proposed Petro-SAM and prior arts.                                                                                      
+
+> Method mIoU Background Feldspar Debris Quartz Accuracy DeepLabV3 [19] 83.8% 84.3% 75.6% 85.9% 89.5% 0.900 CCNet [22] 83.4% 83.7% 75.5% 86.4% 88.3% 0.897 FCN [18] 85.0% 87.2% 75.8% 88.2% 89.0% 0.906 PSPNet [55] 83.1% 83.7% 74.3% 85.3% 89.1% 0.899 Swin-UNet [23] 76.6% 75.2% 70.6% 78.7% 82.0% 0.845 SAM [6] vit-b 40.6% 49.4% 23.5% 32.6% 56.8% 0.549 vit-l 34.9% 44.1% 14.6% 31.5% 49.4% 0.493 vit-h 34.1% 44.2% 13.6% 29.8% 48.9% 0.485 Mask2Former [24] swin-b 56.2% 60.9% 43.4% 54.2% 66.3% 0.705 swin-l 57.4% 61.3% 44.2% 57.4% 66.5% 0.716 Petro-SAM vit-b 83.4% 85.7% 73.3% 85.6% 88.9% 0.900 vit-l 84.5% 82.6% 78.0% 85.9% 91.5% 0.911 vit-h 86.3% 87.6% 75.9% 89.2% 92.4% 0.928
+
+cured the highest overall performance, achieving an impressive mIoU of 86.3% and an Accuracy of 0.928. This significantly surpasses the best traditional method, FCN (mIoU 85.0%). Furthermore, Petro-SAM demonstrates superior segmenta-tion performance in challenging categories, notably achieving an IoU of 75.9% for Feldspar. The dramatic improvement over the raw SAM (vit-b), whose mIoU was only 40.6% compared to our Petro-SAM (vit-b) at 83.4%, strongly validates the effectiveness and robustness of our proposed architecture and adaptation strat-egy in successfully applying SAM’s knowledge to the complex domain of mineral segmentation. Beyond the strong quantitative results, the qualitative visualization in Figure 7 Semantic Comparison further validates the high fidelity of our model in segment-ing mineral categories. While classic models (FCN, DeepLabV3) and Swin-UNet often produce masks with jagged boundaries and localized category confusion, and Mask2Former exhibits fragmentation and irregular holes (e.g., rows 4 and 5), our Petro-SAM model consistently generates results that are closest to the GT. Petro-SAM successfully produces clean, smooth, and regionally continuous segmentation masks across all samples. This demonstrates that our framework not only achieves superior mIoU but also excels in accurately localizing regional boundaries and maintaining high semantic consistency, confirming its reliability for accurate lithological recognition in complex geological images. 18 Image DeepLabV3 CCNet FCN Mask2Former Swin -UNet Petro -SAM GT Figure 7: Qualitative semantic results comparing existing methods with our Petro-SAM. 
+
+19 Table 3: Ablation results for the three components of our Stage 1 teacher model.                         
+
+> Merge Block Adaption Block Refine Block mIoU F-Score 22.0% 0.360
+> ✓24.0% 0.384
+> ✓23.7% 0.380
+> ✓22.2% 0.361
+> ✓✓27.1% 0.423
+> ✓✓23.8% 0.382
+> ✓✓25.0% 0.383
+> ✓✓✓27.8% 0.432
+
+4.4. Ablation Study of Stage 1 
+
+In Stage 1, we designed a dual-branch teacher model to exploit the comple-mentary strengths of SAM’s high-level structural priors and ECPN’s extinction-aware representations. To validate the effectiveness of this design, we performed a comprehensive ablation study on the three core components of Stage 1: the Merge Block, Adaptation Block, and Refine Block (Table 4.4). The dual-branch design was motivated by the observation that SAM’s encoder, although robust to tex-ture variability, lacked the petrographic sensitivity required to capture extinction-driven grain boundaries, while the ECPN encoder captured extinction cues but produced fragmented or noisy contours without global contextual regularization. The Merge Block addressed this gap by fusing seven polarized views using global-attention pooling and image-wise summation, yielding extinction-consistent fea-tures and improving mIoU from 22.0% to 24.0%. The Adaptation Block further aligned SAM’s feature space with petrographic textures through attention-based feature transformation, raising performance to 23.7% mIoU. The Refine Block enhanced the delineation of thin and low-contrast grain edges through multi-scale aggregation, offering moderate improvements when used alone. When the blocks were progressively combined, performance increased steadily, with the full Stage 1 model achieving the best results at 27.8% mIoU and 0.432 F-score. These results demonstrated that multi-angle fusion, cross-domain adaptation, and fine-grained refinement were all necessary and complementary. As shown in our qual-itative comparisons (Figures 6 and 8), the Stage 1 teacher generated extinction-aware edge maps that were significantly cleaner and sharper than those produced by classical edge detectors or SAM alone. These high-quality edge prompts sub-sequently enabled Stage 2 to perform more accurate GES–LSS joint learning, confirming the essential role of Stage 1 in the overall Petro-SAM framework. 20 Table 4: Ablation results for Stage 2 edge branch.                           
+
+> Lsem Ledge Entropy Block Stage 1 mIoU F-Score
+> ✓✓✓43.2% 0.604
+> ✓✓✓27.7% 0.431
+> ✓✓✓38.3% 0.549
+> ✓✓✓34.7% 0.506
+> ✓✓✓✓42.6% 0.592
+> Table 5: Ablation results for Stage 2 semantic branch.
+
+Ledge Adaptation Block mIoU Accuracy 
+
+✓ 59.4% 0.728 
+
+✓ 75.3% 0.835 
+
+✓ ✓ 83.4% 0.900 
+
+4.5. Ablation Study of Stage 2 
+
+Ablation study of edge branch. In Stage 2, we investigated the behavior of the edge branch under multi-task learning, where both the edge and semantic heads share the same ECPN encoder. Table 4 presents a leave-one-out ablation in which each component of the Stage 2 edge branch is individually removed and compared to the full model (42.6% mIoU, 0.592 F-score). This setup allows us to quantify the specific contribution of each element under multi-task learning, where the edge and semantic heads share the same ECPN encoder. When semantic supervision was excluded, the model reached 43.2% mIoU and a 0.604 F-score, slightly higher than the full configuration. This indicates that Lsem introduces moderate gradi-ent competition in the shared encoder; however, its inclusion in the full model remains necessary for producing coherent lithologic boundaries, even if it mildly constrains edge sharpness. Eliminating the edge loss caused the strongest degra-dation, reducing performance to 27.7% mIoU and 0.431 F-score. The comparison with the full model highlights that Ledge is essential for supervising fine-grained contour structures and preventing the encoder from being dominated by seman-tic gradients. Disabling the entropy block reduced accuracy to 38.3% mIoU and 0.549 F-score. Relative to the full model, this confirms that entropy-guided modu-lation stabilizes extinction-dependent or low-contrast boundaries, preventing them from being suppressed by multi-task gradients. Removing Stage 1 prompts further lowered performance to 34.7% mIoU and 0.506 F-score. As visualized in Fig-ure 9, the contrast with the full model demonstrates that the extinction-consistent priors transferred from Stage 1 provide crucial structural guidance, anchoring the 21 Image EPCN    
+
+> (Baseline )
+> With
+> Merge Block
+> With
+> Adaptation
+> Block
+> With
+> Refine Block GT Stage 1 Figure 8: Stage 1 Ablation Visualization. Zoom in for a better understanding.
+
+edge branch during joint optimization. Overall, the full configuration delivered the best balance between edge precision and semantic-phase consistency. Although multi-task supervision introduces mild competition, combining all components ultimately produced the most coherent and extinction-consistent edge maps, vali-dating the necessity of tightly coupling edge and semantic learning in Petro-SAM. 
+
+Ablation study of semantic branch. Table 5 evaluates how the semantic Adap-tation Block and the edge loss Ledge contribute to lithology segmentation by pro-gressively enabling each component. With only Ledge active and the Adaptation Block removed, the semantic head reached 59.4% mIoU and 0.728 accuracy. In this setting, the edge branch regularized the shared encoder with boundary-sensitive cues; however, without feature alignment from the Adaptation Block, the semantic decoder lacked sufficient high-level semantic structure, resulting in over-smoothed predictions and class mixing across grains. When we disabled Ledge 
+
+but enabled the Adaptation Block, performance improved substantially to 75.3% mIoU and 0.835 accuracy. This confirms that injecting SAM-derived semantic structure into the shared encoder provides strong global context for lithologic dis-crimination. Nevertheless, in the absence of edge supervision, the model failed to preserve fine-grain contacts, causing neighboring grains of similar appearance to 22 Image W/O  
+
+> Semantic
+> W/O
+> ℒ!"#!
+> W/O
+> Entropy Block
+> W/O
+> Stage 1 GT Stage 2 Figure 9: Stage 2 Edge Ablation Visualization. Zoom in for a better understanding.
+
+remain partially blended. The full configuration, which activates both the Adap-tation Block and Ledge , achieved the best results at 83.4% mIoU and 0.900 accu-racy. Here, the semantic pathway benefited simultaneously from SAM-informed semantic alignment and explicit boundary cues propagated through the shared encoder, enabling the decoder to maintain interior consistency while accurately separating adjacent mineral grains. As visualized in Figure 10, the full model pro-duced coherent mineral-phase regions with clearly preserved grain boundaries, whereas models lacking either component exhibited region bleeding or boundary artifacts. These findings demonstrate that the Adaptation Block and edge-guided supervision are complementary: the former provides global semantic structure, while the latter enforces local boundary precision. Their combination is essential for high-quality lithology segmentation in Petro-SAM. 
+
+5. Conclusion 
+
+In this work, we introduced Petro-SAM, a two-stage framework for auto-mated petrographic thin-section understanding under multi-angle polarized imag-ing. We also constructed a new multi-angle polarized thin-section dataset, com-23 Image W/O  
+
+> Edge Branch Stage 2
+> W/O
+> Adaptation
+> Block
+> GT Figure 10: Stage 2 Semantic Ablation Visualization. Zoom in for a better understanding.
+
+prising seven-view polarized stacks with expert-annotated grain-edge masks and four-class lithology labels, providing the first benchmark that simultaneously sup-ports both grain-edge segmentation (GES) and lithology semantic segmentation (LSS). Building upon this dataset, our Stage-1 teacher model fused polarized views to extract extinction-consistent boundary cues, adapted SAM’s encoder fea-tures to petrographic textures, and generated high-fidelity edge prompts. Stage-2 jointly learned GES and LSS through a multi-task student network, integrating prompt-guided boundary refinement, a color-entropy prior, and boundary-aware losses to enhance contour sharpness and mineral-phase separability. Comprehen-sive experiments demonstrated that Petro-SAM consistently outperformed clas-sical edge detectors, extinction-based networks, promptable segmentation mod-els, and strong semantic baselines. Our model achieved clearer grain boundaries, more coherent lithologic regions, and superior robustness to polarization-induced variations. Overall, this study showed that combining multi-angle cues, two-stage prompt-guided learning, and joint GES–LSS supervision offered a principled path forward for accurate and scalable digital petrography. 24 Acknowledgement 
+
+This work was financially supported by the National Natural Science Founda-tion of China (No. 42372175), National Science and Technology Major Project-Key Equipment and Software for Smart Oil and Gas Fields (No. 2025ZD1401501). 
+
+Declaration of competing interests 
+
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper. 
+
+Declaration of generative AI and AI-assisted technologies in the writing pro-cess 
+
+During the preparation of this work the author(s) used [ChatGPT] in order to [check grammar and improve language]. After using this tool/service, the au-thor(s) reviewed and edited the content as needed and take(s) full responsibility for the content of the publication. 25 References 
+
+[1] P. Zhang, J. Zhou, W. Zhao, X. Li, and L. Pu, “The edge segmentation of grains in thin-section petrographic images utilising extinction consistency perception network,” Complex & Intelligent Systems , vol. 10, no. 1, pp. 1231–1245, 2024. [2] S. Xie and Z. Tu, “Holistically-nested edge detection,” in Proceedings of the IEEE international conference on computer vision , 2015, pp. 1395–1403. [3] J. He, S. Zhang, M. Yang, Y. Shan, and T. Huang, “Bi-directional cascade network for perceptual edge detection,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2019, pp. 3828– 3837. [4] O. Ronneberger, P. Fischer, and T. Brox, “U-net: Convolutional networks for biomedical image segmentation,” 2015. [Online]. Available: https://arxiv.org/abs/1505.04597 [5] J. Wang, K. Sun, T. Cheng, B. Jiang, C. Deng, Y. Zhao, D. Liu, Y. Mu, M. Tan, X. Wang, W. Liu, and B. Xiao, “Deep high-resolution representation learning for visual recognition,” 2020. [Online]. Available: https://arxiv.org/abs/1908.07919 [6] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo et al. , “Segment anything,” arXiv preprint arXiv:2304.02643 , 2023. [7] R. Heilbronner, “Automatic grain boundary detection and grain size analysis using polarization micrographs or orientation images,” Journal of Structural Geology , vol. 22, no. 7, pp. 969–981, 2000. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S0191814100000146 [8] M. Jungmann, H. Pape, P. Wißkirchen, C. Clauser, and T. Berlage, “Segmentation of thin section images for grain size analysis using region competition and edge-weighted region merging,” Computers & Geosciences , vol. 72, pp. 33–48, 2014. [Online]. Available: https: //www.sciencedirect.com/science/article/pii/S0098300414001599 [9] F. Jiang, Q. Gu, H. Hao, N. Li, B. Wang, and X. Hu, “A method for automatic grain segmentation of multi-angle cross-polarized microscopic 26 images of sandstone,” Computers & Geosciences , vol. 115, pp. 143–153, 2018. [Online]. Available: https://www.sciencedirect.com/science/article/ pii/S0098300417308178 [10] F. Fueten and J. Mason, “An artificial neural net assisted approach to editing edges in petrographic images collected with the rotating polarizer stage,” Computers & Geosciences , vol. 33, no. 9, pp. 1176–1188, 2007. [Online]. Available: https://www.sciencedirect.com/science/article/ pii/S0098300407000738 [11] H. Izadi, J. Sadri, and N.-A. Mehran, “A new intelligent method for minerals segmentation in thin sections based on a novel incremental color clustering,” 
+
+Computers & Geosciences , vol. 81, pp. 38–52, 2015. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S0098300415000916 [12] R. Das, B. U. Shankar, T. Chakraborty et al. , “Automatic grain segmenta-tion in cross-polarized photomicrographs of sedimentary rocks using psy-chophysics inspired models,” Innovations in Systems and Software Engi-neering , vol. 17, pp. 167–183, 2021. [13] K. Simonyan and A. Zisserman, “Very deep convolutional networks for large-scale image recognition,” 2015. [Online]. Available: https: //arxiv.org/abs/1409.1556 [14] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2016, pp. 770–778. [15] Y. Liu, M.-M. Cheng, X. Hu, K. Wang, and X. Bai, “Richer convolutional features for edge detection,” in Proceedings of the IEEE conference on com-puter vision and pattern recognition , 2017, pp. 3000–3009. [16] Z. Su, W. Liu, Z. Yu, D. Hu, Q. Liao, Q. Tian, M. Pietikäinen, and L. Liu, “Pixel difference networks for efficient edge detection,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 5117– 5127. [17] X. Liufu, C. Tan, X. Lin, Y. Qi, J. Li, and J.-F. Hu, “Sauge: Taming sam for uncertainty-aligned multi-granularity edge detection,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 6, 2025, pp. 5766– 5774. 27 [18] J. Long, E. Shelhamer, and T. Darrell, “Fully convolutional networks for semantic segmentation,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2015, pp. 3431–3440. [19] L.-C. Chen, G. Papandreou, F. Schroff, and H. Adam, “Rethinking atrous convolution for semantic image segmentation,” 2017. [Online]. Available: https://arxiv.org/abs/1706.05587 [20] E. Xie, W. Wang, Z. Yu, A. Anandkumar, J. M. Alvarez, and P. Luo, “Segformer: Simple and efficient design for semantic segmentation with transformers,” 2021. [Online]. Available: https://arxiv.org/abs/2105.15203 [21] Y. Ren, C. Zeng, X. Li, X. Liu, Y. Hu, Q. Su, X. Wang, Z. Lin, Y. Zhou, Z. Zheng, H. Hu, Y. Yang, and F. Hui, “Intelligent evaluation of sandstone rock structure based on a visual large model,” Petroleum Exploration and Development , vol. 52, no. 2, pp. 548–558, 2025. [22] Z. Huang, X. Wang, L. Huang, C. Huang, Y. Wei, and W. Liu, “Ccnet: Criss-cross attention for semantic segmentation,” in Proceedings of the IEEE/CVF international conference on computer vision , 2019, pp. 603–612. [23] H. Cao, Y. Wang, J. Chen, D. Jiang, X. Zhang, Q. Tian, and M. Wang, “Swin-unet: Unet-like pure transformer for medical image segmentation,” in European conference on computer vision . Springer, 2022, pp. 205–218. [24] B. Cheng, I. Misra, A. G. Schwing, A. Kirillov, and R. Girdhar, “Masked-attention mask transformer for universal image segmentation,” in Proceed-ings of the IEEE/CVF conference on computer vision and pattern recogni-tion , 2022, pp. 1290–1299. [25] R. Gong, W. Li, Y. Chen, and L. V. Gool, “Dlow: Domain flow for adaptation and generalization,” 2019. [Online]. Available: https://arxiv.org/abs/1812.05418 [26] Y.-H. Tsai, K. Sohn, S. Schulter, and M. Chandraker, “Domain adaptation for structured output via discriminative patch representations,” 2019. [Online]. Available: https://arxiv.org/abs/1901.05427 [27] P. Zhang, B. Zhang, T. Zhang, D. Chen, Y. Wang, and F. Wen, “Prototypical pseudo label denoising and target structure learning for 28 domain adaptive semantic segmentation,” 2021. [Online]. Available: https://arxiv.org/abs/2101.10979 [28] H.-M. Xu, L. Liu, Q. Bian, and Z. Yang, “Semi-supervised semantic segmentation with prototype-based consistency regularization,” 2022. [Online]. Available: https://arxiv.org/abs/2210.04388 [29] P. Krähenbühl and V. Koltun, “Efficient inference in fully connected crfs with gaussian edge potentials,” 2012. [Online]. Available: https: //arxiv.org/abs/1210.5644 [30] J. Serra, Image analysis and mathematical morphology . Academic Press, Inc., 1983. [31] H. Kervadec, J. Bouchtiba, C. Desrosiers, E. Granger, J. Dolz, and I. B. Ayed, “Boundary loss for highly unbalanced segmentation,” in International conference on medical imaging with deep learning . PMLR, 2019, pp. 285– 296. [32] T. Chen, L. Zhu, C. Deng, R. Cao, Y. Wang, S. Zhang, Z. Li, L. Sun, Y. Zang, and P. Mao, “Sam-adapter: Adapting segment anything in underperformed scenes,” in Proceedings of the IEEE/CVF International Conference on Com-puter Vision , 2023, pp. 3367–3375. [33] X. Lai, Z. Tian, Y. Chen, Y. Li, Y. Yuan, S. Liu, and J. Jia, “Lisa: Reasoning segmentation via large language model,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 9579– 9589. [34] T. Piater, B. Barz, and A. Freytag, “Prompt-tuning sam: From generalist to specialist with only 2048 parameters and 16 training images,” in Proceed-ings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 4688–4698. [35] J. Ye, J. Cheng, J. Chen, Z. Deng, T. Li, H. Wang, Y. Su, Z. Huang, J. Chen, L. Jiang et al. , “Sa-med2d-20m dataset: Segment anything in 2d medical imaging with 20 million masks,” arXiv preprint arXiv:2311.11969 , 2023. [36] C. Zhou, X. Li, C. C. Loy, and B. Dai, “Edgesam: Prompt-in-the-loop distil-lation for sam,” International Journal of Computer Vision , pp. 1–17, 2025. 29 [37] J. Zhao, D. Li, and Y. Yu, “Identification of rock fragments after blasting by using deep learning-based segment anything model,” Minerals , vol. 14, no. 7, p. 654, 2024. [38] Z. Zhang, Q. Li, Z. Wei, Q. Du, X. Li, and Y. Zhou, “Few-shot intelli-gent identification of rock thin sections based on sam,” Available at SSRN 5158450 .[39] Z. Wang, Z. Hou, and D. Cao, “Enhancing sam-based digital rock image segmentation via edge-semantics fusion,” Applied Computing and Geosciences , vol. 28, p. 100292, 2025. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S2590197425000746 [40] S. Ruder, “An overview of multi-task learning in deep neural networks,” 
+
+arXiv preprint arXiv:1706.05098 , 2017. [41] S. Ruder, J. Bingel, I. Augenstein, and A. Søgaard, “Sluice networks: Learning what to share between loosely related tasks,” arXiv preprint arXiv:1705.08142 , vol. 2, no. 1, 2017. [42] S. Liu, E. Johns, and A. J. Davison, “End-to-end multi-task learning with attention,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2019, pp. 1871–1880. [43] A. Agiza, M. Neseem, and S. Reda, “Mtlora: Low-rank adaptation approach for efficient multi-task learning,” in Proceedings of the IEEE/CVF confer-ence on computer vision and pattern recognition , 2024, pp. 16 196–16 205. [44] X. Qin, X. Wang, and J. Yan, “Towards consistent multi-task learning: Un-locking the potential of task-specific parameters,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 10 067– 10 076. [45] Z. Yue, Y. Zhang, and J. Liang, “Learning conflict-noticed architecture for multi-task learning,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 37, no. 9, 2023, pp. 11 078–11 086. [46] Y. Wang, W. Ding, R. Zhang, and H. Li, “Boundary-aware multitask learn-ing for remote sensing imagery,” IEEE Journal of selected topics in applied earth observations and remote sensing , vol. 14, pp. 951–963, 2020. 30 [47] F. Caliva, C. Iriondo, A. M. Martinez, S. Majumdar, and V. Pedoia, “Dis-tance map loss penalty term for semantic segmentation,” arXiv preprint arXiv:1908.03679 , 2019. [48] Z. A. Scan.Z, T. Heupel, and C. Zeiss, “Zeiss axio scan . z 1 areference list for automated slide scanning,” 2018. [Online]. Available: https://api.semanticscholar.org/CorpusID:49565229 [49] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Un-terthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly et al. , “An image is worth 16x16 words: Transformers for image recognition at scale,” arXiv preprint arXiv:2010.11929 , 2020. [50] X. Soria, E. Riba, and A. Sappa, “Dense extreme inception network: Towards a robust cnn model for edge detection,” in 2020 IEEE Winter Conference on Applications of Computer Vision (WACV) . Los Alamitos, CA, USA: IEEE Computer Society, mar 2020, pp. 1912–1921. [Online]. Available: https://doi.ieeecomputersociety.org/10.1109/WACV45572.2020. 9093290 [51] R. Deng and S. Liu, “Deep structural contour detection,” Proceedings of the 28th ACM International Conference on Multimedia , 2020. [Online]. Available: https://api.semanticscholar.org/CorpusID:222278473 [52] M. Tan and Q. V. Le, “Efficientnetv2: Smaller models and faster training,” in 
+
+International Conference on Machine Learning , 2021. [Online]. Available: https://api.semanticscholar.org/CorpusID:232478903 [53] H. Winnemöller, “Xdog: advanced image stylization with ex-tended difference-of-gaussians,” in Proceedings of the ACM SIG-GRAPH/Eurographics Symposium on Non-Photorealistic Animation and Rendering , ser. NPAR ’11. New York, NY, USA: Association for Computing Machinery, 2011, p. 147–156. [Online]. Available: https://doi.org/10.1145/2024676.2024700 [54] P. Dollár and C. L. Zitnick, “Fast edge detection using structured forests,” 
+
+IEEE transactions on pattern analysis and machine intelligence , vol. 37, no. 8, pp. 1558–1570, 2014. 31 [55] H. Zhao, J. Shi, X. Qi, X. Wang, and J. Jia, “Pyramid scene parsing net-work,” in Proceedings of the IEEE conference on computer vision and pat-tern recognition , 2017, pp. 2881–2890. 32

@@ -1,0 +1,302 @@
+Title: PC-MIL: Decoupling Feature Resolution from Supervision Scale in Whole-Slide Learning
+
+URL Source: https://arxiv.org/pdf/2604.12100v1
+
+Published Time: Wed, 15 Apr 2026 00:15:11 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# PC-MIL: Decoupling Feature Resolution from Supervision Scale in Whole-Slide Learning 
+
+Syed Fahim Ahmed 1,2⋆, Gnanesh Rasineni 1,2, Florian Koehler 3, Abu Zahid Bin Aziz 1,2, Mei Wang 3, Attila Gyulassy 1,2, Brian Summa 4, J. Quincy Brown 4,Valerio Pascucci 1,2, and Shireen Y. Elhabian 1,2 
+
+> 1
+
+Kahlert School of Computing, University of Utah, Salt Lake City, UT 84112, USA  
+
+> 2
+
+Scientific Computing & Imaging Institute, University of Utah, Salt Lake City, UT 84112, USA 
+
+u1419916@utah.edu, gnanesh.rasineni@utah.edu, zahid.aziz@sci.utah.edu, attila.gyulassy@utah.edu, valerio.pascucci@utah.edu, shireen@sci.utah.edu  
+
+> 3
+
+Instapath Inc., Houston, TX 77021, USA 
+
+florian@instapathbio.com, mwang@instapathbio.com  
+
+> 4
+
+Tulane University, Department of Biomedical Engineering, New Orleans, Louisiana, USA 
+
+bsumma@tulane.edu, jqbrown@tulane.edu 
+
+Abstract. Whole-slide image (WSI) classification in computational pat-hology is commonly formulated as slide-level Multiple Instance Learning (MIL) with a single global bag representation. However, slide-level MIL is fundamentally underconstrained: optimizing only global labels encourages models to aggregate features without learning anatomically meaningful lo-calization . This creates a mismatch between the scale of supervision and the scale of clinical reasoning. Clinicians assess tumor burden, focal le-sions, and architectural patterns within millimeter-scale regions, whereas standard MIL is trained only to predict whether “somewhere in the slide there is cancer.” As a result, the model’s inductive bias effectively erases anatomical structure. We propose Progressive-Context MIL (PC-MIL), a framework that treats the spatial extent of supervision as a first-class design dimension. Rather than altering magnification, patch size, or in-troducing pixel-level segmentation, we decouple feature resolution from supervision scale. Using fixed 20 × features, we vary MIL bag extent in millimeter units and anchor supervision at a clinically motivated 2mm scale to preserve comparable tumor burden and avoid confounding scale with lesion density. PC-MIL progressively mixes slide- and region-level supervision in controlled proportions, enabling explicit train-context ×
+
+test-context analysis. On 1,476 prostate WSIs from five public datasets for binary cancer detection, we show that anatomical context is an in-dependent axis of generalization in MIL, orthogonal to feature resolu-tion: modest regional supervision improves cross-context performance, and balanced multi-context training stabilizes accuracy across slide and regional evaluation without sacrificing global performance. These results demonstrate that supervision extent shapes MIL inductive bias and sup-port anatomically grounded WSI generalization.  
+
+> ⋆
+
+Corresponding author: u1419916@utah.edu   
+
+> arXiv:2604.12100v1 [cs.CV] 13 Apr 2026 2Ahmed et al.
+> Keywords: Multiple instance learning, Prostate cancer detection
+
+## 1 Introduction 
+
+Whole-slide image (WSI) analysis is central to computational pathology and has enabled automated cancer assessment at clinical scale [1]. Because WSIs contain billions of pixels, dense pixel-level annotation is rarely available, and weakly supervised learning has become the practical default. Multiple Instance Learning (MIL) formalizes this setting by treating each slide as a bag of patch embeddings supervised only by a global slide label [3, 7]. A key limitation of slide-level MIL is not model capacity but identifiability :global labels constrain only existence of diagnostic evidence, not its extent . Many spatial configurations of evidence are equally consistent with the same slide label, making the learning problem inherently underconstrained. This issue is most apparent in classical MIL aggregators (e.g., max pooling), where gradients can be dominated by a small subset of instances, encouraging shortcut solutions that do not recover anatomically meaningful structure [3]. Attention-based MIL alleviates the rigidity of max pooling by assigning continuous importance to instances [7], and CLAM further introduces clustering constraints to improve instance-level separability and interpretability [15]. Nevertheless, these methods still optimize a global objective: the only scale at which supervision constrains learning remains the full slide, and spatial extent is not explicitly modeled. When supervision does not constrain spatial extent, the learned representation need not align with anatomically meaningful regions. This leads to a supervision–reasoning mismatch. Clinical interpretation is inherently spatial—tumor burden, focal lesions, and architectural patterns are assessed within bounded millimeter-scale regions. Indeed, 1–2 mm thresholds are commonly used to define clinically actionable margins [11, 18]. In contrast, slide-level MIL is trained only to determine whether cancer exists somewhere in the slide, leaving anatomical support weakly constrained by the learning objective. A broad literature has improved MIL feature representations and aggre-gation mechanisms, including transformer-based MIL [20], dual-stream designs [12], and graph-based formulations [13]. In parallel, pathology foundation mod-els have substantially strengthened patch-level embeddings [5, 23, 26, 14, 9], and standardized benchmarks such as EVA enable consistent downstream compari-son across encoders [8]. Multi-scale MIL methods (e.g., SD-MIL) alter perceptual scale or internal feature interactions, yet supervision remains anchored to a sin-gle global label. Consequently, the spatial extent of supervision —the anatomical scale at which labels constrain the model—has not been treated as an indepen-dent design axis shaping MIL inductive bias. At the same time, many cohorts provide sparse region-of-interest (ROI) an-notations that encode localized semantic cues and can be generated efficiently [15, 2]. While too sparse for dense segmentation training, these ROIs provide a mechanism to impose spatially bounded supervision without requiring pixel-level PC-MIL 3
+
+annotation, enabling weak supervision to be aligned with anatomically meaning-ful contexts without requiring dense annotations. We therefore propose Progressive-Context MIL (PC-MIL), which decouples feature resolution from supervision scale by fixing patch representations and explicitly varying the physical support over which labels constrain the model. Rather than altering magnification or feature architecture, PC-MIL redefines MIL bags over millimeter-scale anatomical regions while preserving a shared em-bedding space. Regional supervision is anchored at a clinically motivated 2 mm pivot to maintain comparable tumor burden across contexts and avoid conflat-ing supervision scale with lesion density. By systematically composing slide-level and regional supervision during training and evaluating across contexts, PC-MIL isolates supervision scale as an independent axis of generalization. We evaluate PC-MIL on 1,476 prostate WSIs aggregated from five public datasets for prostate cancer detection. Our results demonstrate that the super-vision scale constitutes an independent axis of generalization in MIL, orthogo-nal to feature resolution: moderate regional supervision improves cross-context robustness, and balanced multi-context training stabilizes performance across slide-level and regional evaluation scales without sacrificing global accuracy. In summary, we contribute: (i) a principled reframing of MIL in which supervision scale defines inductive bias; (ii) an ROI-guided formulation of millimeter-scale regional supervision anchored at clinically meaningful thresholds; and (iii) a com-prehensive empirical study demonstrating anatomically grounded generalization via PC-MIL. 
+
+## 2 Method 
+
+We introduce Progressive-Context MIL (PC-MIL) to study supervision scale as a controllable design variable in MIL while preserving a shared embedding space. PC-MIL explicitly varies the anatomical extent of MIL bags without altering feature resolution. The framework comprises three components: (1) ROI-guided regional bag construction anchored at a clinically motivated 2, mm pivot; (2) a granularity-first context allocation strategy to prevent cross-context information leakage; and (3) a progressive context-mixing scheme governed by a composition vector α that enables learning across multiple anatomical scales. An overview of the full PC-MIL pipeline is shown in Fig. 1. 
+
+Background: Slide-Level Multiple Instance Learning . In computational pathology, WSIs are partitioned into patches and analyzed using Multiple In-stance Learning (MIL). We define a dataset of N WSIs as S = {(Si, Y i)}Ni=1 ,where each slide Si has a binary label Yi ∈ { 0, 1}. In MIL [7], each slide is a bag 
+
+Bi = {xij }Mi 
+
+> j=1
+
+of Mi patches. Under the classical binary MIL assumption, the bag label is positive iff at least one instance is positive, Yi = max j yij , where instance labels yij ∈ { 0, 1} are latent . Each patch is embedded with a frozen foundation encoder to generate features fij = ϕ(xij ) ∈ RD . To explicitly define that aggregation produces a global embedding rather than a direct label, we 4 Ahmed et al. 
+
+utilize a permutation-invariant function g(·) and a classifier head h(·):
+
+zi = g {fij }Mi
+
+> j=1
+
+, ˆpi = σ(h(zi)) , ˆYi = I [ˆ pi ≥ τ ] , (1) where zi is the slide-level embedding , σ(·) is the sigmoid activation function, and 
+
+ˆpi is the predicted probability. In conventional MIL, the entire WSI constitutes a single bag, Bslide  
+
+> i
+
+= {fij }Mi
+
+> j=1
+
+, so aggregation is performed globally. In this for-mulation, supervision constrains only the existence of positive evidence, not the anatomical extent. In this work, we generalize the bag definition to anatomi-cally defined regional extents, enabling explicit control over the spatial extent of supervision. 
+
+ROI-Guided Regional Bag Construction . Fig. 1 summarizes the ROI-guided multi-scale bag construction and context allocation strategy. Conven-tional MIL treats an entire WSI as a single bag, implicitly aggregating infor-mation across the full tissue extent. In contrast, we redefine the spatial extent of a bag by processing WSIs at fixed 20 × magnification ( ≈ 0.5 μm/pixel) using non-overlapping 256 ×256 patches. This fixed tiling ensures that millimeter-scale regions correspond to disjoint, countable patch sets, enabling consistent geomet-ric partitioning of the slide and precise control over absolute tumor burden across supervision scales. At 20 × resolution, square regional contexts of 1×1, 2×2, and 
+
+4 × 4 mm 2 correspond to pixel extents of 2048 2, 4096 2, and 8192 2, respectively, which translate to bags of 64 , 256 , and 1024 patches. Each slide Si is partitioned into non-overlapping square regions of size c ∈{1 × 1, 2 × 2, 4 × 4} mm 2. Let ntumor  
+
+> i,r
+
+, n normal  
+
+> i,r
+
+, n stroma  
+
+> i,r
+
+denote the number of anno-tated patches of each type in region r, and nann  
+
+> i,r
+
+their sum. A region is ROI-valid if nann  
+
+> i,r
+
+≥ 26 . A valid region is labeled Cancer if ntumor  
+
+> i,r
+
+≥ 26 ; it is labeled 
+
+Non-Cancer if ntumor  
+
+> i,r
+
+= 0 and either nnormal  
+
+> i,r
+
+/n ann  
+
+> i,r
+
+≥ 0.5 or nstroma  
+
+> i,r
+
+= nann  
+
+> i,r
+
+.Valid regions that do not meet either criterion are treated as ambiguous and discarded. The threshold of 26 patches corresponds to a fixed absolute tumor area under the 2mm pivot and is inspired by millimeter-scale margin criteria in surgical pathology [11, 18]. We define the set of supervision contexts as C = {slide , 1×1, 2×2, 4×4} mm 2,where c ∈ { 1 × 1, 2 × 2, 4 × 4} denotes square regions of side length 1, 2, or 
+
+4 mm. For any c ∈ C , the collection of bags for slide Si is B(c) 
+
+> i
+
+= {Bslide  
+
+> i
+
+} if 
+
+c = slide, and B(c) 
+
+> i
+
+= {B(c) 
+
+> i,r
+
+| r is ROI-valid at scale c} for regional contexts. A regional bag aggregates patch embeddings within a valid region r, defined as B(c) 
+
+> i,r
+
+= {fij | xij ∈ r}. Unlike the slide bag which includes all Mi patches, regional bags are restricted to ROI-validated contexts to ensure high-confidence supervision derived from sparse annotations. We denote the corresponding bag label as Y (c) 
+
+> i,r
+
+, where Yi is the ground truth for c = slide. 
+
+Progressive-Context MIL (PC-MIL). We treat the supervision scale as a controllable design variable by mixing labels across contexts C = {slide , 4×4, 2×
+
+2, 1×1} mm 2. We define a supervision composition vector α = ( αslide , α 4×4, α 2×2, α 1×1)
+
+satisfying P 
+
+> c∈C
+
+αc = 1 , which specifies the fraction of WSIs assigned to each anatomical scale. At dataset construction, each slide Si is assigned a single con-PC-MIL 5ROI Coverage Rule Cancer   
+
+> Frozen Foundation Model
+> Frozen Foundation Model
+> Slide
+> Level
+> Labels
+> Pixel
+> Labels
+> 2mm  x 2mm
+> Label s
+> 4mm x  4mm
+> Labels
+> 1mm x 1mm
+> Labels
+> ROI Coverage Rule
+> Tissue
+> Segmentation
+> Patch
+> Extraction
+> Patch Embeddings
+> Support Filter
+> >=26 Patches
+> Rejected<26 Accepted>=26
+> Cancer/Non -Cancer
+> Context Rules
+> Extracted Patches
+> Context wise
+> Prediction
+> Attention
+> Heatmap
+> Inference
+> Whole Slide
+> Image
+> Pathological Patch Embeddings from Prostate WSI
+> ROI Guided Regional Bag Construction + MIL Training
+> Slide
+> Level
+> Bags
+> 4mm x 4mm
+> Bags
+> 2mm x 2mm
+> Bags
+> 1mm x 1mm
+> Bags
+> Progressive Context Composition Strategy
+> MIL Backbone
+> Classifier
+> Head
+> Bag
+> Predictions
+
+Fig. 1: PC-MIL pipeline. Top: WSIs are segmented, tiled at 20 × into 256 ×256 
+
+patches, and embedded by a frozen encoder. Bottom: Sparse ROI annotations generate candidate regional bags across 4 × 4, 2 × 2, and 1 × 1 mm 2 anatomical extents using coverage rules (red: Cancer, green: Non-Cancer; ambiguous regions are discarded). Each WSI is assigned to one supervision context during training to prevent cross-context leakage, and contexts are mixed via α. Inference pro-duces context-wise predictions and attention heatmaps. text ci according to α, and training uses only bags B(ci)
+
+i from that scale. This granularity-first allocation ensures that a WSI contributes supervision at only one anatomical scale, preventing cross-context leakage. After context allocation, we balance Cancer and Non-Cancer bags. For each bag B ∈ B (ci)
+
+i , the permutation-invariant aggregator produces a context embed-ding z = g(B), and a classification head predicts ˆp = σ(h(z)) , which is supervised using the corresponding bag label. 
+
+Experimental Design and Context Sweep. To quantify supervision-scale effects, we sweep α by reducing the slide fraction from 100% to 60% while reallocating mass to the 4 × 4, 2 × 2, and 1 × 1 mm 2 square regional contexts. We evaluate each trained model under fixed inference contexts c∗ ∈ C to perform a controlled train-context × test-context analysis (Sec. 3). 
+
+Implementation Details. We use five public prostate H&E datasets: AGGC22 [6], TCGA-PRAD [27], GTEx-Prostate [4], DiagSet [10], and Gleason2019 [17]. Official train/val/test splits are used for AGGC22, DiagSet, and Gleason2019; TCGA-PRAD and GTEx are split 80/10/10 at the slide level. All regional bags inherit the split of their parent slide. WSIs are processed using TRIDENT [25] (tissue masking; 20 × patching at 
+
+256 ×256 ). Patches are embedded using a frozen UNI2-h encoder into fij ∈ R1536 ;6 Ahmed et al. 
+
+Table 1: Binary classification performance across progressive multi-context train-ing label allocations. Training ratios α: (Slide, 4×4, 2×2, 1×1) %. B-A: Balanced Accuracy (%); S@98: Spec. at 98% Sens. (%). Average columns denote mean per-formance across all four evaluation contexts c∗ ∈ C .                                                                                                                                                            
+
+> Ratio αSlide 4×4mm 22×2mm 21×1mm 2Average
+> (%) B-A S@98 B-A S@98 B-A S@98 B-A S@98 B-A S@98
+> (100,0,0,0) 99.46 99.73 78.78 85.49 69.00 93.98 63.09 89.42 77.58 92.16 (90,10,0,0) 99.46 99.46 96.15 94.08 93.56 89.62 87.14 77.74 94.08 90.22 (90,6,4,0) 98.66 97.85 95.49 95.27 91.31 95.48 86.26 89.64 92.93 94.56 (90,6,2,2) 98.39 97.58 94.96 89.55 95.31 95.68 95.71 98.04 96.09 95.21 (80,20,0,0) 98.12 97.58 90.36 90.37 88.33 92.38 84.44 90.12 90.31 92.61 (80,12,8,0) 98.39 99.46 95.98 86.23 93.65 96.09 90.33 96.93 94.59 94.68 (80,12,4,4) 98.12 95.13 95.65 96.47 94.26 98.10 92.26 97.84 95.07 96.89
+> (70,30,0,0) 98.12 99.18 88.47 81.81 84.18 93.02 79.21 92.11 87.50 91.53 (70,18,12,0) 97.83 95.18 97.05 96.31 95.16 97.54 91.93 97.21 95.49 96.56 (70,18,6,6) 98.12 97.85 88.86 80.62 91.07 96.72 94.26 98.16 93.08 93.34 (60,40,0,0) 96.49 96.49 93.02 89.32 88.04 95.51 82.20 94.32 89.94 93.91 (60,24,16,0) 97.33 95.70 94.31 87.93 92.82 96.96 91.92 97.29 94.09 94.47 (60,24,8,8) 97.31 96.76 95.05 85.20 95.01 94.91 97.26 98.18 96.16 93.76
+> Bold indicates best performance per evaluation context; underlined indicates second best.
+
+the encoder remains fixed across experiments so performance differences arise solely from bag construction and supervision scale. MIL backbones are implemented using the MIL-LAB framework [19], which provides standardized implementations of multiple state-of-the-art architectures. We evaluate ABMIL [7], TransMIL [20], DSMIL [12], WiKG [13], RRT [21], Transformer-based MIL [7], and ILRA [24] under identical optimization settings. We specifically evaluate two ABMIL variants: (1) ABMIL (pre) , repre-senting the standard ABMIL [7] initialized with weights from [19]; and (2) 
+
+PC-MIL , which implements our progressive context-mixing strategy using a vanilla ABMIL backbone using random weights (denoting as PC-MIL ). Let 
+
+T denote the set of training bags after context allocation and balancing, with 
+
+ˆpB = σ(h(g(B))) . We optimize bag-level binary cross-entropy: 
+
+LBCE = − 1
+
+|T | 
+
+X 
+
+> (B,Y B)∈T
+
+[YB log ˆ pB + (1 − YB ) log(1 − ˆpB )] . (2) Optimization uses AdamW with early stopping on validation balanced accuracy. Evaluation is performed separately under each fixed inference context c∗ ∈ C .
+
+## 3 Results 
+
+In prostate cancer diagnostics, high specificity at 98% sensitivity (S@98) is clin-ically critical to reduce unnecessary biopsies while minimizing missed clinically significant disease [16, 22]. We therefore report balanced accuracy (B-A), which accounts for class imbalance, and S@98 across both slide-level and regional in-ference contexts to evaluate cross-scale generalization. PC-MIL 7
+
+Table 2: Comparison of PC-MIL against state-of-the-art baselines across multi-context evaluation. B-A: Balanced Accuracy (%); S@98: Spec. at 98% Sens. (%). Average columns denote mean performance across all four evaluation contexts.                                                                                                                                       
+
+> Model Slide 4×4mm 22×2mm 21×1mm 2Average B-A S@98 B-A S@98 B-A S@98 B-A S@98 B-A S@98
+> ABMIL (pre) [19] 98.91 97.85 77.66 67.62 66.49 64.89 60.66 63.71 75.93 73.52 TransMIL [20] 98.66 99.46 79.36 89.89 77.80 92.83 80.99 92.04 84.20 93.56 DSMIL [12] 98.64 99.18 78.51 66.24 69.85 85.03 64.78 83.86 77.94 83.58 WiKG [13] 97.85 97.58 77.66 66.05 66.81 72.69 61.14 72.32 75.87 77.16 RRT [21] 99.18 99.18 79.30 87.11 68.85 88.15 70.58 84.19 79.48 89.66 Transformer [7] 97.85 97.85 78.26 88.77 68.75 85.02 62.70 75.83 76.89 86.87 ILRA [24] 98.12 99.18 77.71 31.21 65.93 23.65 59.67 22.02 75.36 44.02 ABMIL [7] 99.46 99.73 78.78 85.49 69.00 93.98 63.09 89.42 77.58 92.16 PC-MIL (Slide-Pres) 99.46 99.46 96.15 94.08 93.56 89.62 87.14 77.74 94.08 90.22 PC-MIL (Clinical) 98.12 95.13 95.65 96.47 94.26 98.10 92.26 97.84 95.07 96.89
+> PC-MIL (Balanced) 97.31 96.76 95.05 85.20 95.01 94.91 97.26 98.18 96.16 93.76
+> Bold indicates best performance per evaluation context; underlined indicates second best.
+
+Table 1 reveals a strong supervision-scale dependence in cross-context per-formance. A slide-only model ( 100 , 0, 0, 0) attains near-ceiling slide accuracy (99 .46% B-A) but exhibits severe degradation under regional inference ( 69 .00% 
+
+and 63 .09% B-A at 2 × 2 and 1 × 1 mm 2 square regions, respectively), consistent with the underconstrained nature of slide-level MIL.Injecting limited regional supervision yields substantial cross-context gains: allocating only 10% of slides to 4 × 4 mm 2 square regions ( 90 , 10 , 0, 0) increases average B-A from 77 .58% to 
+
+94 .08% while preserving slide performance. Incorporating finer contexts further stabilizes performance across scales; (60 , 24 , 8, 8) achieves the best average B-A (96 .16% ), while (80 , 12 , 4, 4) yields the best average S@98 ( 96 .89% ).These re-sults suggest a stable regime in which moderate regional supervision maximizes cross-context robustness without materially compromising global accuracy. Be-yond this regime, increasing regional supervision produces diminishing returns and may slightly reduce slide-level performance. Based on Table 1, we select three representative allocations: Slide-Preserving 
+
+(90 , 10 , 0, 0), Clinical (80 , 12 , 4, 4; best avg. S@98), and Balanced (60 , 24 , 8, 8;best avg. B-A). Table 2 shows that architectural variation alone does not prevent cross-context degradation: slide-level baselines remain strong on slide evaluation but drop markedly on regional square contexts (avg. B-A 75.36–84.20%). In contrast, PC-MIL improves robustness across scales. Slide-Preserving retains 99.46% slide B-A while raising 4 × 4 mm 2 B-A to 96.15% (94.08% avg. B-A). 
+
+Balanced yields the best avg. B-A (96.16%), while Clinical achieves the best average S@98 (96.89%). Overall, these results indicate that the supervision scale is an independent driver of inductive bias and cross-context generalization in MIL, with a larger impact than backbone choice in this setting. Figure 2 provides qualitative support for the mechanism suggested by Ta-bles 1–2. When trained solely with slide-level supervision, ABMIL produces overextended 2mm cancer predictions and broadly distributed attention, con-8 Ahmed et al. PC -MIL (Clinical) Prediction  
+
+> Agreement: 93.18%
+> Ground Truth ABMIL Prediction
+> Agreement: 51.70%
+
+(a) 2 × 2 mm 2 regional predictions comparing ABMIL and PC-MIL. PC -MIL (Clinical) Heatmap ABMIL Heatmap Ground Truth 
+
+(b) Corresponding attention heatmaps. 
+
+Fig. 2: Qualitative comparison of spatial reasoning. sistent with the underconstrained nature of slide-level MIL: correct slide classifi-cation can be achieved without learning anatomically coherent tumor extent. In contrast, PC-MIL trained with 2mm regional supervision yields spatially con-sistent predictions that better align with the ground-truth tumor distribution (93.18% vs 51.70% agreement), concentrating high-confidence responses within tumor-dense regions rather than diffusely across peripheral tissue. To establish regional ground truth for this evaluation, 10 WSIs from the AGGC22 dataset [6] were exhaustively annotated at 2 × 2 mm 2 square regions by expert patholo-gists using a custom regional annotation tool. Regional inference was performed across the entire tissue, and agreement was computed against these localized an-notations. For visualization only, 2 × 2 mm 2 region probabilities were binarized at a conservative threshold of 0.9 to highlight high-confidence cancer regions; quantitative evaluation used continuous predictions. These qualitative patterns mirror the quantitative improvements observed in cross-context evaluation and provide further evidence that supervision scale shapes the inductive bias of MIL, promoting anatomically grounded reasoning beyond what is achieved through architectural modification alone. 
+
+## 4 Conclusion 
+
+We presented Progressive-Context MIL (PC-MIL), which treats the spatial ex-tent of supervision as a first-class design variable for WSI classification. Us-ing fixed 20 × features, PC-MIL decouples feature resolution from supervision scale and progressively mixes slide-level and millimeter-scale regional supervi-sion to analyze train-context × test-context interactions. Across 1,476 prostate WSIs from five public datasets, we show that supervision scale is an indepen-dent axis of generalization: slide-only training attains near-ceiling slide accuracy but degrades under regional inference, while modest regional supervision yields PC-MIL 9
+
+substantial cross-context gains and balanced multi-context training stabilizes performance across slide and regional evaluations without sacrificing global ac-curacy. Qualitative predictions and attention maps further indicate that regional supervision encourages anatomically coherent localization rather than diffuse ag-gregation. Future work will extend PC-MIL to multi-class Gleason grading and study calibration and adaptive context allocation for deployment. 
+
+## References 
+
+1. Bulten, W., Pinckaers, H., Van Boven, H., Vink, R., De Bel, T., Van Ginneken, B., Van der Laak, J., Hulsbergen-Van de Kaa, C., Litjens, G.: Automated deep-learning system for gleason grading of prostate cancer using biopsies: a diagnostic study. The Lancet Oncology 21 (2), 233–241 (2020) 2. Campanella, G., Hanna, M.G., Geneslaw, L., Miraflor, A., Werneck Krauss Silva, V., Busam, K.J., Brogi, E., Reuter, V.E., Klimstra, D.S., Fuchs, T.J.: Clinical-grade computational pathology using weakly supervised deep learning on whole slide images. Nature medicine 25 (8), 1301–1309 (2019) 3. Carbonneau, M.A., Cheplygina, V., Granger, E., Gagnon, G.: Multiple instance learning: A survey of problem characteristics and applications. Pattern recognition 
+
+77 , 329–353 (2018) 4. Center, B.S., et al.: The gtex consortium atlas of genetic regulatory effects across human tissues. American Association for the Advancement of Science (2020) 5. Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F., Jaume, G., Song, A.H., Chen, B., Zhang, A., Shao, D., Shaban, M., et al.: Towards a general-purpose foundation model for computational pathology. Nature medicine 30 (3), 850–862 (2024) 6. Huo, X., Ong, K.H., Lau, K.W., Gole, L., Young, D.M., Tan, C.L., Zhu, X., Zhang, C., Zhang, Y., Li, L., et al.: A comprehensive ai model development framework for consistent gleason grading. Communications Medicine 4(1), 84 (2024) 7. Ilse, M., Tomczak, J., Welling, M.: Attention-based deep multiple instance learning. In: International conference on machine learning. pp. 2127–2136. PMLR (2018) 8. kaiko.ai, Gatopoulos, I., Känzig, N., Moser, R., Otálora, S.: eva: Evaluation frame-work for pathology foundation models. In: Medical Imaging with Deep Learning (2024), https://openreview.net/forum?id=FNBQOPj18N 9. Karasikov, M., van Doorn, J., Känzig, N., Cesur, M.E., Horlings, H.M., Berke, R., Tang, F., Otálora, S.: Training state-of-the-art pathology foundation mod-els with orders of magnitude less data. arXiv preprint arXiv:2504.05186 (2025), https://arxiv.org/abs/2504.05186 10. Koziarski, M., Cyganek, B., Niedziela, P., Olborski, B., Antosz, Z., Żydak, M., Kwolek, B., Wąsowicz, P., Bukała, A., Swadźba, J., et al.: Diagset: a dataset for prostate cancer histopathological image classification. Scientific Reports 14 (1), 6780 (2024) 11. Kuerer, H.M., Smith, B.D., Chavez-MacGregor, M., Albarracin, C., Barcenas, C.H., Santiago, L., Edgerton, M.E., Rauch, G.M., Giordano, S.H., Sahin, A., et al.: Dcis margins and breast conservation: Md anderson cancer center multidisciplinary practice guidelines and outcomes. Journal of Cancer 8(14), 2653 (2017) 12. Li, B., Li, Y., Eliceiri, K.W.: Dual-stream multiple instance learning network for whole slide image classification with self-supervised contrastive learning. In: Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 14318–14328 (2021) 10 Ahmed et al. 13. Li, J., Chen, Y., Chu, H., Sun, Q., Guan, T., Han, A., He, Y.: Dynamic graph representation with knowledge-aware attention for histopathology whole slide im-age analysis. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 11323–11332 (2024) 14. Lu, M.Y., Chen, B., Williamson, D.F., Chen, R.J., Liang, I., Ding, T., Jaume, G., Odintsov, I., Le, L.P., Gerber, G., et al.: A visual-language foundation model for computational pathology. Nature medicine 30 (3), 863–874 (2024) 15. Lu, M.Y., Williamson, D.F., Chen, T.Y., Chen, R.J., Barbieri, M., Mahmood, F.: Data-efficient and weakly supervised computational pathology on whole-slide images. Nature biomedical engineering 5(6), 555–570 (2021) 16. Mazzone, B., et al.: Molecular biomarkers for the detection of clinically signif-icant prostate cancer: A systematic review and meta-analysis. European Urol-ogy Oncology 5(6), 611–622 (2022). https://doi.org/10.1016/j.euo.2022.09.004, https://pmc.ncbi.nlm.nih.gov 17. Nir, G., Hor, S., Karimi, D., Fazli, L., Skinnider, B.F., Tavassoli, P., Turbin, D., Villamil, C.F., Wang, G., Wilson, R.S., et al.: Automatic grading of prostate cancer in digitized histopathology images: Learning from multiple experts. Medical image analysis 50 , 167–180 (2018) 18. Scimone, M.T., Krishnamurthy, S., Maguluri, G., Preda, D., Park, J., Grimble, J., Song, M., Ban, K., Iftimia, N.: Assessment of breast cancer surgical margins with multimodal optical microscopy: A feasibility clinical study. Plos one 16 (2), e0245334 (2021) 19. Shao, D., Chen, R.J., Song, A.H., Runevic, J., Lu, M.Y., Ding, T., Mahmood, F.: Do multiple instance learning models transfer? arXiv preprint arXiv:2506.09022 (2025) 20. Shao, Z., Bian, H., Chen, Y., Wang, Y., Zhang, J., Ji, X., et al.: Transmil: Trans-former based correlated multiple instance learning for whole slide image classifica-tion. Advances in neural information processing systems 34 , 2136–2147 (2021) 21. Tang, W., Zhou, F., Huang, S., Zhu, X., Zhang, Y., Liu, B.: Feature re-embedding: Towards foundation model-level performance in computational pathology. In: Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 11343–11352 (2024) 22. Treviño, J.G., et al.: Sensitivity, specificity, positive predictive value, and neg-ative predictive value: Explaining the real-world performance of diagnostic tests. Medicina 57 (5), 503 (2021). https://doi.org/10.3390/medicina57050503, https://www.mdpi.com 23. Vorontsov, E., Bozkurt, A., Casson, A., Shaikovski, G., Zelechowski, M., Sever-son, K., Zimmermann, E., Hall, J., Tenenholtz, N., Fusi, N., et al.: A foundation model for clinical-grade computational pathology and rare cancers detection. Na-ture medicine 30 (10), 2924–2935 (2024) 24. Xiang, J., Zhang, J.: Exploring low-rank property in multiple instance learning for whole slide image classification. In: The Eleventh International Conference on Learning Representations (2023) 25. Zhang, A., Jaume, G., Vaidya, A., Ding, T., Mahmood, F.: Accelerating data processing and benchmarking of ai models for pathology. arXiv preprint arXiv:2502.06750 (2025) 26. Zimmermann, E., Vorontsov, E., Viret, J., Casson, A., Zelechowski, M., Shaikovski, G., Tenenholtz, N., Hall, J., Fuchs, T., Fusi, N., Liu, S., Severson, K.: Virchow2: Scaling self-supervised mixed magnification models in pathology. arXiv preprint arXiv:2408.00738 (2024) PC-MIL 11 27. Zuley, M.L., Jarosz, R., Drake, B.F., Rancilio, D., Klim, A., Rieger-Christ, K., Lemmerman, J.: The cancer genome atlas prostate adenocarcinoma collection (tcga-prad) (version 4) [data set] (2016). https://doi.org/10.7937/K9/TCIA.2016.YXOGLM4Y, https://doi.org/10.7937/K9/TCIA.2016.YXOGLM4Y
