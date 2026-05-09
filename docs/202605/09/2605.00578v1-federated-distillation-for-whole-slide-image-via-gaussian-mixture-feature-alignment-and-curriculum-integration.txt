@@ -1,0 +1,505 @@
+Title: Federated Distillation for Whole Slide Image via Gaussian-Mixture Feature Alignment and Curriculum Integration
+
+URL Source: https://arxiv.org/pdf/2605.00578v1
+
+Published Time: Mon, 04 May 2026 00:56:34 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Federated Distillation for Whole Slide Image via Gaussian-Mixture Feature Alignment and Curriculum Integration 
+
+Luru Jing 1 Cong Cong 2 Yanyuan Chen 3 Yongzhi Cao 1
+
+## Abstract 
+
+Federated learning (FL) offers a promising frame-work for collaborative digital pathology by en-abling model training across institutions. How-ever, real-world deployments face heterogene-ity arising from diverse multiple instance learn-ing (MIL) architectures and heterogeneous fea-ture extractors across institutions. We propose FedHD, a novel FL framework that performs lo-cal Gaussian-mixture feature alignment tailored for WSI analysis. Instead of exchanging model parameters, each client independently distills se-mantically rich synthetic feature representations aligned with the distribution of real WSIs. To preserve diagnostic diversity, FedHD adopts a one-to-one distillation strategy, generating a syn-thetic counterpart for each real slide to avoid over-compression. During federation, a curriculum-based integration strategy progressively incorpo-rates cross-site synthetic features into local train-ing once performance plateaus. Furthermore, an optional interpretation module reconstructs pseudo-patches from synthetic embeddings, en-hancing transparency. FedHD is architecture-agnostic, privacy-preserving, and supports per-sonalized yet collaborative training across diverse institutions. Experiments on TCGA-IDH, CAME-LYON16, and CAMELYON17 show that FedHD consistently outperforms state-of-the-art feder-ated and distillation baselines. 
+
+## 1. Introduction 
+
+Histopathology image analysis using whole slide images (WSIs) plays a central role in cancer diagnosis (Wang et al., 
+
+> 1
+
+School of Computer Science, Peking University, Beijing, China 2Centre for Health Informatics, Australian Institute of Health Innovation, Macquarie University, Sydney, NSW 2113, Australia 3School of Data Science, University of Virginia, Charlottesville, VA, USA. Correspondence to: Yongzhi Cao 
+
+<caoyz@pku.edu.cn >.
+
+Accepted at ICML 2026. Camera-ready version forthcoming. 
+
+2024; Chauhan et al., 2025; Tang et al., 2025). Multi-ple Instance Learning (MIL) frameworks (Lu et al., 2021; Shao et al., 2021) have greatly advanced WSI classifica-tion. However, training robust MIL models requires large and diverse datasets, which are rarely available at a single institution. Privacy regulations further restrict data shar-ing, making cross-institutional collaboration essential yet challenging (Dayan et al., 2021). Federated learning (FL) provides a natural paradigm for col-laborative model training without direct data exchange (Wen et al., 2023; Guan et al., 2024; Cong et al., 2026). In real-world medical settings, institutions often differ in computa-tional resources and modeling preferences, leading to the adoption of heterogeneous feature extractors as well as di-verse MIL architectures. Such heterogeneity results in in-compatible model parameter spaces across clients, posing fundamental challenges to conventional FL frameworks. To mitigate model compatibility issues, recent federated dataset distillation (FedDD) methods (Jin et al., 2025; Jia et al., 2025; Zhao & Bilen, 2023) have been proposed, en-abling clients to share synthetic datasets instead of model parameters. While this paradigm facilitates collaboration across heterogeneous models, our preliminary results show that existing FedDD approaches often yield low-informative synthetic data, leading to notable performance degradation in local MIL models. We identify two key reasons for this limitation. First, the mean-matching based distribution alignment used in prior works (Zhou et al., 2021; Zhao & Bilen, 2023; Tian et al., 2023) is ill-suited for WSIs, whose patch feature follow multi-component distributions (Song et al., 2024), causing severe oversimplification of morpho-logical complexity. Second, most methods pursue maximum compression, representing thousands of real patches with only a few synthetic samples. This strategy becomes coun-terproductive for WSI datasets, which are typically small in size and exhibit high intra-class diversity at the slide level. Over-compression discards fine-grained diagnostic cues, resulting in synthetic data with limited representational richness. Accordingly, we propose FedHD, a novel dataset distilla-tion framework tailored for federated WSI learning. At the local level, FedHD introduces an enhanced distribution 1
+
+> arXiv:2605.00578v1 [cs.CV] 1 May 2026 FedHD
+
+alignment strategy that models the patch feature space as a mixture of Gaussians and aligns both the mean and covari-ance of each component between real and synthetic data, effectively capturing intra-slide heterogeneity. Moreover, to preserve representational richness, FedHD performs one-to-one feature distillation, generating a synthetic counterpart for each real slide rather than compressing multiple slides into a few examples. Furthermore, unlike pixel-level distilla-tion, FedHD operates directly on patch embeddings, which naturally align with the MIL pipeline, improving training ef-ficiency while maintaining semantic fidelity. To enhance in-terpretability of these synthetic embeddings, an on-demand interpretation module further reconstructs synthetic features into realistic pseudo-patches. During federation, each client shares its distilled slides with the server, which aggregates and redistributes them to all participating institutions. To further bridge the gap between real and synthetic data, we adopt a curriculum learning strategy that gradually incorporates synthetic data into local training. Specifically, each client first optimizes its MIL model using real data to ensure stable convergence, then synthetic data from other clients are progressively intro-duced as auxiliary supervision once local performance sat-urates. This curriculum design allows the model to learn complementary knowledge distilled by other institutions in a controlled manner, mitigating domain shift and enhanc-ing generalization. Taken together, FedHD establishes a new direction for feature-level dataset distillation in fed-erated pathology. It is architecture-agnostic, and privacy-preserving, enabling personalized yet collaborative model development across heterogeneous institutions. Extensive experiments on TCGA-IDH, CAMELYON16, and CAME-LYON17, demonstrate that FedHD consistently outperforms state-of-the-art federated and distillation baselines in both performance and scalability. In summary, our contributions include: 1) a novel Gaussian-mixture feature distillation framework tailored for federated WSI learning; 2) a one-to-one feature distillation strategy that preserves diagnostic diversity by generating a synthetic counterpart for each real slide, avoiding over-compression; and 3) a curriculum-based federation strategy that progres-sively incorporates cross-site synthetic data into local train-ing, enhancing generalization in a controlled manner. 
+
+## 2. Related Work 
+
+Federated Learning. Federated Learning enables privacy-preserving, cross-institutional collaboration (Wen et al., 2023; Li et al., 2020). Existing approaches fall into two main categories: standard federated learning (Mohri et al., 2019; Kulkarni et al., 2020), which aims to train a single high-performance global model across all clients. For exam-ple, FedAvg (McMahan et al., 2017) averages client model weights after local training; recent methods such as FedMut (Hu et al., 2024) leverage mutual knowledge distillation to improve robustness against heterogeneity, while FedIm-pro (Tang et al., 2024) enhance generalization by sharing similar features between clients. In contrast, personalized FL (Zhang et al., 2025; Sabah et al., 2025) seeks to tailor models to individual client data distributions. For instance, FedD3 (Song et al., 2023) learns personalized representa-tions via disentangled dual decoders, separating global and local semantics to enable personalized prediction; FedDGM (Jia et al., 2024; 2025) leverages diffusion models and gen-erative latents to produce client-specific synthetic features, improving performance under extreme data heterogeneity. 
+
+Federated Learning for WSI. FedHisto (Lu et al., 2022) integrated federated learning with weakly supervised MIL, leveraging attention mechanisms to enhance slide-level clas-sification performance. HistoFS (Raswa et al., 2025) ad-vanced federated MIL by introducing pseudo bag style augmentation and RoI-aware alignment. However, these approaches typically assume homogeneous computational resources and uniform MIL architectures across clients, lim-iting their applicability in real-world multi-institutional set-tings. While recent work such as FedWSIDD (Jin et al., 2025) introduces dataset distillation for collaborative WSI analysis, it relies on distribution matching to synthesize rep-resentative slides. This simple matching results in coarse-grained approximations of feature distributions, failing to preserve the intra-slide heterogeneity. 
+
+Dataset Distillation. Dataset distillation (DD) is a tech-nique for efficient knowledge condensation (Wang et al., 2025; Wei et al., 2024). Mainstream approaches can be broadly categorized into meta-model matching, gradi-ent matching, distribution matching, and trajectory match-ing (Xue et al., 2025). Initial studies focused primarily on natural image datasets such as MNIST (Sucholutsky & Schonlau, 2021; Loo et al., 2023) and CIFAR-10 (Li et al., 2023; Zhang et al., 2023). In recent years, the scope of DD has gradually expanded into medical imaging. For instance, Li et al. (Li et al., 2022) demonstrated that a small number of synthetic chest X-rays can retain high lesion detection performance. Similarly, Yu et al. (Yu et al., 2024) proposed a progressive trajectory matching strategy tailored to medi-cal datasets. Despite recent progress (Cong et al., 2024), DD in WSI analysis remains limited. WSI features exhibit multi-component distributions, and simplistic alignment methods fail to capture their morphological complexity. Moreover, excessive compression in current approaches leads to loss of fine-grained diagnostic cues, reducing the representational quality of synthetic data. 
+
+Differences from Prior Studies. FedHD introduces a curriculum-based strategy that gradually incorporates syn-thetic data from other clients after local convergence, ef-2FedHD Institution #1 
+
+1
+
+> Interpretation Module
+
+Institution #2 Interpretation Module 
+
+Institution #c Interpretation Module 
+
+Trainable Frozen 
+
+Upload Download 
+
+On-Demand 
+
+2 
+
+> Stage 1 Stage 2
+
+1
+
+1
+
+Figure 1. Overview of the FedHD Framework. ① Each institution c distills its local WSIs into a set of synthetic slides ( {hci }Ni=1 )through the local Gaussian-mixture feature distillation process. {hci }Ni=1 are then uploaded to a central server, which aggregates them and constructs a global synthetic dataset H(c) 
+
+> global
+
+for each client by excluding that client’s own data. ② Each institution subsequently trains its MIL model using both its local real data and the received global synthetic dataset following a curriculum learning strategy. 
+
+fectively reducing domain bias and enhancing local model performance. Unlike prior DD methods, it operates on patch embeddings rather than pixels and applies one-to-one feature distillation to preserve slide-level representational richness. An on-demand interpretation module reconstructs realistic pseudo-patches from synthetic features, enhancing interpretability. Moreover, by modeling patch features as a Gaussian mixture and aligning both mean and covariance, FedHD captures intra-slide heterogeneity more effectively than simple distribution matching. 
+
+## 3. Methodology 
+
+3.1. Preliminary 
+
+Suppose we have C participating institutions, each maintain-ing its own dataset {D1, D 2, · · · , D C }. Each Dc contains 
+
+N slides represented as {(xi, y i)}Ni=1 , where xi denotes a WSI and yi is the corresponding label. Note that N may vary across institutions. Each institution follows a standard WSI analysis pipeline: 1. Patch Extraction: Each xi is partitioned into K non-overlapping image patches {aik}Kk=1 , where K depends on the size of xi.2. Feature Extraction: A feature extractor F is applied to each instance in {aik}Kk=1 to generate feature embed-dings bik = F(aik), where bik ∈ Rd.3. Slide-Level Aggregation: The resulting patch-level features {bik}Kk=1 are aggregated using a MIL model G
+
+to generate a slide-level prediction for each WSI. Globally, in a standard FL setup, the training objective is formulated as: 
+
+arg min 
+
+> {Gc}Cc=1
+
+L =
+
+> C
+
+X
+
+> c=1
+
+|Dc||D| E(x,y )∈Dc [L(Gc; x, y )] (1) where D denotes the union of all local datasets, and L is a task-specific loss function. When all institutions use the same Gc, the setting simplifies to homogeneous FL. How-ever, in real-world medical environments, variations in com-putational infrastructure often lead to heterogeneous Gc.In such cases, conventional gradient or parameter sharing becomes infeasible due to architectural incompatibility, ne-cessitating alternative approaches. 3FedHD 
+
+3.2. Overview of FedHD 
+
+FedHD addresses these limitations by shifting from param-eter aggregation to feature-level dataset distillation. As shown in Fig. 1, instead of exchanging model weights, each client in FedHD generates a set of synthetic slides that cap-ture the distribution of local WSIs without exposing raw data or model internals (Section 3.2.1). These synthetic slides are then aggregated and redistributed for collaborative training in a model-agnostic manner (Section 3.2.2). 3.2.1. L OCAL GAUSSIAN -M IXTURE FEATURE 
+
+ALIGNMENT 
+
+To generate synthetic data without sharing raw WSIs or model parameters, FedHD performs feature-level distilla-tion locally at each client c. Given a set of N real slides 
+
+{x(c) 
+
+> i
+
+}Ni=1 , where each slide contains K patch-level features 
+
+{bi,c k }Kk=1 , with each bi,c k ∈ Rd. These features define the distribution to be distilled. To preserve intra-slide hetero-geneity, we approximate the patch feature distribution of each slide using a mixture of Gaussians: 
+
+P (c,i ) 
+
+> real
+
+≈
+
+> M
+
+X
+
+> m=1
+
+πmN (μ(c,i ) 
+
+> m
+
+, Σ(c,i ) 
+
+> m
+
+) (2) where μ(c) 
+
+> m
+
+, Σ(c) 
+
+> m
+
+, and π(c) 
+
+> m
+
+are the mean, covariance, and mixture weight of the m-th component, estimated via GMM on {bi,c k }Kk=1 .For each real slide x(c) 
+
+> i
+
+, we optimize a corresponding syn-thetic slide h(c) 
+
+> i
+
+, containing T synthetic patch embeddings ({pi,c j }Tj=1 ), where each pi,c j ∈ Rd is initialized as learnable parameters. This forms N synthetic slides per client. We model the synthetic feature distribution using: 
+
+P (c,i ) 
+
+> syn
+
+≈
+
+> M
+
+X
+
+> m=1
+
+π(c) 
+
+> m
+
+N (ˆ μ(c) 
+
+> m
+
+, ˆΣ(c) 
+
+> m
+
+) (3) where ˆμ(c) 
+
+> m
+
+and ˆΣ(c) 
+
+> m
+
+are computed from the synthetic fea-tures {pi,c j }Tj=1 , assigned to each component via the same GMM. To learn h(c) 
+
+> i
+
+, we enfore alignment between P (c,i )
+
+> real
+
+and P (c,i ) 
+
+> syn
+
+following the loss below: 
+
+L(c) 
+
+> align
+
+=
+
+> M
+
+X
+
+> m=1
+
+
+
+∥μ(c) 
+
+> m
+
+− ˆμ(c) 
+
+> m
+
+∥22 + ∥Σ(c) 
+
+> m
+
+− ˆΣ(c) 
+
+> m
+
+∥2
+
+> F
+
+
+
+(4) where ∥ · ∥ 2 denotes the Euclidean norm for vector differ-ences, and ∥ · ∥ F is the Frobenius norm used to compare covariance matrices. This one-to-one distillation strategy avoids over-compression and preserves the diagnostic di-versity of each real slide. The resulting synthetic slides 
+
+{h(c) 
+
+> i
+
+}Ni=1 are retained locally for use in federation. 
+
+On-demand Interpretation via Pseudo-Patch Recon-struction. Although the synthetic slides {h(c) 
+
+> i
+
+}Ni=1 pre-serve the diagnostic diversity of real slides, they are not in-herently interpretable to human experts. To support qualita-tive inspection without revealing raw data, FedHD includes an optional on-demand interpretation module that recon-structs synthetic embeddings into realistic pseudo-patches. Each client c locally trains a lightweight generator G(c)
+
+that maps a synthetic feature pi,c j to a pseudo-patch ˜ai,c j =
+
+G(c)(pi,c j ). Here, we adopt FastGAN (Liu et al., 2021) as the backbone due to its efficiency and effectiveness in low-data regimes. The generator G(c) and discriminator D(c) are trained jointly with the following adversarial loss: 
+
+L(c) 
+
+> GAN
+
+= Ea∼A (c)
+
+h
+
+log D(c)(a)
+
+i
+
++ Eh∼P (c)
+
+h
+
+log 
+
+
+
+1 − D(c)(G(c)(h)) 
+
+i 
+
+(5) where A(c) denotes the real patch distribution and P(c) the set of synthetic features. To promote semantic fidelity, we add a patch-level reconstruction loss: 
+
+L(c) 
+
+> rec
+
+= E(a,h )
+
+h
+
+∥G (c)(h) − a∥1
+
+i
+
+(6) The overall interpretation objective combines both losses: 
+
+L(c) 
+
+> interp
+
+= L(c) 
+
+> GAN
+
++ λrec L(c) 
+
+> rec
+
+(7) where λrec balances realism and reconstruction accuracy. 3.2.2. C URRICULUM -B ASED FEDERATION 
+
+After completing local feature distillation, each client c
+
+transmits its synthetic slides {h(c) 
+
+> i
+
+}Ni=1 (i.e., their distilled feature tensors) along with the corresponding slide labels to a central server. The server aggregates these slides from all clients and redistributes a global pool of synthetic slides to each participant. To ensure privacy and prevent self-training on synthetic data, each client only receives slides generated by other clients: 
+
+H(c) 
+
+> global
+
+= [
+
+> c′∈{ 1,...,C }\{ c}
+
+{hc′ 
+
+> i
+
+}Ni=1 (8) Although the received H(c) 
+
+> global
+
+are aligned with correspond-ing real patch distributions via Lalign , they may still lack sufficient discriminability. To address this, FedHD adopts a curriculum strategy: each client first trains its MIL model on real data for stable convergence, then progressively incor-porates synthetic data from other clients. To further mitigate potential label noise in cross-client synthetic features, we replace standard cross-entropy with the Generalized Cross-Entropy (GCE) loss (Zhang & Sabuncu, 2018): 
+
+LGCE (p, y ) = 1 − pqy
+
+q , q ∈ (0 , 1] (9) 4FedHD 
+
+where py is the predicted probability for class y, and q
+
+controls the robustness–accuracy trade-off. When q → 1,GCE reduces to CE; when q → 0, it approaches MAE. The overall training objective at client c is: 
+
+L(c) 
+
+> local
+
+= L(c) 
+
+> real
+
++ L(c) 
+
+> GCE
+
+· I(t ≥ t0) (10) where t is the current training epoch, and t0 denotes the curriculum threshold. The indicator function I(t ≥ t0)
+
+ensures that synthetic data is only used once the model has reached a stable baseline on real data. This design allows FedHD to incorporate H(c) 
+
+> global
+
+in a controlled manner, improving generalization without sacrificing model stability. 
+
+## 4. Experiments 
+
+4.1. Datasets CAMELYON16 (Bejnordi et al., 2017) This breast can-cer dataset involves a binary classification task distinguish-ing between normal and tumor slides. It comprises 399 WSIs collected from two medical centres: RUMC (C1) and UMCU (C2). RUMC contributed 169 training slides (99 normal / 70 tumor) and 74 testing slides (50 normal / 24 tumor). UMCU provided 101 training slides (60 normal / 41 tumor) and 55 testing slides (31 normal / 24 tumor). 
+
+CAMELYON17 (Bandi et al., 2019) This dataset focuses on classifying breast cancer metastases into four categories: negative (neg), isolated tumor cells (itc), micro-metastases (micro), and macro-metastases (macro). Each of the five centres (C1–C5) contributed 20 patients, with five slides per patient. The class distributions per centre are: C1: 11 itc, 10 micro, 15 macro, and 64 neg; C2: 7 itc, 23 micro, 12 macro, and 58 neg; C3: 2 itc, 8 micro, 15 macro, and 75 neg; C4: 8 itc, 13 micro, 19 macro, and 60 neg; and C5: 8 itc, 5 micro, 26 macro, and 61 neg. 
+
+TCGA-IDH (Liu et al., 2020) This dataset focuses on IDH mutation status classification in gliomas and includes 1016 WSIs from eight centres. Only centres contributing over 40 slides were included. Each slide is labelled as either IDH wildtype (WT) or mutant (MU), based on immunohis-tochemistry and/or genetic sequencing. The breakdown by centre is as follows: C1: 292 WT / 119 MU, C2: 52 WT / 24 MU, C3: 8 WT / 40 MU, C4: 4 WT / 44 MU, C5: 57 WT / 61 MU, C6: 38 WT / 130 MU, C7: 3 WT / 45 MU, and C8: 84 WT / 15 MU. 
+
+4.2. Implementation Details 
+
+Patches of size 256 × 256 were sampled at 40 × magni-fication for CAMELYON16 and CAMELYON17, and at 10 × for TCGA-IDH. For federated learning, we adopted a single-round communication protocol: each client performs 1000 iterations of dataset distillation locally, uploads its distilled slides once, and then performs 50 epochs of local training after receiving the global synthetic set. In this pro-tocol, client c uploads N synthetic slides, each containing T
+
+distilled patch embeddings in Rd, resulting in a payload of 
+
+O(N T d ) floating-point values per client (plus labels). Syn-thetic features were initialized randomly with T = 1000 ,and we set the number of Gaussian mixture components to 
+
+M = 16 , following empirical evidence from (Song et al., 2024) indicating that this value provides a good approxi-mation of morphological feature distributions. The mixture weights were set uniformly as πm = 1 /M = 1 /16 . In addition, we used q = 0 .7 for the GCE loss, and set the curriculum threshold to t0 = 30 . We report test accuracy and Matthews Correlation Coefficient (MCC) for each client and their weighted global averages. For CAMELYON16, as an official training and test split is provided, we eval-uate model performance using repeated testing with five different random seeds to account for stochastic variation during training. For CAMELYON17 and TCGA-IDH, we conduct five-fold cross-validation within each centre. To prevent data leakage, slides from the same patient are al-ways assigned to the same fold. In addition, we ensure that all classes are represented in both the training and test splits for each fold. All results are reported as mean ± standard deviation, and training was implemented in PyTorch and conducted on a single NVIDIA A100 GPU. 
+
+4.3. Comparison with Prior Art Heterogeneous Local Model To simulate a realistic het-erogeneous federated learning scenario, we consider client heterogeneity arising from both feature extractors and MIL architectures. Specifically, we construct a feature extractor pool consisting of a ResNet50 pretrained on ImageNet and three pathology foundation models, including UNI (Chen et al., 2024), PhikonV2 (Filiot et al., 2024), and GPFM (Ma et al., 2024). In parallel, we build a MIL model pool by se-lecting three widely used architectures in digital pathology, namely CLAM (Lu et al., 2021), TransMIL (Shao et al., 2021), and ACMIL (Zhang et al., 2024). Each participat-ing institution randomly selects one feature extractor and one MIL model from the corresponding pools, resulting in heterogeneous local model configurations across clients. 
+
+Performance under Heterogeneous Local Models We compare FedHD against state-of-the-art personalized FL methods, including FedHE (Chan & Ngai, 2021), DESA (Huang et al., 2024), FedDGM (Jia et al., 2023), HistoFS (Raswa et al., 2025), and FedWSIDD (Jin et al., 2025). As shown in Table 1, FedHD consistently achieves the best performance across all benchmarks under this heterogeneous setting. For instance, on CAMELYON16, FedHD attains an average accuracy of 91.2%, outperform-5FedHD 
+
+Table 1. Heterogeneous model performance comparison of FedHD against competing personalized federated learning methods. Client-specific heterogeneous configurations, including feature extractors and MIL architectures, are shown in [...]. Best results are highlighted in bold , and underlined values indicate statistically significant improvements of FedHD over the strongest baseline ( p < 0.05 ). Methods FedHE DESA FedDGM HistoFS FedWSIDD FedHD (Ours) Acc MCC Acc MCC Acc MCC Acc MCC Acc MCC Acc MCC CAM16 C1 [R50+CLAM] 72.7 ±1.3 49.2 ±3.8 77.0 ±0.8 46.7 ±3.1 77.0 ±1.6 53.0 ±2.0 82.4 ±1.1 58.4 ±2.2 83.7 ±0.8 63.5 ±1.5 85.1 ±1.0 65.1 ±3.0 
+
+C2 [UNI+TrMIL] 77.7 ±2.0 57.4 ±2.2 86.2 ±2.1 71.9 ±5.3 87.8 ±1.2 78.0 ±0.6 91.3 ±1.0 81.6 ±3.6 93.2 ±1.7 86.8 ±3.1 95.8 ±0.9 91.8 ±1.6 
+
+Avg 75.2 ±3.1 53.3 ±5.3 81.9 ±4.8 60.5 ±12.7 83.4 ±4.9 65.2 ±13.6 86.7 ±4.9 69.9 ±12.6 88.7 ±4.9 75.3 ±12.3 91.2 ±5.0 80.6 ±12.0 
+
+CAM17 C1 [UNI+CLAM] 72.3 ±2.6 35.9 ±3.9 72.3 ±2.6 41.1 ±5.8 74.3 ±1.7 45.3 ±0.7 75.9 ±2.1 48.3 ±4.3 77.3 ±3.6 47.4 ±4.7 83.6 ±2.4 61.8 ±9.2 
+
+C2 [R50+TrMIL] 66.5 ±8.5 37.9 ±6.3 65.0 ±6.2 35.3 ±3.2 65.5 ±7.6 34.6 ±4.5 67.5 ±8.5 35.4 ±5.0 66.5 ±7.2 32.4 ±6.1 74.0 ±5.5 43.4 ±6.6 
+
+C3 [R50+ACMIL] 77.0 ±4.2 45.3 ±7.7 78.0 ±2.7 48.4 ±2.1 79.0 ±2.2 50.8 ±4.9 79.0 ±2.2 51.6 ±5.4 79.0 ±4.2 51.1 ±2.4 84.0 ±4.2 60.2 ±5.5 
+
+C4 [PhV2+TrMIL] 73.7 ±2.1 45.2 ±8.8 78.3 ±3.0 55.9 ±6.6 79.9 ±2.6 59.8 ±4.7 82.3 ±1.8 62.1 ±4.6 80.7 ±1.5 63.3 ±4.4 84.5 ±1.2 70.2 ±2.0 
+
+C5 [GPFM+CLAM] 77.6 ±2.0 55.5 ±7.4 80.0 ±3.2 61.0 ±3.8 81.6 ±1.8 62.2 ±3.8 82.4 ±2.0 65.6 ±4.0 82.4 ±2.3 65.9 ±6.3 87.2 ±1.8 75.8 ±2.8 
+
+Avg 73.4 ±4.3 44.0 ±8.1 74.7 ±6.4 48.3 ±9.9 76.1 ±6.4 50.5 ±10.8 77.3 ±6.2 52.7 ±11.2 77.2 ±6.6 52.0 ±13.2 82.7 ±4.8 62.3 ±11.3 
+
+IDH C1 [R50+CLAM] 76.4 ±0.7 41.1 ±1.6 79.0 ±0.7 50.3 ±1.0 79.0 ±0.7 50.3 ±1.0 80.0 ±0.7 51.7 ±1.2 79.5 ±0.0 50.8 ±0.0 81.3 ±0.8 54.2 ±2.0 
+
+C2 [GPFM+TrMIL] 76.0 ±3.5 48.0 ±9.6 77.3 ±3.5 55.1 ±1.6 77.3 ±3.5 55.1 ±1.6 78.7 ±2.9 64.1 ±3.8 81.3 ±2.7 67.0 ±2.0 85.4 ±3.0 73.7 ±4.3 
+
+C3 [R50+TrMIL] 80.0 ±5.0 20.0 ±27.4 82.2 ±6.1 50.0 ±0.0 82.2 ±6.1 50.0 ±0.0 80.0 ±5.0 50.0 ±0.0 82.2 ±6.1 53.2 ±7.2 86.7 ±5.0 56.4 ±8.5 
+
+C4 [UNI+ACMIL] 77.9 ±2.3 37.3 ±5.3 81.0 ±3.2 49.0 ±7.6 82.1 ±3.0 50.2 ±6.3 83.1 ±2.4 54.8 ±5.1 79.0 ±2.3 42.9 ±7.8 83.1 ±2.4 53.6 ±8.1 
+
+C5 [PhV2+TrMIL] 71.3 ±2.4 45.4 ±7.4 68.7 ±2.0 43.2 ±4.0 68.7 ±2.0 43.2 ±4.0 73.0 ±1.9 46.9 ±1.7 76.5 ±2.3 53.4 ±5.0 80.9 ±2.4 62.2 ±4.5 
+
+C6 [GPFM+CLAM] 72.0 ±1.3 26.0 ±4.0 74.5 ±1.8 27.6 ±4.1 74.5 ±1.8 27.6 ±4.1 76.4 ±1.3 29.4 ±4.0 80.0 ±1.5 33.8 ±3.2 82.9 ±1.6 48.9 ±3.4 
+
+C7 [R50+TrMIL] 77.8 ±0.0 40.0 ±22.4 77.8 ±0.0 50.0 ±0.0 77.8 ±0.0 50.0 ±0.0 84.7 ±5.5 53.2 ±7.2 80.0 ±5.0 40.0 ±22.4 84.7 ±5.5 59.7 ±8.0 
+
+C8 [PhV2+CLAM] 80.0 ±2.4 26.0 ±3.5 77.9 ±2.3 23.9 ±2.7 77.9 ±2.3 23.9 ±2.7 82.1 ±2.7 29.1 ±4.4 85.3 ±2.3 34.5 ±5.3 88.4 ±2.4 46.8 ±5.8 
+
+Avg 76.9 ±3.3 35.5 ±10.4 78.9 ±4.0 44.9 ±10.3 79.2 ±4.0 44.9 ±10.3 80.9 ±4.3 47.4 ±9.7 80.5 ±4.2 47.0 ±10.1 84.8 ±4.1 57.0 ±8.4 
+
+ing the strongest competing personalized FL method (Fed-WSIDD) by +2.5%. Moreover, a paired t-test conducted between FedHD and the second-best method across five runs confirms that these improvements are statistically sig-nificant, with p-values < 0.05 on most individual centers. Moreover, FedHD also demonstrates consistent client-wise improvements. Compared to WSI-specific FL approaches such as HistoFS and FedWSIDD, FedHD delivers clear gains, indicating that sharing distilled synthetic samples with enhanced representational quality provides a more ef-fective mechanism for cross-centre knowledge transfer. 
+
+Communication and Training Efficiency We take the largest client in TCGA-IDH (C1, 313 training slides) as an illustrative case, image-based dataset distillation methods such as DESA and FedWSIDD transmit synthetic patch images of size 10 ×100 ×3×64 ×64, corresponding to ap-proximately 49.2 MB per communication round assum-ing standard 32-bit floating-point representation. In con-trast, FedHD supports two configurations: without the O2O strategy, it distills 10 fixed synthetic slides per client (10 × 1000 × 1024 , approximately 39 MB); with O2O en-abled, one synthetic slide is generated per real training slide, increasing the payload to approximately 1.19 GB. Regard-ing training time, on a single NVIDIA A100 GPU, distilling synthetic patch images for 1000 rounds typically requires 10–12 hours, whereas FedHD, which distills compact fea-ture representations, completes the same number of rounds in approximately 1 hour. 
+
+4.4. Ablation Studies 
+
+We evaluate the impact of the following key modules: Feature-level Data Distillation (FDD), One-to-One Distil-lation Strategy (O2O), Gaussian-Mixture Feature Align-ment (GMA), On-Demand Interpretation, and Curriculum-Based Federation (CBF). We compare against a baseline method (Jin et al., 2025) that performs patch-level image distillation optimized for maximum data compression us-ing naive distribution matching. Specifically, each client generates synthetic image data of size 10 ×100 ×3×64 ×64, corresponding to 100 synthetic samples per slide for 10 slides per class. During federation, the baseline simply con-catenates the received synthetic images from other clients with its own real data for local training. 
+
+FDD vs. Baseline: As shown in Table 2, incorporating FDD, which replaces pixel-level generation with feature-space distillation, consistently improves MCC and leads to immediate accuracy gains. Beyond performance, FDD offers notable training efficiency by avoiding repeated fea-ture extraction, reducing computational overhead. However, when used alone with naive distribution modeling, it strug-6FedHD Real Slides Baseline +FDD +FDD/O2O +FDD/O2O/GMA 
+
+Acc : 68.9; AUC :74.5 Acc : 62.2; AUC :66.8 Acc : 62.2; AUC :67.0 Acc : 67.6; AUC :70.9 Acc : 70.3; AUC :71.8 
+
+Figure 2. t-SNE visualization of patch-level feature embeddings from real slides and various ablated versions of FedHD. CAMELYON16 is used for this demonstration as it provides patch-level tumor annotations. Each point represents a patch embedding, color-coded by class (Normal vs. Tumor). We additionally report the corresponding local model performance when trained using real slides or synthetic samples to facilitate quantitative comparison. Interpretated with PPR Baseline 
+
+Figure 3. Baseline synthetic images are unrealistic. The PPR mod-ule enables realistic on-demand reconstructions without adding training overhead. The first row shows normal patches and the second row shows tumor patches. 
+
+gles to capture the full complexity of real slide features, limiting its standalone effectiveness. 
+
+Impact of O2O: As shown in Table 2, combining FDD with the O2O strategy consistently improves model perfor-mance. This underscores the benefit of preserving slide-wise structure during distillation, leading to more informative and generalizable embeddings. Fig. 2 further illustrates that O2O helps mitigate over-compression and retain diagnostic richness. However, due to naive distribution matching, the synthetic features still show uneven density compared to real data, motivating the need for a more expressive alignment strategy, as introduced in the GMA module. 
+
+Impact of GMA: Fig. 2 shows that modeling patch fea-tures as a Gaussian mixture improves alignment between synthetic and real slide distributions, resolving the uneven spread seen in naive distillation and yielding more semanti-cally faithful embeddings. When GMA is combined with FDD and O2O, further performance gains are observed. These results confirm that higher-order alignment via mean and covariance matching is crucial for capturing morpho-logical diversity in WSIs. 
+
+Table 2. Ablation study evaluating the contribution of each pro-posed component in FedHD across three datasets.                                                 
+
+> CAM16 CAM17 IDH Acc MCC Acc MCC Acc MCC Baseline 88.7 ±4.9 75.3 ±12.3 77.2 ±6.6 52.0 ±13.2 80.5 ±4.2 47.0 ±10.1
+> +FDD 89.7 ±4.9 77.6 ±12.0 78.8 ±3.2 54.5 ±9.6 82.1 ±3.9 49.8 ±13.5
+> +GMA 89.4 ±4.9 77.1 ±11.9 79.9 ±3.8 57.1 ±9.5 83.4 ±4.1 52.4 ±11.6
+> +CBF 90.3 ±4.7 78.5 ±11.9 80.7 ±4.8 58.5 ±11.2 83.9 ±4.0 55.1 ±11.2
+> +FDD&O2O 90.6 ±4.7 79.2 ±11.8 81.2 ±4.7 60.0 ±10.7 84.0 ±4.0 54.3 ±11.6
+> +FDD&GMA&O2O 91.2 ±4.9 80.3 ±12.1 81.9 ±4.8 61.3 ±12.0 84.6 ±4.1 56.6 ±11.1
+> +All 91.2 ±5.0 80.6 ±12.0 82.7 ±4.8 62.3 ±11.3 84.8 ±4.1 57.0 ±8.4
+
+Interpretation via Pseudo-Patch Reconstruction (PPR): 
+
+As shown in Fig. 3, we present reconstructed pseudo-patches on CAMELYON16 to qualitatively illustrate interpretability. These reconstructions support human-in-the-loop inspection and address the lack of transparency in embedding-based methods. Since synthetic features are non-invertible and contain no raw pixel data, they offer strong privacy guar-antees for cross-institutional sharing. The interpretation module is locally trained and invoked only when needed, adding no overhead to training. 
+
+Impact of CBF The CBF module is motivated by our empirical observation that models trained solely on distilled data, while effective, generally underperform those trained on real slides (Fig. 2). Notably, although models trained exclusively on distilled data remain inferior to those trained on real data, models trained using our distilled slides not only outperform prior synthetic-data-based methods (Jin et al., 2025), but also achieve performance comparable to real-data-trained models. As shown in Table 2, adding CBF gives consistent performance gain. Fig. 4 further illustrates that CBF enhances interpretability, producing more precise and diagnostically relevant heatmaps compared to naive data concatenation. In cases (second row), it even corrects mispredictions by better localizing pathological cues. 7FedHD Annotations from Pathologists CLAM without CBF CLAM with CBF                              
+
+> 11
+> 1
+> 222
+> 2
+> 1
+> 1
+> 1
+> 2
+> 21212
+> Figure 4. Comparison of heatmaps from a model trained with naive data concatenation versus CBF. CBF not only produces more precise and diagnostically relevant regions in successful cases (first row) but also corrects predictions by better localizing pathological cues in cases where the naive approach fails (second row).
+> Table 3. LiRA-based Membership Inference Attack (MIA) results. FedWSIDD FedHD (Ours) Max AUC ↓Mean AUC ↓Max AUC ↓Mean AUC ↓
+> CAM16 52.7 52.9 51.8 51.5
+> CAM17 57.6 54.2 56.7 53.0
+> IDH 60.1 56.1 54.7 52.3
+
+4.5. Privacy analysis 
+
+The shared synthetic features in FedHD are non-invertible and contain no raw pixel information, providing strong pri-vacy protection for cross-institutional collaboration. How-ever, the PPR module generates image-space visualizations, which may raise concerns about potential privacy leakage. To assess this risk, we conduct a dedicated privacy analysis using the Likelihood Ratio Attack (LiRA) (Carlini et al., 2022) on the reconstructed pseudo-patch images, rather than on the feature embeddings. For each client, we split the real training slides into member (80 %) and non-member (20 %)sets, and generate synthetic features using only the mem-ber set. Pseudo-patches are then reconstructed via the PPR module, and cosine-distance–based likelihood ratios are computed between reconstructed samples and real images to distinguish members from non-members. As reported in Table 3, despite enabling post-hoc interpretability, FedHD consistently achieves lower AUC values than FedWSIDD, indicating reduced susceptibility to membership inference attacks. Overall, these results demonstrate that the PPR mod-ule does not materially introduce additional privacy leakage and that FedHD preserves strong membership privacy while providing interpretable visualizations under realistic cross-client deployment conditions. 
+
+4.6. Limitation 
+
+The pseudo-patch reconstruction module in FedHD relies on a lightweight GAN, which may limit the visual fidelity of the reconstructed pseudo-patches. While sufficient for qual-itative interpretability and human-in-the-loop inspection, more advanced generative models could further improve reconstruction quality, which we leave for future work. 
+
+## 5. Conclusions 
+
+We presented FedHD, a novel federated distillation framework tailored for WSI classification across hetero-geneous institutions. By distilling semantically rich, slide-specific patch embeddings and integrating them via a curriculum-based strategy, FedHD enables privacy-preserving, architecture-agnostic collaboration. Extensive experiments show that FedHD consistently outperforms ex-isting federated and distillation baselines, demonstrating im-proved generalization, scalability, and interpretability across diverse datasets and settings. Our results highlight the po-tential of feature-level distillation as a robust solution for federated pathology. 8FedHD 
+
+## References 
+
+Bandi, P., Geessink, O., Manson, Q., Van Dijk, M., Balken-hol, M., Hermsen, M., Bejnordi, B. E., Lee, B., Paeng, K., Zhong, A., et al. From detection of individual metastases to classification of lymph node status at the patient level: the CAMELYON17 challenge. IEEE Transactions on Medical Imaging , 38(2):550–560, 2019. Bejnordi, B. E., Veta, M., Van Diest, P. J., Van Ginneken, B., Karssemeijer, N., Litjens, G., Van Der Laak, J. A., Hermsen, M., Manson, Q. F., Balkenhol, M., et al. Di-agnostic assessment of deep learning algorithms for de-tection of lymph node metastases in women with breast cancer. JAMA , 318(22):2199–2210, 2017. Carlini, N., Chien, S., Nasr, M., Song, S., Terzis, A., and Tramer, F. Membership inference attacks from first prin-ciples. In 2022 IEEE symposium on security and privacy (SP) , pp. 1897–1914. IEEE, 2022. Chan, Y. H. and Ngai, E. C. Fedhe: Heterogeneous models and communication-efficient federated learning. In 2021 17th International Conference on Mobility, Sensing and Networking (MSN) , pp. 207–214. IEEE, 2021. Chauhan, N. K., Singh, K., Kumar, A., Mishra, A., Gupta, S. K., Mahajan, S., Kadry, S., and Kim, J. A hybrid learning network with progressive resizing and pca for diagnosis of cervical cancer on wsi slides. Scientific Reports , 15(1):12801, 2025. Chen, R. J., Ding, T., Lu, M. Y., Williamson, D. F., Jaume, G., Chen, B., Zhang, A., Shao, D., Song, A. H., Shaban, M., et al. Towards a general-purpose foundation model for computational pathology. Nature Medicine , 2024. Cong, C., Xuan, S., Liu, S., Pagnucco, M., Zhang, S., and Song, Y. Dataset distillation for histopathology image classification. arXiv preprint arXiv:2408.09709 , 2024. Cong, C., Song, Y., Di Ieva, A., Chou, A., Gill, A. J., Coiera, E., and Liu, S. Flexible and scalable federated learning with deep feature prompts for digital pathology. npj Digital Medicine , 2026. Dayan, I., Roth, H. R., Zhong, A., Harouni, A., Gentili, A., Abidin, A. Z., Liu, A., Costa, A. B., Wood, B. J., Tsai, C.-S., et al. Federated learning for predicting clinical outcomes in patients with covid-19. Nature medicine , 27 (10):1735–1743, 2021. Filiot, A., Jacob, P., Mac Kain, A., and Saillard, C. Phikon-v2, a large and public feature extractor for biomarker prediction. arXiv preprint arXiv:2409.09173 , 2024. Guan, H., Yap, P.-T., Bozoki, A., and Liu, M. Federated learning for medical image analysis: A survey. Pattern Recognition , pp. 110424, 2024. Hu, M., Cao, Y., Li, A., Li, Z., Liu, C., Li, T., Chen, M., and Liu, Y. Fedmut: Generalized federated learning via stochastic mutation. In Proceedings of the AAAI con-ference on artificial intelligence , volume 38, pp. 12528– 12537, 2024. Huang, C.-Y., Srinivas, K., Zhang, X., and Li, X. Over-coming data and model heterogeneities in decentralized federated learning via synthetic anchors. arXiv preprint arXiv:2405.11525 , 2024. Jia, Y., Vahidian, S., Sun, J., Zhang, J., Kungurtsev, V., Gong, N. Z., and Chen, Y. Unlocking the potential of federated learning: The symphony of dataset distil-lation via deep generative latents, 2023. URL https: //arxiv.org/abs/2312.01537 .Jia, Y., Vahidian, S., Sun, J., Zhang, J., Kungurtsev, V., Gong, N. Z., and Chen, Y. Unlocking the potential of federated learning: The symphony of dataset distillation via deep generative latents. In European Conference on Computer Vision , pp. 18–33. Springer, 2024. Jia, Y., Vahidian, S., Sun, J., Zhang, J., Kungurtsev, V., Gong, N. Z., and Chen, Y. Unlocking the potential of federated learning: The symphony of dataset distillation via deep generative latents. In European Conference on Computer Vision , pp. 18–33. Springer, 2025. Jin, H., Liu, S., Cong, C., Feng, Q., Liu, Y., Huang, L., and Hu, Y. Fedwsidd: Federated whole slide image classification via dataset distillation. arXiv preprint arXiv:2506.15365 , 2025. Kulkarni, V., Kulkarni, M., and Pant, A. Survey of personal-ization techniques for federated learning. In 2020 fourth world conference on smart trends in systems, security and sustainability (WorldS4) , pp. 794–797. IEEE, 2020. Li, G., Togo, R., Ogawa, T., and Haseyama, M. Dataset distillation for medical dataset sharing, 2022. URL 
+
+https://arxiv.org/abs/2209.14603 .Li, G., Togo, R., Ogawa, T., and Haseyama, M. Dataset distillation using parameter pruning, 2023. URL https: //arxiv.org/abs/2209.14609 .Li, T., Sahu, A. K., Zaheer, M., Sanjabi, M., Talwalkar, A., and Smith, V. Federated optimization in heterogeneous networks. Proceedings of Machine learning and systems ,2:429–450, 2020. Liu, B., Zhu, Y., Song, K., and Elgammal, A. Towards faster and stabilized gan training for high-fidelity few-shot image synthesis. In iclr , 2021. 9FedHD 
+
+Liu, S., Shah, Z., Sav, A., Russo, C., Berkovsky, S., Qian, Y., Coiera, E., and Di Ieva, A. Isocitrate dehydroge-nase (IDH) status prediction in histopathology images of gliomas using deep learning. Scientific Reports , 10(1): 1–11, 2020. Loo, N., Hasani, R., Lechner, M., and Rus, D. Dataset dis-tillation with convexified implicit gradients, 2023. URL 
+
+https://arxiv.org/abs/2302.06755 .Lu, M. Y., Williamson, D. F., Chen, T. Y., Chen, R. J., Bar-bieri, M., and Mahmood, F. Data-efficient and weakly su-pervised computational pathology on whole-slide images. 
+
+Nature biomedical engineering , 5(6):555–570, 2021. Lu, M. Y., Chen, R. J., Kong, D., Lipkova, J., Singh, R., Williamson, D. F., Chen, T. Y., and Mahmood, F. Feder-ated learning for computational pathology on gigapixel whole slide images. Medical image analysis , 76:102298, 2022. Ma, J., Guo, Z., Zhou, F., Wang, Y., Xu, Y., Li, J., Yan, F., Cai, Y., Zhu, Z., Jin, C., Lin, Y., Jiang, X., Zhao, C., Li, D., Han, A., Li, Z., Chan, R. C. K., Wang, J., Fei, P., Cheng, K.-T., Zhang, S., Liang, L., and Chen, H. Towards a generalizable pathology foundation model via unified knowledge distillation. 2024. McMahan, B., Moore, E., Ramage, D., Hampson, S., and y Arcas, B. A. Communication-efficient learning of deep networks from decentralized data. In Artificial intelli-gence and statistics , pp. 1273–1282. PMLR, 2017. Mohri, M., Sivek, G., and Suresh, A. T. Agnostic feder-ated learning. In International conference on machine learning , pp. 4615–4625. PMLR, 2019. Raswa, F. H., Lu, C.-S., and Wang, J.-C. Histofs: Non-iid histopathologic whole slide image classification via feder-ated style transfer with roi-preserving. In Proceedings of the Computer Vision and Pattern Recognition Conference ,pp. 30251–30260, 2025. Sabah, F., Chen, Y., Yang, Z., Raheem, A., Azam, M., Ahmad, N., and Sarwar, R. Fairdpfl-scs: Fair dynamic personalized federated learning with strategic client se-lection for improved accuracy and fairness. Information Fusion , 115:102756, 2025. Shao, Z., Bian, H., Chen, Y., Wang, Y., Zhang, J., Ji, X., et al. Transmil: Transformer based correlated multiple instance learning for whole slide image classification. Advances in neural information processing systems , 34:2136–2147, 2021. Song, A. H., Chen, R. J., Ding, T., Williamson, D. F., Jaume, G., and Mahmood, F. Morphological prototyping for un-supervised slide representation learning in computational pathology. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024. Song, R., Liu, D., Chen, D. Z., Festag, A., Trinitis, C., Schulz, M., and Knoll, A. Federated learning via decen-tralized dataset distillation in resource-constrained edge environments. In 2023 International Joint Conference on Neural Networks (IJCNN) , pp. 1–10. IEEE, 2023. Sucholutsky, I. and Schonlau, M. Soft-label dataset dis-tillation and text dataset distillation. In 2021 Interna-tional Joint Conference on Neural Networks (IJCNN) , pp. 1–8. IEEE, July 2021. doi: 10.1109/ijcnn52387.2021. 9533769. URL http://dx.doi.org/10.1109/ IJCNN52387.2021.9533769 .Tang, K., Jiang, Z., Shi, J., Wang, W., Wu, H., and Zheng, Y. Promptable representation distribution learning and data augmentation for gigapixel histopathology wsi anal-ysis. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pp. 7247–7256, 2025. Tang, Z., Zhang, Y., Shi, S., Tian, X., Liu, T., Han, B., and Chu, X. Fedimpro: Measuring and improv-ing client update in federated learning. arXiv preprint arXiv:2402.07011 , 2024. Tian, Y., Wang, J., Jin, Y., and Wang, L. Communication-efficient federated skin lesion classification with gener-alizable dataset distillation. In International Conference on Medical Image Computing and Computer-Assisted Intervention , pp. 14–24. Springer, 2023. Wang, K., Li, Z., Cheng, Z.-Q., Khaki, S., Sajedi, A., Vedantam, R., Plataniotis, K. N., Hauptmann, A., and You, Y. Emphasizing discriminative features for dataset distillation in complex scenarios, 2025. URL https: //arxiv.org/abs/2410.17193 .Wang, X., Zhao, J., Marostica, E., Yuan, W., Jin, J., Zhang, J., Li, R., Tang, H., Wang, K., Li, Y., et al. A pathology foundation model for cancer diagnosis and prognosis prediction. Nature , 634(8035):970–978, 2024. Wei, W., Schepper, T. D., and Mets, K. Dataset condensation with latent quantile matching, 2024. URL https:// arxiv.org/abs/2406.09860 .Wen, J., Zhang, Z., Lan, Y., Cui, Z., Cai, J., and Zhang, W. A survey on federated learning: challenges and applica-tions. International Journal of Machine Learning and Cybernetics , 14(2):513–535, 2023. Xue, E., Li, Y., Liu, H., Wang, P., Shen, Y., and Wang, H. Towards adversarially robust dataset distillation by curvature regularization, 2025. URL https://arxiv. org/abs/2403.10045 .10 FedHD 
+
+Yu, Z., Liu, Y., and Chen, Q. Progressive trajectory matching for medical dataset distillation, 2024. URL 
+
+https://arxiv.org/abs/2403.13469 .Zhang, J., Liu, Y., Hua, Y., Wang, H., Song, T., Xue, Z., Ma, R., and Cao, J. Pfllib: A beginner-friendly and comprehensive personalized federated learning library and benchmark. Journal of Machine Learning Research ,26(50):1–10, 2025. Zhang, L., Zhang, J., Lei, B., Mukherjee, S., Pan, X., Zhao, B., Ding, C., Li, Y., and Xu, D. Accelerating dataset distillation via model augmentation, 2023. URL https: //arxiv.org/abs/2212.06152 .Zhang, Y., Li, H., Sun, Y., Zheng, S., Zhu, C., and Yang, L. Attention-challenging multiple instance learning for whole slide image classification. In European conference on computer vision , pp. 125–143. Springer, 2024. Zhang, Z. and Sabuncu, M. Generalized cross entropy loss for training deep neural networks with noisy labels. 
+
+Advances in neural information processing systems , 31, 2018. Zhao, B. and Bilen, H. Dataset condensation with distri-bution matching. In Proceedings of the IEEE/CVF Win-ter Conference on Applications of Computer Vision , pp. 6514–6523, 2023. Zhou, Y., Pu, G., Ma, X., Li, X., and Wu, D. Distilled one-shot federated learning, 2021. URL https://arxiv. org/abs/2009.07999 .11
