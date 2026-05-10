@@ -1,0 +1,219 @@
+Title: Disentangling Shared and Task-Specific Representations from Multi-Modal Clinical Data
+
+URL Source: https://arxiv.org/pdf/2605.03570v1
+
+Published Time: Wed, 06 May 2026 00:45:21 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# Disentangling Shared and Task-Specific Representations from Multi-Modal Clinical Data 
+
+He Lyu 1,2,3 , Huolin Zeng 1,2 , Junren Wang 1,2 , Huazhen Yang 1,2 , Linchao He 4, Yong Chen 1,2 ,Zhirui Li 5, Andreas Maier 3, Siming Bayer 3 and Huan Song 1,2,6,7 * 1Department of Anesthesiology and West China Biomedical Big Data Center West China Hospital, Sichuan University, Chengdu, China 
+
+2Med-X Center for Informatics, Sichuan University, Chengdu, China 
+
+3Pattern Recognition Lab, Friedrich-Alexander-Universit¨ at Erlangen-N¨ urnberg, Erlangen, Germany 
+
+4Department of National Key Laboratory of Fundamental Science on Synthetic Vision, Sichuan University, Chengdu, China 
+
+5Sichuan University, Chengdu, China 
+
+6Institute of Environmental Medicine, Karolinska Institutet, Stockholm, Sweden 
+
+7Center of Public Health Sciences, Faculty of Medicine, University of Iceland, Reykjav´ ık, Iceland Email: lyuhe233@stu.scu.edu.cn, {zenghuolin, wangjunren, yanghuazhen }@wchscu.cn, 
+
+{hlc, yongchen, lizhirui }@stu.scu.edu.cn, andreas.maier@fau.de, siming.bayer@fau.de, songhuan@wchscu.cn 
+
+© 2026 IEEE. Personal use of this material is permitted. Permis-sion from IEEE must be obtained for all other uses, including reprinting/republishing this material for advertising or promotional purposes, creating new collective works, resale or redistribution, or reuse of any copyrighted component of this work in other works. Accepted for publication in the 2026 48th Annual International Conference of the IEEE Engineering in Medicine & Biology Society (EMBC). The published version will be available in IEEE Xplore. 
+
+Abstract —Real-world clinical data is inherently multimodal, providing complementary evidence that mirrors the practical necessity of jointly assessing multiple related outcomes. Although multi-task learning can improve efficiency by sharing information across outcomes, existing approaches often fail to balance shared representation learning with outcome-specific modeling. Hard parameter sharing can trigger negative transfer when task gradients conflict, while flexible sharing may still entangle shared and task-specific signals. To address this, we propose a multi-task framework built on a unified Transformer for multimodal fu-sion, augmented with Orthogonal Task Decomposition (OrthTD) to split patient representations into shared and task-specific subspaces and impose a geometric orthogonality constraint to reduce redundancy and isolate task-specific signals. We evaluated OrthTD on a real-world cohort of 12,430 surgical patients for predicting four outcomes. OrthTD achieved average AUC (area under the receiver operating characteristic curve) of 87.5% and average AUPRC (area under the precision-recall curve) of 37.2%, consistently outperformed advanced tabular and multi-task methods. Notably, OrthTD achieves substantial gains in AUPRC, indicating superior performance in identifying rare events within imbalanced clinical data. These results suggest that enforcing non-redundant shared and task-specific representations can improve multi-outcome prediction from multimodal clinical data. 
+
+Index Terms —Clinical risk prediction, Multi-modal fusion, Multi-task learning, Representation disentanglement, Orthogonal constraint 
+
+This work has been funded by the National Natural Science Foundation of China (82471535 to H.S.). The first two authors contributed equally to this work, and the last two authors contributed equally as co-senior authors. 
+
+I. I NTRODUCTION 
+
+The rapid digitization of healthcare has generated massive amounts of real-world clinical data, creating new opportu-nities for clinical prediction models that support medical decision-making [1]. Such data are heterogeneous, combining structured variables (demographics, comorbidities, laboratory tests, medications, procedures) with unstructured narratives in EMRs, as well as other data sources depending on the setting (e.g., imaging, waveforms) [2]. While these sources describe the same patient, they vary in information granularity, clinical perspective, and representational modality. A central problem is how to learn patient representations that can use this heterogeneity effectively. Artificial intelligence (AI) based representation learning provides a practical approach by inte-grating multi-source inputs and learning patient-level features directly from routine clinical records, reducing reliance on manual feature engineering [3]. Clinical decision-making often involves multiple related prediction tasks rather than a single outcome [4]. These tasks share part of the underlying patient factors, yet each task also depends on distinct cues. This naturally calls for learning clin-ical task representations that can capture both shared and task-specific information [5]. Multi-task learning can improve data efficiency and generalization by enabling information sharing across tasks, but effective sharing is difficult in real-world clinical settings. Hard parameter sharing can cause negative transfer when task gradients conflict, and more flexible sharing strategies may still mix shared and task-specific signals within the same latent space. As a consequence, “shared” and task-specific representations can become redundant, with overlap-ping information that weakens specialization and destabilizes training. This challenge is further amplified when tasks have different label distributions and noise levels, where limited task-specific supervision makes it easier for shared patterns to  
+
+> arXiv:2605.03570v1 [cs.LG] 5 May 2026 Fig. 1. Overview of the Orthogonal Task Decomposition (OrthTD) framework. The figure is composed of two parts. Part 1 (Framework Overview) illustrates how heterogeneous multimodal clinical data (e.g., tabular variables, vital signs, and clinical text) are fused into a unified patient representation, which is then decomposed into a shared component capturing general risk and task-specific components encoding outcome-dependent risk, enabling structured multi-task learning. Part 2 (Model Architecture) details the implementation: modality-specific encoders project inputs into a common latent space, which is fused by a Transformer with a learnable global token to form a multimodal representation. This representation is then decomposed into shared and task-specific subspaces for each outcome, with an orthogonality regularization enforcing non-redundancy between them, and task-specific prediction heads produce probabilistic estimates for multiple clinical outcomes.
+
+dominate. Related work spans two closely connected directions: multi-modal clinical representation learning and multi-task learning. For multimodal learning, a common pipeline encodes struc-tured variables and unstructured text separately (and other modalities when available) and then fuses them by feature concatenation, late fusion of logits, cross-attention, or unified tokenization followed by an encoder. These approaches aim to combine complementary information across modalities, but they often produce a single fused representation that is reused for all downstream tasks [6]. For multi-task learning [7], widely used architectures include independent task-specific models, hard sharing with a shared backbone and multiple heads, and soft-sharing variants that adjust sharing strength through learnable feature mixing (e.g., cross-stitch [8]) or expert-routing (e.g., mixture-of-experts with task-specific gates [9]). Another line of work focuses on optimization and balancing, such as loss reweighting (including uncertainty-based weighting [10]) or gradient-based conflict handling. Despite these advances, many existing methods do not directly control what information should be shared versus reserved for each task. In practice, even when separate branches or experts are introduced, shared and task-specific pathways can still encode overlapping signals, which reduces the value of decomposition and makes it harder to isolate task-specific cues, especially under different label distributions and limited positive supervision. Moreover, most multimodal and multi-task components are developed relatively independently, leav-ing the combined multimodal multi-task setting without a clear mechanism to prevent redundancy between shared and task-specific representations while keeping the fusion module modular. Our design is intended to explicitly separate shared and task-specific information after multimodal fusion and to discourage overlap between them. To address these challenges, we propose OrthTD, a mul-timodal multi-task method that explicitly decomposes task representations and enforces a non-redundancy constraint. An overview of OrthTD is shown in Figure 1. Our approach is based on the hypothesis that effective clinical modeling requires explicitly disentangling general patient risks from outcome-specific signals. OrthTD integrates tabular and textual data using a unified Transformer backbone and employs a Task Decomposition module to separate the latent representation into a shared subspace and multiple task-specific subspaces. Crucially, we introduce a geometric orthogonal constraint that forces these subspaces to be non-redundant. This ensures that shared features capture truly universal risk patterns, while task-specific features isolate unique signals required to distinguish individual complications. We validated our method from a large real-world clinical cohort. Our experiments in 12,430 surgical patients demonstrate that OrthTD effectively resolves the feature entanglement problem. The contributions of this work are as follows: 1) We propose a multimodal method for multi-task clinical prediction that jointly models structured tabular vari-ables and unstructured clinical notes, validated on a prospective cohort of 12,430 patients. 2) We propose a task decomposition module that factorizes the fused patient representation into shared and task-specific subspaces. 3) We introduce an orthogonality-based regularization that discourages redundancy between shared and task-specific representations, and our method outperforms strong tabular, multimodal, and multi-task baselines in comparative experiments. II. M ATERIALS AND METHODS 
+
+A. Data Source and Study Design 
+
+This study used data from the China Surgery and Anes-thesia Cohort (CSAC) 1, an ongoing prospective multicenter cohort recruiting patients aged 40-65 years undergoing elective surgery under general anesthesia since July 15, 2020. The cohort profile has been described in detail previously [11]. Briefly, cohort staff collected baseline data through preoper-ative interviews and ascertained postoperative outcomes via in-person (bedside) and remote (telephone/online) follow-up. Perioperative data were routinely extracted from hospital in-formation systems, including the anesthesia information man-agement system (AIMS) for intraoperative physiological data and the EMR system for comprehensive clinical care records. As of April 1, 2025, 18,709 of 19,884 screened patients were enrolled (baseline response rate: 94.09%). In this study, we selected postoperative complications as the multi-task prediction targets. Analyses were restricted to the primary center (West China Hospital, n = 12,430) from July 15, 2020 to April 1, 2025, which had fully integrated AIMS and EMR data enabling comprehensive multimodal modeling. Postoperative complications occurring within seven days after surgery were defined according to the European Perioperative Clinical Outcome (EPCO) criteria [12]. The pre-diction outcomes included any EPCO complication (defined as the occurrence of any measured complications), postoperative pulmonary complications (PPCs), acute kidney injury (AKI), and unplanned ICU admission (ascertained from EMRs). 
+
+B. Methods 
+
+The model architecture is depicted in Figure 1. Our ap-proach builds a unified patient representation from heteroge-neous clinical modalities and then structures this represen-tation for multi-task prediction through explicit feature de-composition. A Transformer-based fusion module aggregates information across modalities into a global latent embedding, which is subsequently split into a shared subspace encoding 
+
+> 1Additional details of CSAC are available at https://biomedbdc.wchscu.cn/ JoylabErasePM/joylab-portals-web/#/queue/01/index
+
+overall risk and task-specific subspaces capturing outcome-dependent factors. By enforcing orthogonality between these components, the model is encouraged to separate common and outcome-specific signals, enabling both effective information sharing and robust specialization across tasks. In the following we will detail the core elements and the implementation of our method. 
+
+1) Multimodal Data Fusion: To convert raw multimodal inputs into unified feature representations, we tokenized all heterogeneous data [13]. Categorical features were processed through embedding layers, concatenated with continuous nu-merical features, and projected to obtain the tabular modality representation Ftabular ∈ RB×Dhidden . For unstructured text, we extracted the [CLS ] token from a shared-weight BERT [14], followed by linear projection to obtain Ftext ∈ RB×Dhidden . For vital sign time-series data with variable lengths due to different surgical durations, we converted them into prior features using medically predefined feature extraction methods and incorpo-rated them into the tabular modality [15]. After concatenating different modality features, a learnable global token Tglobal ∈
+
+RDhidden was inserted to aggregate global information from the entire input sequence, forming the comprehensive feature for downstream tasks. The sequence was then processed through 
+
+L stacked Transformer Encoders. The output corresponding to the global token position, denoted as Hglobal ∈ RB×Dhidden ,serves as the fused multi-modal representation. 
+
+2) Task Decomposition: In multi-task learning, different clinical outcomes often share common risk factors while also having task-specific predictors. To explicitly model this characteristic, we propose a Task Decomposition module that separates the fused representation into shared and task-specific components. Given the fused representation Hglobal , we first extract shared features that are common across all prediction tasks: 
+
+Fshared = LayerNorm (GELU (Wshared · Hglobal + bshared )) , (1) where Wshared ∈ RDhidden ×Dshared . The shared features capture general patient characteristics that influence multiple out-comes. For each task k ∈ { 1, 2, ..., K }, we learn a separate projection to extract task-specific signals: 
+
+F (k) 
+
+> specific
+
+= LayerNorm (GELU (W (k) 
+
+> specific
+
+·Hglobal +b(k)
+
+> specific
+
+)) , (2) where W (k) 
+
+> specific
+
+∈ RDhidden ×Dspecific . Each task-specific projection learns to extract features uniquely relevant to that particular outcome. We concatenate the shared and specific features to form the final representation for each task F (k) 
+
+> task
+
+.This decomposition provides an explicit inductive bias: the model is encouraged to learn features that are either universally predictive (shared) or selectively predictive (task-specific), rather than learning entangled representations that conflate these two types of information. Finally, each task feature 
+
+F (k) 
+
+> task
+
+is sent into a task-specific prediction head (MLP), which outputs the probability of complication through a sigmoid activation. 3) Orthogonal Constraint: While the Task Decomposition architecture provides explicit separation between shared and task-specific representations, there is no guarantee that these learned features will be non-redundant. Without proper con-straints, the shared features and task-specific features may encode similar information, limiting the effectiveness of the decomposition. To address this issue, we introduce an orthogonal constraint that encourages Fshared and F (k) 
+
+> specific
+
+to be geometrically or-thogonal, thereby ensuring that they capture complementary rather than redundant information. We define the orthogonal regularization term as the average absolute cosine similarity between shared and task-specific features: 
+
+Lortho = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+cos( Fshared , F (k)
+
+> specific
+
+) . (3) When this loss approaches zero, the shared and task-specific features become orthogonal in the representation space, indi-cating that they encode distinct types of information. The final loss function combines the task-specific prediction losses with the orthogonal regularization: 
+
+L = Ltask + λortho · L ortho , (4) where Ltask is the multi-task classification loss (asymmetric loss [16] for handling class imbalance), and λortho controls the strength of the orthogonal constraint. 
+
+4) Implementation details: All experiments were conducted on a workstation running Ubuntu 22.04 with an Intel Xeon Gold 6530 CPU and two NVIDIA RTX 5090 GPUs. The model was implemented in Python 3.12 using PyTorch 2.7 [17] and CUDA 12.8. We used BERT-base-Chinese (hidden size 768) for text encoding and fine-tuned only its last Transformer layer while freezing the remaining layers. All modality features were projected to a unified hidden dimension 
+
+Dhidden = 240 . The multimodal fusion backbone comprised 4 Transformer encoder layers with 8 attention heads each. Training was performed for 40 epochs using AdamW [18], with learning rates of 1e-4 for the main model and 1e-5 for BERT, a cosine learning-rate schedule with 10% warm-up (4 epochs), and a batch size of 128. In the Task Decomposition module, we set the shared ratio 0.5, assigning equal dimen-sions to the shared and task-specific subspaces. Regarding the orthogonal regularization weight, we observed that the model performance remained consistent for λortho ∈ [0 .1, 0.3] , while exceeding 0.3 led to training instability. For simplicity, we fixed λortho = 0 .1 in all reported experiments. We hypothesize that optimal Dhidden and λortho are likely correlated with modality count, data complexity, and the degree of task relatedness, and leave a systematic analysis to future work. III. E XPERIMENTS AND RESULTS 
+
+We conducted experiments to assess the discriminative abil-ity and calibration of OrthTD, and to understand the contribu-tion of each component. The cohort was randomly partitioned into train and test sets at a 70:30 ratio. The incidence of 
+
+TABLE I INCIDENCE OF OUTCOMES IN THE TRAIN AND TEST SETS 
+
+Outcome Train set, n (%) Test set, n (%) 
+
+Any EPCO complication 1115 (12.8%) 471 (12.6%) PPCs 949 (10.9%) 386 (10.4%) AKI 77 (0.9%) 54 (1.4%) Unplanned ICU admission 128 (1.5%) 42 (1.1%) 
+
+outcomes is summarized in Table I. We evaluated the proposed OrthTD model against comparative methods and conducted ablation studies. Three evaluation metrics were used: AUC and AUPRC (both reported in %) for discrimination, and the Brier score for calibration. Figure 1 shows the ROC and PR curves for all four prediction tasks. The model achieved strong discrimination for any EPCO complication and PPCs, which had higher incidence rates. For imbalanced outcomes (AKI and unplanned ICU admission), the model maintained high discrimination but with lower AUPRC values as expected for rare events. 0.0 0.2 0.4 0.6 0.8 1.0      
+
+> False Positive Rate (1 - Specificity)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> True Positive Rate (Sensitivity)
+> A
+> Any EPCO complication (AUC = 0.832)
+> PPCs (AUC = 0.859)
+> AKI (AUC = 0.860)
+> Unplanned ICU Admission (AUC = 0.948)
+> Average (AUC = 0.875)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Recall (Sensitivity)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Precision (Positive Predictive Value)
+> B
+> AUPRC = 0.452
+> AUPRC = 0.444
+> AUPRC = 0.255
+> AUPRC = 0.335
+> Average (AUPRC = 0.372)
+
+Fig. 2. Detailed performance of the proposed model. 
+
+1) Comparative Analysis with Advanced Methods: Table II shows the performance comparison between OrthTD and competing methods. We selected these baselines to cover strong tabular learning approaches from both classical machine learning and modern neural models, and to include repre-sentative multimodal fusion baselines for a fair comparison with OrthTD. Among classical machine learning methods, LightGBM [19] delivered the strongest performance, out-performing XGBoost [20], and serves as a strong machine learning baseline for tabular data. For advanced modern neural network tabular methods, TabPFN [21] is a state-of-the-art (SOTA) baseline and achieved the best performance among unimodal models, while FT-Transformer [22] is a strong attention-based tabular model. Multimodal baselines based on simple concatenation showed limited gains. OrthTD achieved the best overall performance, with a clear improvement on AUPRC, indicating better identification of positive cases under class imbalance. 
+
+2) Multi-Task Learning Strategy Comparison: We com-pared OrthTD against five representative multi-task learn-ing strategies that cover common design choices for feature sharing and task balancing, including independent training TABLE II MODEL PERFORMANCE COMPARISON .                        
+
+> Model Modality (Fusion) AUC (%) AUPRC (%)
+> XGBoost Tabular 85.5 29.7 LightGBM Tabular 86.3 31.4 FT-Transformer Tabular 86.7 32.5 TabPFN Tabular 87.1 32.9 MLP Tabular + Text (Concat) 86.2 30.8 Transformer Tabular + Text (Concat) 84.7 28.6 Ours (OrthTD) Tabular + Text (Fusion) 87.5 37.2
+
+of proposed model, hard sharing, loss reweighting, feature mixing, and expert routing (Table III). Single-task learning with our models achieved AUC 86.9% and AUPRC 34.5%, avoiding negative transfer but failing to use shared patterns. Hard parameter sharing obtained AUC 85.8% and AUPRC 33.7%, with performance drop suggesting that forced repre-sentation sharing introduces conflicting gradients. Uncertainty weighting [10] improved performance to AUC 86.7% and AUPRC 35.6%, showing the importance of task balancing. Cross-stitch networks [8] achieved AUC 87.1% and AUPRC 36.1% through flexible feature sharing. Multi-gate mixture-of-experts (MMoE) [9] yielded AUC 87.3% and AUPRC 35.8%, while its lower AUPRC suggests that explicit orthog-onal constraints may provide a stronger inductive bias under our setting. Our OrthTD achieved the highest performance, suggesting that enforcing orthogonality between shared and task-specific features can mitigate negative transfer while preserving knowledge sharing.                      
+
+> TABLE III COMPARISON OF MULTI -TASK LEARNING STRATEGIES .
+> Method Type AUC (%) AUPRC (%)
+> Ours MTL 87.5 37.2
+> Ours (Single-Task) Independent 86.9 34.5 Hard Parameter Sharing MTL 85.8 33.7 Uncertainty Weighting MTL 86.7 35.6 Cross-Stitch Networks MTL 87.1 36.1 Multi-gate Mixture-of-Experts MTL 87.3 35.8
+
+3) Ablation Study and Detail Model Performance: Figure 3 shows the ablation study results. Starting from the vanilla Transformer (base model), adding a learnable global token under hard sharing improved performance to AUC 85.8%, AUPRC 33.7%. The 5.1-point AUPRC gain shows that explicit global information aggregation is important for multimodal fusion. Adding task decomposition further improved perfor-mance (AUC 87.3%, AUPRC 35.1%), validating that explicitly modeling shared and task-specific risk factors provides useful inductive bias. Finally, enforcing orthogonality between shared and task-specific features achieved the best performance. The AUPRC improvement confirms that orthogonality prevents re-dundant information and enhances feature separation. The final model achieved a Brier score of 0.077, indicating reasonably calibration. 80  
+
+> 82
+> 84
+> 86
+> 88
+> 90
+> AUC (%)
+> 84.7
+> 85.8
+> 87.3 87.5
+
+A 
+
+> AUC
+> Base model
+> + Learnable token
+> + Task decomposition
+> + Orthogonal constraint
+> (OrthTD)
+> 20
+> 25
+> 30
+> 35
+> 40
+> AUPRC (%)
+> 28.6
+> 33.7 35.1
+> 37.2
+
+B 
+
+> AUPRC
+> Fig. 3. Performance in the ablation study of the proposed model.
+
+IV. D ISCUSSION 
+
+Integrating heterogeneous multimodal data is fundamental for clinical risk prediction, yet effectively balancing shared knowledge with task-specific signals remains a critical chal-lenge in multi-task learning. Enforcing geometric orthogo-nality disentangles shared and task-specific representations, mitigating negative transfer and improving discrimination under both imbalanced and extremely imbalanced outcome settings. Our approach achieves consistent SOTA performance across all experiments and metrics. This pattern is important because several targets in our setting are extremely rare, where improvements in precision–recall performance better reflect practical screening value than AUC alone. The ablation results further show that the performance gains are cumulative, indicating that multimodal fusion, task decomposition, and the orthogonal constraint each contribute to the final model behavior rather than serving as a single isolated trick. A key challenge in multi-task learning for clinical outcomes is the coexistence of shared and task-specific risk factors. Hard parameter sharing can force incompatible gradients into the same representation and lead to negative transfer, while purely soft-sharing approaches may still mix signals that should remain distinct. OrthTD addresses this by explicitly decom-posing the fused patient representation into shared features and task-specific features for each outcome. On top of this struc-ture, the orthogonal constraint encourages these components to be non-redundant, promoting complementary information rather than duplicated content. The observed improvements over alternative multi-task strategies are consistent with this motivation, suggesting that separating general risk patterns from outcome-specific cues can improve overall performance. The results also highlight the value of multimodal modeling for clinical prediction. Clinical narratives in EMRs often contain rich information that is not fully represented by fixed fields, such as nuanced comorbidity descriptions, symptom history, care plans, and clinician assessments. In modern medical practice, structured tabular data and EMR text are routinely available throughout the clinical workflow, making their combination a practical and widely applicable choice for risk modeling. Our fusion backbone uses a unified token-based representation and a learnable global token to aggregate information across modalities, which is supported by the clear gains when adding global aggregation in the ablation study. Together, these design choices provide a practical way to integrate heterogeneous medical data without requiring task-specific feature engineering for every new outcome. OrthTD provides a generalized framework where task-specific heads and modality encoders can be expanded without altering the core decomposition mechanism. Future work will focus on scaling this architecture to broader clinical settings by incorporating extra data types, new prediction targets and advanced model components, such as sequence models for raw vital signs and domain-adapted language models to improve data efficiency. Additionally, we will strengthen real-world reliability by assessing subgroup robustness and stability under missing-modality scenarios. V. C ONCLUSION 
+
+In this work, we presented OrthTD, a multimodal multi-task learning method designed to model heterogeneous real-world clinical data. By explicitly decomposing representations and enforcing geometric orthogonality, our approach mitigates the trade-off between feature sharing and task specialization. The empirical results on a large-scale clinical cohort confirm that separating general patient risks from outcome-specific signals mitigates negative transfer and reduces feature redundancy. Consequently, OrthTD delivers superior discrimination com-pared to strong unimodal and multi-task baselines, particularly for detecting low-incidence events. Furthermore, the unified fusion backbone allows for the flexible integration of addi-tional modalities, making the framework a scalable solution for comprehensive clinical risk monitoring. ACKNOWLEDGMENT 
+
+We thank all the team members and colleagues involved in CSAC for their support. The computations in this paper were supported by the High Performance Computing platform at West China Biomedical Big Data Center, West China Hospital, Sichuan University. REFERENCES [1] K. Y. Ngiam and I. W. Khor, “Big data and machine learning algorithms for health-care delivery,” The Lancet Oncology , vol. 20, no. 5, pp. e262– e273, 2019. [2] R. Garriga, T. S. Buda, J. Guerreiro, J. Oma˜ na Iglesias, I. Estella Aguerri, and A. Mati´ c, “Combining clinical notes with structured electronic health records enhances the prediction of mental health crises,” Cell Reports Medicine , vol. 4, no. 11, 2023. [3] C. Varghese, E. M. Harrison, G. O’Grady, and E. J. Topol, “Artificial intelligence in surgery,” Nature Medicine , vol. 30, no. 5, pp. 1257–1268, 2024. [4] J. Yang, “Multi-task learning for medical foundation models,” Nature Computational Science , vol. 4, no. 7, pp. 473–474, 2024. [5] M. Xue, J. Yang, H. Wang, Z. Yan, X. Chen, W. Gao, R. Luo, X. Lv, and Z. Ye, “From static to dynamic: Artificial intelligence revolution in perioperative care through multimodal data fusion and closed-loop optimization,” Journal of Anesthesia and Translational Medicine , vol. 4, no. 3, pp. 132–141, 2025. [6] S. R. Stahlschmidt, B. Ulfenborg, and J. Synnergren, “Multimodal deep learning for biomedical data fusion: a review,” Briefings in bioinformat-ics , vol. 23, no. 2, p. bbab569, 2022. [7] Y. Zhang and Q. Yang, “A survey on multi-task learning,” IEEE Transactions on Knowledge and Data Engineering , vol. 34, no. 12, pp. 5586–5609, 2022. [8] I. Misra, A. Shrivastava, A. Gupta, and M. Hebert, “Cross-stitch Net-works for Multi-task Learning,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2016, pp. 3994– 4003. [9] J. Ma, Z. Zhao, X. Yi, J. Chen, L. Hong, and E. H. Chi, “Modeling task relationships in multi-task learning with multi-gate mixture-of-experts,” in Proceedings of the ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , 2018, pp. 1930–1939. [10] A. Kendall, Y. Gal, and R. Cipolla, “Multi-task learning using uncer-tainty to weigh losses for scene geometry and semantics,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2018. [11] L. Yang, W. Chen, D. Chen, J. He, J. Wang, Y. Qu, Y. Yang, Y. Tang, H. Zeng, W. Deng, H. Liu, L. Huang, X. Li, L. Du, J. Liu, Q. Li, and H. Song, “Cohort profile: the China surgery and anesthesia cohort (CSAC),” European Journal of Epidemiology , vol. 39, no. 2, pp. 207– 218, 2024. [12] I. Jammer, N. Wickboldt, M. Sander, A. Smith, M. J. Schultz, P. Pelosi, B. Leva, A. Rhodes, A. Hoeft, B. Walder, M. S. Chew, and R. M. Pearse, “Standards for definitions and use of outcome measures for clinical effectiveness research in perioperative medicine: European Perioperative Clinical Outcome (EPCO) definitions: a statement from the ESA-ESICM joint taskforce on perioperative outcome measures,” European Journal of Anaesthesiology — EJA , vol. 32, no. 2, 2015. [13] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” in Advances in Neural Information Processing Systems , 2017, pp. 5999–6009. [14] J. Devlin, M. W. Chang, K. Lee, and K. Toutanova, “BERT: Pre-training of deep bidirectional transformers for language understanding,” in Pro-ceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies ,2019, pp. 4171–4186. [15] E. M. Wesselink, T. H. Kappen, H. M. Torn, A. J. Slooter, and W. A. van Klei, “Intraoperative hypotension and the risk of postoperative adverse outcomes: a systematic review,” British Journal of Anaesthesia , vol. 121, no. 4, pp. 706–721, 2018. [16] T. Ridnik, E. Ben-Baruch, N. Zamir, A. Noy, I. Friedman, M. Protter, and L. Zelnik-Manor, “Asymmetric loss for multi-label classification,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 82–91. [17] A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury, G. Chanan, T. Killeen, Z. Lin, N. Gimelshein, and L. Antiga, “Pytorch: An im-perative style, high-performance deep learning library,” in Advances in neural information processing systems , 2019. [18] I. Loshchilov and F. Hutter, “Decoupled Weight Decay Regularization,” in International Conference on Learning Representations , 2017. [19] G. Ke, Q. Meng, T. Finley, T. Wang, W. Chen, W. Ma, Q. Ye, and T.-Y. Liu, “Lightgbm: A highly efficient gradient boosting decision tree,” in 
+
+Advances in Neural Information Processing Systems , 2017. [20] T. Chen and C. Guestrin, “Xgboost: A scalable tree boosting system,” in Proceedings of the 22nd acm sigkdd international conference on knowledge discovery and data mining , 2016, pp. 785–794. [21] N. Hollmann, S. M¨ uller, L. Purucker, A. Krishnakumar, M. K¨ orfer, S. B. Hoo, R. T. Schirrmeister, and F. Hutter, “Accurate predictions on small data with a tabular foundation model,” Nature , vol. 637, no. 8045, pp. 319–326, 2025. [22] Y. Gorishniy, I. Rubachev, V. Khrulkov, and A. Babenko, “Revisiting deep learning models for tabular data,” in Advances in Neural Informa-tion Processing Systems , 2021, pp. 18 932–18 943.
