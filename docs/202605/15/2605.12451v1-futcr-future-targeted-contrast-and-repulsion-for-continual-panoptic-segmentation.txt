@@ -1,0 +1,613 @@
+Title: FuTCR: Future-Targeted Contrast and Repulsion for Continual Panoptic Segmentation
+
+URL Source: https://arxiv.org/pdf/2605.12451v1
+
+Published Time: Wed, 13 May 2026 01:54:11 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# FuTCR: Future-Targeted Contrast and Repulsion for Continual Panoptic Segmentation 
+
+Nicholas Ikechukwu 1∗ Keanu Nichols 1∗ Deepti Ghadiyaram 1,2 Bryan A. Plummer 11Boston University 
+
+> 2
+
+Runway 
+
+{ncholas, kmn5409, dghadiya, bplum}@bu.edu 
+
+## Abstract 
+
+Continual Panoptic Segmentation (CPS) requires methods that can quickly adapt to new categories over time. The nature of this dense prediction task means that training images may contain a mix of labeled and unlabeled objects. As nothing is known about these unlabeled objects a priori , existing methods often simply group any unlabeled pixel into a single "background" class during training. In effect, during training, they repeatedly tell the model that all the different back-ground categories are the same (even when they aren’t). This makes learning to identify different background categories as they are added challenging since these new categories may require using information the model was previously told was unimportant and ignored. Thus, we propose a Future-Targeted Contrastive and Repulsive (FuTCR) framework that addresses this limitation by restructuring representations before new classes are introduced. FuTCR first discovers confident 
+
+future-like regions by grouping model-predicted masks whose pixels are consis-tently classified as background but exhibit non-background logits. Next, FuTCR applies pixel-to-region contrast to build coherent prototypes from these unlabeled regions, while simultaneously repelling background features away from known-class prototypes to explicitly reserve representational space for future categories. Experiments across six CPS settings and a range of dataset sizes show FuTCR improves relative new-class panoptic quality over the state-of-the-art by up to 28% ,while preserving or improving base-class performance with gains up to 4% 2.
+
+## 1 Introduction 
+
+Continual learning aims to expand a model’s recognition capability by introducing new categories over time without retraining from scratch [ 1– 10 ]. Most prior work studies classification, where the model updates only a global label predictor [ 2 , 9, 11 – 15 ], where samples only contain examples of labeled classes. In contrast, dense prediction tasks like image segmentation may contain a mix of labeled and unlabeled categories [ 16 – 28 ]. As shown in Fig. 1(a), many of these methods map all unlabeled pixels into a single "background" category. Thus, these methods may only learn how to identify it as any unlabeled category, rather than learning how to distinguish between objects. For example, if no vehicles are labeled, then a model could just look for a wheel to mark that object as background. Thus, there would be no need to learn to separate cars and trucks even though they may appear as new categories to learn in the future. We address this limitation by proposing a Fu ture-Targeted Contrastive and Repulsive ( FuTCR )learning framework that explicitly restructures the representation space before new classes are introduced. As illustrated in Fig. 1(b), our core idea is to treat unlabeled content that is likely to     
+
+> ∗Equal contribution
+> 2The models and code will be made publicly available: https: // github. com/ futcr/ FuTCR
+> Preprint.
+> arXiv:2605.12451v1 [cs.CV] 12 May 2026 Background
+> (a) Existing Methods (b) FuTCR (Ours )
+> Contrast and Repulsion
+> Labeled classes at time t
+> Future class
+> learning
+> PQ New
+> Future class
+> confusion
+> PQ New
+> Collapse in
+> feature space
+> Future-Classes
+> Signal
+
+Figure 1: From background noise to structured supervision . (a) Prior continual panoptic methods treat background regions as non-informative [ 21 , 23 , 29 , 30 ], allowing future-class evidence to be absorbed into existing decision regions in feature space over time. (b) Our framework instead converts background activations into future-aware structural cues that organize scene composition before new labels arrive, reducing semantic drift and improving Panoptic Quality (PQ). belong to future classes not as undifferentiated background, but as structured regions that should remain separable from known-class representations. To do so, FuTCR uses the model’s own panoptic predictions at the base step to discover future-like regions, i.e ., connected mask regions that are consistently predicted as background yet exhibit non-background evidence in the logits. Within each discovered region, FuTCR applies a pixel-to-region contrastive objective that pulls pixels toward a shared region prototype and pushes them away from prototypes of other regions. This objective enforces coherence inside each unlabeled region and diversity across regions, encouraging the model to form distinct, reusable prototypes for future categories instead of collapsing them into background. To further prevent unlabeled regions from being absorbed into known-class decision regions, FuTCR introduces a future-targeted repulsion objective . Concretely, we maintain a set of prototypes for known classes and explicitly repel features from discovered future-like regions away from these prototypes in both feature and logit space. This repulsion discourages future evidence from occupying the same representational subspace as old classes and creates a margin around known-class prototypes that can later be allocated to new categories. Together, the contrastive and repulsive terms cause the current-step model to pre-organize its feature space so that future-class pixels form coherent clusters that are distinct from old classes, which eases the integration of new categories during incremental updates. Our future-aware error and representation analysisconfirms that FuTCR significantly reduces future-old class confusion compared to strong baselines. While prior work has explored using unlabeled data via semi-supervised or self-supervised objec-tives [ 31 – 34 ], these methods primarily improve performance on currently labeled classes and do not explicitly shape the feature space for future class expansion in continual segmentation. Recent work on future-aware representation learning for segmentation [ 35 ] moves in this direction but relies on externally defined regions or non-adaptive clustering, which decouples region construction from the model’s evolving predictions. In contrast, FuTCR couples region discovery, representation learning, and classifier preparation in a single model-driven procedure: predicted masks define the regions, contrastive learning structures the corresponding feature clusters, and repulsion from known-class prototypes reserves capacity for future categories. This tight coupling yields a scalable, adaptive mechanism for organizing representations ahead of future class introductions, resulting in a relative gain of up to 28% on new classes coupled with gains up to 4% on old categories. In summary, our main contributions are: • We identify a fundamental extensibility limitation in continual panoptic segmentation: representa-tions and classifier parameters become progressively biased toward previously learned categories, suppressing future-class integration under background overlap. • We propose FuTCR , a future-targeted region-level unsupervised learning framework that leverages model-predicted masks to construct supervision from unlabeled regions, combining con-trastive structuring and known-class repulsion to reserve explicit capacity for future categories. • Through a dedicated future-aware error and representation analysis, we show that FuTCR reshapes the feature space to reduce future-known class confusion, leading to consistent gains in novel-2class panoptic quality across two extreme settings, including fully shared and fully disjoint image overlaps, while preserving performance on previously learned classes. 
+
+## 2 Related Work 
+
+Recent continual panoptic segmentation methods typically adapt dense prediction architectures to class-incremental streams by combining mask-based distillation [ 21 , 23 , 36 ], pseudo-labeling [ 29 , 36 ], replay [ 30 , 29 , 37 ], or prompt tuning [ 28 , 38 ] to alleviate catastrophic forgetting [ 39 – 41 ] and maintain panoptic quality [ 29 , 21 , 30 , 23 , 28 , 42 ]. These approaches successfully preserve performance on previously learned classes, but they still train the base step under a closed-world assumption: pixels from unseen categories are mapped to background and classifier capacity is allocated only to currently labeled classes [ 21 , 23 , 43 , 44 , 36 ]. As a result, future-class evidence is repeatedly absorbed into background representations, biasing decision regions toward old categories and suppressing novel-class predictions when new labels arrive [ 42 , 45 , 28 ]. FuTCR directly targets this structural extensibility limitation by treating background pixels as carriers of future-class signal and reshaping the feature space around them via future-targeted contrast and repulsion, rather than relying solely on supervised losses for current classes. A complementary line of work argues that continual segmentation should be future-aware and distribution-aware, exploiting unlabeled pixels as hints about upcoming classes instead of discarding them [ 35 , 46 –48 ]. Prior methods pre-learn future knowledge by applying contrastive or distillation objectives on unlabeled regions and show that completing or suppressing unlabeled foreground signif-icantly affects forgetting [ 17 , 35 , 49 , 43 ]. However, these methods focus on semantic segmentation, that simply labels pixels as their category, whereas we focus on the panoptic segmentation task that gives pixel and instance labels. Further, unlike our approach none of these methods explicitly reserve classifier capacity for class expansion. Open-set and open-world panoptic segmentation further treat unlabeled regions as unknown classes and maintain explicit unknown categories or discovery mechanisms [ 37 , 50 –53 ], yet these formulations are typically single-step and do not exploit background pixels to proactively structure feature space for future categories across a continual stream. FuTCR closes this gap by coupling model-predicted masks with future-targeted contrast and repulsion on background pixels inside a query-based panoptic framework, carving out future-ready, non-overlapping representational regions that significantly enhance novel-class panoptic quality in both fully overlapped and fully disjoint incremental settings. 
+
+## 3 Future-Targeted Contrastive and Repulsive (FuTCR) Framework 
+
+We explore an incremental panoptic segmentation setting defined over a fixed semantic label space 
+
+C = {1, . . . , K }, where K is the total number of semantic classes to be learned across all steps (seen and unseen). Training proceeds over T steps. At a given time step t ∈ { 1, . . . , T }, the learner receives a dataset Dt = {(x, y )}, where x is an input image, y is its panoptic annotation containing both thing instances and stuff regions for the current class set Ct ⊆ C , and Y(x) ⊆ C denotes the subset of classes present in image x. The cumulative set of classes seen up to step t is C≤t = Sts=1 Cs.The goal of incremental panoptic segmentation is: after training on Dt, the model fθt must accurately segment all classes in C≤t, despite only having direct access to Dt and not previous steps. Following [ 23 ], we use a query-based panoptic architecture. Let Q denote the number of queries and d the feature dimension. For an image x at step t, the decoder produces per-query feature representations ht(x) ∈ RQ×d. A shared classifier (prediction head) is parameterized by weights 
+
+Wt ∈ RK×d, mapping query features to class scores over the entire label space C, including categories that are not yet annotated at step t but may already occur in Y(x).In the default training protocol, supervision at step t is restricted to the current classes Ct, while pixels from unseen classes C \ C ≤t are assigned to a generic background label. Consequently, the query features ht(x) and classifier Wt are optimized only to separate C≤t from background. Future-class evidence is thus repeatedly collapsed into the background subspace and shaped to sit near already-seen classes in order to separate them from non-object regions, discarding structure that could benefit later steps, as illustrated in Fig. 1. We tackle this limitation in FuTCR as detailed next. 3Unlabeled 
+
+> Region Selector
+> Total Objective
+
+Ltotal     
+
+> Panoptic Loss
+> Lpan
+> Panoptic
+> Head
+> Input Images X
+> Pixel
+> Decoder
+> Backbone Encoder
+> Query
+> Transfm.
+> Decoder
+> Dense Pixel-
+> Level
+> Features
+> Mask
+> logits
+> Region Prototype
+> (unlabeled)
+> Known-class
+> Prototype
+> Repulsion
+> Feature/query flow
+> Loss flow
+> Panoptic branch
+> Future-Aware Module
+> Lreg
+> (pixel-to-region contrast)
+> Lrep
+> (Known-Class repulsion loss)
+> Unlabeled Regions Q fut
+> &Prototypes
+> Pixel-to-Region
+> Contrast
+> Repulsion from known
+> class prototypes
+> Sampled Unlabeled
+> region pixels
+> rM
+> Sampled From Ωr
+> Dense Pixel-Level
+> Features F
+> Positives
+> Known-class
+> Prototypes
+> Negatives
+> r2
+> r1
+
+Figure 2: Overview of FuTCR , a query-based continual panoptic model produces dense region features and mask predictions. Our future-targeted module leverages unlabeled regions together with ground-truth labeled regions to perform unlabeled region discovery Sec. 3.1, region-level contrastive learning Sec. 3.2, and known-class repulsion Sec. 3.3, encouraging structured rep-resentations for future categories. The final objective combines standard panoptic losses with future-targeted contrastive and repulsion objectives Eq. (4). 
+
+3.1 Unlabeled Region Discovery 
+
+During training pixels from classes in C \ C ≤t already appear in x at step t, but prior work maps them to a generic background label and they never receive class-specific supervision ( e.g ., [ 44 , 21 , 23 , 35 ]). Our aim is to convert this systematically ignored evidence into an explicit structural signal at the base step to produce a representation space that already allocates coherent regions for future classes before they are introduced. For a given image xb and query index q panoptic model fθt produces per-query mask ˆmb,q ∈
+
+[0 , 1] H×W . We then identify future-like regions whose support lies predominantly on pixels outside the current class set C≤t (e.g., unlabeled labels in the ground truth or pixels annotated as background but not belonging to Y(xb) ∩ C ≤t). For each image index b, we define the set of future queries 
+
+Qfut  
+
+> b
+
+=
+
+(
+
+q
+
+ˆmb,q is confident and sufficiently large, and a majority of its support lies on pixels outside C≤t
+
+)
+
+,
+
+and collect batch-level future regions as Rfut = {(b, q ) | q ∈ Q fut  
+
+> b
+
+}. This isolates step t’s object-like masks whose identity is unknown but whose pixels may later be assigned to classes in C \ C ≤t.Unlike prior methods that collapse future evidence into a single auxiliary "unknown" class [ 44 ] or depend on externally generated region proposals [ 35 , 54 ], where discovered regions are only indirectly aligned with the incremental classifier Wt, our approach is fully model-driven. FuTCR derives Rfut 
+
+directly from the query masks of fθt , preserving the panoptic head’s native one-query-per-region structure. This tight coupling grounds future region discovery in the same query feature space reused by subsequent heads, yielding a more faithful and scalable foundation for future-targeted contrastive and repulsive learning [55–57]. 
+
+3.2 Region Prototypes and Pixel-to-Region Contrast 
+
+For each future-like region ∈ R fut , we pool corresponding mask features to form region prototypes. Let Fb ∈ RC×H×W denote image xb’s mask feature map, then prototype for region r = ( b, q ) is 
+
+pr = 1
+
+|Ωr |
+
+X
+
+> (i,j )∈Ωr
+
+Fb(: , i, j ), Ωr = {(i, j ) | ˆmb,q (i, j ) > τ mask }, (1) where τmask is a confidence threshold. This simple averaging ties each prototype directly to a single panoptic query, so that future categories are represented as object-level clusters in the same feature 4space that the incremental classifier will later reuse. We then sample a fixed number of pixel features from each Ωr to serve as anchors fn ∈ RC , each associated with its region index r(n).To encourage future-like regions to form coherent object-centric representations while remaining distinct from one another, we apply an InfoNCE-style contrastive loss [ 32 , 33 ] between sampled pixel features and region prototypes. Let P denote the set of all prototypes in the batch. For each sampled pixel feature fn with positive prototype pr(n), we define 
+
+Lreg = − 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+log exp  sim( fn, pr(n))/τ P  
+
+> pk∈P
+
+exp  sim( fn, pk)/τ  , (2) where sim( ·, ·) is cosine similarity and τ is a temperature. This objective encourages pixels from the same future-like region to cluster around a shared prototype. Further, prototypes for different regions are pushed apart so future-class evidence is organized into stable, query-aligned object capsules instead of being spread diffusely across background, which we will show is a failing of prior work. 
+
+3.3 Known-class Repulsion 
+
+Future-like regions are composed largely of unlabeled pixels in the current step’s ground truth, which standard continual methods either drop from the loss or treat as background. To prevent these pixels from collapsing onto known-class decision regions, we introduce an known-class-repulsion loss that explicitly pushes unlabeled features away from prototypes of known classes C≤t, thereby reserving representational “headroom” for future categories. Let Iunlb be a set of sampled unlabeled pixels across the batch and let {wc}c∈C ≤t denote the normalized classifier prototypes or class-centric feature vectors for known classes at step t. For each unlabeled feature zu and each known class c, we compute the cosine similarity su,c = sim( zu, wc)
+
+and apply a margin-based hinge penalty: 
+
+Lrep = 1
+
+|I unlb |
+
+X
+
+> u∈I unlb
+
+max  0, s u,c ⋆(u) − γ, (3) where u ∈ Iunlb , c⋆(u) = arg max c∈C ≤t su,c is the most similar known class and γ is a repulsion margin. Intuitively, unlabeled pixels that align too strongly with any known class incur a positive loss and are pushed to move away in feature space, reducing the future-old class confusion we quantify in Sec. 4.2. This makes it less likely that new classes will later be forced into already-occupied decision regions when they are labeled. 
+
+Overall Objective and Training Scheme. 
+
+Our future-aware module is attached to a query-based panoptic backbone ( e.g ., a SimCIS-style [ 23 ]transformer decoder) and optimized jointly with the standard panoptic objective. Let Lpan denote the conventional segmentation, classification, and localization losses for the current classes Ct (see [ 23 ]). The overall objective at step t is 
+
+Ltotal = Lpan + λreg Lreg + λrep Lrep , (4) where λreg and λrep weight future-targeted region contrast and known-class repulsion, respectively. Both objectives operate on pixels that standard continual methods typically ignore or absorb into background [ 44 , 43 , 17 ], encouraging future-like regions to form coherent representations separated from known-class decision regions. In the next section we will show pre-structured feature space improves future-class integration under challenging overlap regimes while preserving stable panoptic predictions for previously learned categories. 
+
+## 4 Experiments 
+
+Following [ 16 , 21 , 23 , 29 ], we evaluate FuTCR on diverse continual panoptic segmentation settings derived from ADE20K [ 58 ]. The full label space C = {1, . . . , K } contains K semantic classes and is partitioned across T continual learning steps into a base class set C1 and a sequence of incremental class groups {C t}Tt=2 . At step t = 1 , the model is trained only on D1 with annotations for C1. At step t > 1, a new group Ct is introduced and supervision is restricted to the current classes Ct, while 5evaluation is always performed on all classes seen so far, C≤t = Sts=1 Cs. In practice, D1 has ∼10K images and incremental steps have ∼700 images on average. The validation and test sets has 1K held-out images each. New classes are those introduced after the base step. Thus, at step t the new classes observed so far are C2: t, and at the final step they are C2: T . Similarly, future classes are defined from the perspective of step t and refers to classes that have not yet been introduced, Ct+1: T .In all cases, the base step uses |C 1| = 100 classes and the remaining 50 classes in C2: T are introduced over T −1 incremental steps in groups of k ∈ { 5, 10 , 50 } classes per step, resulting in T = {11 , 6, 2},respectively. We report final-step performance after incorporating all incremental classes. Specifically, PQ base is computed on the base classes C1, PQ new is computed on the incremental classes C2: T , and PQ all is computed on all classes C1: T .Each of the cases above are evaluated under two settings. The overlap stream reuses images from step 1 in later steps. As such, pixels belonging to all future classes in C \ C ≤t are present in x ∈ D t,but annotated only as background or ignored in prior work as discussed earlier. This stream directly tests whether a method can prevent future-class evidence from collapsing into background or being confused with known classes when future classes are visually present but unlabeled. The disjoint-image stream contains no image overlaps between the base and incremental steps. This simulates a setting where new classes are added to a pretrained model without access to the original training data. We note that evaluating both streams makes our protocol more robust than some recent methods, which only use one (typically the overlap stream) [23, 21, 30, 38]. 
+
+Metrics. We adapt the same metrics as prior work [ 28 , 23 , 21 ]. Specifically, we report Panoptic Quality (PQ), which balances both recognition and segmentation quality to evaluate continual panoptic segmentation performance. In addition, we report the mean Intersection-over-Union (mIoU) computed between the ground truth and predicted segmentation maps. Eclipse reports PQ under our evaluation protocol, but its released code does not directly output mIoU; therefore, we report only PQ for Eclipse. 
+
+Implementation Details . Our method is implemented on top of Mask2Former [ 59 ] using the Detectron2 framework, with a pretrained ResNet-50 backbone [60]. Unless otherwise specified, we follow the same training setup and hyperparameters as prior work [ 23 , 28 ] to ensure fair comparison. We train the model sequentially across incremental steps, initializing each step from the previous model. We set the repulsion factor λrep for our future-aware module to 0.5. All experiments were run on 4 NVIDIA RTX A6000 GPUs. Each incremental training step required approximately 2 hours on average for the 100 - 5 setting, and models were trained sequentially across all incremental steps. All reported baselines are evaluated under the same controlled split construction, class order, validation/test split, and final-step evaluation protocol. Additional implementation details are provided in Sec. B including compute details, training schedules, and hyperparameters. 
+
+4.1 Results 
+
+Tabs. 1 to 3 reports both image stream’s performance across three step sizes, resulting in six total combinations. On average FuTCR reports absolute gains of up to 4 points. Overall, our method is most advantageous when there are many steps (Tab. 1), suggesting FuTCR becomes more advantageous over time (further supported by results in Sec. 4.2). Notably, in PQ new Tab. 1 shows a +28% relative gain ( 17 .3 → 22 .3) over SimCIS [ 23 ], the closest method to ours. We also observe that our gains are not limited to just improvements in new classes. For example, in the disjoint-image stream in Tab. 1 has most of its PQ gains on base classes, suggesting that the benefits can also stem from less destructive learning as we add base classes. Fig. 3 provides qualitative comparisons between SimCIS and FuTCR on the ADE20K 100 - 50 setting. SimCIS often suppresses newly introduced regions by assigning them to background or merging them with previously learned categories, producing fragmented or incomplete panoptic masks. In contrast, FuTCR yields more coherent masks for new classes while maintaining the structure of old-class regions. These examples support the quantitative trends in Tabs. 1 to 3, suggesting that future-targeted contrast and repulsion improve the model’s ability to integrate newly labeled categories rather than only preserving past classes. Figure 4 evaluates robustness to reduced incremental supervision on the 100–5 protocol. We keep the same base step, class order, and ten incremental steps, but progressively reduce the average number of training images per incremental step from roughly 700 to 400 and 100 . In the overlap stream, FuTCR 6Table 1: Performance on ADE20K 100-5 (11 total steps) under controlled overlap and disjoint-image streams. FuTCR improves performance by 2-3 points on average on PQ and mIOU metrics.                                                                                     
+
+> Overlap Disjoint Avg (all)
+> 1-100 101-150 all 1-100 101-150 all
+> Method PQ base mIOU PQ new mIOU PQ all mIOU PQ base mIOU PQ new mIOU PQ all mIOU PQ avg mIOU Eclipse [28] 37.5 -8.5 -28.8 -36.6 -7.1 -27.0 -27.9 Balconpas [30] 35.0 41.3 22.3 21.6 30.8 34.8 34.2 40.6 20.6 20.9 29.6 34.1 30.2 34.4 Combo [21] 32.6 41.5 19.3 20.2 28.2 34.4 31.2 39.7 19.3 21.0 27.3 33.5 27.7 33.9 SimCIS [23] 37.2 52.5 17.3 24.3 30.6 43.7 34.6 48.1 22.8 33.9 30.6 43.6 30.6 43.6
+> FuTCR (Ours) 38.8 53.7 22.3 31.8 33.3 46.8 35.4 49.9 23.0 37.3 31.3 46.1 32.3 46.4
+
+Table 2: Performance on ADE20K 100-10 (6 total steps) under controlled overlap and disjoint-image streams. FuTCR provides more stable results across both reported metrics, unlike prior work ( e.g ., Combo has similar average PQ but has an 8 point drop in mIOU).                                                                                      
+
+> Overlap Disjoint Avg (all)
+> 1-100 101-150 all 1-100 101-150 all
+> Method PQ base mIOU PQ new mIOU PQ all mIOU PQ base mIOU PQ new mIOU PQ all mIOU PQ avg mIOU Eclipse [28] 37.5 –10.8 –28.8 –37.7 –11.2 –29.1 –28.9 –Balconpas [30] 37.9 45.5 22.5 27.2 32.8 39.5 38.1 45.0 23.9 27.2 33.4 39.1 33.1 39.3 Combo [21] 37.4 44.9 25.6 28.9 33.4 39.6 36.6 44.0 24.4 28.7 32.5 38.9 32.9 39.2 SimCIS [23] 39.9 55.7 20.1 26.8 33.3 46.5 37.8 54.9 19.1 31.2 31.6 47.4 32.4 46.9
+> FuTCR (Ours) 40.0 55.3 21.0 30.0 33.7 47.0 39.1 54.3 20.3 32.7 32.8 47.5 33.2 47.2
+
+consistently outperforms SimCIS across all supervision levels, with the largest relative gains at full data. In the disjoint-image stream, the methods are closer, though FuTCR still slightly improves PQ all in the full-data case, suggesting that structuring future-like regions is most beneficial when future-category evidence appears as unlabeled background and that extremely sparse supervision limits recoverable gains. 
+
+Ablation Study. Tab. 4 quantifies the contributions of region contrast (RC) and known-future repulsion (KFR) on the ADE20K 100–5 validation set. We select the final FuTCR configuration based on validation PQ all and do not use test performance for model selection. KFR provides the strongest standalone improvement: relative to SimCIS, average validation PQ all increases from 31 .2
+
+to 32 .2 (about +3% ), with gains in both overlap and disjoint streams. This matches our diagnosis that the main failure mode is future-class evidence collapsing into known-class decision regions, and that explicitly repelling future-like features from known-class prototypes directly mitigates this effect. RC plays a complementary role. On its own, RC slightly reduces average PQ all (from 31 .2 to 30 .5), reflecting that organizing future-like regions into coherent prototypes is insufficient if those prototypes remain near known-class regions. When combined with KFR, however, RC boosts validation PQ all 
+
+further from 32 .2 to 32 .8 (roughly an additional +2% relative), yielding the best overall validation performance and the configuration used in all main experiments. This pattern supports our design: Table 3: Performance on ADE20K 100-50 (2 total steps) under controlled overlap and disjoint-image streams. FuTCR improves performance by nearly 1 point on average on PQ and mIOU metrics.                                                                                      
+
+> Overlap Disjoint Avg (all)
+> 1-100 101-150 all 1-100 101-150 all
+> Method PQ base mIOU PQ new mIOU PQ all mIOU PQ base mIOU PQ new mIOU PQ all mIOU PQ avg mIOU Eclipse [28] 37.9 –15.9 –30.8 –38.1 –17.4 –31.2 –31.0 –Balconpas [30] 39.9 46.2 22.3 28.3 34.0 40.3 40.5 46.6 22.6 30.1 34.5 41.2 34.2 40.7 Combo [21] 39.2 45.7 21.6 29.9 33.3 40.0 39.7 46.2 21.5 31.1 33.6 41.2 33.4 40.6 SimCIS [23] 42.4 56.7 24.9 39.4 36.5 51.1 42.3 55.5 27.1 37.0 37.2 49.4 36.8 50.2
+> FuTCR (Ours) 42.0 56.1 28.0 38.0 37.3 50.3 42.1 58.2 29.4 38.1 37.9 51.7 37.6 51.0
+
+7FuTCR ( Ours) Ground Truth  SimCIS Figure 3: Qualitative comparison of segmentation produced by FuTCR and SimCIS [ 23 ] on ADE20K 
+
+100 –50 . FuTCR yields consistently richer panoptic reconstructions that recovers new-class regions or instances that SimCIS misses, while preserving cleaner, more complete segmentation of small and thin structures ( e.g ., wall, grass, bulletin board, etc.) 
+
+Figure 4: Robustness to reduced incre-mental supervision on ADE20K 100–5. We keep the same base step, class or-der, and ten incremental steps, and vary the average number of images per incre-mental step (x-axis: ≈ 100 , 400 , and 
+
+700 ). The left and right panels show final-step PQ all under the overlap and disjoint-image streams, respectively. future-aware region structuring is most effective when paired with an explicit separation objective that prevents future-like prototypes from being absorbed into old-class subspaces. 
+
+4.2 Future-Aware Error and Representation Analysis Future-Category Confusion Profiling . Motivated by the tendency of background-assigned future-class pixels to be absorbed into known-class decision regions during continual training, we explicitly quantify how base-step models allocate probability mass to pixels that will later belong to novel categories. For each incremental step, we compute, at the base step, the fraction of pixels whose ground-truth class lies in C \ C ≤t that are predicted as old classes, as background, or as future classes (when future-class logits are exposed). This defines a compact “future confusion profile” for each method, summarized in Fig. 5. Strong continual baselines already exhibit a marked tendency to fold future-category evidence into previously learned classes: in our experiments, the baseline misclassifies roughly 12 –16% of future Table 4: Component ablation of FuTCR on the ADE20K 100–5 validation set. We report final-step validation PQ on base classes (PQ base 1 − 100 ), new classes (PQ new 101 − 150 ), and all classes (PQ all 
+
+1 − 150 ) under overlap and disjoint-image streams. RC denotes region contrast and KFR denotes known-future repulsion. We find both components are needed for best performance.                                               
+
+> Variant RC KFR Overlap Val. Disjoint Val. Val. Avg. 1-100 101-150 all 1-100 101-150 all SimCIS [23] ––37.7 19.3 31.5 35.1 22.6 30.9 31.2 FuTCR-RC ✓–38.8 15.2 31.0 34.9 20.7 30.1 30.5 FuTCR-KFR –✓39.1 20.2 32.9 35.7 23.4 31.6 32.2 FuTCR ✓✓38.8 23.7 33.7 36.4 23.3 32.0 32.8
+
+82 3 4 5 6 7 8 9 10 
+
+Incremental step 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Predicted Old
+> 0.12
+> 0.13
+> 0.15
+> 0.16
+> 0.20
+> 0.22
+> 0.18
+> 0.24
+> 0.19
+> 0.16
+> 0.18
+> 0.18
+> 0.22
+> 0.34
+> 0.27
+> 0.24
+> 0.25
+> 0.42
+> Method
+> Ours (FuTCR)
+> SimCIS
+
+Figure 5: Future-aware error dynamics. 
+
+FuTCR reduces the fraction of future-class pixels that are misclassified as base classes across incremental steps compared to Sim-CIS [ 23 ], indicating less future–old class con-fusion at the base step. 2 4 6 8 10              
+
+> Incremental Step
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> SemSeg mIoU
+> 246810
+> Incremental Step
+> 10
+> 20
+> 30
+> 40
+> Panoptic PQ
+> Ours (FuTCR)
+> SimCIS
+> Old Classes
+> New Classes
+> All Classes 2345678910 11
+> Incremental step
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> 0.98
+> Cosine similarity
+> Method
+> Ours (FuTCR)
+> SimCIS
+
+Figure 6: Left/middle : FuTCR consistently outperforms SimCIS [ 23 ] in mIoU and PQ on ADE20K 100–5, with especially pronounced gains on newly introduced classes and improved performance on previously learned classes. Right : cross-step prototype similarity for old classes, where FuTCR permits moderate drift (down to ≈ 0.89 ) instead of the baseline’s near-rigid prototypes ( > 0.97 ), and this adaptive evolution coincides with higher PQ and reduced future–old class confusion. pixels as old classes at early steps, and this future–old class confusion persists throughout training (see Fig. 5 and [ 21 , 23 , 35 ]). FuTCR consistently reduces this fraction across all steps while increasing the share of future pixels that remain separable from old-class decision regions, providing quantitative evidence that our future-aware objectives reshape the previous-step feature space in a way that is more conducive to integrating new categories. 
+
+Cross-Step Prototype Congruence Prototype-based continual methods are often evaluated by how well they preserve old-class feature centroids across steps, e.g., via cosine similarity between current and initial prototypes [ 29 , 35 ]. However, our measurements show that such nearly frozen prototypes do not reliably correlate with better future-class behavior. In the baseline, mean cosine similarity between current and step-1 prototypes remains above 0.97 for all steps Fig. 6(right), yet the model still exhibits strong future–old class confusion. FuTCR instead allows old-class prototypes to evolve more over time: mean cosine similarity gradually decreases from 0.98 at step 2 to about 0.89 by step 11 Fig. 6(right), while panoptic quality improves and future–old class confusion decreases Fig. 5 and Tab. 1. This pattern indicates that a controlled degree of adaptive prototype drift, rather than strict preservation of initial centroids, is beneficial for carving out a dedicated subspace for unseen categories and for stabilizing future-class integration in continual panoptic segmentation. 
+
+## 5 Conclusion 
+
+We introduced FuTCR, a future-targeted contrastive and repulsive learning framework for continual panoptic segmentation. FuTCR directly addresses the tendency of standard protocols to absorb unlabeled future-class regions into background or known-class decision regions by discovering future-like regions from model predictions, organizing them via pixel-to-region contrast, and repelling them from known-class prototypes. Across controlled overlap and disjoint-image streams on ADE20K, FuTCR improves new-class integration while maintaining competitive base-class performance, with the clearest gains in the long 100–5 protocol and consistent improvements in shorter and reduced-data 9settings. These results indicate that background regions contain exploitable structure for preparing representations before future class labels arrive. 
+
+Limitations and Future Work. Our study is restricted to ADE20K, a specific set of overlap regimes, and a small number of random seeds and architectures, so even broader robustness remains to be explored. Extending FuTCR to other continual segmentation settings and task orderings, and refining future-like region selection, are important next steps. 
+
+## References 
+
+[1] Yuhao Zhou, Yuxin Tian, Jindi Lv, Mingjia Shi, Yuanxi Li, Qing Ye, Shuhao Zhang, and Jiancheng Lv. Ferret: An efficient online continual learning framework under varying memory constraints. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 4850–4861, 2025. [2] Hankyul Kang, Gregor Seifer, Donghyun Lee, and Jongbin Ryu. Do your best and get enough rest for continual learning. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 10077–10086, 2025. [3] Francisco M Castro, Manuel J Marín-Jiménez, Nicolás Guil, Cordelia Schmid, and Karteek Alahari. End-to-end incremental learning. In Proceedings of the European conference on computer vision (ECCV) , pages 233–248, 2018. [4] Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl: Incremental classifier and representation learning. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition , pages 2001–2010, 2017. [5] Arslan Chaudhry, Puneet K Dokania, Thalaiyasingam Ajanthan, and Philip HS Torr. Riemannian walk for incremental learning: Understanding forgetting and intransigence. In Proceedings of the European conference on computer vision (ECCV) , pages 532–547, 2018. [6] Hanul Shin, Jung Kwon Lee, Jaehong Kim, and Jiwon Kim. Continual learning with deep generative replay. Advances in neural information processing systems , 30, 2017. [7] Shipeng Yan, Jiangwei Xie, and Xuming He. Der: Dynamically expandable representation for class incremental learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 3014–3023, 2021. [8] Xiaoyu Tao, Xiaopeng Hong, Xinyuan Chang, Songlin Dong, Xing Wei, and Yihong Gong. Few-shot class-incremental learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 12183–12192, 2020. [9] Li Jiao, Qiuxia Lai, Yu Li, and Qiang Xu. Vector quantization prompting for continual learning. 
+
+Advances in Neural Information Processing Systems , 37:34056–34076, 2024. [10] Liyuan Wang, Kuo Yang, Chongxuan Li, Lanqing Hong, Zhenguo Li, and Jun Zhu. Ordisco: Effective and efficient usage of incremental unlabeled data for semi-supervised continual learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 5383–5392, 2021. [11] Lior Friedman and Ron Meir. PAC-bayes bounds for cumulative loss in continual learning. In 
+
+The Fourteenth International Conference on Learning Representations , 2026. URL https: //openreview.net/forum?id=hWw269fPov .[12] Fei Ye, Yulong Zhao, Qihe Liu, Junlin Chen, Adrian G. Bors, Jingling Sun, Rongyao Hu, and Shijie Zhou. Dynamic siamese expansion framework for improving robustness in online continual learning. In Advances in Neural Information Processing Systems , 2025. [13] Yanru Wu, Jianning Wang, Xiangyu Chen, Enming Zhang, Yang Tan, Hanbing Liu, and Yang Li. Exploiting task relationships in continual learning via transferability-aware task embeddings. In Advances in Neural Information Processing Systems , 2025. URL https: //openreview.net/forum?id=V8FnYzDX35 .10 [14] Saleh Momeni, Changnan Xiao, and Bing Liu. Anacp: Toward upper-bound continual learning via analytic contrastive projection. In Advances in Neural Information Processing Systems ,2025. URL https://openreview.net/forum?id=qQbvLU34F1 .[15] chenyanxi, Xiuxing Li, Han Yuyang, Zhuo Wang, Qing Li, Ziyu Li, Xiang Li, Chen Wei, and Xia Wu. Hippotune: A hippocampal associative loop–inspired fine-tuning method for continual learning. In The Fourteenth International Conference on Learning Representations , 2026. URL 
+
+https://openreview.net/forum?id=MtDiLnnYgm .[16] Ze Yang, Shichao Dong, Ruibo Li, Nan Song, and Guosheng Lin. ADAPT: Attentive self-distillation and dual-decoder prediction fusion for continual panoptic segmentation. In The Thirteenth International Conference on Learning Representations , 2025. URL https:// openreview.net/forum?id=HF1UmIVv6a .[17] Hongmei Yin, Tingliang Feng, Fan Lyu, Fanhua Shang, Hongying Liu, Wei Feng, and Liang Wan. Beyond background shift: Rethinking instance replay in continual semantic segmentation. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 9839–9848, 2025. [18] Thanh-Dat Truong, Utsav Prabhu, Bhiksha Raj, Jackson Cothren, and Khoa Luu. Falcon: Fairness learning via contrastive attention approach to continual semantic scene understanding. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 15065– 15075, 2025. [19] Guilin Zhu, Runmin Wang, Yuanjie Shao, Wei dong Yang, Nong Sang, and Changxin Gao. Continual gaussian mixture distribution modeling for class incremental semantic segmentation. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. URL 
+
+https://openreview.net/forum?id=dtYKDOBkc7 .[20] Xinyue Zhang, Xu Zou, Liqun Chen, Jiahuan Zhou, Guodong Wang, Sheng Zhong, and Luxin Yan. Parameter release and knowledge reuse for class-incremental semantic segmentation, 2025. URL https://openreview.net/forum?id=9qbKOaF8YJ .[21] Kai Fang, Anqi Zhang, Guangyu Gao, Jianbo Jiao, Chi Harold Liu, and Yunchao Wei. Combo: Conflict mitigation via branched optimization for class incremental segmentation. In Pro-ceedings of the Computer Vision and Pattern Recognition Conference , pages 25667–25676, 2025. [22] Lanyun Zhu, Tianrun Chen, Jianxiong Yin, Simon See, and Jun Liu. Continual semantic segmentation with automatic memory sample selection. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 3082–3092, 2023. [23] Yuchen Zhu, Cheng Shi, Dingyou Wang, Jiajin Tang, Zhengxuan Wei, Yu Wu, Guanbin Li, and Sibei Yang. Rethinking query-based transformer for continual image segmentation. In 
+
+Proceedings of the Computer Vision and Pattern Recognition Conference , pages 4595–4606, 2025. [24] Jiajin Tang, Ge Zheng, Cheng Shi, and Sibei Yang. Contrastive grouping with transformer for referring image segmentation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 23570–23580, 2023. [25] Cheng Shi and Sibei Yang. The devil is in the object boundary: Towards annotation-free instance segmentation using foundation models. arXiv preprint arXiv:2404.11957 , 2024. [26] Zekang Zhang, Guangyu Gao, Jianbo Jiao, Chi Harold Liu, and Yunchao Wei. Coinseg: Contrast inter-and intra-class representations for incremental segmentation. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 843–853, 2023. [27] Zihan Lin, Zilei Wang, and Xu Wang. Towards continual universal segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 29417–29427, June 2025. 11 [28] Beomyoung Kim, Joonsang Yu, and Sung Ju Hwang. Eclipse: Efficient continual learning in panoptic segmentation with visual prompt tuning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 3346–3356, 2024. [29] Fabio Cermelli, Matthieu Cord, and Arthur Douillard. Comformer: Continual learning in semantic and panoptic segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 3010–3020, 2023. [30] Jinpeng Chen, Runmin Cong, Yuxuan Luo, Horace Ho Shing Ip, and Sam Kwong. Strike a balance in continual panoptic segmentation. In European Conference on Computer Vision ,pages 126–142. Springer, 2024. [31] Kihyuk Sohn, David Berthelot, Nicholas Carlini, Zizhao Zhang, Han Zhang, Colin A Raf-fel, Ekin Dogus Cubuk, Alexey Kurakin, and Chun-Liang Li. Fixmatch: Simplifying semi-supervised learning with consistency and confidence. Advances in neural information processing systems , 33:596–608, 2020. [32] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework for contrastive learning of visual representations. In International conference on machine learning , pages 1597–1607. PmLR, 2020. [33] Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick. Momentum contrast for unsupervised visual representation learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9729–9738, 2020. [34] Viktor Olsson, Wilhelm Tranheden, Juliano Pinto, and Lennart Svensson. Classmix: Segmentation-based data augmentation for semi-supervised learning. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pages 1369–1378, 2021. [35] Zihan Lin, Zilei Wang, and Yixin Zhang. Preparing the future for continual semantic segmenta-tion. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 11910–11920, 2023. [36] Bo Yuan, Danpei Zhao, Zhuoran Liu, Wentao Li, and Tian Li. Continual panoptic perception: Towards multi-modal incremental interpretation of remote sensing images. In Proceedings of the 32nd ACM International Conference on Multimedia , pages 2117–2126, 2024. [37] Sungmin Cha, YoungJoon Yoo, Taesup Moon, et al. Ssul: Semantic segmentation with unknown label for exemplar-based class-incremental learning. Advances in neural information processing systems , 34:10919–10930, 2021. [38] D Manjunath, Shrikar Madhu, Aniruddh Sikdar, and Suresh Sundaram. Vista-clip: Visual incre-mental self-tuned adaptation for efficient continual panoptic segmentation. In 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW) , pages 6557– 6565. IEEE, 2025. [39] Robert M French. Catastrophic forgetting in connectionist networks. Trends in cognitive sciences , 3(4):128–135, 1999. [40] Anthony Robins. Catastrophic forgetting, rehearsal and pseudorehearsal. Connection Science , 7 (2):123–146, 1995. [41] Sebastian Thrun. Lifelong learning algorithms. In Learning to learn , pages 181–209. Springer, 1998. [42] Bo Yuan and Danpei Zhao. A survey on continual semantic segmentation: Theory, challenge, method and application. IEEE Transactions on Pattern Analysis and Machine Intelligence ,2024. [43] Gilhan Park, WonJun Moon, SuBeen Lee, Tae-Young Kim, and Jae-Pil Heo. Mitigating background shift in class-incremental semantic segmentation. In European Conference on Computer Vision , pages 71–88. Springer, 2024. 12 [44] Fabio Cermelli, Massimiliano Mancini, Samuel Rota Bulo, Elisa Ricci, and Barbara Caputo. Modeling the background for incremental learning in semantic segmentation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9233–9242, 2020. [45] Tobias Michael Kalb. Principles of Catastrophic Forgetting for Continual Semantic Segmenta-tion in Automated Driving . KIT Scientific Publishing, 2024. [46] Zihan Lin, Zilei Wang, and Yixin Zhang. Continual semantic segmentation via structure preserving and projected feature alignment. In European Conference on Computer Vision , pages 345–361. Springer, 2022. [47] Zichen Song, Xiaoliang Zhang, and Zhaofeng Shi. Scale-hybrid group distillation with knowl-edge disentangling for continual semantic segmentation. Sensors , 23(18):7820, 2023. [48] Mostafa ElAraby, Ali Harakeh, and Liam Paull. Bacs: Background aware continual semantic segmentation. arXiv preprint arXiv:2404.13148 , 2024. [49] Yuxuan Luo, Jinpeng Chen, Runmin Cong, Horace Ho Shing Ip, and Sam Kwong. Trace back and go ahead: Completing partial annotation for continual semantic segmentation. Pattern Recognition , 165:111613, 2025. [50] Jaedong Hwang, Seoung Wug Oh, Joon-Young Lee, and Bohyung Han. Exemplar-based open-set panoptic segmentation network. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 1175–1184, 2021. [51] Yufei Yin, Hao Chen, Wengang Zhou, Jiajun Deng, Haiming Xu, and Houqiang Li. Revis-iting open-set panoptic segmentation. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pages 6747–6754, 2024. [52] Hexin Dong, Zifan Chen, Mingze Yuan, Yutong Xie, Jie Zhao, Fei Yu, Bin Dong, and Li Zhang. Region-aware metric learning for open world semantic segmentation via meta-channel aggrega-tion. arXiv preprint arXiv:2205.08083 , 2022. [53] Hai-Ming Xu, Hao Chen, Lingqiao Liu, and Yufei Yin. Dual decision improves open-set panoptic segmentation. arXiv preprint arXiv:2207.02504 , 2022. [54] Alexander Kirillov, Kaiming He, Ross Girshick, Carsten Rother, and Piotr Dollár. Panoptic segmentation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9404–9413, 2019. [55] Huangjie Zheng, Xu Chen, Jiangchao Yao, Hongxia Yang, Chunyuan Li, Ya Zhang, Hao Zhang, Ivor Tsang, Jingren Zhou, and Mingyuan Zhou. Contrastive attraction and contrastive repulsion for representation learning. arXiv preprint arXiv:2105.03746 , 2021. [56] Jan Niklas Böhm, Philipp Berens, and Dmitry Kobak. Attraction-repulsion spectrum in neighbor embeddings. Journal of Machine Learning Research , 23(95):1–32, 2022. [57] Stella X. Yu and Jianbo Shi. Segmentation with pairwise attraction and repulsion. In Proceedings Eighth IEEE International Conference on Computer Vision. ICCV 2001 , volume 1, pages 52–58. IEEE, 2001. [58] Bolei Zhou, Hang Zhao, Xavier Puig, Sanja Fidler, Adela Barriuso, and Antonio Torralba. Scene parsing through ade20k dataset. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2017. [59] Bowen Cheng, Ishan Misra, Alexander G Schwing, Alexander Kirillov, and Rohit Girdhar. Masked-attention mask transformer for universal image segmentation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 1290–1299, 2022. [60] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pages 770–778, 2016. 13 A Additional Analysis 
+
+A.1 Stability–plasticity Trajectory 
+
+Fig. 7 summarizes the stability–plasticity behavior of FuTCR and SimCIS on ADE20K 100–5. Each point corresponds to a step t ∈ { 2, . . . , 11 }, with the horizontal axis measuring base-class retention and the vertical axis measuring new-class performance. FuTCR traces a consistently more favorable trajectory, achieving stronger gains on new classes while incurring less degradation on previously learned classes, indicating that future-aware region structuring improves the long-term stability–plasticity trade-off in the most challenging incremental setting. 10 15 20 25 
+
+Plasticity (PQ-New) 
+
+> 38.0
+> 38.5
+> 39.0
+> 39.5
+> 40.0
+> 40.5
+> Stability (PQ-Old)
+> S2
+> (13.7, 39.1)
+> S4
+> (14.7, 40.4)
+> S6
+> (23.6, 39.8)
+> S8
+> (25.2, 40.1)
+> S11
+> (23.7, 38.9)
+> S2
+> (7.9, 40.8)
+> S4
+> (13.4, 40.5)
+> S6
+> (18.1, 39.7)
+> S8
+> (20.7, 38.7)
+> S11
+> (19.3, 37.8)
+> Ours (FuTCR)
+> SimCIS
+
+Figure 7: Stability–plasticity trajectory of FuTCR versus SimCIS on ADE20K 100–5 (steps 2–11). Each marker reflects the trade-off between base-class retention and new-class performance at a given step, with FuTCR occupying a more favorable region of the plane across the sequence. 
+
+A.2 Extra Qualitative Results 
+
+In Fig. 8 we provide additional comparisons between our FuTCR and SimCIS [ 23 ] on ADE20K 100-50. Across the diverse scenes we selected, we see that SimCIS often either inaccurately predicts labels or produces incomplete masks. Whereas FuTCR yields segmentations that are more closely aligned with the panoptic ground truth. In the third image on the sixth row, for example, SimCIS incorrectly labels the wardrobe as a fireplace. It also fails to properly predict the mask for the 3rd bed in the second image in the sixth row. These patterns illustrate that FuTCR not only improves aggregate metrics as seen in the tables but also produces more reliable and consistent predictions even in challenging layouts. 
+
+## B Dataset and Split Construction 
+
+B.1 Split Construction Details 
+
+We construct ADE20K continual panoptic splits for the 100–5, 100–10, and 100–50 settings. Each setting uses the same base class set of 100 classes and introduces the remaining 50 classes in increments of 5, 10, or 50 classes. The overlap stream corresponds to (IMG _OV , CLS _OV) = (100 , 75) , while the disjoint-image stream corresponds to (0 , 75) .The base step is shared between the overlap and disjoint-image streams. The overlap stream allows base-step images to reappear during incremental steps, while the disjoint-image stream removes image reuse between base and incremental training. In both streams, the class schedule and evaluation protocol are held fixed. 
+
+B.2 Reduced Incremental Supervision Protocol 
+
+For reduced-data experiments on ADE20K 100–5, we keep the base step, class order, validation set, test set, and number of incremental steps fixed. Only the number of training images per incremental 14 Table 5: Number of training images per step for ADE20K 100–5. Step 1 is the shared base step. Stream S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11 Overlap 10177 573 297 617 598 581 941 903 1475 617 953 Disjoint 10177 569 297 617 598 570 935 903 1469 617 953 Table 6: Image counts for reduced incremental supervision on ADE20K 100–5. The base step is fixed across all reduced-data experiments; reduced supervision is applied only to incremental steps. Stream Setting S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11 Overlap ∼ 700/step 10177 573 297 617 598 581 941 903 1475 617 953 
+
+∼ 400/step – 327 170 353 342 332 538 516 843 353 545 
+
+∼ 100/step – 80 42 87 84 81 132 127 207 87 134 Disjoint ∼ 700/step 10177 569 297 617 598 570 935 903 1469 617 945 
+
+∼ 400/step – 325 170 353 342 326 534 516 839 353 540 
+
+∼ 100/step – 80 42 87 84 80 131 127 206 87 132 step is reduced. The full setting contains approximately 700 images per incremental step on average. Because the full incremental step sizes vary naturally across class groups, the reduced subsets are sampled proportionally per step rather than forcing each step to contain exactly the same number of images. Table 7: Implementation and FuTCR hyperparameters. Parameter Value Backbone ResNet-50 Segmentation architecture Mask2Former / SimCIS-style query-based CPS model Framework Detectron2 Dataset ADE20K Base classes 100 Total classes 150 Increment sizes 5, 10, 50 Region contrast weight λreg 0.5 Repulsion weight λrep 0.5 Mask threshold τmask 0.5 Sampled pixels per region 70 Temperature τ 0.07 Repulsion margin γ 0.0 Optimizer AdamW Learning rate 5 × 10 −5
+
+Batch size 8Training iterations 100–5 5000 Training iterations 100–10 10000 Training iterations 100–50 50000 GPUs 4 NVIDIA RTX A6000 Runtime ∼2 hours per 100–5 incremental step 
+
+## C Auxiliary Prototype Clustering 
+
+Beyond contrast and repulsion, we also experimented with imposing additional structure on future-like region prototypes through an auxiliary clustering branch. We maintain a buffer of region prototypes and periodically run a lightweight K-means procedure to estimate cluster centers {ck}Kaux  
+
+> k=1
+
+on the unit sphere. Each prototype pr is assigned a pseudo-label ℓr = arg max k sim( pr , ck), and an auxiliary MLP predicts logits gr ∈ RKaux from pr . We then minimize a combination of cross-entropy 15 FuTCR ( Ours)  Ground Truth SimCIS FuTCR ( Ours)  Ground Truth SimCIS Figure 8: Additional qualitative comparisons between FuTCR and SimCIS [ 23 ] on ADE20K 100– 50. The two panels depict diverse scenes where FuTCR recovers more accurate panoptic masks, particularly on newly introduced classes. and a balance term: 
+
+Laux = 1
+
+|R fut |
+
+X
+
+> r
+
+CE( gr , ℓ r ) + λbal KL  ¯p ∥ u, (5) where ¯p is the mean predicted distribution over clusters and u is the uniform distribution. This head is intended to encourage diverse usage of latent slots for future-like regions and to promote more disentangled prototypes. In our experiments, however, neither this auxiliary classifier nor a related unseen-classifier head yielded consistent gains over our core FuTCR module, so we treat clustering 16 Table 8: Ablation study on ADE20K 100-5 using seed 2. We report PQ All on the validation set under both the overlap setting (100-75) and disjoint setting (0-75). The average is computed over the two settings. Hyperparameters are selected using validation performance. Method / Variant λFA τmask RC PPR. KFR λrep Aux. cls. Val Overl. Val Disj. Val Avg. SimCIS [23] – – – – – – – 31.5 30.9 31.2 FuTCR w/ aux. cls. 0.5 0.5 ✓ 50 ✓ 0.5 ✓ 32.5 31.6 32.1 FuTCR w/o KFR 0.5 0.5 ✓ 50 – – ✓ 33.3 31.4 32.4 FuTCR w/o RC 0.5 0.5 – – ✓ 0.5 – 32.9 31.6 32.3 FuTCR 0.5 0.5 ✓ 50 ✓ 0.5 – 33.8 32.0 32.9 
+
+as an optional variant and report its effect only in ablations in Tab. 8. We find on its own it improved performance, but was harmful when combined with KFR and RC. 
+
+## D Ablation Hyperparameters and Column Definitions 
+
+Tab. 8 provides additional ablations for the FuTCR components and hyperparameters on ADE20K 100–5. The columns RC and KFR indicate whether region contrast and known-future repulsion are enabled, respectively. RC corresponds to the pixel-to-region contrastive objective that pools confident future-like mask regions into prototypes and encourages sampled pixels from the same region to align with their prototype while separating different region prototypes. KFR denotes the known-future repulsion objective, which pushes unlabeled or future-like features away from known-class prototypes to reduce future–old class confusion. The mask threshold τmask controls which pixels are included when forming a region prototype, while “PPR” (Pixels per region) specifies the number of sampled pixel features used from each selected region. The coefficient λFA weights the future-aware branch, and λrep controls the strength of the repulsion term. The “Aux. cls.” column indicates whether the optional auxiliary clustering classifier is enabled; this branch was explored as an additional way to organize future-like prototypes, but was not used in the final model because it did not consistently improve validation performance. We report validation PQ All under both controlled data streams. The 100–75 stream denotes the overlap setting, where base-step images may reappear in later incremental steps, while 0–75 denotes the disjoint-image setting, where base-step and incremental-step images are disjoint but the class schedule is kept fixed. Following our experimental protocol, hyperparameters are selected using validation performance only; test results are shown for transparency and are not used for model selection. The ablation results show that the selected FuTCR configuration is chosen by validation performance. Removing the auxiliary classifier improves the validation average compared with the full auxiliary variant, suggesting that the main gains come from the combination of region contrast and known-future repulsion rather than from auxiliary prototype clustering. KFR is especially important because it directly targets the collapse of future-like regions into known-class decision regions, while RC is most effective when paired with KFR. 
+
+## E Training Overview. 
+
+As detailed in Algorithm 1, at each incremental step t, FuTCR first identifies query regions that predominantly cover unlabeled pixels and treats them as potential future-class regions. These regions are used to form prototypes that supervise a future-targeted contrastive objective in the shared query feature space, while an additional repulsion term pushes unlabeled features away from known-class prototypes. The final objective combines standard panoptic supervision with these future-aware contrastive and repulsive regularizers. 
+
+## F Impact Statement. 
+
+FuTCR advances continual representation learning for long-lived perception systems, with potential benefits for robotics, assistive sensing, and autonomous systems where models must adapt to newly observed categories over time. However, improved continual perception could also be used in 17 Algorithm 1 FuTCR Training at Incremental Step t 
+
+> 1:
+
+Input: Query-based panoptic model fθt (backbone fbackbone , decoder fdec , classifier weights Wt); incremental dataset Dt with current classes Ct and known classes C≤t; mask threshold τmask ,contrast temperature τ , repulsion margin γ; loss weights λreg , λ rep . 
+
+> 2:
+
+Output: Updated parameters θt. 
+
+> 3:
+
+for each minibatch {(xb, y b)}Bb=1 ⊂ D t do  
+
+> 4:
+
+/* Supervised panoptic learning on Ct */  
+
+> 5:
+
+for b = 1 to B do  
+
+> 6:
+
+Fb ← fbackbone (xb) 
+
+> 7:
+
+ht(xb) ← fdec (Fb) 
+
+> 8:
+
+{ ˆmb,q }Qq=1 ← fθt (xb) 
+
+> 9:
+
+end for  
+
+> 10:
+
+Compute panoptic loss Lpan on Ct using ( ˆ mb,q , y b) 
+
+> 11:
+
+/* Future-region discovery */  
+
+> 12:
+
+Rfut ← ∅  
+
+> 13:
+
+for b = 1 to B do  
+
+> 14:
+
+Identify unlabeled pixels in yb w.r.t. C≤t 
+
+> 15:
+
+for q = 1 to Q do  
+
+> 16:
+
+if ˆmb,q is confident, sufficiently large, and majority-supported on unlabeled pixels 
+
+then  
+
+> 17:
+
+Rfut ← R fut ∪ { (b, q )} 
+
+> 18:
+
+end if  
+
+> 19:
+
+end for  
+
+> 20:
+
+end for  
+
+> 21:
+
+/* Future-targeted region contrast */  
+
+> 22:
+
+P ← ∅ ▷ region prototypes  
+
+> 23:
+
+Collect pixel anchors {fn}Nn=1  
+
+> 24:
+
+for each r = ( b, q ) ∈ R fut do  
+
+> 25:
+
+Ωr ← { (i, j ) | ˆmb,q (i, j ) > τ mask } 
+
+> 26:
+
+pr ← 1 
+
+> |Ωr|
+
+P 
+
+> (i,j )∈Ωr
+
+Fb(: , i, j ) 
+
+> 27:
+
+Sample pixel features from Ωr as anchors {fn}n:r(n)= r 
+
+> 28:
+
+P ← P ∪ { pr } 
+
+> 29:
+
+end for  
+
+> 30:
+
+Compute region-level InfoNCE loss Lreg over {fn} and P with temperature τ 
+
+> 31:
+
+/* Known-class repulsion on unlabeled pixels */  
+
+> 32:
+
+Collect unlabeled pixel features {zu}u∈I unlb from {Fb} 
+
+> 33:
+
+Let {wc}c∈C ≤t be normalized prototypes derived from Wt 
+
+> 34:
+
+for each u ∈ I unlb do  
+
+> 35:
+
+c⋆(u) ← arg max c∈C ≤t sim( zu, wc) 
+
+> 36:
+
+end for  
+
+> 37:
+
+Compute repulsion loss Lrep with margin γ using {zu} and {c⋆(u)} 
+
+> 38:
+
+/* Final objective and update */  
+
+> 39:
+
+Ltotal ← L pan + λreg Lreg + λrep Lrep  
+
+> 40:
+
+Update θt via backpropagation on Ltotal  
+
+> 41:
+
+end for 
+
+surveillance or other monitoring applications, and failures in safety-critical settings could lead to incorrect recognition of newly introduced objects. We therefore view FuTCR as a research contribution rather than a deployment-ready system, and recommend careful evaluation under domain shift, fairness, and safety constraints before real-world use. 
+
+## G Datasets, Codebases, and Licenses. 
+
+We conduct experiments on ADE20K [ 58 ], following the continual panoptic segmentation protocols of prior work. ADE20K is publicly available for research use under its dataset terms. Our implemen-tation builds on Mask2Former [ 59 ] and Detectron2, which are publicly released research codebases. 18 We also compare against and/or adapt publicly available implementations of continual panoptic segmentation baselines including SimCIS [ 23 ], CoMBO [ 21 ], BalConpas [ 30 ], and Eclipse [ 28 ]. We cite the original papers and use these assets according to their released licenses and terms of use. 19

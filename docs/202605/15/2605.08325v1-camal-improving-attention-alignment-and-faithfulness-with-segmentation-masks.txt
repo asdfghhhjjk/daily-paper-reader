@@ -1,0 +1,573 @@
+Title: CAMAL: Improving Attention Alignment and Faithfulness with Segmentation Masks
+
+URL Source: https://arxiv.org/pdf/2605.08325v1
+
+Published Time: Tue, 12 May 2026 00:08:54 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# CAMAL: Improving Attention Alignment and Faithfulness with Segmentation Masks 
+
+Rajdeep Singh Hundal 
+
+National University of Singapore 
+
+rajdeep@u.nus.edu 
+
+Yan Xiao 
+
+Sun Yat-sen University 
+
+xiaoy367@mail.sysu.edu.cn 
+
+Jin Song Dong 
+
+National University of Singapore 
+
+dcsdjs@nus.edu.sg 
+
+Manuel Rigger 
+
+National University of Singapore 
+
+rigger@nus.edu.sg 
+
+# Abstract 
+
+Many vision datasets now provide segmentation masks in addition to annotated images to support a wide range of tasks. In this work, we propose Class Activa-tion Map Attention Learning (CAMAL), an efficient and scalable method that utilizes segmentation masks to improve attention alignment and faithfulness in vision models. Specifically, attention alignment refers to the degree to which a model’s attention aligns with ground-truth discriminative regions, while attention faithfulness refers to the degree to which a model’s attention influences its decision. Improving both attention alignment and faithfulness is essential for ensuring that model attention is both spatially accurate and causally meaningful. To improve attention alignment and faithfulness in vision models, CAMAL first extracts the model’s attention for each image during training and then compares the attention to ground-truth discriminative regions obtained from the corresponding segmentation masks. CAMAL then acts as an auxiliary regularizer, encouraging attention that aligns with ground-truth discriminative regions, while suppressing attention else-where. We evaluated CAMAL across two learning paradigms— Deep Learning 
+
+(DL) and Deep Reinforcement Learning (DRL)—and observed consistent, signif-icant improvements in both attention alignment and faithfulness. In particular, CAMAL yields statistically significant gains in attention alignment across all set-tings, and improves attention faithfulness by over 35% compared to recent work. Moreover, we show that improved attention alignment and faithfulness enhance explainability, while yielding improved or comparable generalization performance without increasing inference cost. These findings demonstrate that the spatial information contained within segmentation masks can be effectively leveraged to guide model attention across learning tasks. 
+
+# 1 Introduction 
+
+As vision models are increasingly deployed in real-world applications, it is imperative to understand their decisions and correct them when necessary. To this end, Class Activation Maps (CAMs) [Zhou et al., 2016] are widely used to interpret vision models. They highlight a model’s attention, that is, the model’s perceived discriminative regions in an image. This provides an explanation of which regions the model attends to during predictions. However, as an explainability technique, CAM approaches cannot ensure attention alignment —the degree to which a model’s attention aligns with ground-truth discriminative regions. In fact, recent work by Ye et al. [2026] shows that models are still susceptible to shortcut learning, mistaking spurious regions for discriminative ones. Furthermore, as demonstrated by Adebayo et al. [2018], attention alignment alone does not guarantee attention faithfulness —the 
+
+> Preprint.
+> arXiv:2605.08325v1 [eess.IV] 8 May 2026
+
+degree to which a model’s attention influences its decision. That is to say, attention might itself be inconsequential to the model’s decision-making process. Thus, CAMs offer interpretation, but lack corrective capability. To address this gap in corrective capability, recent work have proposed attention supervision . No-tably, Yang et al. [2026], Nautiyal et al. [2025], and Petryk et al. [2022] proposed auxiliary training objectives that minimize the distance between a model’s attention and reference regions that indicate where the attention should be. A common characteristic of these works is that they all use CLIP-based priors —pretrained zero-shot models originally proposed by OpenAI [Radford et al., 2021]—to derive the reference regions. We term these reference regions as pseudo-discriminative regions , a proxy for ground-truth discriminative regions. Crucially, because these priors originate from pretrained zero-shot models optimized for broad generalization rather than precise spatial localization, the reference regions they project may only coarsely approximate true discriminative regions [Li et al., 2022], a phenomenon we empirically observed in a pilot study (see Appendix B). Consequently, this leads to attention being corrected with signals that are themselves untrustworthy .Many vision datasets now provide segmentation masks in addition to annotated images to support a wide range of tasks, including those used in Deep Learning (DL) [Illarionova et al., 2025, Krasin et al., 2022, Lee et al., 2020] and Deep Reinforcement Learning (DRL) [Li et al., 2023, Wydmuch et al., 2019, Dosovitskiy et al., 2017]. Furthermore, modern developments such as SAM 3 by Meta [Carion et al., 2025] significantly reduce the cost of obtaining high-quality segmentation masks by enabling prompt-based automatic segmentation. Crucially, these segmentation masks are typically human-verified, and thus serve as a trustworthy signal that reflects ground-truth discriminative regions. This increased accessibility to segmentation masks raises a natural question: can the well-structured, complete, and accurate spatial information provided within these masks be leveraged to reliably correct attention in vision models? In this work, we propose Class Activation Map Attention Learning (CAMAL) as an efficient and scalable approach towards attention supervision that leverages segmentation masks to reliably correct attention in vision models. Specifically, CAMAL leverages these masks to identify and encourage attention within ground-truth discriminative regions, while suppressing attention in spurious regions. At its core, CAMAL is based on the premise that attention supervision must (1) be grounded in trustworthy reference regions to ensure reliability, and (2) scale efficiently. We provide our source code at https://doi.org/10.5281/zenodo.20084662 to support reproducibility. Our contributions are: 1. We introduce CAMAL, a principled approach to attention supervision that grounds attention learning in trustworthy reference regions obtained from segmentation masks. 2. We formulate a mask-guided auxiliary regularization objective that jointly encourages atten-tion within ground-truth discriminative regions and suppresses attention in spurious regions. In addition, we propose an efficient batch-level attention extraction method that reduces the typical computational overhead from O(B) to O(1) , enabling scalable supervision. 3. We provide a comprehensive and statistically rigorous evaluation of attention supervision across two learning paradigms, DL and DRL. In our evaluation, we show that CAMAL achieves consistent, statistically significant improvements in attention alignment and over 35% gains in attention faithfulness, while maintaining improved or comparable generaliza-tion across 18 DL settings and 4 DRL environments. 
+
+# 2 Related Work 
+
+Recent work by Yang et al. [2026], Nautiyal et al. [2025], and Petryk et al. [2022] improve attention through auxiliary regularization objectives that align attention with reference regions (see Appendix B for a more detailed discussion of these works). Beyond auxiliary regularization objectives, several other approaches have been explored for improving attention in vision models. Among these, input augmentation approaches improve attention by modifying training images. For example, Kumar Singh and Jae Lee [2017] randomly masked patches in training images, while Yun et al. [2019] swapped patches instead. Architectural approaches in the same vein have also been explored. For exam-ple, Zhang et al. [2018] augmented the network architecture by introducing an additional classifier head that takes masked feature maps as input, while Choe and Shim [2019] introduced a self-attention mechanism for each feature map. Both input and architectural augmentation approaches encourage the model to discover a broader set of ground-truth discriminative regions instead of relying on the 2Extractor 
+
+Feature  c Ground-truth 
+
+Classifier   
+
+> Activations
+> Grad-CAM Gradients
+> ReLU → Upsample → Normalize
+> Maximize Mean
+> In-Mask Attention
+> Hadamard
+> Product
+> CAMAL Regularizer (Training)
+> Minimize Mean
+> Out-of-Mask Attention
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Training Gradients
+> Multiplication
+
+Figure 1: Architecture diagram for CAMAL. Given an input image Ic passed through a model (steps 1–2), CAMAL extracts the model’s attention Hc (steps 3–4) and compares it with ground-truth discriminative regions obtained from the corresponding segmentation mask M c (step 5). Lastly, CAMAL regularizes the network by encouraging attention within ground-truth discriminative regions (α ↑) while suppressing attention in spurious regions ( β ↓) (steps 5–6). Importantly, while illustrated with a Convolutional Neural Network (CNN) for clarity, CAMAL can be naturally extended to a wide range of network architectures and tasks. most discriminative regions. CAMAL shares a similar motivation, but instead improves attention directly through an auxiliary regularization objective grounded in trustworthy reference regions, rather than indirectly through input or network augmentation. 
+
+# 3 Method 
+
+We ground attention supervision in trustworthy reference regions obtained directly from segmentation masks, formulating a mask-guided auxiliary regularization objective that explicitly encourages attention within ground-truth discriminative regions while suppressing attention in spurious regions (see Figure 1). In this section, we first discuss the proposed auxiliary regularization objective, followed by batch-level optimizations to make attention supervision feasible for realistic training regimes, and finally describe how CAMAL can be naturally extended to a wide range of network architectures and tasks. 
+
+3.1 CAMAL Regularization Objective 
+
+At a high level, the CAMAL regularization objective quantifies and promotes agreement with ground-truth discriminative regions while penalizing agreement with spurious regions. To formalize this regularization objective, let Ic ∈ R3×H×W denote an input image with ground-truth class 
+
+c. We define the model’s attention for Ic as a spatial heatmap Hc ∈ [0 , 1] H×W that captures the model’s perceived discriminative regions for class c (steps 1–4 in Figure 1). In this work, we instantiate Hc with Grad-CAM [Selvaraju et al., 2017], a gradient-based technique that extracts attention. However, CAMAL is not tied to Grad-CAM and can operate with any attention extraction 3technique. Correspondingly, let M c ∈ { 0, 1}H×W denote the segmentation mask for Ic, where 
+
+Mij = 1 indicates the ground-truth discriminative regions for class c. Our objective is to encourage the model’s attention Hc to align with M c (steps 5–6 in Figure 1). Intuitively, this biases the model to rely on ground-truth discriminative regions enclosed by the segmentation masks when making decisions, rather than spurious regions. To realize this objective, we decompose a model’s attention Hc into two components: attention within ground-truth discriminative regions and attention outside them. Specifically, we define 
+
+α =
+
+P
+
+> ij
+
+Hcij M cij 
+
+P
+
+> ij
+
+M cij 
+
+and β =
+
+P
+
+> ij
+
+Hcij (1 − M cij )
+
+P
+
+> ij
+
+(1 − M cij ) (1) where α measures the mean attention within ground-truth discriminative regions, while β measures the mean attention outside them (step 5 in Figure 1). Recent work on attention supervision typically employ regularizers that focus solely on suppressing attention in spurious regions, that is, by minimiz-ing terms analogous to β [Nautiyal et al., 2025, Petryk et al., 2022]. However, such formulations do not explicitly account for attention within ground-truth discriminative regions and thus, fail to capture the relative discrepancy between model attention and the ground-truth. We empirically demonstrate this limitation in Appendix B. In contrast, our formulation jointly considers both α and β, enabling a direct measure of how far attention deviates from the ground-truth. A well-behaved model should attend more towards ground-truth discriminative regions ( α ↑) and less towards spurious regions ( β ↓). Accordingly, we define an auxiliary regularization objective that encourages α to be large and β to be small by minimizing β − α:
+
+L =
+
+> LCE
+
+z }| {
+
+− 1
+
+B
+
+X
+
+> b
+
+log( pb,y b ) + 
+
+> LCAM AL
+
+z }| {
+
+λB
+
+X
+
+> b
+
+(βb − αb) (2) Here, L is minimized over a mini-batch of size B where b ∈ { 1, ..., B } and LCAM AL acts as an auxiliary regularizer for cross-entropy loss LCE (step 6 in Figure 1). λ controls CAMAL’s regularizing impact and can be tuned empirically. Overall, CAMAL introduces an additional mask-guided auxiliary regularizer to the de facto objective, which emphasizes in-mask attention via α and suppresses out-of-mask attention via β.
+
+3.2 Efficient Batch-Level Attention Supervision 5.3 
+
+> 11.7
+> 28.4
+> 28.6
+> 30.9
+> 86.6
+> Model Parameters (M)
+> 32
+> 64
+> 128
+> 256
+> 512
+> 1024
+> Batch Size  2000
+> 4000
+> 6000
+> 8000
+> Training Overhead (h)
+
+Figure 2: Training overhead incurred by per-sample attention extraction rel-ative to batch-level attention extraction. Values are based on empirical measure-ments from our experiments where avail-able, with remaining points estimated from known scaling trends. Existing attention supervision approaches do not scale well to large datasets, as the gradient-based attention ex-traction techniques they rely on are typically formulated on a per-sample basis. As shown in Figure 2, the training overhead of per-sample attention extraction grows linearly with batch size, quickly becoming prohibitive for larger models and realistic training regimes. Concretely, we con-sider Grad-CAM, a representative gradient-based attention extraction technique: 
+
+Gc = ReLU 1
+
+K
+
+X
+
+> kwk
+
+z }| {
+
+1
+
+HW 
+
+X
+
+> ij
+
+∂y c
+
+∂A kij 
+
+!
+
+Ak
+
+!| {z }
+
+> linear combination
+
+(3) Here, the Grad-CAM for an image Ic classified by a CNN is defined by Gc where c, wk, and Ak denote the ground-truth class, weight for the k-th feature map, and k-th fea-ture map respectively (steps 1–4 in Figure 1). Crucially, to extract Gc for Ic in a mini-batch of size B, a single isolated backward pass from the corresponding scalar logit yc is required. This translates to an additional B backward passes per mini-batch. To the best of our knowledge, recent work in attention 4supervision leveraging gradient-based attention extraction techniques do not explicitly formalize how to address this bottleneck and implement their approach efficiently at scale [Yang et al., 2026, Nautiyal et al., 2025, Petryk et al., 2022]. However, this is crucial as attention supervision must be performed at every training step, rendering per-sample attention extraction computationally inefficient, as shown in Figure 2. To address this, we introduce and formalize an efficient, scalable approach towards extracting attention for supervision with gradient-based techniques. Specifically, we sum the corresponding 
+
+yc logits across the mini-batch into a single scalar and perform a backward pass with respect to this scalar to extract attention for all samples in the mini-batch. Although counterintuitive, as this might seem like mixing attention signals across the mini-batch, this is equivalent to computing attention for each sample individually, while reducing the computational complexity from O(B) to 
+
+O(1) (see Proposition 1 in Appendix B for proof). Using Grad-CAM in Equation 3 to illustrate this operation, the weight wk for the k-th feature map Ak is reformulated as 
+
+1
+
+HW 
+
+X
+
+> ij
+
+∂y c
+
+∂A kij 
+
+| {z }
+
+> wk
+
+→ 1
+
+HW 
+
+X
+
+> ij
+
+∂∂A kij 
+
+> summed scalar
+
+z }| { X
+
+> b
+
+ycb
+
+> b
+
+!| {z } 
+
+> reformulated wk
+
+(4) where b ∈ { 1, ..., B } denotes samples in a mini-batch and the gradients for a sample are computed with respect to the summed scalar. Furthermore, this formulation naturally extends to other gradient-based attention extraction techniques, such as DiffGradCAM [Piland et al., 2025], LayerCAM [Jiang et al., 2021], Integrated Gradients [Sundararajan et al., 2017], and SmoothGrad [Smilkov et al., 2017]. 
+
+3.3 Architecture and Task Agnosticism 
+
+While presented in Figure 1 with respect to a CNN-based classifier for clarity, CAMAL can be extended to any network architecture as long as spatial feature maps can be extracted from interme-diate representations. For example, transformers can be naturally adapted to work with CAMAL. Let X ∈ RB×N ×C denote the transformer output where B, N , and C correspond to the batch, sequence, and channel dimensions respectively. Assuming patch-based tokenization, X can be reshaped into X ∈ RB×H×W ×C , where H and W correspond to the height and width, yielding spatial feature maps analogous to those produced by CNNs. However, the exact semantics of this transformation might differ depending on the network architecture. For example, N = H × W + 1 
+
+for ViT by Dosovitskiy et al. [2021], where the additional token corresponds to the class token and is omitted from the transformation. In contrast, for Swin-V2 by Liu et al. [2022a], N is already in the form of H × W and thus, no transformation is required. This transformation can also be ignored for hybrid architectures like MaxViT by Tu et al. [2022], where convolutional stages already produce explicit spatial feature maps. Furthermore, CAMAL extends to any task with a well-defined scalar target from which attention can be computed. For example, in our experiments, we evaluate CAMAL in a weakly-supervised setting with DRL. Specifically, we augment the Proximal Policy Optimization (PPO) objective [Schulman et al., 2017] as L = LP P O + LCAM AL . Unlike supervised learning, DRL does not provide ground-truth labels—there is no known correct action for a given state s. Instead, the actor network outputs a probability distribution over actions and the policy learns to select actions by maximizing the expected return. As this does not yield a scalar supervision signal analogous to a ground-truth logit 
+
+yc, we instead use the critic’s value estimate V (s)—the expected return from state s—as the target for attention computation. 
+
+# 4 Experiments 
+
+We compare the effectiveness of CAMAL in attention alignment, faithfulness, and generalization against two baselines, Prior and Vanilla . The former uses pseudo-discriminative regions derived from CLIP as reference regions ( i.e., similar to recent work), while the latter does not incorporate any form of attention supervision, and is trained solely on the task objective. Specifically, we trained six DL models of varying sizes and layer compositions on three challenging fine-grained classification datasets, where classes are highly similar and require learning subtle visual distinctions. 5Table 1: Comparison of attention alignment between CAMAL and Prior in DL. The evaluation metric is test IoU (mean ± standard deviation). Results in bold denote cases where CAMAL achieves a higher mean than Prior, with the difference being statistically significant under WSRT ( p < 0.05 ). Model BUSI Oxford-IIIT-Pet Oxford-Flower CAMAL Prior CAMAL Prior CAMAL Prior ResNet 33.8 ± 1.9 2.2 ± 0.6 67.1 ± 1.5 2.5 ± 0.6 69.4 ± 1.1 5.3 ± 0.6 ConvNeXt 35.6 ± 3.8 2.7 ± 0.5 71.3 ± 0.6 3.8 ± 0.5 71.0 ± 1.1 9.9 ± 2.0 EfficientNet 35.9 ± 2.9 2.6 ± 0.8 71.3 ± 0.7 4.4 ± 0.8 71.7 ± 0.8 9.6 ± 0.7 ViT 42.8 ± 5.5 1.8 ± 1.1 80.2 ± 0.4 3.2 ± 0.4 80.7 ± 0.9 10.1 ± 1.0 Swin 38.0 ± 3.0 2.8 ± 0.6 73.2 ± 0.4 5.1 ± 0.4 72.3 ± 0.6 12.5 ± 1.0 MaxViT 38.7 ± 1.5 2.6 ± 0.4 74.0 ± 0.4 4.8 ± 1.1 72.3 ± 0.7 11.5 ± 0.7 The evaluated models comprise ResNet-18 [He et al., 2016], ConvNeXt-T [Liu et al., 2022b], EfficientNet-B0 [Tan and Le, 2019], ViT-B/16 [Dosovitskiy et al., 2021], SwinV2-T [Liu et al., 2022a], and MaxViT-T [Tu et al., 2022]. The evaluated datasets comprise BUSI [Al-Dhabyani et al., 2020], Oxford-IIIT-Pet [Parkhi et al., 2012], and Oxford-Flower [Nilsback and Zisserman, 2008]. In addition, we explore the effectiveness of attention supervision in a weakly-supervised setting by extending the comparison of CAMAL and Vanilla to DRL across four ViZDoom [Kempka et al., 2016] environments under the PPO objective. In particular, ViZDoom is a visual DRL benchmark based on the Doom game engine, featuring first-person shooter environments. We select the Basic, DefendLine, DefendCenter, and TakeCover environments to cover diverse task demands, ranging from single-target combat to multi-threat engagement and pure evasive control. For the DL experiments, we use 10-fold cross-validation for each model-dataset-method combination, compute 95% confidence intervals (CI) with mean ± 1.96 × standard error, and assess statistical significance with the Wilcoxon Signed-rank Test (WSRT) [Rainio et al., 2024, Demšar, 2006]. For the DRL experiments, we conduct 5 trials for each environment-method combination, analyze the results with Stratified Bootstrap Confidence Intervals (SBCI), and assess statistical significance with the Probability of Improvement (POI) [Agarwal et al., 2021]. Both SBCI and POI are computed using the open-source library by Agarwal et al. [2021]. More details on the statistical methods and experimental settings can be found in Appendix A and Appendix C respectively. 
+
+4.1 Attention Alignment 
+
+We quantitatively assess attention alignment by measuring the extent to which model attention over-laps with ground-truth discriminative regions by computing their Intersection-over-Union (IoU), a well-established metric widely used in computer vision tasks. This addresses two key limitations in recent work. The first is the lack of quantitative evaluation for attention alignment [Yang et al., 2026, Nautiyal et al., 2025], potentially favoring methods that produce visually compelling expla-nations Adebayo et al. [2018]. The second is the reliance on the pointing game experiment [Petryk et al., 2022, Figure 5], which considers attention correct as long as the pixel with the highest attention lies within ground-truth discriminative regions, thereby overlooking attention in spurious regions. Quantitative and qualitative results for the DL experiments are shown in Table 1 and Figure 3 respectively. CAMAL consistently outperforms Prior across all models and datasets, achieving substantially higher IoU scores, with all improvements being statistically significant under WSRT. As shown in Figure 3, CAMAL focuses more on discriminative regions, while Prior often attends to spurious regions. The bottom-right panel further illustrates this difference by visualizing the spatial variance of attention across datasets. CAMAL exhibits structured variance concentrated around object boundaries, aligning with the ground truth. This produces a roughly circular pattern, as objects are typically centered and variations occur primarily along their edges. In contrast, Prior concentrates variance in peripheral regions, suggesting that attention is often allocated to spurious areas. We omit the DL comparison with Vanilla for brevity, as it exhibits quantitatively and qualitatively similar trends, with CAMAL consistently outperforming Vanilla (see Appendix B for full results). 6BUSI CAMAL Prior Oxford-IIIT-Pet CAMAL Prior      
+
+> Oxford-Flower CAMAL Prior G. Truth Var CAMAL Var Prior Var
+
+Figure 3: Comparison of attention alignment between CAMAL and Prior in DL. For each dataset, we present an image overlaid with its ground-truth discriminative regions, alongside the corresponding attention from CAMAL and Prior. A single representative example per dataset is shown for brevity; however, similar patterns are consistently observed across datasets. 20 40 60    
+
+> Vanilla
+> CAMAL
+> Mean IoU (%) 0.95 1.00 1.05
+> P(Left IoU > Right IoU)
+> CAMAL Vanilla
+
+Figure 4: Comparison of attention alignment between CAMAL and Vanilla in DRL. The left figure uses SBCI to statistically analyze the results across environments and trials while the right figure uses POI to determine if the observed differences are statistically significant ( P (Left IoU > Right IoU ) >
+
+0.5 ∧ 0.5 /∈ CI ). The shaded regions denote 95% confidence bands. Quantitative results for the DRL experiments are shown in Figure 4 (see Appendix B for qualitative results). Under SBCI analysis, where results across multiple environments and trials are repeatedly sampled and aggregated to obtain point estimates with corresponding 95% CIs, CAMAL achieves a substantially higher mean IoU than Vanilla, indicating improved attention alignment under the PPO objective. Furthermore, the POI analysis confirms that this difference in IoU is statistically significant, with both the point estimate and the lower bound of the CI exceeding 0.5. We omit including a comparison with Prior for DRL as its reliance on pseudo-discriminative regions makes it impractical in an online learning setting, where such regions will need to be recomputed for newly generated observations, significantly increasing inference overhead. 
+
+Key takeaway: These findings show that CAMAL reliably yields better-aligned attention in both DL and DRL, consistently outperforming Prior and Vanilla, underscoring that aligned attention is best achieved when attention supervision is grounded in trustworthy regions. 
+
+4.2 Attention Faithfulness 
+
+We quantitatively assess attention faithfulness to determine whether the model’s attention reflects features that truly influence its predictions. Specifically, we assess the causal impact of attention by progressively removing and inserting pixels in order of their attention-attributed importance and measuring the resulting change in model confidence ( i.e., softmax output). Here, removal starts from the original image and progressively masks pixels to zero in order of importance, while insertion starts from an all-zero image and progressively restores pixels in the same order. If the attention is faithful, removing highly attended regions should significantly decrease model confidence, while inserting them should significantly increase it. This evaluation protocol follows well-established practices in Explainable Artificial Intelligence (XAI) [Fong et al., 2019, Petsiuk et al., 2018, Zeiler and Fergus, 2014]; however, similar to attention alignment, recent work on attention supervision has yet to incorporate such quantitative evaluations of attention faithfulness. 70 25 50 75 100          
+
+> Top-k% Pixels Removed
+> 0.0
+> 0.5
+> 1.0
+> Confidence
+> 0510
+> 0.85
+> 0.90
+> 025 50 75 100
+> Top-k% Pixels Inserted
+> 0510
+> 0.0
+> 0.1
+> CAMAL Prior
+
+Figure 5: Comparison of attention faithfulness between CAMAL and Prior in DL. Model confidence is evaluated under removal and insertion of the top-k% most important pixels determined by the model’s attention. Curves are aggregated over all model-dataset combinations, with shaded regions denoting 95% confidence bands. Table 2: Comparison of generalization between CAMAL and Vanilla in DL. The evaluation metric is test accuracy (mean ± standard deviation). Results in bold denote cases where CAMAL achieves a higher mean than Vanilla, with the difference being statistically significant under WSRT ( p < 0.05 ). Results that are underlined denote cases where CAMAL achieves a higher mean without statistical significance. Model BUSI Oxford-IIIT-Pet Oxford-Flower CAMAL Vanilla CAMAL Vanilla CAMAL Vanilla ResNet 84.1 ± 3.0 80.1 ± 3.7 78.2 ± 1.5 73.9 ± 4.0 92.4 ± 1.0 90.1 ± 2.5 ConvNeXt 83.8 ± 4.4 71.9 ± 2.5 81.5 ± 1.8 72.8 ± 3.8 93.5 ± 1.7 92.6 ± 1.1 EfficientNet 85.6 ± 4.0 83.3 ± 6.3 85.6 ± 1.2 83.4 ± 2.2 95.6 ± 1.0 94.9 ± 1.5 ViT 82.3 ± 2.8 70.3 ± 10.7 84.0 ± 3.9 86.6 ± 3.1 93.8 ± 1.0 88.6 ± 9.9 Swin 87.8 ± 3.2 85.3 ± 5.5 90.8 ± 1.3 89.4 ± 1.6 97.5 ± 1.1 97.0 ± 1.2 MaxViT 89.6 ± 3.0 89.0 ± 2.3 93.9 ± 1.2 93.8 ± 0.9 98.2 ± 0.7 98.6 ± 0.5 The results for the DL experiments are shown in Figure 5. CAMAL consistently exhibits more faithful attention than Prior under both removal and insertion. Under removal, model confidence drops substantially faster for CAMAL, indicating that its attention more accurately identifies features critical to the prediction. In contrast, Prior shows a more gradual decline, suggesting that its attention is less concentrated on truly influential regions. This is further reflected in the area under the curve (AUC), where CAMAL achieves 39% lower AUC than Prior. Under insertion, CAMAL achieves a faster recovery in model confidence as pixels are restored, further demonstrating that its attention captures features that are causally relevant to the model’s output. Consistently, CAMAL attains 35.3% higher AUC than Prior under insertion. These trends are most pronounced where 
+
+k < 50 , which typically corresponds to the object region; this expected behavior is clearly followed by CAMAL but not by Prior. Similar to attention alignment, we omit the DL comparison with Vanilla for brevity, as it exhibits similar trends, with CAMAL consistently outperforming Vanilla (see Appendix B for full results). Furthermore, we do not include a comparison for DRL here as the model’s output may depend on future states, making per-frame removal and insertion less meaningful. 
+
+Key takeaway: These findings show that CAMAL reliably yields more faithful attention, consistently outperforming Prior and Vanilla, further demonstrating that faithful attention is best achieved when attention supervision is grounded in trustworthy regions. 
+
+4.3 Generalization Performance 
+
+We quantitatively assess whether attention supervision improves generalization reliably by evaluating classification accuracy for DL and mean return for DRL. The results for the DL experiments against Vanilla are shown in Table 2. CAMAL consistently outperforms Vanilla, achieving statistically signif-8180 210 240 270     
+
+> Vanilla
+> CAMAL
+> Mean Return 0.3 0.4 0.5 0.6
+> P(Left Return > Right Return)
+> CAMAL Vanilla
+
+Figure 6: Comparison of generalization between CAMAL and Vanilla in DRL. The left figure uses SBCI to statistically analyze the results across environments and trials while the right figure uses POI to determine if the observed differences are statistically significant ( P (Left Return >
+
+Right Return ) > 0.5 ∧ 0.5 /∈ CI ). The shaded regions denote 95% confidence bands. Table 3: Comparison of generalization between CAMAL and Prior in DL. The evaluation metric is test accuracy (mean ± standard deviation). Results in bold denote cases where CAMAL achieves a higher mean than Prior, with the difference being statistically significant under WSRT (p < 0.05 ). Results that are underlined denote cases where CAMAL achieves a higher mean without statistical significance. Model BUSI Oxford-IIIT-Pet Oxford-Flower CAMAL Prior CAMAL Prior CAMAL Prior ResNet 83.8 ± 3.2 82.1 ± 4.4 77.8 ± 2.6 73.1 ± 1.5 92.3 ± 1.0 89.5 ± 1.8 ConvNeXt 82.3 ± 4.3 76.0 ± 3.5 80.6 ± 2.1 75.5 ± 2.4 92.9 ± 2.4 91.7 ± 2.5 EfficientNet 87.2 ± 5.1 85.0 ± 4.2 85.4 ± 1.4 85.7 ± 1.3 95.6 ± 0.8 96.1 ± 1.1 ViT 83.6 ± 5.4 82.6 ± 5.2 85.5 ± 1.7 85.9 ± 1.5 92.5 ± 2.9 94.2 ± 1.1 Swin 85.5 ± 4.5 85.5 ± 4.4 90.6 ± 1.4 91.5 ± 1.1 97.3 ± 0.9 98.1 ± 0.4 MaxViT 89.9 ± 3.9 90.3 ± 3.4 94.1 ± 1.3 94.3 ± 1.1 98.8 ± 0.3 98.6 ± 0.4 icant improvements in classification accuracy across the majority of the model-dataset combinations. Even in cases where improvements are not statistically significant, CAMAL remains competitive, never exhibiting substantial degradation relative to Vanilla. This shows that attention supervision is indeed effective in improving generalization, but its impact may vary across architectures and datasets, potentially due to how features and spatial dependencies are represented. In such cases, the task objective alone may already be sufficient to learn reasonably well-aligned and faithful representations, thereby reducing the benefit of attention supervision. The results for the DRL experiments against Vanilla are shown in Figure 6. Using SBCI analysis, CAMAL attains a higher mean return than Vanilla across environments and trials. This is, however, not statistically significant under POI, indicating that while CAMAL shows a trend towards improved performance, the gains are not consistently reliable across environments. This suggests that attention supervision requires further refinement in more complex tasks, such as accounting for the underlying dynamics and reward structure in DRL. Finally, the results for the DL experiments against Prior are shown in Table 3. CAMAL performs on par with Prior across models and datasets, achieving higher classification accuracies in half of the model-dataset combinations. 
+
+Key takeaway: These findings show that CAMAL is comparable to Prior and often out-performs Vanilla in generalization, suggesting that attention supervision is beneficial for generalization regardless of how reference regions are obtained. Furthermore, the comparable performance between CAMAL and Prior in generalization suggests that, among methods incorporating attention supervision, the primary gains may lie more in improving attention quality than in substantially increasing task performance. 
+
+# 5 Conclusion 
+
+We have proposed CAMAL, a principled approach to attention supervision that leverages segmen-tation masks as trustworthy reference regions to guide model attention. In addition, we introduced an efficient batch-level attention extraction method that enables scalable supervision. CAMAL consistently improves attention alignment and faithfulness, while yielding improved or comparable generalization performance. Importantly, our results suggest that the primary benefits of attention 9supervision lie in improving the quality of learned attention, with gains in task performance being more modest and context-dependent. Taken together, these findings highlight that realizing the full potential of attention supervision requires grounding it in trustworthy reference regions, establishing a reliable baseline for future attention supervision methods. 
+
+# References 
+
+Julius Adebayo, Justin Gilmer, Michael Muelly, Ian Goodfellow, Moritz Hardt, and Been Kim. Sanity checks for saliency maps. Advances in neural information processing systems , 31, 2018. Rishabh Agarwal, Max Schwarzer, Pablo Samuel Castro, Aaron C Courville, and Marc Bellemare. Deep reinforcement learning at the edge of the statistical precipice. Advances in Neural Information Processing Systems , 34, 2021. Walid Al-Dhabyani, Mohammed Gomaa, Hussien Khaled, and Aly Fahmy. Dataset of breast ultrasound images. Data in Brief , 28:104863, 2020. ISSN 2352-3409. doi: https://doi.org/10. 1016/j.dib.2019.104863. URL https://www.sciencedirect.com/science/article/pii/ S2352340919312181 .Jason Ansel, Edward Yang, Horace He, Natalia Gimelshein, Animesh Jain, Michael Voznesensky, Bin Bao, Peter Bell, David Berard, Evgeni Burovski, et al. Pytorch 2: Faster machine learning through dynamic python bytecode transformation and graph compilation. In Proceedings of the 29th ACM international conference on architectural support for programming languages and operating systems, volume 2 , pages 929–947, 2024. Xavier Bouthillier, Pierre Delaunay, Mirko Bronzi, Assya Trofimov, Brennan Nichyporuk, Justin Szeto, Nazanin Mohammadi Sepahvand, Edward Raff, Kanika Madan, Vikram Voleti, et al. Accounting for variance in machine learning benchmarks. Proceedings of machine learning and systems , 3:747–769, 2021. Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik Debnath, Ronghang Hu, Didac Suris, Chaitanya Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew Huang, Jie Lei, Tengyu Ma, Baishan Guo, Arpit Kalla, Markus Marks, Joseph Greer, Meng Wang, Peize Sun, Roman Rädle, Triantafyllos Afouras, Effrosyni Mavroudi, Katherine Xu, Tsung-Han Wu, Yu Zhou, Liliane Momeni, Rishi Hazra, Shuangrui Ding, Sagar Vaze, Francois Porcher, Feng Li, Siyuan Li, Aishwarya Kamath, Ho Kei Cheng, Piotr Dollár, Nikhila Ravi, Kate Saenko, Pengchuan Zhang, and Christoph Feichtenhofer. Sam 3: Segment anything with concepts, 2025. URL 
+
+https://arxiv.org/abs/2511.16719 .Junsuk Choe and Hyunjung Shim. Attention-based dropout layer for weakly supervised object local-ization. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 2219–2228, 2019. Janez Demšar. Statistical comparisons of classifiers over multiple data sets. Journal of Machine learning research , 7(Jan):1–30, 2006. Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition ,pages 248–255. Ieee, 2009. Alexey Dosovitskiy, German Ros, Felipe Codevilla, Antonio Lopez, and Vladlen Koltun. Carla: An open urban driving simulator. In Conference on robot learning , pages 1–16. PMLR, 2017. Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representations , 2021. URL https://openreview. net/forum?id=YicbFdNTTy .Ruth Fong, Mandela Patrick, and Andrea Vedaldi. Understanding deep networks via extremal perturbations and smooth masks. In Proceedings of the IEEE/CVF international conference on computer vision , pages 2950–2958, 2019. 10 Ruth C Fong and Andrea Vedaldi. Interpretable explanations of black boxes by meaningful perturba-tion. In Proceedings of the IEEE international conference on computer vision , pages 3429–3437, 2017. Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pages 770–778, 2016. Shengyi Huang, Rousslan Fernand Julien Dossa, Chang Ye, Jeff Braga, Dipam Chakraborty, Kinal Mehta, and JoÃ G, o GM AraÃšjo. Cleanrl: High-quality single-file implementations of deep reinforcement learning algorithms. Journal of Machine Learning Research , 23(274):1–18, 2022. Svetlana Illarionova, Sergey Nesteruk, Tatiana Elina, Sergey Bezzateev, and Evgeny Burnaev. Packed fruits and vegetables visual classification and segmentation benchmark. Scientific Data , 2025. Peng-Tao Jiang, Chang-Bin Zhang, Qibin Hou, Ming-Ming Cheng, and Yunchao Wei. Layercam: Ex-ploring hierarchical class activation maps for localization. IEEE transactions on image processing ,30:5875–5888, 2021. Michał Kempka, Marek Wydmuch, Grzegorz Runc, Jakub Toczek, and Wojciech Ja´ skowski. ViZ-Doom: A Doom-based AI research platform for visual reinforcement learning. In IEEE Conference on Computational Intelligence and Games , pages 341–348, Santorini, Greece, Sep 2016. IEEE. doi: 10.1109/CIG.2016.7860433. The Best Paper Award. Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In International Conference on Learning Representations (ICLR) , 2015. Ivan Krasin, Tom Duerig, Neil Alldrin, Vittorio Ferrari, Sami Abu-El-Haija, Alina Kuznetsova, Hassan Rom, Jasper Uijlings, Stefan Popov, Shahab Kamali, Matteo Malloci, Jordi Pont-Tuset, Andreas Veit, Serge Belongie, Victor Gomes, Abhinav Gupta, Chen Sun, Gal Chechik, David Cai, Zheyun Feng, Dhyanesh Narayanan, and Kevin Murphy. Openimagesv7: A public dataset for large-scale multi-label and multi-class image classification. Dataset available from https://storage.googleapis.com/openimages/web/index.html , 2022. Krishna Kumar Singh and Yong Jae Lee. Hide-and-seek: Forcing a network to be meticulous for weakly-supervised object and action localization. In Proceedings of the IEEE International Conference on Computer Vision (ICCV) , Oct 2017. Cheng-Han Lee, Ziwei Liu, Lingyun Wu, and Ping Luo. Maskgan: Towards diverse and interactive facial image manipulation. In IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2020. Chengshu Li, Ruohan Zhang, Josiah Wong, Cem Gokmen, Sanjana Srivastava, Roberto Martín-Martín, Chen Wang, Gabrael Levine, Michael Lingelbach, Jiankai Sun, et al. Behavior-1k: A benchmark for embodied ai with 1,000 everyday activities and realistic simulation. In Conference on Robot Learning , pages 80–93. PMLR, 2023. Jinlong Li, Zequn Jie, Xu Wang, Xiaolin Wei, and Lin Ma. Expansion and shrinkage of localization for weakly-supervised semantic segmentation. Advances in neural information processing systems ,35:16037–16051, 2022. Ze Liu, Han Hu, Yutong Lin, Zhuliang Yao, Zhenda Xie, Yixuan Wei, Jia Ning, Yue Cao, Zheng Zhang, Li Dong, et al. Swin transformer v2: Scaling up capacity and resolution. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 12009–12019, 2022a. Zhuang Liu, Hanzi Mao, Chao-Yuan Wu, Christoph Feichtenhofer, Trevor Darrell, and Saining Xie. A convnet for the 2020s. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 11976–11986, 2022b. Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In International Confer-ence on Learning Representations (ICLR) , 2019. 11 Henry B Mann and Donald R Whitney. On a test of whether one of two random variables is stochastically larger than the other. The annals of mathematical statistics , pages 50–60, 1947. Mayank Nautiyal, Stela Arranz Gheorghe, Kristiana Stefa, Li Ju, Ida-Maria Sintorn, and Prashant Singh. Paric: Probabilistic attention regularization for language guided image classification from pre-trained vison language models. arXiv preprint arXiv:2503.11360 , 2025. Jerzy Neyman and Egon S Pearson. On the use and interpretation of certain test criteria for purposes of statistical inference: Part i. Biometrika , 20(1/2):175–240, 1928. Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number of classes. In Indian Conference on Computer Vision, Graphics and Image Processing , Dec 2008. Omkar M. Parkhi, Andrea Vedaldi, Andrew Zisserman, and C. V. Jawahar. Cats and dogs. In IEEE Conference on Computer Vision and Pattern Recognition , 2012. Suzanne Petryk, Lisa Dunlap, Keyan Nasseri, Joseph Gonzalez, Trevor Darrell, and Anna Rohrbach. On guiding visual attention with language specification. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , pages 18092–18102, 2022. Vitali Petsiuk, Abir Das, and Kate Saenko. Rise: Randomized input sampling for explanation of black-box models. In Proceedings of the British Machine Vision Conference (BMVC) , 2018. Jacob Piland, Chris Sweet, and Adam Czajka. Diffgradcam: A universal class activation map resistant to adversarial training. arXiv preprint arXiv:2506.08514 , 2025. Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , pages 8748–8763. PmLR, 2021. Oona Rainio, Jarmo Teuho, and Riku Klén. Evaluation metrics and statistical tests for machine learning. Scientific reports , 14(1):6086, 2024. John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh, and Dhruv Batra. Grad-cam: Visual explanations from deep networks via gradient-based localiza-tion. In Proceedings of the IEEE international conference on computer vision , pages 618–626, 2017. Daniel Smilkov, Nikhil Thorat, Been Kim, Fernanda Viégas, and Martin Wattenberg. Smoothgrad: removing noise by adding noise. arXiv preprint arXiv:1706.03825 , 2017. Also presented at the International Conference on Machine Learning (ICML) 2017 Workshop. Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks. In 
+
+International conference on machine learning , pages 3319–3328. PMLR, 2017. Mingxing Tan and Quoc Le. Efficientnet: Rethinking model scaling for convolutional neural networks. In International conference on machine learning , pages 6105–6114. PMLR, 2019. Zhengzhong Tu, Hossein Talebi, Han Zhang, Feng Yang, Peyman Milanfar, Alan Bovik, and Yinxiao Li. Maxvit: Multi-axis vision transformer. In European conference on computer vision , pages 459–479. Springer, 2022. Marek Wydmuch, Michał Kempka, and Wojciech Ja´ skowski. ViZDoom Competitions: Playing Doom from Pixels. IEEE Transactions on Games , 11(3):248–259, 2019. doi: 10.1109/TG.2018.2877047. The 2022 IEEE Transactions on Games Outstanding Paper Award. Ryan L. Yang, Dipkamal Bhusal, and Nidhi Rastogi. Learning to look: Cognitive attention alignment with vision-language models. In First Workshop on CogInterp: Interpreting Cognition in Deep Learning Models , 2026. URL https://openreview.net/forum?id=ZhJ6WPw0mp .12 Wenqian Ye, Luyang Jiang, Eric Xie, Guangtao Zheng, Yunsheng Ma, Xu Cao, Dongliang Guo, Daiqing Qi, Zeyu He, Yijun Tian, Christopher W. Porter, Megan Coffee, Zhe Zeng, Sheng Li, Ziran Wang, Ting-Hao Kenneth Huang, James Matthew Rehg, Henry Kautz, and Aidong Zhang. The clever hans mirage: A comprehensive survey on spurious correlations in machine learning. Transactions on Machine Learning Research , 2026. ISSN 2835-8856. URL https: //openreview.net/forum?id=kIuqPmS1b1 .Sangdoo Yun, Dongyoon Han, Seong Joon Oh, Sanghyuk Chun, Junsuk Choe, and Youngjoon Yoo. Cutmix: Regularization strategy to train strong classifiers with localizable features. In Proceedings of the IEEE/CVF international conference on computer vision , pages 6023–6032, 2019. Matthew D Zeiler and Rob Fergus. Visualizing and understanding convolutional networks. In 
+
+European conference on computer vision , pages 818–833. Springer, 2014. Xiaolin Zhang, Yunchao Wei, Jiashi Feng, Yi Yang, and Thomas S Huang. Adversarial complementary learning for weakly supervised object localization. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 1325–1334, 2018. Bolei Zhou, Aditya Khosla, Agata Lapedriza, Aude Oliva, and Antonio Torralba. Learning deep features for discriminative localization. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 2921–2929, 2016. 
+
+# A Statistical Evaluation Methods 
+
+Wilcoxon Signed-rank Test. Rainio et al. [2024] and Demšar [2006] both proposed using the 
+
+Wilcoxon Signed-rank Test (WSRT)—a non-parametric test—to statistically analyze multiple paired trials between two DL algorithms for more reliable claims. In particular, given k-fold cross-validation where two algorithms use the same dataset split each fold, WSRT tests if the median of the differences in the k paired trials di, where i ∈ { 1, ..., k }, is zero with the following test statistic: 
+
+T = min (R+, R −), where R+ = X
+
+> di>0
+
+rank (|di|) and R− = X
+
+> di<0
+
+rank (|di|) (5) Here, the absolute differences |di| are first ranked collectively. Subsequently, the ranks are summed for di > 0 and di < 0 individually. The minimum is then taken as the test statistic to be compared with the respective critical values for WSRT. In this work, we use 10 -fold cross-validation for all DL experiments and one-tailed WSRT to evaluate whether CAMAL outperforms each DL baseline. Env 1  
+
+> Trials
+> n samples
+> Sample Agg Env 2
+> Env m
+
+Figure 7: The SBCI evaluation method involves sampling a DRL algorithm’s result set repeatedly and aggregating (Agg) the samples to form a distribution of aggregated samples (AS) that estimates the algorithm’s true performance. 
+
+Stratified Bootstrap Confidence Intervals. DRL is inherently stochastic and more robust statistical methods are required to reliably compare two DRL algorithms. Agarwal et al. [2021] proposed 
+
+Stratified Bootstrap Confidence Intervals (SBCI) to compare two DRL algorithms across multiple environments and trials, illustrated in Figure 7. Given a m × k result set for a DRL algorithm trained on m environments k times, SBCI samples n sets of shape m × k from the result set with replacement, with equal proportions per environment. The n sets are then individually aggregated according to an 13 aggregation metric to form a distribution of aggregated samples with a 95% CI that reliably estimates the true performance of the DRL algorithm. In this work, we use SBCI with the mean aggregation metric, where m = 4 and k = 5 , for all DRL experiments to evaluate whether CAMAL outperforms each DRL baseline, unless otherwise specified. 
+
+Probability of Improvement. To determine whether the observed differences under SBCI with mean aggregation are statistically significant, we further conduct SBCI with the Probability of Improvement (POI) aggregation metric [Agarwal et al., 2021]. POI performs pairwise comparisons using the Mann-Whitney U-statistic [Mann and Whitney, 1947]: 
+
+P (Xm > Y m) = 1
+
+k2
+
+> k
+
+X
+
+> i=1
+> k
+
+X
+
+> j=1
+
+I(xm,i , y m,j ), where I(x, y ) = 
+
+
+
+1, if x > y,  
+
+> 12
+
+, if x = y, 
+
+0, if x < y. 
+
+(6) Here, P (Xm > Y m) denotes the POI of algorithm X over Y on environment m, with k denoting the number of trials. The intuition behind the pairwise comparisons being that for X to be considered better than Y, it must outperform Y with sufficient frequency. P (X > Y ) is then obtained by aggregating the environment specific POI’s 1
+
+> M
+
+PMm=1 P (Xm > Y m). Finally, the resulting point estimate and confidence band is inspected via the Neyman-Pearson testing criterion [Bouthillier et al., 2021, Neyman and Pearson, 1928], where the X is statistically significantly better than Y if 
+
+P (X > Y ) > 0.5 ∧ 0.5 /∈ CI .
+
+# B Extended Experiments and Discussion Oxford-IIIT-Pet Prior Mask Oxford-Flower Prior Mask 
+
+Figure 8: Comparison between pseudo-discriminative regions derived from an external prior (CLIP) and ground-truth discriminative regions obtained from segmentation masks for two datasets. Com-pared to the ground-truth, the pseudo-discriminative regions are (1) fragmented and incomplete (left panel), and (2) spurious (right panel). For brevity, we show two examples; however, similar patterns are observed throughout both datasets. 
+
+Pilot study. To assess the trustworthiness of the reference regions projected by pretrained zero-shot models ( i.e., pseudo-discriminative regions), we conducted a pilot study with CLIP to visualize them. In particular, we first selected two vision datasets with segmentation masks ( i.e., ground-truth discriminative regions), Oxford-IIIT-Pet and Oxford-Flower. We selected these two datasets as they exhibit high inter-class similarity, where distinguishing between classes depends on subtle features. Importantly, this setting allows us to assess whether CLIP—being trained on broad classification rather than spatial localization—is capable of capturing the fine-grained distinctions necessary to localize such similar classes. Subsequently, similar to Yang et al. [2026], Nautiyal et al. [2025], and Petryk et al. [2022], we derived pseudo-discriminative regions for images in the two datasets by passing them through CLIP and employing Grad-CAM on the image encoder. In Figure 8, we show that contrary to the assumptions of the aforementioned work, when compared to the ground-truth, these pseudo-discriminative regions can be (1) fragmented and incomplete (left panel), and (2) spurious (right panel). Thus, the reference regions projected by CLIP are poor proxies for ground-truth discriminative regions and untrustworthy. Furthermore, this finding motivates a broader question: where should vision models attend to when making decisions? While some works suggest that vision models only require a subset of ground-truth discriminative regions for correct decisions [Li et al., 2022, Fong and Vedaldi, 2017], other works contend that this can lead to over-reliance and reliable decisions require reasoning over the entire 14 object region [Zhang et al., 2018, Kumar Singh and Jae Lee, 2017]. In this work, we adopt the latter perspective, arguing that for attention supervision to be reliable, it needs to be grounded in trustworthy regions, that is, regions that are well-structured, complete, and accurate. 
+
+Limitations of recent work. Beyond their reliance on pseudo-discriminative regions, recent work in attention supervision exhibit several additional limitations [Yang et al., 2026, Nautiyal et al., 2025, Petryk et al., 2022]. First, their regularization formulations are often sub-optimal, focusing solely on suppressing attention in spurious regions, and thus fail to capture the full extent of discrepancy between model attention and reference regions. Second, they do not formally address scalability, particularly when employing gradient-based attention extraction techniques that incur significant overhead. Third, they often do not quantitatively evaluate attention alignment and faithfulness even though their primary focus is to improve attention, but instead focus on evaluating generalization. Fourth, their empirical evaluations lack statistical rigor with conclusions often drawn without formal statistical tests. Finally, their applicability is largely restricted to standard supervised learning settings, with limited exploration in other settings. Building on the foundations of recent work, our work addresses these limitations by introducing a principled regularization objective, a scalable formulation for it, and a statistically rigorous, attention-focused evaluation across multiple learning settings. Table 4: Comparison of Spearman and Pearson correlation scores (mean ± standard deviation) between regularizers. Results in bold denote cases where CAMAL achieves a higher mean than the suppress-only regularizer, with the difference being statistically significant under WSRT ( p < 0.05 ). Dataset Perturbation Spearman Pearson CAMAL Supp. Only CAMAL Supp. Only Shift 0.98 ± 0.07 0.50 ± 0.46 0.96 ± 0.05 0.59 ± 0.41 Oxford-IIIT-Pet Erode 1.00 ± 0.01 — 0.99 ± 0.01 —Dilate 1.00 ± 0.01 1.00 ± 0.01 1.00 ± 0.01 1.00 ± 0.01 Shift 0.97 ± 0.10 0.50 ± 0.45 0.94 ± 0.08 0.59 ± 0.39 Oxford-Flower Erode 1.00 ± 0.00 — 1.00 ± 0.01 —Dilate 1.00 ± 0.02 1.00 ± 0.02 0.99 ± 0.03 0.99 ± 0.03 
+
+Regularizer comparison. To compare the robustness and sensitivity of CAMAL’s regularizer with the regularizers commonly used in recent work that focus solely on suppressing attention in spurious regions [Nautiyal et al., 2025, Petryk et al., 2022], we conducted a perturbation-based experiment that isolates their response to controlled deviations from ground-truth discriminative regions. In particular, we perturb segmentation mask M to simulate model attention H and compare regularizers by evaluating R(M, H ). We used three types of perturbations—spatial shifts, morphological erosion, and dilation—to systematically induce attention misalignment, under-coverage, and over-coverage respectively. Similar to the pilot study, we conduct this experiment on the Oxford-IIIT-Pet and Oxford-Flower datasets, which provide high-quality segmentation masks for reliable evaluation. For each image and perturbation type, we generate a sequence of perturbed masks {Hi}ni=1 , pro-gressively increasing in severity to simulate attention. Subsequently, for each image, perturbation type, and regularizer R, we evaluate R on all corresponding (M, H i) pairs to obtain sequence 
+
+{R(M, H i)}ni=1 . Lastly, we compute Spearman and Pearson correlations between perturbation severity and regularizer response. We summarize the results in Table 4 and illustrate the behavior of each perturbation and regularizer in Figure 9. Overall, the results in Table 4 show that CAMAL exhibits a consistent near-monotonic response to increasing perturbation severity, achieving strong correlations across all perturbation types. In contrast, the suppress-only regularizers used in recent work fail to respond meaningfully when attention deviates within ground-truth regions ( i.e., erode) and display weak or unstable correlations under spatial misalignment ( i.e., shift). This behavior is further illustrated in Figure 9, where CAMAL simultaneously encourages attention within ground-truth regions and suppresses attention in spurious regions, while suppress-only regularizers do only the latter. Thus, the suppress-only regularizers used in recent work lack any mechanism to recover missing evidence. On the other hand, CAMAL 15 Shift              
+
+> Mask MAttention HCAMAL Rc(M,H)Supp. Only Rs(M,H)
+> Erode Dilate
+> Overlap Missed Spurious Encouraged Suppressed
+
+Figure 9: Comparison of regularizers under different perturbations—shift, erode, and dilate. For each perturbation we visualize the segmentation mask M , attention H, and corresponding regularizer responses R(M, H ). Colors denote overlap between ground truth regions and attention ( M ∩ H,orange), missed ground-truth regions ( M \ H, blue), attention in spurious regions ( H \ M , purple), with green and red indicating regions encouraged and suppressed by the regularizers respectively. A single representative example for each perturbation is shown for brevity. captures the full spectrum of attention allocation, making it a fundamentally more complete and robust attention supervision objective. 
+
+Proposition 1 (Equivalence of batch-level attention extraction ). Let b ∈ { 1, ..., B } denote samples in a mini-batch of size B, let ycb 
+
+> b
+
+denote the scalar logit for the ground-truth class cb for sample b,and let Akb denote the k-th feature map for sample b. Assume that the model processes each sample independently along the batch dimension so that for any b̸ = b′,
+
+∂y cb
+
+> b
+
+∂A kb′
+
+= 0 .
+
+Then, performing one backward pass on the summed scalar P 
+
+> b
+
+ycb 
+
+> b
+
+yields the same gradients as computing from each ycb 
+
+> b
+
+independently with B backward passes. Proof. By the linearity of differentiation, the gradients of the summed scalar with respect to the k-th feature map of sample b′ can be expanded as 
+
+∂∂A kb′
+
+X
+
+> b
+
+ycb
+
+> b
+
+!
+
+= X
+
+> b
+
+∂y cb
+
+> b
+
+∂A kb′
+
+= ∂y cb′
+
+> b′
+
+∂A kb′
+
+, since ∂y cb
+
+> b
+
+∂A kb′
+
+= 0 ∀ b̸ = b′ (7) Therefore, the gradient for each sample obtained from the summed scalar is identical to the gradient obtained from each individual scalar ycb 
+
+> b
+
+independently. Consequently, since attention is computed deterministically from these gradients and the corresponding feature maps, the resulting CAMs are identical under both approaches. 
+
+Attention alignment comparison with Vanilla. Quantitative and qualitative results for the DL experiments are shown in Table 5 and Figure 10 respectively. CAMAL consistently outperforms Vanilla across all models and datasets, achieving substantially higher IoU scores, with all improve-ments statistically significant under WSRT. This difference is illustrated in Figure 10, where CAMAL 16 Table 5: Comparison of attention alignment between CAMAL and Vanilla in DL. The eval-uation metric is test IoU (mean ± standard deviation). Results in bold denote cases where CAMAL achieves a higher mean than Vanilla, with the difference being statistically significant under WSRT ( p < 0.05 ). Model BUSI Oxford-IIIT-Pet Oxford-Flower CAMAL Vanilla CAMAL Vanilla CAMAL Vanilla ResNet 33.9 ± 3.2 14.4 ± 2.4 67.2 ± 1.3 10.8 ± 0.9 70.0 ± 0.7 9.6 ± 0.9 ConvNeXt 36.1 ± 2.2 2.0 ± 0.5 71.2 ± 1.1 3.7 ± 0.2 71.3 ± 0.6 3.4 ± 0.2 EfficientNet 36.9 ± 2.2 12.8 ± 1.1 71.3 ± 0.6 8.8 ± 0.3 71.8 ± 0.5 9.7 ± 0.4 ViT 44.0 ± 2.5 4.2 ± 3.2 79.9 ± 1.3 7.9 ± 8.3 80.8 ± 0.5 5.6 ± 3.1 Swin 38.3 ± 1.6 9.2 ± 4.3 73.4 ± 0.4 8.9 ± 5.2 72.5 ± 0.4 3.6 ± 2.3 MaxViT 38.9 ± 2.2 2.8 ± 2.5 73.9 ± 0.4 7.5 ± 1.9 71.7 ± 1.3 1.8 ± 0.5 BUSI CAMAL Vanilla Oxford-IIIT-Pet CAMAL Vanilla      
+
+> Oxford-Flower CAMAL Vanilla G. Truth Var CAMAL Var Vanilla Var
+
+Figure 10: Comparison of attention alignment between CAMAL and Vanilla in DL. For each dataset, we present an image overlaid with its ground-truth discriminative regions, alongside the corresponding attention from CAMAL and Vanilla. A single representative example per dataset is shown for brevity; however, similar patterns are consistently observed across datasets. attends to the entire object region while Vanilla attends to incomplete or spurious regions. This is further reflected in the bottom-right panel that visualizes the spatial variance of attention across datasets. The variance by CAMAL closely resembles the ground truth, where variations occur primarily along object edges in a circular fashion. In contrast, Vanilla exhibits variance in the top-left and center, suggesting that attention is often allocated to spurious regions or fails to adequately cover the object center. Qualitative results for the DRL experiments are shown in Figure 11. Across all environments, CAMAL produces attention that closely aligns with the ground truth, consistently highlighting relevant targets while suppressing background noise. In contrast, Vanilla exhibits incomplete and misaligned attention, often deviating significantly from the ground truth. For example, in TakeCover, CAMAL correctly ignores the background while Vanilla attends to the background. These qualitative observations are consistent with the quantitative observations reported under SBCI and POI analysis in Figure 4. Additional sample videos are provided in the source code to further illustrate the qualitative differences between CAMAL and Vanilla. Overall, similar to the comparison with Prior, these results demonstrate that compared to Vanilla, CAMAL reliably yields better-aligned attention in both DL and DRL. 
+
+Attention faithfulness comparison with Vanilla. The results for the DL experiments are shown in Figure 12. The model confidence decreases and increases substantially faster for CAMAL for removal and insertion respectively. This is further reflected in AUC, where CAMAL achieves 13.6% lower AUC and 6.4% higher AUC than Vanilla for removal and insertion respectively. This indicates that the attention by CAMAL more accurately identifies features critical to its prediction. Overall, 17 Basic      
+
+> Frame (C) Ground Truth (C) Attention (C) Frame (V) Ground Truth (V) Attention (V)
+> DefendLine DefendCenter TakeCover
+
+Figure 11: Comparison of attention alignment between CAMAL (C, left panel) and Vanilla (V, right panel) in DRL. For each environment, we present an image, its ground-truth discriminative regions, alongside the corresponding attention from CAMAL and Vanilla. A single frame for each environment is shown for brevity; however, similar patterns are consistently observed across episodes. 0 25 50 75 100         
+
+> Top-k% Pixels Removed
+> 0.0
+> 0.5
+> 1.0
+> Confidence
+> 25 30 35
+> 0.40
+> 0.45
+> 025 50 75 100
+> Top-k% Pixels Inserted
+> 25 30
+> 0.50
+> 0.55
+> CAMAL Vanilla
+
+Figure 12: Comparison of attention faithfulness between CAMAL and Vanilla in DL. Model confidence is evaluated under removal and insertion of the top-k% most important pixels determined by the model’s attention. Curves are aggregated over all model-dataset combinations, with shaded regions denoting 95% confidence bands. similar to the comparison with Prior, these results demonstrate that compared to Vanilla, CAMAL reliably yields more faithful attention. 
+
+Overhead incurred by attention supervision. Attention supervision incurs overhead only during training, not at inference time, because the additional computation arises from computing attention and applying the auxiliary regularization—both of which are absent once the model is deployed. Concretely, CAMAL requires one additional backward pass per mini-batch to compute attention, which constitutes the dominant source of overhead compared to Vanilla training. As shown in Table 6, this translates to negligible overhead for lightweight models ( e.g., ResNet) and moderate overhead for bigger models ( e.g., MaxViT) across datasets. 
+
+Limitations. A primary limitation of CAMAL is its reliance on segmentation masks, which are not universally available across all datasets. While (1) many modern vision benchmarks increasingly provide such masks [Illarionova et al., 2025, Li et al., 2023, Krasin et al., 2022, Lee et al., 2020, Wydmuch et al., 2019, Dosovitskiy et al., 2017], and (2) recent advancements like prompt-based 18 Table 6: Mean training overhead ( %) incurred by CAMAL relative to Vanilla. Model BUSI Oxford-IIIT-Pet Oxford-Flower ResNet 1.0 5.0 0.2 ConvNeXt 51.2 65.0 65.0 EfficientNet 29.8 72.6 69.0 ViT 55.2 63.1 62.7 Swin 52.2 64.2 64.0 MaxViT 60.5 69.2 68.9 segmentation have significantly lowered the cost of generating human-verified masks [Carion et al., 2025], this requirement may still restrict applicability in domains where segmentation is unavailable or difficult to obtain. In addition, while CAMAL does not introduce any additional inference costs, CAMAL introduces extra training costs due to the need to compute attention. Taken together, CAMAL presents a trade-off: broader applicability may be constrained by mask availability and increased training cost, in exchange for more well-aligned and faithful attention, with improved or comparable generalization. 
+
+Broader impacts. A potential positive societal impact of this work is improved transparency and reliability of vision models, as better-aligned and more faithful models can help practitioners understand and trust model decisions in high-stakes domains such as healthcare and autonomous systems. However, a potential negative impact is that such improvements could be misused to create more convincing AI systems whose decisions appear trustworthy, even when they are incorrect or biased, potentially enabling their deployment in sensitive or harmful applications. As a safeguard against potential misuse, we release only the source code and training procedures, but do not release pretrained model weights. 
+
+# C Experimental Settings and Details 
+
+All experiments were conducted on a Ubuntu 22.04.5 LTS server equipped with an AMD EPYC 9554 CPU (64 cores, 128 threads), 755 GB of RAM, and four NVIDIA L40S GPUs, each with 48 GB of VRAM. For both DL and DRL experiments, each trial was assigned a dedicated GPU to ensure fairness. For example, the first trial for training the ResNet-BUSI-CAMAL DL combination had its own dedicated GPU. The DL CAMAL-Vanilla comparison required 1.1K hours of computation, whereas the CAMAL-Prior comparison required 1.3K hours. The DRL CAMAL-Vanilla comparison required 0.5K hours, bringing the total computational cost to approximately 3K hours. Table 7: The hyperparameters used for training the DL models. Hyperparameter Value Description Number of epochs 500 The number of epochs to train for. Learning rate 0.001 1 Optimized with AdamW [Loshchilov and Hutter, 2019]. Weight decay 0.01 The optimizer weight decay. Batch size 32 The mini-batch size to use. 
+
+λCAMAL 1 The CAMAL coefficient in Equation 2.  
+
+> 1
+
+0.0001 for ViT, Swin, and MaxViT 
+
+Deep learning. For the DL experiments, we selected six models spanning diverse architectural families, including convolutional-based, transformer-based, and hybrid convolution-transformer architectures ( e.g., ResNet, ViT, and MaxViT). We use PyTorch’s [Ansel et al., 2024] default implementation of the evaluated models, initialized with ImageNet pre-trained weights [Deng et al., 2009]. Moreover, we selected three datasets with segmentation masks spanning two domains, medical imaging (BUSI) and natural images (Oxford-IIIT-Pet and Oxford-Flower). BUSI is a dataset of breast ultrasound images containing annotated breast lesions, categorized into three classes: 19 normal, benign, and malignant. Oxford-IIIT-Pet and Oxford-Flower (also known as Flowers102) are datasets commonly used in vision tasks, comprising 37 pet categories (cats and dogs) and 102 flower categories respectively. These three datasets share high inter-class similarity, making precise attention localization critical, thereby serving as a natural testbed for attention supervision. The images in these datasets were resized to 256 × 256 , center-cropped to 224 × 224 , and normalized before being fed into the models for training. We use 10-fold cross-validation when training each model-dataset-method combination. The DL training hyperparameters can be viewed in Table 7; for parameters not explicitly specified, we use the default settings by PyTorch. For example, we use the default epsilon value of 1 × 10 −8 for the optimizer. Table 8: The hyperparameters used for training the DRL models. Hyperparameter Value Description Number of environments 8 Number of environments used to collect training samples. Total timesteps 10M Total number of timesteps to train for. Number of timesteps 128 Number of timesteps per environment rollout. Number of epochs 4 Number of times to update the policy after each rollout. Number of mini-batches 4 Number of mini-batches in an epoch. Learning rate 0.00025 Optimized with Adam [Kingma and Ba, 2015]. 
+
+γ 0.99 The discount factor. 
+
+λGAE 0.95 The general advantage estimation value. Clip coefficient 0.1 The surrogate clipping coefficient. Entropy coefficient 0.01 The entropy coefficient. Value function coefficient 0.5 The value function coefficient. Maximum gradient norm 0.5 The maximum norm for gradient clipping. 
+
+λCAMAL 1 The CAMAL coefficient in Equation 2. Frame skip 4 The number of times an action is repeated. Frame stack 4 The history the model sees, inclusive of the current frame. Reward clip -1, 1 Lower and upper bounds for reward clipping. 
+
+Deep reinforcement learning. For the DRL experiments, we use CleanRL’s PPO implementa-tion [Huang et al., 2022] and selected four environments from the ViZDoom benchmark that cover diverse task demands: Basic, DefendLine, DefendCenter, and TakeCover. Basic involves a single monster that the agent must eliminate, serving as a simple setting to evaluate fundamental perception and targeting. DefendLine increases the difficulty by introducing multiple monsters aligned in front of the agent, requiring sequential target prioritization and efficient shooting. DefendCenter further expands the complexity by spawning multiple monsters around the agent, demanding 360-degree awareness. TakeCover differs from the previous tasks by focusing on survival rather than offense, where the agent must evade incoming enemy projectiles. We train 5 agents for each environment-method combination. The DRL training hyperparameters can be viewed in Table 8; for parameters not explicitly specified, we use the default settings by CleanRL and ViZDoom. For example, we use the default 5-layer CNN by CleanRL and the default frame size of 240 × 320 by ViZDoom. 
+
+Additional details. During training, we compute Grad-CAM at the final convolutional layer, as it captures high-level semantic information while preserving spatial structure; however this choice may vary depending on the model architecture (see source code for full implementation details). Furthermore, we compute Grad-CAM with respect to the mean weighted combination of feature maps by dividing by K, the total number of feature maps, as we empirically observe that this yields more accurate CAMs (see Equation 3). During evaluation, to compute the attention alignment for an image Ic in the test set, we first quantize the corresponding model attention Hc into a binary mask Hc 
+
+> mask
+
+via simple thresholding, where values above τ are set to 1 and the rest to 0. We use τ = 0 .7, as we found it to effectively retain important regions while suppressing noise across models and datasets. Subsequently, we compute the IoU between Hc 
+
+> mask
+
+and the corresponding segmentation mask M c to obtain the attention alignment score for Ic:IoU (Hc
+
+> mask
+
+, M c) = |Hc 
+
+> mask
+
+∩ M c||Hc 
+
+> mask
+
+∪ M c| (8) 20 To evaluate attention faithfulness, we adopt a representative sampling strategy where, for each trial, we select one sample per class from the test set to perform removal and insertion-based faithfulness evaluation. This approach ensures coverage across all classes while keeping the evaluation computationally tractable, as the removal and insertion experiments require multiple forward passes per sample. Furthermore, the selected samples vary across different cross-validation splits, thereby mitigating sampling bias and improving the robustness of the aggregated results. 
+
+Assets and licenses. This paper is licensed under CC BY 4.0, while the accompanying source code is released under the MIT license. The Oxford-IIIT-Pet dataset is distributed under the CC BY-SA 4.0 license, while the Oxford-Flower and BUSI datasets do not explicitly specify a license but are available for public use. 123 Moreover, our models use ImageNet pretrained weights, where ImageNet is publicly available for non-commercial research and educational purposes under its custom terms and conditions. 4 Finally, CleanRL and ViZDoom are released under the MIT license, while PyTorch is released under the BSD-3 license. 567 We use the latest available versions of all datasets; the exact software dependencies and their versions are provided in our source code. 
+
+> 1https://www.robots.ox.ac.uk/ vgg/data/pets/
+> 2https://www.robots.ox.ac.uk/ vgg/data/flowers/102/
+> 3https://scholar.cu.edu.eg/?q=afahmy/pages/dataset
+> 4https://www.image-net.org/download.php
+> 5https://github.com/vwxyzjn/cleanrl
+> 6https://github.com/Farama-Foundation/ViZDoom
+> 7https://github.com/pytorch/pytorch
+
+21

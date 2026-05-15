@@ -1,0 +1,1231 @@
+Title: FEFormer: Frequency-enhanced Vision Transformer for Generic Knowledge Extraction and Adaptive Feature Fusion in Volumetric Medical Image Segmentation
+
+URL Source: https://arxiv.org/pdf/2605.11434v1
+
+Published Time: Wed, 13 May 2026 00:31:13 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# FEFormer: Frequency-enhanced Vision Transformer for Generic Knowledge Extraction and Adaptive Feature Fusion in Volumetric Medical Image Segmentation 
+
+Jin Yang a,∗, Xiaobing Yu b and Peijie Qiu b
+
+> a
+
+Department of Radiation Oncology, Icahn School of Medicine at Mount Sinai, New York, 10029, NY, USA 
+
+> b
+
+Mallinckrodt Institute of Radiology, Washington University School of Medicine in St. Louis, St. Louis, 63110, MO, USA 
+
+A R T I C L E I N F O 
+
+Keywords :Vision Transformer Medical Image Segmentation Fourier Frequency Filter Wavelet Adaptive Feature Fusion Selective Attention Mechanisms 
+
+A B S T R A C T 
+
+Accurate segmentation of organs and lesions in medical images is essential for many clinical applications, and Vision Transformers (ViTs) have shown impressive segmentation performance. However, they face several key challenges in module and architecture designs. Specifically, self-attention is challenged from capturing fine-grained local features to understand detailed anatomical structures with large variations, and standard MLP modules lack explicit mechanisms to preserve detailed spatial information. Moreover, conventional encoder–decoder architectures rely on naive feature fusion strategies (e.g., concatenation), and they lack explicit mechanisms to align features and handle large semantic discrepancies for robust fusion. These architectures also downsample input images to lower dimension, but they lack explicit mechanisms to propagate low-level information from encoder to the decoder for improving segmentation performance. To overcome these challenges, we propose a Frequency-enhanced Vision Transformer (FEFormer) for robust and efficient volumetric medical image segmentation by explicitly model frequency information to jointly capture global context and fine structural details. Specifically, FEFormer employs a Frequency-enhanced Dynamic Self-Attention (FDSA) module that employs locality-preserving convolution with frequency-domain attention to jointly capture fine-grained local details and global long-range dependencies and dy-namically integrates them based on frequency-domain importance. We further design a Frequency-decomposed Gating MLP (FGMLP) to adaptively disentangle and model low- and high-frequency components, enhancing both global semantic representation and local structural details. Additionally, a Wavelet-guided Adaptive Feature Fusion (WAFF) module is proposed to perform frequency-domain fusion of encoder and decoder features guided by Wavelet transformation, enabling semantically consistent and robust feature integration. Finally, we propose a Frequency-enabled Cross-scale Stem Bridge (FCSB) to enhance the propagation of low-level features from the encoder to the decoder by capturing their global representations and cross-scale interactions in the frequency domain. To demonstrate the effectiveness of FEFormer, we evaluated it on four diverse volumetric medical image segmentation tasks. Extensive experimental results demonstrated that FEFormer achieved superior segmentation performance with high computational efficiency compared to state-of-the-art methods. 
+
+1. Introduction 
+
+Segmentation of organs and lesions in medical im-ages plays a critical role in clinical workflows, including diagnosis, prognosis, and treatment planning. However, manual delineation of target structures is labor-intensive, time-consuming, and prone to inter-observer variability, thereby motivating the development of automatic segmenta-tion methods to improve efficiency and consistency (Wang et al., 2021a). In recent years, deep learning (DL) tech-niques have significantly advanced this field, leading to the development of a wide range of automatic segmentation approaches (Azad et al., 2024). Among these, convolutional neural networks (CNNs), particularly U-Net and its variants, have demonstrated remarkable performance by leveraging convolutional layers to effectively capture fine-grained local features (Ronneberger et al., 2015; Li et al., 2018; Yang et al., 2025b,d,a). Nevertheless, due to the intrinsic locality of convolutional operations, CNN-based models are limited in their ability to capture global contextual information and 
+
+> ∗
+
+Corresponding author  
+
+> yang.jin@wustl.edu
+
+(J. Yang) 
+
+> ORCID
+
+(s): 
+
+model long-range dependencies (Yang et al., 2025c, 2026). Comparing with CNN-based models, the Vision Trans-former (ViT) has been introduced as a powerful alternative backbone to capture global information for medical image segmentation (Dosovitskiy et al., 2021). It employs self-attention mechanisms to model long-range dependencies through global interactions across the entire image, enabling more effective utilization of contextual information. Due to these advantages, ViT-based methods have been widely adopted for organ and tissue segmentation across diverse imaging modalities, including Computed Tomography (CT) (You et al., 2022; Yan et al., 2022), Cone Beam Computed Tomography (Chen et al., 2023), Magnetic Resonance (MR) (Liu et al., 2022; Pecco et al., 2024), Positron Emission Tomography (Li et al., 2024), dermoscopy (Wu et al., 2022), and electron microscopy (Pan et al., 2023). However, their performance and applicability in medical image segmenta-tion are challenged by the intrinsic characteristics of self-attention and multi-layer perceptrons (MLPs) modules and the architectural design of ViT-based networks. First, ViT-based models leverage self-attention to model long-range spatial dependencies by computing pairwise 
+
+Jin Yang: Preprint submitted to Elsevier Page 1 of 20    
+
+> arXiv:2605.11434v1 [eess.IV] 12 May 2026 Frequency-enhanced Vision Transformer in Medical Image Segmentation Low -Frequency High -Frequency Low -Frequency High -Frequency
+
+(A)  (B)  
+
+> Figure 1: Visualization of low-frequency and high-frequency components decomposed by 3D Fast Fourier Transformation on (A) CT volumes and (B) T1w MR volumes.
+
+interactions among tokenized image patches (Dosovitskiy et al., 2021). While this global modeling capability is effective for capturing contextual information, it may come at the cost of diminished sensitivity to fine-grained spatial details (Ren et al., 2022; Xu et al., 2025a). Specifically, the global aggregation inherent in self-attention tends to lead to a bias toward low-frequency signals, thus ignor-ing high-frequency components (Zhang et al., 2023). As shown in Fig. 1, low-frequency components capture coarse structural information, while high-frequency components include information of peripheral regions and emphasize sharp intensity transitions and detailed patterns. Therefore, self-attention limits the model’s ability to preserve dis-criminative high-frequency information, thus diminishing representation of local structures such as edges, boundaries, and small anatomical variations (Bai et al., 2022; Yan et al., 2025). Moreover, standard self-attention operates primarily along the spatial dimension, focusing on relation-ships between patches while lacking explicit mechanisms to model inter-channel dependencies (Hatamizadeh et al., 2023). These self-attention mechanisms cannot fully capture cross-channel feature interactions to model channel attention due to the implementation of global pooling or aggregation operations to ignore the high-frequency information (Zheng et al., 2023). Additionally, self-attention introduces substan-tial computational overhead due to the pairwise similarity computation between tokens (Liu et al., 2021; Wu et al., 2025). For example, given an input with 𝑁 tokens, the attention operation incurs a computational complexity of 
+
+(𝑁 3) which increases quadratically for high-resolution feature maps or volumetric medical images. This quadratic scaling not only increases memory consumption but also limits the practical deployment of ViT-based models in resource-constrained settings. Second, while ViT-based models employ MLPs to in-troduce non-linearity and enhance feature representation (Dosovitskiy et al., 2021), standard MLP modules operate in a point-wise manner across spatial locations and primarily model channel-wise transformations. Therefore, they lack explicit mechanisms to capture spatially localized patterns and fine-grained details. This limitation may lead to in-sufficient modeling of high-frequency spatial information, such as edges and small structures, which are essential for segmentation tasks. Additionally, conventional channel at-tention or dynamic weighting mechanisms typically rely on global pooling operations to summarize spatial information (Hu et al., 2018; Wang et al., 2020; Zhong et al., 2020). While effective for capturing global context, such strate-gies predominantly encode low-frequency responses and may under-represent high-frequency components, thereby limiting their ability to fully exploit discriminative channel features. Third, U-shaped segmentation architectures fuse skip-connected encoder features with upsampled decoder fea-tures through concatenation or element-wise summation to preserve spatial details and contextual information (Ron-neberger et al., 2015; Çiçek et al., 2016). However, such fusion strategies treat features as homogeneous representa-tions without aligning them and lack the ability to explicitly model their global relationships and semantic discrepancies (Song et al., 2026). To alleviate this limitation, several studies introduce attention mechanisms to selectively and adaptively fuse spatial features (Sun et al., 2025; Xu et al., 2025b; Yang et al., 2026). While effective, these approaches operate purely in the spatial domain. However, when features from encoder and decoder branches may exhibit substantial discrepancies in scale, semantics, and distribution, these ap-proaches may lack semantic alignment and lead to unreliable fusion. Fourth, most ViT-based segmentation models adopt a convolutional stem to generate overlapping patch embed-dings by progressively downsampling the input images (e.g., to 𝐻  
+
+> 4
+
+× 𝑊  
+
+> 4
+
+resolution) (Xiao et al., 2021; Zhang et al., 2025), and employ a symmetric stem in the decoder to restore spatial resolution (e.g., from 𝐻  
+
+> 4
+
+× 𝑊  
+
+> 4
+
+resolution) (Wang et al., 2022; Song et al., 2026). While this design enhances compu-tational efficiency, it cannot fully capture low-level features and thus inevitably leads to the loss of fine-grained spatial details during early-stage downsampling. These low-level features, including edges, boundaries, and subtle texture variations, are particularly critical for accurate delineation in   
+
+> Jin Yang: Preprint submitted to Elsevier Page 2 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation
+
+medical image segmentation. Since these ViT-based models lack mechanisms to propagate low-level features from the encoder stem to the decoder stem and fuse them accordingly (Cao et al., 2022), existing ViT-based architectures often struggle to preserve anatomical precision and boundary fi-delity, especially for small or low-contrast structures. To address the aforementioned limitations of self-attention and MLP modules, we propose Frequency-enhanced Dy-namic Self-Attention (FDSA) and Frequency-decomposed Gating MLP (FGMLP) modules. Specifically, FDSA first employs large-kernel depthwise convolution to capture rich fine-grained spatial details in large receptive fields, thus introducing a strong locality bias. This design enables the models to capture locally enriched features, thus improv-ing the representation of edges, boundaries, and small anatomical structures for accurate medical image segmen-tation. Second, FDSA introduces a frequency-domain self-attention mechanism , where self-attention is implemented on the frequency representations after spatial features are transformed into the spectral domain via the Fast Fourier Transform (FFT). Compared to spatial-domain attention, this design facilitates efficient modeling of large receptive fields, thus allowing the model to explicitly capture long-range dependencies through global frequency interactions. Additionally, global spatial attention often suppress high-frequency information related to fine-grained structures, but frequency-domain attention enables the preservation of discriminative high-frequency information. Third, FDSA in-corporates a multi-frequency dynamic mechanism to model inter-channel dependencies across distinct frequency bands. Instead of relying on a single global descriptor, the spectrum of features is decomposed into multiple frequency compo-nents, and channel-wise responses are adaptively modulated based on their spectral characteristics from different compo-nents separately. This design mitigates the bias toward low-frequency components and enables the network to preserve informative high-frequency signals, thereby capturing richer structural and textural patterns. These designs enable FDSA to maintain robustness across different imaging modalities and anatomical variations. The FGMLP module first utilizes a gating mechanism 
+
+to preserve informative high-frequency signals which are associated with detailed structures such as boundaries and small regions. Furthermore, FGMLP incorporates a selec-tive frequency decomposition mechanism to adaptively mod-ulates feature responses, improving segmentation perfor-mance across structures of varying scales. This mechanism decomposes input features into low-frequency and high-frequency components, and allows the model to disentan-gle global structural information from fine-grained details, facilitating more effective feature representation. It then se-lectively highlights informative frequency components, en-hancing the network’s ability to capture both coarse semantic context and detailed spatial variations adaptively. To address the limitations on feature fusion, we pro-pose a Wavelet-guided Adaptive Feature Fusion (WAFF) module, which performs feature fusion in the frequency domain to enable semantically consistent and robust in-tegration. Specifically, WAFF decomposes spatial features into multi-frequency components using the Discrete Wavelet Transform (DWT), where different subbands capture dis-tinct semantic information, including global structures (low-frequency) and fine-grained details (high-frequency). By disentangling features into frequency-specific representa-tions, WAFF performs adaptive fusion on corresponding subbands for aligning encoder and decoder features at the semantic level. This design ensures that components with similar semantic information are fused coherently, thereby mitigating the impact of large semantic discrepancies in the spatial domain. Furthermore, frequency-domain repre-sentations inherently capture global context with reduced spatial redundancy and improved noise suppression. After frequency decomposition, WAFF employs an adaptive fu-sion mechanism to enhance the robustness of feature fusion by emphasizing informative components while suppressing irrelevant or noisy signals. This mechanism models global relationships between encoder and decoder features within each frequency band, enabling dynamic and content-aware feature aggregation. Therefore, WAFF demonstrates more robust and efficient feature fusion and information aggre-gation without losing details and informative signals during fusion. To address the limitations of low-level feature propaga-tion, we propose a Frequency-enabled Cross-scale Stem Bridge (FCSB) to explicitly enhance the propagation and flow of low-level features between the stems of encoder and decoder. FCSB explores global dependencies and cross-scale interactions among varying-scaled features in the fre-quency domain. Specifically, it transforms spatial features into the frequency domain, and utilizes lightweight global receptive fields to capture long-range correlations among low-level features efficiently (Chi et al., 2020). Addition-ally, it utilizes a frequency-guided cross-attention mecha-nism to explicitly model cross-scale interactions between shallow and deeper stem features in the frequency domain. By performing this cross-scale attention, FCSB effectively aligns multi-scale representations and enhances the consis-tency of structural details across resolutions. This design not only avoids fine-grained information lose during downsam-pling but also enables more effective integration of com-plementary features across scales. Therefore, FCSB enables low-level feature bridging by jointly exploiting frequency-domain global modeling and cross-scale attention with high computational efficiency. Building upon those, we develop a Frequency-enhanced Vision Transformer , termed FEFormer, for generic knowl-edge extraction and adaptive feature fusion in robust and efficient volumetric medical image segmentation. We incor-porate the FDSA and FGMLP into the Frequency-enhanced Transformer block by replacing standard self-attention and MLP modules, and incorporate the block into a hierarchical ViT architecture for adopting the scaling behavior of hier-archical transformers. We further integrate the WAFF into the decoder to fuse skip connected features and upsampled   
+
+> Jin Yang: Preprint submitted to Elsevier Page 3 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation
+
+features, and integrate the FCSB between the convolutional stems of the encoder and the decoder. The incorporation of these modules jointly enhance spatial, spectral, and channel-wise feature representations, thereby enabling more accu-rate and robust medical image segmentation. We evaluated FEFormer on four heterogeneous volumetric segmentation tasks: abdominal multi-organ CT segmentation, brain tumor MR segmentation, hepatic vessel tumor CT segmentation, and abdomen organ CT segmentation. It achieved supe-rior segmentation performance with lower computational complexity compared with other state-of-the-art (SOTA) models. Our contributions are summarized as follows: 
+
+• We propose a Frequency-enhanced Dynamic Self-Attention (FDSA) module that integrates convolu-tions for strong locality bias with frequency-domain attention for efficient global context modeling. It fur-ther employs a multi-frequency dynamic mechanism to adaptively emphasize informative spectral compo-nents, improving the representation of fine-grained anatomical structures. 
+
+• We propose a Frequency-decomposed Gating MLP (FGMLP) module that combines gated modulation with frequency decomposition for adaptive enhance-ment of both global semantic context and fine struc-tural details, leading to more discriminative feature representations. 
+
+• We develop a Wavelet-guided Adaptive Feature Fusion (WAFF) module that performs frequency-domain feature decomposition and adaptive frequency-aware fusion to achieve semantically consistent inte-gration and improve fusion robustness to large feature discrepancies. 
+
+• We propose a Frequency-enabled Cross-scale Stem Bridge (FCSB) that leverages frequency-domain global modeling and cross-attention to enhance low-level feature propagation and improve consistency in struc-tural fine details among multi-scale features. 
+
+• We develop a Frequency-enhanced Vision Trans-former (FEFormer) by incorporating the proposed modules into a hierarchical ViT architecture for ac-curate, robust, and efficient medical image segmenta-tion. We validated it on four diverse volumetric med-ical image segmentation tasks, demonstrating supe-rior accuracy and high efficiency compared to SOTA methods. 
+
+2. Related Works 
+
+2.1. Vision Transformers for Medical Image Segmentation 
+
+ViT-based architectures have demonstrated remarkable success in medical image segmentation due to their strong capability in modeling long-range dependencies (Xiao et al., 2023). For example, Swin UNet represents one of the earli-est fully transformer-based frameworks tailored for medical image segmentation, leveraging hierarchical self-attention to capture multi-scale contextual information (Cao et al., 2022). Nevertheless, pure ViT-based models often struggle to effectively encode local structures due to their reliance on patch-wise tokenization. To address this limitation, Med-ical Transformer introduces gated position-sensitive axial attention along with a local–global training strategy to bet-ter balance fine-grained details and global context (Vala-narasu et al., 2021). Subsequent works have further ex-plored hybrid and hierarchical designs to enhance both lo-cal and global feature modeling. MISSFormer incorporates enhanced transformer blocks and a context bridge mod-ule within a hierarchical architecture to facilitate cross-scale feature interaction (Huang et al., 2022). Similarly, the asymmetric compound branch Transformer adopts an asynchronous dual-branch design to efficiently capture com-plementary local and global dependencies while reducing computational complexity (Zhang et al., 2024). To improve multi-scale representation learning, Dual Swin Transformer UNet employs dual-scale encoders to extract features at different semantic levels (Lin et al., 2022), while nnFormer, built upon nnU-Net, integrates both local and global volume-based self-attention mechanisms to learn expressive volu-metric representations (Zhou et al., 2023a). Despite these advancements, ViT-based models still exhibit limitations in capturing fine boundary and structural details, partly due to the smoothing effect of self-attention and MLP layers. To mitigate this issue, SEAformer enhances edge representation by explicitly preserving informative boundary features while suppressing background noise (Li et al., 2025). Furthermore, the use of fixed-size patches restricts the ability of stan-dard ViTs to model deformable anatomical structures. To overcome this constraint, AgileFormer introduces spatially dynamic components that adaptively adjust receptive fields, enabling more effective modeling of geometric variations and improving segmentation performance (Qiu et al., 2026). 
+
+2.2. Frequency in Vision Transformers 
+
+The architecture of ViTs is enhanced by employing frequency filters and extracting frequency features. These methods highlight important frequency components for helping models focus on useful feature representations in target vision tasks. For instance, a Frequency Domain-based Transformer extracts features via frequency-based self-attention and MLP for efficient image deblurring (Kong et al., 2023). Similarly, the Holistic Dynamic Frequency Transformer is capable of capturing global information and dynamically selecting important frequency components for image fusion and restoration (Shang et al., 2024). Since high- and low-frequency components of features highlight different characteristics, the FreqFormer separately handles low- and high-frequency information for efficient image super-resolution (Dai et al., 2024). The LoFormer simul-taneously captures features from low- and high-frequency   
+
+> Jin Yang: Preprint submitted to Elsevier Page 4 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation
+
+local windows, thus effectively modeling long-range de-pendencies with maintaining fine-grained details for image deblurring (Mao et al., 2024). Other methods employ fre-quency mechanisms to extract more features in the frequency domain, thus enhancing and supplement the extraction of spatial features to improve performance in vision tasks. For example, the SpectFormer employs frequency attention layers to enhance spatial self-attention layers by capturing high-frequency information to improve segmentation in edges and lines (Patro et al., 2025). The frequency feature aggregation transformer captures spatial features to enhance high-frequency feature extraction in image super-resolution effectively (Song et al., 2025). The DBFFT employs a dual frequency and spatial branches to learn representation from the frequency and spatial domains simultaneously and to adaptively fuse features from two domains (Zeng et al., 2024). 
+
+2.3. Wavelet Transform in Semantic Segmentation 
+
+Wavelet transform offers a unique advantage in jointly modeling spatial and frequency information, making it par-ticularly well-suited for semantic segmentation tasks where both global structures and fine-grained details are critical. Consequently, it has been increasingly incorporated into segmentation frameworks. For instance, WNet leverages a wavelet-based encoder to capture cross-modal represen-tations from video and audio signals, enabling more ef-fective object segmentation (Pan et al., 2022). XNet de-composes biomedical images into low- and high-frequency components via wavelet transform, facilitating consistency learning across frequency bands and thereby improving ro-bustness (Zhou et al., 2023b). Similarly, WCMamba in-troduces a pyramid wavelet mechanism to extract multi-scale representations and enhance fine structural details, leading to improved segmentation performance (Zhan and Yang, 2025). WTCLIP further integrates a learnable wavelet transform decoder to strengthen feature extraction capabil-ities within CLIP, particularly benefiting boundary delin-eation (Xiao et al., 2026). In the context of remote sensing, FSSFFormer employs discrete wavelet transform to decom-pose images into frequency sub-bands, explicitly preserving global spatial structures while maintaining high-frequency details, which is essential for accurate semantic segmenta-tion (Li et al., 2026). 
+
+3. Methods 
+
+3.1. Overall Architecture 
+
+FEFormer adopts a U-shaped encoder–decoder architec-ture to learn hierarchical feature representations (Fig. 2). It consists of four main components: an encoder, a bottleneck, a decoder, and a stem bridge. 
+
+Encoder. The encoder employs a convolutional stem that downsamples the input volume of size 𝐶 𝑖𝑛 ×𝐷 ×𝐻 ×𝑊 by a factor of 4, projecting it into a 𝐶 -dimensional feature space (𝐶 = 64 ) and generating patches with size 𝐶 × 𝐻  
+
+> 4
+
+× 𝑊  
+
+> 4
+
+× 𝐷  
+
+> 4
+
+.It comprises three stages, each containing two consecutive Frequency-Enhanced Transformer blocks. After transformer blocks at each stage, a patch merging layer employs a 3×3×3 
+
+convolution with stride 2 followed by layer normalization to progressively reduce the spatial resolution while doubling the channel dimension. Therefore, the feature maps at each stage are of sizes 𝐶 × 𝐻  
+
+> 4
+
+× 𝑊  
+
+> 4
+
+× 𝐷  
+
+> 4
+
+, 2𝐶 × 𝐻  
+
+> 8
+
+× 𝑊  
+
+> 8
+
+× 𝐷  
+
+> 8
+
+, and 
+
+4𝐶 × 𝐻  
+
+> 16
+
+× 𝑊  
+
+> 16
+
+× 𝐷  
+
+> 16
+
+, respectively. 
+
+Bottleneck. The bottleneck further processes the deepest features using two consecutive Frequency-Enhanced Trans-former blocks, producing representations of size 8𝐶 × 𝐻  
+
+> 32
+
+× 
+
+> 𝑊
+> 32
+
+× 𝐷  
+
+> 32
+
+.
+
+Decoder. The decoder utilizes a similar architecture as the encoder with three stages, each consisting of two consec-utive Frequency-Enhanced Transformer blocks. Before each stage, a patch expanding layer is employed to upsample the feature maps by a factor of 2. The upsampled features are then fused with the corresponding skip-connected encoder features adaptively within a WAFF block. Consequently, the feature dimensions at the decoder stages are 4𝐶 × 𝐻  
+
+> 16
+
+× 𝑊  
+
+> 16
+
+× 𝐷  
+
+> 16
+
+,
+
+2𝐶 × 𝐻  
+
+> 8
+
+× 𝑊  
+
+> 8
+
+× 𝐷  
+
+> 8
+
+, and 𝐶 × 𝐻  
+
+> 4
+
+× 𝑊  
+
+> 4
+
+× 𝐷  
+
+> 4
+
+, respectively. Subsequently, a convolution stem is employed to reconstruct the feature maps by restoring the original spatial resolution of input images. Lastly, a 1 × 1 × 1 convolutional layer is em-ployed to produce the voxel-wise segmentation predictions. 
+
+Stem bridge. A FCSB is employed to bridge the fea-ture flows between the convolution stems of the encoder and decoder, enhancing low-level feature propagation and improving the preservation of fine structural details. 
+
+3.2. Frequency-enhanced Transformer block 
+
+The Frequency-enhanced Transformer block is built on the FDSA and FGMLP modules (Fig. 2). Layer Normaliza-tion (LN) layer is applied before the FDSA and FGMLP modules, with residual connections incorporated in both. Given the input in the 𝑙 −th layer as 𝑿 𝑙 −1 ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 ,the output, 𝑿 𝑙 ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 , is computed as ̂
+
+𝑿 𝑙 = FDSA (LN (𝑿 𝑙 −1 )) + 𝑿 𝑙 −1 , (1) 
+
+𝑿 𝑙 = FGMLP (LN (̂𝑿 𝒍 )) + ̂ 𝑿 𝑙 . (2) 
+
+3.3. Frequency-enhanced Dynamic Self-attention module 
+
+The FDSA module is constructed by integrating a frequency-domain self-attention mechanism into a multi-frequency dynamic mechanism (Fig. 2). Specifically, the frequency-domain self-attention mechanism employs a depth-wise con-volutional layer with a large 7×7×7 kernel (DWConv 7×7×7 )to extract features 𝑿 ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 from the input 𝑿 in ∈
+
+ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 as 
+
+𝑿 = DWConv 7×7×7 (𝑿 in ). (3) This large-kernel depth-wise convolutional layer is em-ployed to capture rich spatial features through an enlarged receptive field while maintaining low computational com-plexity. Additionally, it introduces local inductive biases into the self-attention mechanism, thereby enhancing the model’s   
+
+> Jin Yang: Preprint submitted to Elsevier Page 5 of 20
+
+Frequency-enhanced Vision Transformer in Medical Image Segmentation Patch Merging  
+
+> Frequency -enhanced
+> Transformer Block ×2
+
+Bottleneck 
+
+Encoder  Decoder                         
+
+> 𝐶 ×𝐻
+> 4×𝑊
+> 4×𝐷
+> 4
+> 2𝐶 ×𝐻
+> 8×𝑊
+> 8×𝐷
+> 8
+> 4𝐶 ×𝐻
+> 16 ×𝑊
+> 16 ×𝐷
+> 16
+> 8𝐶 ×𝐻
+> 32 ×𝑊
+> 32 ×𝐷
+> 32
+> LN
+> FDSA
+> LN
+> FGMLP
+> 𝑋 𝑙 −1
+> ෠𝑋 𝑙
+> 𝑋 𝑙
+
+(A) FEFormer                        
+
+> Patch Merging
+> Frequency -enhanced
+> Transformer Block ×2
+> Patch Merging
+> Frequency -enhanced
+> Transformer Block ×2
+> Frequency -enhanced
+> Transformer Block
+> Patch Expanding
+> Frequency -enhanced
+> Transformer Block ×2
+> Patch Expanding
+> Frequency -enhanced
+> Transformer Block ×2
+> Patch Expanding
+> Frequency -enhanced
+> Transformer Block ×2
+> Conv
+> Conv, stride 2
+> Conv, stride 2
+> Conv
+> Transpose Conv
+> Conv
+> Transpose Conv
+> Conv
+> WAFF
+> WAFF
+> WAFF
+> 4𝐶 ×𝐻
+> 16 ×𝑊
+> 16 ×𝐷
+> 16
+> 𝐶 ×𝐻
+> 4×𝑊
+> 4×𝐷
+> 4
+> 2𝐶 ×𝐻
+> 8×𝑊
+> 8×𝐷
+> 8
+
+Stem  Stem    
+
+> Split
+> FFT
+> SPConv
+> BN
+> ReLU
+> IFFT
+> FFT FFT
+> IFFT
+> Frequency -enabled Cross -scale Stem Bridge
+
+(B) Frequency -enhanced 
+
+Transformer block        
+
+> 𝑿 1
+> 𝑿 2
+> 𝑿 2
+> 1
+> 𝑿 2
+> 2
+> ෡𝑿 2
+> ෡𝑿 1
+> Up
+> Frequency -enhanced
+> Transformer Block
+> 8𝐶 ×𝐻
+> 32 ×𝑊
+> 32 ×𝐷
+> 32
+> FFT
+> DWConv
+> FFT FFT
+> IFFT
+> Linear
+> Sigmoid
+
+K V 
+
+> Linear
+> GELU
+> 𝑿 𝑖𝑛 𝑿 𝑜𝑢𝑡
+> 𝜎
+> GAP
+> Conv
+> Softmax
+> AVP
+> MAP
+> Conv
+> Sigmoid
+> Linear
+> (C) Frequency -
+> enhanced Dynamic
+> Self -attention
+> (D) Frequency -decomposed
+> Gating MLP
+
+Softmax 
+
+Q
+
+K
+
+V
+
+Q  
+
+> High Medium Low
+
+𝑧 (1) 𝑧 (3)
+
+𝑧 (2)  
+
+> 𝑿 𝐹𝑟𝑒𝑞
+> (1)
+> 𝑿 𝐹𝑟𝑒𝑞
+> (2)𝑿 𝐹𝑟𝑒𝑞
+> (3)
+> 𝑍
+> 𝑤
+> 𝑿 𝑆𝐴
+> ෡𝑿
+> 𝑿
+> 𝑿 𝑖𝑛
+> 𝑿
+> 𝑿 𝐺𝑎𝑡𝑒
+> 𝑲 𝑿 𝑳𝒐𝒘
+> 𝑿 𝑯𝒊𝒈𝒉
+> ෡𝑿
+
+Softmax 
+
+Element -wise product 
+
+Convolution 
+
+Element -wise subtraction 
+
+Element -wise multiplication 
+
+Element -wise addition 
+
+> Linear
+> ReLU
+> GELU
+> Conv
+> 𝑤 1
+> 𝑤 2
+> Conv
+
+Figure 2: (A) The overall architecture of FEFormer. FEFormer consists of an encoder, a bottleneck, a decoder, and a Frequency-enabled Cross-scale Stem Bridge (FCSB). The encoder employs a convolutional stem, and subsequently employs two consecutive Frequency-enhanced Transformer blocks and a patch merging layer at each stage. The decoder with a symmetry architecture employs a patch expanding layer and two Transformer blocks at each stage. The stem bridge employs FCSB to propagate features from the encoder to the decoder. (B) The Frequency-enhanced Transformer block incorporates a FDSA and FGMLP modules. (C) The Frequency-enhanced Dynamic Self-attention module utilizes a frequency-domain self-attention mechanisms and a multi-frequency dynamic mechanism. (D) The Frequency-decomposed gating MLP module utilizes a gating mechanism and a selective frequency decomposition mechanism. 
+
+ability to efficiently capture fine-grained features and spatial details. These spatial features are projected for generating the query 𝑸 , the key 𝑲 , and the value 𝑽 via the linear matrices as 
+
+𝑸 = 𝑿𝑾 𝑞 , 𝑲 = 𝑿𝑾 𝑘 , 𝑽 = 𝑿𝑾 𝑣 . (4) The query and key are converted to frequency-domain fea-tures via FFT as 
+
+𝑸 Freq = FFT (𝑸 ), 𝑲 Freq = FFT (𝑲 ). (5) Subsequently, frequency-domain attention score 𝑸𝑲 Freq is calculated as 
+
+𝑸𝑲 Freq = 𝑸 Freq ⊙ 𝑲 Freq . (6) Subsequently, the frequency-domain attention score is con-verted to the spatial domain by implementing the Inverse Fast Fourier Transform (IFFT) as 
+
+𝑸𝑲 = IFFT (𝑸𝑲 Freq ). (7) The output features of the frequency-domain self-attention mechanism 𝑿 SA ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 is generated by multiplying the attention score and the value as 
+
+𝑿 SA = Softmax (𝑸𝑲 ) ⋅ 𝑽 . (8) Standard spatial-domain self-attention may ignore high-frequency information because its global aggregation op-eration tends to smooth the fine-grained features and lo-cal patterns captured by large-kernel convolutions, thus limiting segmentation performance in edges and boundary structures. In contrast, this frequency-domain self-attention mechanism calculates global self-attention scores through element-wise multiplication in the frequency domain. Ac-cording to the Convolution Theorem, element-wise multipli-cation in the frequency domain is equivalent to convolution in the spatial domain. Therefore, the proposed mechanism explicitly preserves high-frequency information rather than allowing it to be implicitly smoothed or diluted during spatial-domain aggregation. This enables the model to better retain fine-grained features that are critical for accurate segmentation of edges, boundaries, fine anatomical struc-tures, and small abnormalities. Furthermore, this frequency-domain self-attention mechanism reduces the computa-tional complexity to 𝑂 (𝑁 log 𝑁 ), significantly reducing from 𝑂 (𝑁 2)in the standard self-attention. Subsequently, a multi-frequency dynamic mechanism is introduced to adaptively recalibrate channel features ac-cording to their importance in the frequency domain. By explicitly analyzing the contributions of low-, medium-, and 
+
+Jin Yang: Preprint submitted to Elsevier Page 6 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 
+
+high-frequency components, this mechanism assigns larger weights to channels containing discriminative global struc-tures, texture patterns, or fine-grained details, while reducing the influence of redundant or noisy responses. This dynamic recalibration enables the network to capture complementary information across multiple frequency bands and improves feature representation quality. Existing channel attention mechanisms typically em-ploy global average pooling to estimate channel importance. However, average pooling primarily reflects low-frequency responses and may overlook informative mid- and high-frequency signals that are critical for representing bound-aries, textures, and small anatomical structures. In contrast, this multi-frequency dynamic mechanism decomposes fea-ture representations into multiple frequency sub-bands and models their contributions separately. This frequency-aware representation enables a more comprehensive characteriza-tion of channel-wise information and allows the network to adaptively emphasize complementary features across differ-ent frequency ranges. Specifically, the features 𝑿 SA along all channels 𝐶 are transformed to the frequency domain via FFT as 
+
+𝑿 Freq = FFT (𝑿 SA ). (9) This frequency-domain features 𝑿 Freq are decomposed into three sub-band components 𝑿 (𝑠 ) 
+
+> Freq
+
+(𝑠 ∈ {1 , 2, 3} ), includ-ing low-frequency 𝑿 (1) 
+
+> Freq
+
+, mid-frequency 𝑿 (2) 
+
+> Freq
+
+, and high-frequency 𝑿 (3) 
+
+> Freq
+
+, as 
+
+{𝑿 (1) 
+
+> Freq
+
+, 𝑿 (2) 
+
+> Freq
+
+, 𝑿 (3) 
+
+> Freq
+
+} = { 𝑿 (𝑠 )
+
+> Freq
+
+}3 
+
+> 𝑠 =1
+
+= Decomp (𝑿 Freq ).
+
+(10) These spectrum components are globally aggregated within the spatial region Ω of each sub-band to model their relative importance as 
+
+{𝑧 (1) , 𝑧 (2) , 𝑧 (3) } = { 𝑧 (𝑠 )}3 
+
+> 𝑠 =1
+
+= 1
+
+|Ω|∑
+
+> (𝑑,ℎ,𝑤 )∈Ω
+
+|𝑿 (𝑠 )
+
+> Freq
+
+|.
+
+(11) All aggregated frequency components are concatenated along channels to generate frequency-domain descriptors 𝒁 
+
+to model channel-wise inter-dependencies as 
+
+𝒁 = Concate ([ 𝑧 (1) ; 𝑧 (2) ; 𝑧 (3) ]) . (12) Subsequently, the dynamic mechanism is employed to gen-erate channel-wise dynamic weight 𝑤 by stacking two fully connected (FC) layers, with a ReLU function in-between and a sigmoid function followed as 
+
+𝑤 = Sigmoid (FC (ReLU (FC (𝒁 )) )) . (13) The channel-wise inter-dependencies are modeled based on frequency signals. The dynamically calibrated features ̂
+
+𝑿 ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 are generated by adaptively highlighting the important and informative features by the channel-wise dynamic weight as ̂
+
+𝑿 = 𝑤 ⊙ 𝑿 SA . (14) 
+
+3.4. Frequency-decomposed Gating MLP module 
+
+The Frequency-decomposed Gating MLP (FGMLP) module is built by integrating a gating mechanism with a selective frequency decomposition mechanism (Fig. 2). Specifically, given the input features 𝑿 𝑖𝑛 ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 ,a linear layer is employed to project them to features 𝑿 ∈
+
+ℝ4𝐶 ×𝐻 ×𝑊 ×𝐷 by expanding channels with a ratio of 4 with a GELU followed as 
+
+𝑿 = GELU (Linear (𝑿 𝑖𝑛 )) . (15) Subsequently, the gating mechanism generates gated fea-tures 𝑿 Gate ∈ ℝ4𝐶 ×𝐻 ×𝑊 ×𝐷 by utilizing an activation function 𝜎 (e.g., ReLU6) as 
+
+𝑿 Gate = 𝑿 ⊙ 𝜎 (𝑿 ). (16) Channel-wise MLP module lacks mechanisms to extract fine grained spatial features. However, employing a gating mechanism enables it to enhance the extraction of spatial features and highlight fine grained details by amplifying high frequency signals. After gating, a second linear projection layer is employed to compress channels to the original dimension as 𝑿 𝑜𝑢𝑡 ∈
+
+ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 , and two Dropout layers are employed before and after it as 
+
+𝑿 𝑜𝑢𝑡 = Dropout (Linear (Dropout (𝑿 Gate ))) . (17) Subsequently, the selective frequency decomposition mech-anism decomposes the features 𝑿 𝑜𝑢𝑡 into low-frequency and high-frequency components using learnable low frequency filters and adaptively highlights important ones. Specifically, input-adaptive low-pass frequency filter kernels are first generated by stacking a global average pooling layer (GAP), two 1 × 1 × 1 convolutional layer (Conv) with a GELU function in-between, and a softmax function. The global average pooling layer is utilized to describe global contextual information, and the 1 × 1 × 1 convolutional layers project global context with a reduction ratio of 4 in intermediate channel dimensions for generating filter kernels with the size of 𝑘 3. To enhance stability, the softmax function is utilized to normalize kernels as low-pass smoothing filters. Thus, the kernels 𝑲 ∈ ℝ𝐶 ×𝑘 3
+
+are generated as 
+
+𝑲 = Softmax (Conv (GELU (Conv (GAP (𝑿 out ))))) .
+
+(18) The normalized kernels are reshaped into convolutional filters 𝑲 ∈ ℝ𝐶 ×1×1×1× 𝑘 3
+
+, and this input-adaptive kernel is applied to extract low-frequency components via a convolu-tional layer as 
+
+𝑿 Low = Conv (𝑲 , 𝑿 out ). (19) The high-frequency components 𝑿 High are extracted from the input features by removing low-frequency components from the whole signals as 
+
+𝑿 High = 𝑿 out − 𝑿 Low . (20)   
+
+> Jin Yang: Preprint submitted to Elsevier Page 7 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation
+
+Aggregating information within spatial regions preserves low-frequency signals while suppressing high-frequency components, as spatial averaging smooths fine-grained de-tails in the feature maps. Therefore, the low-pass frequency filter is constructed using a global average pooling layer followed by 1 × 1 × 1 convolutional layers. A channel-wise frequency selection modulator is then introduced to adaptively emphasize informative frequency components from the low- and high-frequency branches, thereby enhancing discriminative channel features accord-ing to their relevance. Since different channels may rely on distinct frequency characteristics, dynamically reweight-ing these components allows the network to better capture global structural information from low frequencies and fine boundary details from high frequencies. To estimate channel importance robustly, both average pooling (AVP) and max pooling (MAP) layers are employed to summarize comple-mentary global responses, where average pooling captures overall activation statistics and max pooling highlight salient responses. These descriptors are then interacted through a 
+
+7 × 7 × 7 depth-wise convolutional layer (DWConv 7×7×7 )kernel and sigmoid activation to generate adaptive channel-wise modulation weights as 
+
+𝑤 𝑎𝑣𝑝 = AVP (𝑿 Low + 𝑿 High ), (21) 
+
+𝑤 𝑚𝑎𝑝 = MAP (𝑿 Low + 𝑿 High ), (22) 
+
+{𝑤 1, 𝑤 2} = Sigmoid (DWConv 7×7×7 ([ 𝑤 𝑎𝑣𝑝 ; 𝑤 𝑚𝑎𝑝 ]) ).
+
+(23) Lastly, the output of the FGMLP module ̂ 𝑿 ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 
+
+is generated by adaptively re-weighting low-frequency and high-frequency features based on their relative importance as ̂
+
+𝑿 = 𝑤 1 ⊙ 𝑿 Low + 𝑤 2 ⊙ 𝑿 High . (24) 
+
+3.5. Wavelet-guided Adaptive Feature Fusion module 
+
+We propose a Wavelet-guided Adaptive Feature Fu-sion (WAFF) module for semantically consistent feature fusion in the frequency domain, thus improving fusion robustness by aligning feature semantics to handle large feature discrepancy (Fig. 3). Specifically, WAFF employs Haar Discrete Wavelet Transform (DWT) to decompose the input features 𝑿 1 and 𝑿 2 (𝑿 1, 𝑿 2 ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 )into eight sub-bands in the frequency domain by separat-ing low-frequency and high-frequency signals along three dimensions {𝑿 LLL  
+
+> 1
+
+, 𝑿 LLH  
+
+> 1
+
+, ..., 𝑿 HHH  
+
+> 1
+
+} ∈ ℝ𝐶 × 𝐻      
+
+> 2×𝑊
+> 2×𝐷
+> 2
+
+and 
+
+{𝑿 LLL  
+
+> 2
+
+, 𝑿 LLH  
+
+> 2
+
+, ..., 𝑿 HHH  
+
+> 2
+
+} ∈ ℝ𝐶 × 𝐻      
+
+> 2×𝑊
+> 2×𝐷
+> 2
+
+, respectively, as 
+
+{𝑿 LLL  
+
+> 1
+
+, 𝑿 LLH  
+
+> 1
+
+, ..., 𝑿 HHH  
+
+> 1
+
+} = DWT (𝑿 1), (25) 
+
+{𝑿 LLL  
+
+> 2
+
+, 𝑿 LLH  
+
+> 2
+
+, ..., 𝑿 HHH  
+
+> 2
+
+} = DWT (𝑿 2). (26) Each sub-band represents different semantics, and take 𝑿 1
+
+for example: 
+
+• Sub-band 𝑿 LLL  
+
+> 1
+
+represents pure low-frequency se-mantic features. 
+
+• Sub-bands {𝑿 LLH  
+
+> 1
+
+, 𝑿 LHL  
+
+> 1
+
+, 𝑿 HLL  
+
+> 1
+
+} represent relatively higher-frequency semantic features related to edges and boundaries along three dimensions (𝐷, 𝑊 , 𝐻 ).
+
+• Sub-bands {𝑿 LHH  
+
+> 1
+
+, 𝑿 HLH  
+
+> 1
+
+, 𝑿 HHL  
+
+> 1
+
+} represent higher-frequency semantic features related to more complex structures. 
+
+• Sub-band 𝑿 HHH  
+
+> 1
+
+represents high-frequency semantic features related to very fine details or noise. Subsequently, an adaptive feature fusion mechanism is uti-lized to fuse corresponding sub-bands, thus aligning their semantics in the frequency domain. We take 𝑿 LLL  
+
+> 1
+
+and 
+
+𝑿 LLL  
+
+> 2
+
+for example. Their global relationship description is efficiently modeled by applying average pooling (AVP) and max pooling (MAP) along channels as 
+
+𝑤 𝑎𝑣𝑝 = AVP (Concate ([ 𝑿 LLL  
+
+> 1
+
+; 𝑿 LLL  
+
+> 2
+
+])) , (27) 
+
+𝑤 𝑚𝑎𝑝 = MAP (Concate ([ 𝑿 LLL  
+
+> 1
+
+; 𝑿 LLL  
+
+> 2
+
+])) . (28) Subsequently, a 7 × 7 × 7 depthwise convolutional layer (DWConv 7×7×7 ) is used to allow such information to interact and mix among two semantic descriptors. Lastly, a Sigmoid function is used to obtain dynamic selection values 𝑤 1, 𝑤 2
+
+as 
+
+{𝑤 1; 𝑤 2} = Sigmoid (DWConv 7×7×7 ([ 𝑤 𝑎𝑣𝑝 ; 𝑤 𝑚𝑎𝑝 ])) .
+
+Two sub-bands are calibrated by these selection weights and adaptively fused as 
+
+𝑿 LLL = 𝑤 1 ⊙ 𝑿 LLL  
+
+> 1
+
++ 𝑤 2 ⊙ 𝑿 LLL  
+
+> 2
+
+. (29) WAFF decomposes spatial features into multiple frequency-domain sub-bands to capture complementary semantic in-formation, where low-frequency components encode global structural context while high-frequency components pre-serve fine-grained details. This frequency-aware decompo-sition enables spatial patterns to be represented according to their underlying frequency characteristics, thereby facilitat-ing semantic disentanglement across different feature com-ponents. Consequently, WAFF performs alignment and fu-sion on sub-features with similar semantic properties, avoid-ing the mismatch introduced by substantial spatial discrep-ancies. Furthermore, an adaptive feature fusion mechanism dynamically emphasizes informative components while sup-pressing irrelevant or noisy responses, enabling more ef-fective feature aggregation without compromising structural details. All fused sub-bands are combined and transformed back to the spatial domain via Inverse Discrete Wavelet Transform (IDWT), thus generating the output 𝑿 ∈ ℝ𝐶 ×𝐻 ×𝑊 ×𝐷 as 
+
+𝑿 = IDWT (𝑿 LLL , 𝑿 LLH , ..., 𝑿 HHL , 𝑿 HHH ). (30)   
+
+> Jin Yang: Preprint submitted to Elsevier Page 8 of 20
+
+Frequency-enhanced Vision Transformer in Medical Image Segmentation DWT 
+
+> …
+
+…
+
+> 𝑿 1
+> AVP
+> MAP
+> Conv
+> Sigmoid C
+> Adaptive Feature Fusion
+> Adaptive Feature Fusion
+> …
+
+𝑿 1 
+
+> 𝐿𝐿𝐿
+
+𝑿 1 
+
+> 𝐻𝐻𝐿
+
+𝑿 1
+
+> 𝐻𝐻𝐻
+
+𝑿 2
+
+> 𝐿𝐿𝐿
+
+𝑿 2
+
+> 𝐻𝐻𝐿
+
+𝑿 2
+
+> 𝐻𝐻𝐻
+
+𝑿 𝐿𝐿𝐿 
+
+𝑿 𝐻𝐻𝐿 
+
+𝑿 𝐻𝐻𝐻 
+
+DWT 
+
+IDWT  
+
+> 𝑿 2
+> Adaptive Feature Fusion
+> 𝑤 𝑎𝑣𝑝
+> 𝑤 𝑚𝑎𝑝
+> 𝑤 1
+> 𝑤 2
+> 𝑿
+> CConcatenation
+> Element -wise multiplication
+> Element -wise Addition
+
+Figure 3: The architecture of the Wavelet-guided Adaptive Feature Fusion (WAFF) module. WAFF takes input spatial features 𝑿 1 and 𝑿 2, and employs DWT to decompose them into frequency-domain sub-bands: {𝑿 𝐿𝐿𝐿  
+
+> 1
+
+, ..., 𝑿 𝐻𝐻𝐿  
+
+> 1
+
+, 𝑿 𝐻𝐻𝐻  
+
+> 1
+
+} and 
+
+{𝑿 𝐿𝐿𝐿  
+
+> 2
+
+, ..., 𝑿 𝐻𝐻𝐿  
+
+> 2
+
+, 𝑿 𝐻𝐻𝐻  
+
+> 2
+
+}. Subsequently, an adaptive feature fusion mechanism is employed to fuse each corresponding sub-bands. All fused sub-bands {𝑿 𝐿𝐿𝐿 , ..., 𝑿 𝐻𝐻𝐿 , 𝑿 𝐻𝐻𝐻 } are converted back to the spatial domain via IDWT as output features 𝑿 .
+
+3.5.1. Frequency-enabled Cross-scale Stem Bridge 
+
+The stem in the encoder consists of two patch embed-ding layers, and each patch embedding layer employs two successive 3 × 3 × 3 convolutional layers with a stride of 2 and 1 (Conv 3×3×3 ,2 and Conv 3×3×3 ,1, respectively). A Batch Normalization and a GELU activation function are employed after each convolutional layer. Two patch embed-ding layers project the channel number of the input image 
+
+𝑿 𝑖𝑛 ∈ ℝ𝐶 𝑖𝑛 ×𝐻 ×𝑊 ×𝐷 to 𝐶 ∕2 and 𝐶 channels, respectively, thus generating the output features of two patch embedding layers 𝑿 1 ∈ ℝ 𝐶        
+
+> 2×𝐻
+> 2×𝑊
+> 2×𝐷
+> 2
+
+and 𝑿 2 ∈ ℝ𝐶 × 𝐻      
+
+> 4×𝑊
+> 4×𝐷
+> 4
+
+as 
+
+𝑿 1 = GELU (BN (Conv 3×3×3 ,2(𝑿 𝑖𝑛 ))) , (31) 
+
+𝑿 1 = GELU (BN (Conv 3×3×3 ,1(𝑿 1))) , (32) 
+
+𝑿 2 = GELU (BN (Conv 3×3×3 ,2(𝑿 1))) , (33) 
+
+𝑿 2 = GELU (BN (Conv 3×3×3 ,1(𝑿 2))) . (34) To enhance the low-level feature propagation of the stem from the encoder to the decoder, we propose a Frequency-enabled Cross-scale Stem Bridge (FCSB) (Fig. 2). The out-put features 𝑿 2 is split into two subset of features along channels as 𝑿 12 and 𝑿 22 (𝑿 12, 𝑿 22 ∈ ℝ 𝐶        
+
+> 2×𝐻
+> 4×𝑊
+> 4×𝐷
+> 4
+
+). Subse-quently, the efficient global feature interaction is performed to the sub-features 𝑿 22 in the frequency domain for efficiently global context modeling. Specifically, the spatial features 
+
+𝑿 22 are transformed to frequency representations via FFT. A spectral 1 × 1 × 1 convolutional layer (SPConv 1×1×1 ), Batch Normalization (BN), and ReLU are then stacked and employed as a global receptive field on real and imagi-nary parts to learn global representations. These frequency representations are transformed back to the spatial domain for capturing globally enriched feature embeddings while preserving structural details. A 1 × 1 × 1 convolutional layer is then employed to restore the channel number of spatial features ̂ 𝑿 2 ∈ ℝ𝐶 × 𝐻      
+
+> 4×𝑊
+> 4×𝐷
+> 4
+
+as 
+
+𝑿 2,Freq = FFT (𝑿 22), (35) ̂
+
+𝑿 2,Freq = ReLU (BN (SPConv 1×1×1 (𝑿 2,Freq )) ), (36) ̂
+
+𝑿 2 = Conv (iFFT (̂𝑿 2,Freq )) . (37) Another subset of features 𝑿 12 are upsampled to the same dimension as that of features from the first patch embedding layer 𝑿 1. Subsequently, their cross-scale correlations are captured by the frequency-domain cross-attention mecha-nism for generating features ̂ 𝑿 1 ∈ ℝ 𝐶        
+
+> 2×𝐻
+> 2×𝑊
+> 2×𝐷
+> 2
+
+as 
+
+𝑿 12 = Upsample (𝑿 12), (38) 
+
+𝑸 = 𝑿 1𝑾 𝑞 , 𝑲 = 𝑿 1𝑾 𝑘 , 𝑽 = 𝑿 12𝑾 𝑣 (39) 
+
+𝑸 Freq = FFT (𝑸 ), 𝑲 Freq = FFT (𝑲 ), (40) 
+
+𝑸𝑲 = iFFT (𝑸 Freq ⊙ 𝑲 Freq ), (41) ̂
+
+𝑿 1 = Softmax (𝑸𝑲 ) ⋅ 𝑽 . (42) Therefore, this frequency-domain cross-attention mecha-nism captures global cross-scale dependencies between shallow high-resolution features and deep semantic repre-sentations. This feature correlation modeling in the spec-tral domain enables efficient long-range interaction and semantic-guided feature refinement for improved multi-scale representation learning. The stem in the decoder employs a similar architecture to take the features from the last layer of the decoder as the input features 𝑿 ′ 
+
+> in
+
+∈ ℝ𝐶 × 𝐻      
+
+> 4×𝑊
+> 4×𝐷
+> 4
+
+. This stem includes two convolutional linear projection layers, and each utilizes a 3×3×3 convolutional layer, and a transposed convolutional layer with the stride of 2. A Batch Normalization and a GELU activation function are employed after each convo-lutional layer. To enhance final segmentation results with richer low-level features, the output features of FCSB ̂ 𝑿 1
+
+and ̂ 𝑿 2 are added to this stem in the decoder. Thus, two lin-ear projection layers generate features 𝑿 ′2 ∈ ℝ 𝐶       
+
+> 2×𝐻
+> 2×𝑊
+> 2×𝐷
+> 2
+
+Jin Yang: Preprint submitted to Elsevier Page 9 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 
+
+and 𝑿 ′1 ∈ ℝ 𝐶    
+
+> 2×𝐻 ×𝑊 ×𝐷
+
+as 
+
+𝑿 ′ 
+
+> in
+
+= 𝑿 ′ 
+
+> in
+
++̂ 𝑿 2, (43) 
+
+𝑿 ′2 = GELU (BN (Conv 3×3×3 (𝑿 ′
+
+> in
+
+))) , (44) 
+
+𝑿 ′2 = GELU (BN (TransposedConv 3×3×3 (𝑿 ′2))) ,
+
+(45) 
+
+𝑿 ′2 = 𝑿 ′2 +̂ 𝑿 1, (46) 
+
+𝑿 ′1 = GELU (BN (Conv 3×3×3 (𝑿 ′2))) , (47) 
+
+𝑿 ′1 = GELU (BN (TransposedConv 3×3×3 (𝑿 ′1))) .
+
+(48) 
+
+4. Experiments and Results 
+
+4.1. Datasets 
+
+We implemented the experiments on four segmentation tasks from four different datasets to evaluate the superiority of FEFormer and underline its potential to generalize across different segmentation tasks. These tasks differ in image modalities, segmentation complexity, number of structures to be segmented, and spatial and phenotypic heterogeneity (Table 1). 
+
+Abdominal Multi-organ Segmentation. We imple-mented abdominal multi-organ segmentation on the MIC-CAI 2022 AMOS Challenge dataset (Ji et al., 2022). It consists of 300 abdominal CT images with voxel-level annotations of 15 organs (Spleen, Right kidney, Left kidney, Gall bladder, Esophagus, Liver, Stomach, Arota, Postcava, Pancreas, Right Adrenal Gland, Left Adrenal Gland, Duo-denum, Bladder, and Prostate). Each CT volume consists of 
+
+67 ∼ 369 slices of 512 × 512 pixels with a slice spacing of 
+
+1.25 ∼ 5.00 mm. 
+
+Hepatic Vessel Tumor Segmentation. The Hepatic Vessel Tumor segmentation dataset is from the Medical Segmentation Decathlon (MSD) Challenge (Antonelli et al., 2022). It consists of 303 CT scans with manual annotations. The target segmentation regions are the hepatic vessels (Ves-sel) and tumors within the liver (Tumor). They are obtained from patients with a variety of primary and metastatic liver tumors. 
+
+Brain Tumor Segmentation. The Multimodal Brain Tumor Segmentation dataset is from the MSD Challenge (Antonelli et al., 2022). It comprises 484 multi-parametric Magnetic Resonance Imaging (MRI) scans with segmen-tation labels. Four modalities are available for each par-ticipant: Native T1-weighted image (T1w), post-contrast T1-weighted (T1Gd), T2-weighted (T2w), and T2 Fluid Attenuated Inversion Recovery (T2-FLAIR). Each subject has three foreground annotations: Edema (ED), Enhancing Tumor (ET), and Non-Enhancing Tumor (NET). 
+
+Abdomen CT Organ Segmentation. The fourth dataset was from The Fast and Low GPU memory Abdominal oRgan sEgmentation (FLARE) challenge (Ma et al., 2022). It consists of 361 CT images with voxel-wise annotations of four organs, including the liver, the kidneys, the spleen, 
+
+Table 1 
+
+Detailed information of the segmentation datasets used for evaluation, including segmentation tasks, imaging modalities, data size, and target segmentation class number. Datasets AMOS 2022 Hepatic Vessel Brain Tumor FLARE Tasks Multi-Organs Tubular &Tumor Tissues Abdominal Organs Modalities CT CT Multi-modal MR CT Data size 300 303 484 361 Class Number 15 2 3 4
+
+and the pancreas. This dataset demonstrates a large diversity across various centers, vendors, phases, and diseases. 
+
+4.2. Implementation details 
+
+The experiments were implemented using PyTorch. Models were trained for 1000 epochs with a batch size of 2 on NVIDIA Tesla A100 PCI-E Passive Single GPU with 40GB of GDDR5 memory. We used a joint loss function (𝑆𝑒𝑔 ) that consists of cross-entropy loss ( 𝐶𝐸 ) and dice loss ( 𝐷𝑖𝑐𝑒 ) as 
+
+𝑆𝑒𝑔 = 𝐶𝐸 (̂𝑦, 𝑦 ) +  𝐷𝑖𝑐𝑒 (̂𝑦, 𝑦 ), (49) where 𝑦 and ̂𝑦 denote the ground truth and predictions. The AdamW was used as the optimizer. The initial learning rate was set to 1𝑒 − 3 , and decayed with a polynomial learning rate of 3𝑒 − 5 for multi-organ segmentation and hepatic vessel segmentation. Additionally, the initial learning rate was 5𝑒 − 5 , and decayed with a rate of 3𝑒 − 6 in brain tumor segmentation. We applied the similar strategy to CT and MRI scans from four datasets. The image intensities were clipped at the 5th and 95th percentiles, and then z-score normalization was applied to each volume. Subsequently, normalized scans were cropped to sub-volumes with the dimension of 96 × 96 × 96 as input patches for model training. Data augmenta-tion techniques were further implemented to improve model robustness. To be specific, patches were rotated between 
+
+[−30 , 30] along three axes and also scaled between (0 .7, 1.4) 
+
+both with a probability of 0.2. Subsequently, patches were mirrored along three axes with a probability of 0.5. Zero-centered additive Gaussian noise with variance drawn from the distribution 𝑈 (0 , 0.1) , and brightness adjustments were added to each sample voxel with a probability of 0.15 for each. We employed the 5-fold cross-validation to generate reliable evaluation results on all datasets. Segmentation performance was evaluated by Dice Similarity Coefficient (DSC) and 95% Hausdorff distance (HD95). The architec-ture complexity was evaluated by the number of parameters (Params), and the computational complexity was evaluated by the number of Floating Point Operations (FLOPs). The Wilcoxon signed-rank test was implemented to statistically quantify the differences in segmentation performance be-tween FEFormer and SOTA methods. 
+
+Jin Yang: Preprint submitted to Elsevier Page 10 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 
+
+Table 2 
+
+Comparison of segmentation performance among FEFormer and SOTA methods on the 2022 AMOS Abdominal Multi-organ segmentation task. The performance was evaluated using the DSC and HD95 (Mean ± Standard Deviation). Bold represents the best results, and underline represents the second best results. ( ∗: 𝑝 < 0.01 with Wilcoxon signed-rank test between FEFormer and SOTA methods.) Tasks VNet Att UNet nnU-Net nnFormer SegFormer TransBTS UNETR Swin UNETR UX-Net MedNext TransHRNet VSmTrans MixUNETR FEFormer Spleen 95.18 ±8.58 96.14 ±8.39 96.61 ±6.18 95.27 ±8.43 92.03 ±10.79 95.91 ±8.30 93.68 ±10.14 95.93 ±8.31 95.95 ±8.80 95.88 ±8.35 95.83 ±8.62 96.00 ±8.31 95.72 ±8.70 97.74 ±5.11 R. kidney 95.05 ±8.04 95.90 ±5.82 96.07 ±5.74 94.04 ±6.49 92.74 ±6.59 95.59 ±5.85 92.83 ±11.48 95.74 ±5.98 95.73 ±6.22 95.73 ±3.05 95.54 ±7.11 95.34 ±8.11 95.24 ±7.51 96.92 ±2.14 L. kidney 95.05 ±8.60 95.76 ±7.37 95.53 ±9.47 94.00 ±9.25 91.88 ±11.28 94.85 ±10.68 92.78 ±12.39 95.10 ±9.78 95.09 ±10.11 94.91 ±8.82 95.02 ±9.98 95.03 ±10.07 94.99 ±9.33 96.71 ±6.32 Gall bladder 77.81 ±25.70 81.86 ±24.20 83.39 ±22.82 82.57 ±20.41 71.07 ±25.59 81.91 ±21.85 71.10 ±27.63 80.62 ±24.91 80.97 ±24.53 80.85 ±24.12 81.25 ±24.06 82.04 ±23.57 81.40 ±23.67 85.18 ±19.22 Esophagus 81.04 ±10.25 83.71 ±9.36 84.71 ±9.65 79.52 ±11.68 69.97 ±12.90 82.77 ±10.03 77.57 ±12.75 83.25 ±9.76 83.52 ±9.92 82.47 ±10.32 82.97 ±9.28 83.82 ±8.93 82.97 ±9.28 86.40 ±8.71 Liver 96.83 ±2.29 97.45 ±1.99 97.55 ±1.85 96.83 ±2.47 95.56 ±3.31 97.29 ±1.86 95.71 ±3.93 97.21 ±2.34 97.21 ±2.95 97.22 ±2.33 97.24 ±2.67 97.38 ±2.00 97.20 ±2.55 97.80 ±1.88 Stomach 88.10 ±16.07 90.56 ±15.60 91.31 ±15.11 89.42 ±15.16 83.44 ±16.75 89.56 ±15.84 82.44 ±17.81 88.83 ±16.51 89.04 ±16.57 89.36 ±16.12 89.82 ±15.98 90.16 ±15.85 89.19 ±16.54 92.77 ±15.10 Arota 92.17 ±5.97 93.81 ±5.26 94.48 ±4.38 90.98 ±7.83 90.67 ±3.98 92.86 ±6.00 91.19 ±6.14 93.82 ±5.42 93.87 ±5.26 91.53 ±6.85 94.97 ±3.35 95.07 ±3.12 94.93 ±3.40 96.24 ±2.35 Postcava 86.64 ±7.77 89.41 ±6.72 90.34 ±5.82 83.48 ±13.37 83.58 ±6.78 87.92 ±7.85 84.18 ±7.94 89.18 ±6.42 89.22 ±6.88 87.18 ±8.93 90.11 ±5.64 90.29 ±5.61 89.92 ±5.76 92.82 ±5.44 Pancreas 81.38 ±12.63 84.50 ±11.95 85.41 ±11.76 79.24 ±14.72 75.66 ±13.43 82.63 ±13.54 76.91 ±15.31 83.07 ±13.07 83.67 ±13.03 83.18 ±13.03 84.04 ±12.20 84.61 ±11.84 83.87 ±12.77 88.18 ±9.08 R.A. gland 73.39 ±13.23 75.12 ±14.65 76.53 ±13.36 69.93 ±14.13 59.44 ±11.31 73.43 ±14.71 70.87 ±14.73 75.61 ±13.28 75.44 ±14.16 74.89 ±13.73 75.44 ±12.31 75.89 ±12.04 75.38 ±12.52 79.32 ±8.82 L.A. gland 74.51 ±14.03 75.55 ±14.95 77.23 ±13.85 70.65 ±14.31 55.82 ±13.23 74.37 ±15.02 68.80 ±17.55 75.82 ±14.72 75.89 ±15.03 75.15 ±14.79 76.12 ±14.45 76.38 ±14.37 76.04 ±14.08 81.14 ±8.95 Duodenum 75.39 ±14.89 79.21 ±15.00 80.79 ±14.68 73.08 ±16.76 68.72 ±14.41 77.89 ±15.21 69.04 ±15.57 77.96 ±14.78 77.83 ±15.53 77.47 ±15.74 79.11 ±14.52 80.18 ±14.10 78.60 ±14.68 83.16 ±10.18 Bladder 85.04 ±17.50 88.07 ±15.38 89.37 ±13.74 86.71 ±14.47 78.99 ±18.00 87.95 ±14.65 79.10 ±21.24 86.92 ±16.32 86.91 ±18.20 87.18 ±15.56 87.60 ±15.36 87.71 ±15.12 87.53 ±15.41 90.70 ±12.06 Prostate 79.48 ±19.51 82.96 ±19.33 83.72 ±20.23 81.85 ±17.88 75.16 ±18.84 82.30 ±18.86 75.90 ±20.78 80.92 ±20.15 81.56 ±20.79 80.72 ±20.64 81.48 ±19.84 81.29 ±20.73 81.41 ±19.57 86.56 ±18.12 Mean DSC 85.15 ±15.76 87.34 ±14.97 88.21 ±14.31 84.51 ±15.77 78.99 ±18.25 86.49 ±15.13 81.49 ±18.15 86.68 ±15.34 86.81 ±15.65 86.26 ±15.38 87.10 ±14.88 87.42 ±14.76 86.97 ±14.92 90.11 ∗±10.60 Mean HD95 2.63 ±3.51 1.93 ±2.59 2.02 ±2.69 2.73 ±3.11 3.32 ±2.79 2.15 ±2.38 3.56 ±3.54 2.38 ±3.24 2.36 ±3.38 2.18 ±2.42 2.04 ±2.70 1.96 ±2.24 2.17 ±2.95 1.78 ∗±2.04 
+
+Table 3 
+
+Comparison of segmentation performance among FEFormer and SOTA methods on the Hepatic Vessel Tumor segmentation and Abdomen Organ segmentation tasks. The performance was evaluated using the DSC and HD95 (Mean ± Standard Deviation). 
+
+Bold represents the best results, and underline represents the second best results. ( ∗: 𝑝 < 0.01 with Wilcoxon signed-rank test between FEFormer and SOTA methods.) Tasks Hepatic Vessel Tumor Segmentation FLARE Abdomen Organ segmentation Methods Mean DSC Mean HD95 Vessel DSC Tumor DSC Mean DSC Mean HD95 Liver DSC Kidney DSC Spleen DSC Pancreas DSC V-Net 64.92 ±21.41 10.98 ±9.46 62.59 ±12.57 67.25 ±27.34 93.69 ±8.34 1.81 ±1.33 98.26 ±1.26 96.18 ±3.37 98.00 ±2.17 82.34 ±9.25 Att U-Net 65.14 ±21.17 11.35 ±12.03 61.80 ±12.75 68.48 ±26.67 94.32 ±7.64 1.53 ±0.99 98.55 ±0.80 96.55 ±3.42 98.28 ±1.00 83.91 ±8.56 nnU-Net 65.96 ±20.94 11.18 ±11.92 62.73 ±12.71 69.20 ±26.36 94.30 ±7.68 1.54 ±1.03 98.54 ±0.83 96.62 ±3.11 98.27 ±1.02 83.76 ±8.59 nnFormer 66.26 ±20.55 10.47 ±9.12 63.15 ±12.05 69.36 ±26.09 93.95 ±7.52 1.95 ±3.12 98.32 ±1.05 96.08 ±2.05 98.02 ±1.18 83.38 ±8.22 SegFormer 59.11 ±21.54 13.29 ±13.44 54.36 ±10.42 63.87 ±27.82 92.77 ±8.63 2.22 ±1.41 97.93 ±1.05 95.37 ±2.90 97.31 ±1.42 80.45 ±9.03 TransBTS 64.62 ±21.33 12.00 ±12.04 61.39 ±12.70 67.84 ±26.98 94.05 ±8.11 1.60 ±1.14 98.47 ±0.99 96.46 ±3.50 98.26 ±1.10 83.00 ±9.14 UNETR 58.57 ±24.21 13.76 ±15.35 62.39 ±12.37 54.75 ±31.47 92.54 ±10.22 2.27 ±1.91 97.97 ±1.71 96.08 ±3.21 97.19 ±6.28 78.93 ±10.77 Swin UNETR 62.66 ±22.52 12.75 ±12.76 61.99 ±12.64 63.33 ±29.23 93.80 ±8.57 1.70 ±1.31 98.37 ±1.57 96.51 ±3.23 98.01 ±3.57 82.33 ±9.52 UX Net 63.11 ±22.21 11.95 ±11.52 62.30 ±12.41 63.92 ±28.82 93.92 ±8.43 1.69 ±1.51 98.42 ±1.34 96.50 ±3.45 98.21 ±1.74 82.59 ±9.68 MedNeXt 66.11 ±20.55 10.69 ±9.05 62.57 ±12.41 69.64 ±25.80 94.19 ±7.82 1.61 ±1.18 98.45 ±0.95 96.52 ±3.38 98.26 ±0.97 83.53 ±8.80 TransHRNet 65.22 ±21.04 11.28 ±11.96 61.92 ±12.66 68.51 ±26.55 94.31 ±7.91 1.55 ±1.10 98.42 ±1.66 96.48 ±3.34 98.10 ±1.21 84.24 ±7.80 VSmTrans 64.93 ±20.46 13.89 ±19.34 62.25 ±12.49 67.60 ±25.83 94.34 ±7.33 1.57 ±1.09 98.46 ±0.97 96.55 ±3.25 98.25 ±1.13 84.10 ±7.74 MixUNETR 63.61 ±21.28 12.42 ±14.14 62.19 ±12.74 65.03 ±27.18 94.09 ±7.83 1.63 ±1.16 98.40 ±1.25 96.55 ±3.26 98.13 ±2.35 83.30 ±8.38 FEFormer 67.97 ∗±20.08 9.94 ∗±8.98 64.96 ±10.32 70.98 ±25.66 95.02 ∗±5.96 1.40 ∗±1.05 98.65 ±0.90 97.25 ±1.27 98.42 ±0.92 85.74 ±5.01 
+
+4.3. Comparison with State-of-the-arts 
+
+We compared the performance of FEFormer with vari-ous recent 3D state-of-the-art (SOTA) segmentation models. These methods include 
+
+• CNN-based methods: VNet (Milletari et al., 2016), nnU-Net (Isensee et al., 2021), Attention gated U-Net (Att UNet) (Oktay et al., 2018) 
+
+• ViT-based methods: nnFormer (Zhou et al., 2023a), SegFormer (Perera et al., 2024) 
+
+• Transformer-like CNN-based methods: 3D UX Net (Lee et al., 2022) and MedNext (Roy et al., 2023) 
+
+• Hybrid CNN-ViT-based methods: TransBTS (Wang et al., 2021b), UNETR (Hatamizadeh et al., 2022), Swin UNETR (Hatamizadeh et al., 2021), TransHR-Net (Yan et al., 2023), VSmTrans (Liu et al., 2024), and MixUNETR (Shen et al., 2025) 
+
+AMOS Multi-organ segmentation. FEFormer outper-formed all compared SOTA methods on this AMOS ab-dominal multi-organ segmentation task, achieving the best mean DSC of 90 .11% and the lowest mean HD95 of 1.78 
+
+mm, with statistical significance ( 𝑝 < 0.01 ) (Table 2). Additionally, FEFormer achieved the highest DSC across all 15 organs, demonstrating its strong capability in ac-curately segmenting both large anatomical structures (e.g., liver and spleen) and challenging small or low-contrast or-gans (e.g., pancreas, adrenal glands, and duodenum). Specif-ically, FEFormer achieved superior performance compared with CNN-based methods such as VNet, Attention U-Net, and nnU-Net. Particularly, it outperformed the second best method, nnU-Net, by 1.9 DSC points and 0.24 HD95 points. Compared with transformer-based models such as nnFormer and SegFormer, FEFormer achieved notably higher accu-racy, especially on challenging organs such as the gallblad-der ( 85 .18% vs. 82 .57% of nnFormer) and pancreas ( 88 .18% 
+
+vs. 79 .24% of nnFormer), highlighting its advantage in cap-turing fine structural details and segmenting largely varying-sized organs. Furthermore, FEFormer consistently achieved higher DSC scores and lower HD95 points than all other hybrid methods. Particularly, FEFormer outperformed the best hybrid method, VSmTrans, by 2.69 points in mean DSC and 0.18 points in mean HD95. 
+
+Jin Yang: Preprint submitted to Elsevier Page 11 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 
+
+Table 4 
+
+Comparison of segmentation performance among FEFormer and SOTA methods on the Brain Tumor segmentation task. The performance was evaluated using the DSC (Mean ± Standard Deviation) and HD95 (Mean ± Standard Deviation, failure rate with HD95 >100mm). Bold represents the best results, and underline represents the second best results. ( ∗: 𝑝 < 0.01 with Wilcoxon signed-rank test between FEFormer and SOTA methods.) Methods Mean DSC Mean HD95 ET DSC ED DSC NET DSC V-Net 73.03 ±21.52 5.98 ±9.76, 0.207 % 77.61 ±22.00 79.80 ±12.81 61.73 ±23.40 Att U-Net 73.53 ±21.38 5.62 ±9.58, 0.000 % 78.83 ±21.44 80.45 ±11.98 61.37 ±23.35 nnU-Net 73.47 ±21.34 5.70 ±9.59, 0.000 % 78.78 ±21.55 80.35 ±11.87 61.35 ±23.21 nnFormer 73.62 ±21.32 5.42 ±9.06, 0.000 % 79.03 ±20.86 80.47 ±11.74 61.36 ±23.18 SegFormer 44.77 ±26.47 14.42 ±9.63, 0.413 % 37.73 ±26.49 63.06 ±17.16 33.41 ±24.38 TransBTS 73.75 ±21.20 5.63 ±9.86, 0.000 % 78.91 ±21.58 80.78 ±11.59 61.64 ±22.92 UNETR 72.59 ±21.65 5.85 ±9.39, 0.000 % 78.00 ±21.78 79.83 ±11.85 60.00 ±23.47 Swin UNETR 73.76 ±21.13 5.37 ±8.02, 0.000 % 79.12 ±20.96 80.58 ±11.58 61.66 ±23.35 UX Net 58.23 ±24.23 11.07 ±9.27, 0.000 % 60.11 ±26.20 68.79 ±14.47 45.81 ±24.42 MedNeXt 73.75 ±21.39 5.50 ±9.29, 0.000 % 78.81 ±21.77 80.72 ±11.94 61.77 ±23.21 TransHRNet 73.71 ±21.30 5.32 ±8.99, 0.000 % 78.58 ±21.86 80.70 ±11.82 61.86 ±23.16 VSmTrans 73.87 ±21.28 5.31 ±9.14, 0.000 % 79.18 ±21.33 80.69 ±11.95 61.80 ±23.25 MixUNETR 73.68 ±21.52 5.34 ±8.79, 0.207 % 78.52 ±22.34 80.71 ±11.79 61.83 ±23.21 FEFormer 74.97 ∗±19.71 5.01 ∗±7.76, 0.000 % 80.30 ±20.54 81.72 ±9.66 62.89 ±21.65 
+
+Table 5 
+
+Comparison of model complexity among FEFormer and SOTA methods. Params and FLOPs were evaluated using input patches with dimensions of 96 × 96 × 96 .Methods Params (M) FLOPs (G) VNet 45.66 370.52 Att U-Net 69.08 360.98 nnU-Net 68.38 357.13 nnFormer 149.33 284.28 SegFormer 4.50 5.02 TransBTS 31.58 110.69 UNETR 92.78 82.73 Swin UNETR 62.19 329.28 UX Net 53.01 632.33 MedNeXt 11.65 178.05 TransHRNet 36.86 340.33 VSmTrans 50.39 358.21 MixUNETR 62.03 329.99 FEFormer 18.54 39.13 
+
+In addition to segmentation accuracy, FEFormer demon-strated a favorable trade-off between performance and com-putational efficiency (Table 5). Despite achieving the best overall accuracy, FEFormer required only 18 .54 M param-eters and 39 .13 G FLOPs, substantially lower than the best CNN-based method (nnU-Net, 68.38M Params, 357.13G FLOPs), the best ViT-based method (nnFormer, 149.33M parameters, 284.28G FLOPs), and the best hybrid method (VSmTrans, 50.39M parameters, 358.21G FLOPs). More-over, when compared with lightweight models such as Seg-Former, FEFormer achieved significantly higher segmenta-tion accuracy by 11 .12 points in mean DSC and 1.54 points in mean HD95 with a moderate increase in complexity. These results demonstrated that FEFormer effectively bal-anced global contextual modeling and local detail preserva-tion while maintaining high segmentation efficiency. 
+
+Hepatic Vessel Tumor segmentation. In the hepatic vessel tumor segmentation task, FEFormer achieved the best overall performance than SOTA methods, achieving a mean DSC of 67 .97% and a mean HD95 of 9.94 mm, with statistical significance ( 𝑝 < 0.01 ) (Table 3). Specifically, FEFormer improved the mean DSC by approximately 2.0% 
+
+and 1.7% than two strong baselines, nnU-Net and nnFormer respectively. Additionally, FEFormer outperformed the best two hybrid method MedNeXt and TransHRNet by 1.86 
+
+and 2.75 points in mean DSC and 0.75 and 1.34 points in mean HD95. At the class level, FEFormer demonstrated the highest DSC for both vessel ( 64 .96% ) and tumor ( 70 .98% ), reflecting its ability to simultaneously segment thin, low-contrast vascular structures and highly heterogeneous tu-mor regions. Specifically, vessel segmentation is inherently challenging due to its complex topology, small caliber, and discontinuities; however, FEFormer showed superior per-formance compared to other methods. For tumor segmen-tation, which often suffered from irregular shapes and am-biguous boundaries, FEFormer achieved superior accuracy, indicating enhanced capability in capturing intra-tumoral heterogeneity and boundary details. Therefore, these results demonstrated that FEFormer was effective for challenging medical segmentation tasks involving complex geometry and high variability, delivering more accurate, robust, and reliable predictions. 
+
+FLARE Abdomen Organ segmentation. FEFormer achieved superior performance than other SOTA methods in the FLARE abdomen organ segmentation task, achieving 
+
+95 .02 in mean DSC and 1.40 in mean HD95 with statistical 
+
+Jin Yang: Preprint submitted to Elsevier Page 12 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 
+
+significance (Table 3). FEFormer outperformed recent meth-ods, such as MedNeXt, VSmTrans and, MixUNETR signif-icantly. Additionally, FEFormer consistently outperformed SOTA methods across all evaluated organs, achieving the best performance on all structures, including liver ( 98 .65% ), kidney ( 97 .25% ), spleen ( 98 .42% ), and pancreas ( 85 .74% ). Specifically, it outperformed the second best method VSm-Trans by 0.19 , 0.70 , 0.17 , and 1.64 higher DSC points in these four organs. 
+
+Brain Tumor segmentation. FEFormer achieved the best overall performance on the brain tumor segmentation task than all SOTA methods by achieving the highest mean DSC of 74 .97% and the lowest mean HD95 of 5.01 mm with statistical significance ( 𝑝 < 0.01 ) (Table 4). Specifically, FE-Former demonstrated superior performance than nnFormer and Swin UNETR which were initially proposed for brain tu-mor segmentation by 1.35 and 1.38 points in mean DSC and 
+
+0.41 and 0.38 points in mean HD95. Additionally, FEFormer improved the mean DSC and mean HD95 by more than 1.50 
+
+and 0.69 points over nnU-Net, and outperformed the second best model VSmTrans by 1.10 points and 0.30 points in mean DSC and mean HD95, respectively. At the sub-region level, FEFormer consistently demonstrated the highest DSC scores for all tumor regions, including ET, ED, and NET. Notably, improvements were more significant in the challenging ET and NET regions, which typically exhibited high variability and low contrast. Additionally, FEFormer maintained a zero failure rate (HD95 > 100 mm), further demonstrating its stability and reliability. 
+
+4.4. Visual assessment of segmentation results 
+
+To further demonstrate the superior performance of FE-Former over SOTA methods, we conducted a qualitative visual assessment of segmentation results (Figure 4). The results of this visual analysis demonstrated that the proposed frequency-enhanced design enabled FEFormer to jointly model global context and fine structural details by over-coming key limitations of both CNN- and ViT-based archi-tectures, leading to improved segmentation quality across diverse and challenging scenarios. FEFormer demonstrates a superior ability to capture and utilize global contextual information by employing frequency-domain attention mechanisms compared to CNN-based models, including Att U-Net, nnU-Net, and Med-NeXt. This enables FEFormer to maintain better anatom-ical coherence and more effectively disambiguate locally ambiguous features when FEFormer segments anatomically complex structures with large variations in shape and size. Therefore, FEFormer acheived more accurate and consistent segmentation results for anatomically complex structures with large variations in shape and size, such as the pancreas in multi-organ segmentation, as well as hepatic tumors and brain lesions. In contrast, CNN-based methods often demonstrated inferior qualitative results in these complex anatomical structures due to their limited receptive field and insufficient modeling of global dependencies, leading to fragmented or inconsistent predictions in such challenging scenarios. Additionally, FEFormer demonstrated superior perfor-mance and ability to preserve and leverage high-frequency information for guiding segmentation compared with ViT-based and hybrid methods, including nnFormer, SegFormer, Swin UNETR, and VSmTrans. By explicitly modeling high-frequency spectral components and enhancing high-frequency representations, FEFormer achieved more precise delineation of edges and boundaries, so it demonstrated su-perior qualitative segmentation results in boundary regions of anatomical structures than those ViT-based methods. Ad-ditionally, FEFormer achieved better segmentation results in small anatomical structures and tubular structures, such as hepatic vessels due to the combination of high-frequency and low-frequency information. FEFormer generated more continuous and anatomically plausible predictions, while ViT-based and hybrid methods generated segmentation results with discontinuities or mis-segmentation. Moreover, FEFormer demonstrated superior capability in capturing fine-grained structural details, thus reducing label misassignment and semantic confusion between neigh-boring anatomical regions. Specifically, other SOTA models frequently misclassified neighboring structures by gener-ating segmentation masks of one structure as belonging to another neighboring anatomical structure. In contrast, FEFormer generated more precise and well-separated seg-mentation masks, highlighting its robustness in complex anatomical contexts. 
+
+4.5. Ablation study 
+
+4.5.1. The impact of different modules 
+
+We conduct a comprehensive ablation study on the 2022 AMOS multi-organ segmentation task to investigate the separate and joint contributions of the proposed modules on segmentation performance and model complexity, including FDSA, FGMLP, WAFF, and FCSB, (Table 6 and Fig. 5). The progressive performance improvements across different configurations highlighted that all modules contributed pos-itively, and their combination yielded a synergistic effect, leading to substantial improvements in segmentation accu-racy while maintaining comparable model complexity. The plain ViT-based segmentation models with standard SA and MLP modules achieved a mean Dice score of 84 .08% 
+
+and an HD95 of 2.86 . The incorporation of FDSA into plain ViT network to replace the standard SA module significantly improved the performance by 2.24 points in DSC and 0.70 
+
+points in HD95 with a slight increases in Params and FLOPs. It demonstrated the effectiveness of FDSA in capturing long-range dependencies and enhancing global contextual rep-resentation. Additionally, when FGMLP was incorporated into the plain ViT network to replace the standard MLP module, the model performance was improved by 1.13 DSC points and 0.65 HD95 points while slightly increasing model complexity. Thus, by disentangling and adaptively reweight-ing frequency components, FGMLP enhances both global structure representation and fine-grained detail preservation.   
+
+> Jin Yang: Preprint submitted to Elsevier Page 13 of 20
+
+Frequency-enhanced Vision Transformer in Medical Image Segmentation (a) Raw Image (b) Ground Truth (c) Att U-Net (d) nnU -Net (e) nnFormer (f) SegFormer (g) Swin UNETR (h) MedNeXt (i)VSmTrans (j) FEFomer 
+
+> AMOS Multi -organ Segmentation Hepatic Vessel Tumor Segmentation Brain Tumor Segmentation
+
+Figure 4: Qualitative comparison between FEFormer and (c) Att UNet, (d) nnU-Net, (e) nnFormer, (f) SegFormer, (g) Swin UNETR, (h) MedNext, and (i) VSmTrans. Results are shown across three public datasets, including the AMOS Abdominal Multi-organ dataset, the Hepatic Vessel Tumor dataset, and the Brain Tumor dataset. Red boxes mark the regions where FEFormer demonstrates better segmentation results than other methods. 
+
+Furthermore, when FDSA and FGMLP were jointly em-ployed in the Frequency-enhanced Transformer block, the performance was enhanced to 87 .56% Dice and 2.10 mm HD95 by 2.48 DSC points and 0.91 HD95 points with only 
+
+0.24 M Params and 3.82 G FLOPs increased, thus demon-strating the joint impact of these two modules on enhancing segmentation accuracy. Plain ViT network employed the concatenation operation to combine skip-connected encoder features and upsampled decoder features, but introducing WAFF to replace it enabled more effective and efficient feature fusion. Specifically, introducing WAFF further im-proved the performance by 1.42 DSC points and 0.12 HD95 points and decreased 0.07 Params and 0.08 G FLOPs. Fi-nally, incorporating FCSB generated the FEFormer and thus achieved the best performance of 90 .11% Dice and 1.78 mm HD95 with statistical significance ( 𝑝 < 0.01 ). 
+
+4.5.2. The effectiveness of FDSA and FGMLP 
+
+To investigate the effectiveness of the proposed FDSA and FGMLP modules, we conducted ablation studies to evaluate the impact of their internal components on segmen-tation performance on the AMOS multi-organ segmentation task (Table 7). For the FDSA module, replacing standard spatial-domain self-attention with frequency-domain self-attention improved 
+
+Table 6 
+
+Ablation study on the impact of the FDSA, FGMLP, WAFF, and FCSB modules in the 2022 AMOS multi-organ segmen-tation task. The performance was evaluated using the DSC and HD95 (Mean ± Standard Deviation). Bold represents the best results. The Params and FLOPs were evaluated using input patches with dimensions of 96 × 96 × 96 . ( ∗: 𝑝 < 0.01 
+
+with Wilcoxon signed-rank test between FEFormer and other designs.) Modules Segmentation performance Model complexity FDSA FGMLP WAFF FCSB Mean DSC Mean HD95 Params (M) FLOPs (G) 84.08 ±14.82 2.86 ±3.22 17.37 34.08                           
+
+> ✓86.32 ±13.48 2.16 ±2.37 18.54 38.36
+> ✓86.21 ±13.65 2.21 ±2.45 17.43 36.32
+> ✓✓87.56 ±12.05 1.95 ±2.26 18.61 37.90
+> ✓✓✓88.98 ±11.44 1.83 ±2.15 18.53 37.82
+> ✓✓✓✓90.11 ∗±10.60 1.78 ∗±2.04 18.54 39.13
+
+the mean DSC from 87 .68% to 89 .06% and reduced the mean HD95 from 2.07 mm to 1.85 mm. Further incorporating the multi-frequency dynamic mechanism enhanced the perfor-mance by 1.05 DSC points and 0.07 HD95 points. These results demonstrated the effectiveness of the frequency-domain self-attention and multi-frequency dynamic mech-anisms in generating more accurate segmentation results. For the FGMLP module, incorporating a gating mechanism into the standard MLP module improved the DSC by 0.74 
+
+Jin Yang: Preprint submitted to Elsevier Page 14 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 78 80 82 84 86 88 90 92 94  
+
+> Mean DSC (%)
+> Baseline
+> + FDSA
+> + FGMLP
+> + WAFF
+> + FCSB (FEFormer)
+> 84.08
+> 86.32
+> 87.56
+> 88.98
+> 90.11*
+> 34.08
+> 38.36
+> 37.90
+> 37.82
+> 39.13
+> 17.37
+> 18.54
+> 18.61
+> 18.53
+> 18.54
+> FLOPs (G) Params (M) Mean DSC (%)
+
+Figure 5: Road-map visualization of the cumulative impact of the proposed modules on segmentation performance and model complexity in the 2022 AMOS multi-organ segmentation task. The progressive incorporation of the FDSA, FGMLP, WAFF, and FCSB into the plain ViT architecture consistently improved the mean DSC from 84 .08% to 90 .11% . Meanwhile, the corresponding changes in computational cost demonstrated that the proposed FEFormer achieved substantial accuracy gains with only modest increases in model complexity. 
+
+Table 7 
+
+Ablation study on different mechanisms of the FDSA and FGMLP modules on the 2022 AMOS multi-organ segmentation task. The performance was evaluated using the DSC and HD95 (Mean ± Standard Deviation). Bold represents the best results. (∗: 𝑝 < 0.01 with Wilcoxon signed-rank test between FEFormer and other configurations.) Modules Configurations Mean DSC Mean HD95 FDSA  Standard self-attention 87.85 ±11.77 2.07 ±2.32 Frequency-domain self-attention 89.06 ±11.20 1.85 ±2.20 + Multi-frequency dynamic mechanism 90.11 ∗±10.60 1.78 ∗±2.04 FGMLP  Standard MLP 88.01 ±11.60 2.02 ±2.25 Gating mechanism 88.75 ±11.48 1.90 ±2.18 + Selective frequency decomposition mechanism 90.11 ∗±10.60 1.78 ∗±2.04 
+
+points to 88 .75% and HD95 by 0.12 points to 1.90 mm. Additionally, further incorporating the selective frequency decomposition mechanism enhanced the segmentation per-formance by 1.36 DSC points and 0.12 HD95 points. Thus, employing the gating and selective frequency decomposition mechanisms in the MLP module improved the segmentation performance of FEFormer. 
+
+4.6. Comparing WAFF with other fusion modules 
+
+To validate the superiority of WAFF, we compared it with two advanced feature fusion strategies: Attentional Feature Fusion (AFF) (Dai et al., 2021) and Dynamic Fea-ture Fusion (DFF) (Yang et al., 2026). These methods em-ployed channel-wise and spatial-wise attention mechanisms to fuse features adaptively and dynamically based on spatial-domain relationship. However, WAFF enabled the fusion of features based on their semantics, thus aligning their global structures and fine-grained details for more effective fusion. We incorporated WAFF and these two modules into the FEFormer by replacing simple concatenation, and com-pared their impacts on segmentation performance and model complexity (Table 7). Specifically, AFF leveraged channel-wise attention to emphasize informative features during 
+
+Table 8 
+
+Comparison of segmentation performance and model com-plexity between the WAFF module and the AFF and DFF modules on the 2022 AMOS multi-organ segmentation task. 
+
+Bold represents the best results. The Params and FLOPs were evaluated using input patches with dimensions of 96 × 96 × 96 .(∗: 𝑝 < 0.01 with Wilcoxon signed-rank test between WAFF and AFF, DFF modules.) Modules Mean DSC Mean HD95 Params (M) FLOPs (G) AFF 88.82 ±12.02 1.89 ±2.21 18.63 39.13 DFF 89.54 ±11.78 1.81 ±2.10 18.97 39.22 WAFF 90.11 ∗±10.60 1.78 ∗±2.04 18.54 39.13 
+
+fusion, but incorporating WAFF outperformed it by 1.29 
+
+DSC points and 0.11 HD95 points with 0.09 M fewer Params and similar FLOPs. Additionally, DFF implemented input-adaptive feature fusion by utilizing channel-wise and spatial-wise dynamic mechanisms. However, employing WAFF im-proved by 0.54 DSC points and 0.03 HD95 points over DFF with 0.43 M fewer Params and 0.09 G fewer FLOPs. Thus, these results demonstrated that WAFF provided a more effective and robust feature fusion mechanism than conventional spatial-domain feature fusion approaches, con-tributing significantly to the performance improvements of FEFormer. 
+
+4.7. Evaluation of generalization and robustness 
+
+To further assess the robustness and cross-dataset gener-alizability of FEFormer, we conducted internal and external evaluations on the FLARE multi-organ segmentation task. In the internal evaluation, all methods were trained and tested within the FLARE dataset. In the external evaluation, models were trained on the AMOS dataset and directly applied to FLARE for zero-shot predictions without any fine-tuning, thus providing a more challenging assessment of domain generalization under distribution shift. The gaps 
+
+Jin Yang: Preprint submitted to Elsevier Page 15 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation V-Net   
+
+> Att U-Net
+> nnU-Net
+> nnFormer
+> SegFormer
+> TransBTS
+> UNETR
+> Swin UNETR
+> UX Net
+> MedNeXt
+> TransHRNet
+> VSmTrans
+> MixUNETR
+> FEFormer
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Mean DSC (%)
+> V-Net
+> Att U-Net
+> nnU-Net
+> nnFormer
+> SegFormer
+> TransBTS
+> UNETR
+> Swin UNETR
+> UX Net
+> MedNeXt
+> TransHRNet
+> VSmTrans
+> MixUNETR
+> FEFormer
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> Mean HD95 (mm)
+> Segmentation performance of internal and external evaluations, and generalization gaps
+> Internal External Gap
+
+Figure 6: Comparison of segmentation performance and generalization gaps between FEFormer and SOTA methods on the FLARE dataset for internal and external evaluation settings. Internal and external performance of all models are shown in DSC and HD95, along with the corresponding generalization gap. FEFormer consistently achieved superior segmentation accuracy (higher DSC and lower HD95) while exhibiting a notably smaller performance degradation between internal and external evaluation, indicating better robustness and generalization capability. (a) Raw Image (b) Ground Truth (c) Att U-Net (d) nnU -Net (e) nnFormer (f) SegFormer (g) Swin UNETR (h) MedNeXt (i) FEFomer 
+
+Figure 7: Qualitative comparison between (i) FEFormer and (c) Att UNet, (d) nnU-Net, (e) nnFormer, (f) SegFormer, (g) Swin UNETR, and (h) MedNext on the external evaluation on the FLARE dataset. Red boxes mark the regions where FEFormer demonstrates better segmentation results than other methods. 
+
+of segmentation performance between internal and external evaluations were evaluated (Table 8 and Fig. 6). Specifically, FEFormer achieved the best performance on the internal and external evaluations and demonstrated the smallest generalization gap compared to other SOTA methods. Specifically, FEFormer achieved the highest mean DSC ( 95 .02% ) and lowest mean HD95 ( 1.40% ) when the internal evaluation was performed to employ FEFormer within the FLARE dataset. Additionally, when FEFormer trained on AMOS were directly employed to FLARE for generating zero-shot predictions, FEFormer demonstrated substantially stronger robustness and generalizability to new domains than other methods. FEFormer achieved the highest mean DSC ( 88 .54% ) and lowest mean HD95 ( 2.32 mm), out-performing CNN-based methods, including Att U-Net, nnU-Net and MedNeXt, in the internal evaluation. Additionally, FEFormer demonstrated higher generalizability than other hybrid models, such as TransHRNet, Swin UNETR, and MixUNETR. To quantify cross-domain robustness, we fur-ther measured the generalization gap, defined as the perfor-mance drop from internal to external evaluation. FEFormer exhibited the smallest DSC gap ( 6.48 ) and DSC points and smallest HD95 increase ( 0.92 ), , whereas competing models showed markedly larger degradations (DSC gaps ranging from 8.08 to 11 .89 ). This finding demonstrated that FEFormer maintained performance more consistently under domain shift and learned more generalizable representations by frequency modeling. Qualitative comparisons among FEFormer and other methods further demonstrated its superior generalizability and robustness (Figure 7). Specifically, when models were directly employed to the FLARE dataset for zero-shot pre-dictions in the external evaluation, FEFormer exhibited less under-segmentation or miss-segmentation than comparing methods, and FEFormer demonstrated more accurate delin-eation of target organs by learning semantic features from 
+
+Jin Yang: Preprint submitted to Elsevier Page 16 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation LLL LLH LHL HLL LHH HLH HHL HHH 
+
+(A) 
+
+(B) 
+
+Figure 8: Visualization of components decomposed by 3D Discrete Wavelet Transformation on (A) CT volumes from the AMOS dataset and (B) T1w MR volumes from the BraTS dataset. 
+
+Table 9 
+
+Comparison of segmentation performance between FEFormer and other SOTA methods on the internal and external evalua-tion of the FLARE organ segmentation task. Bold indicates the best performance. Segmentation performance was reported as DSC and HD95 (Mean ± Standard Deviation). ( ∗: 𝑝 < 0.01 
+
+with the Wilcoxon signed-rank test between FEFormer and SOTA methods.) Methods FLARE (Internal) FLARE (External) Generalization Gaps Mean DSC Mean HD95 Mean DSC Mean HD95 Mean DSC Mean HD95 V-Net 93.69 ±8.34 1.81 ±1.33 82.94 ±11.34 3.01 ±3.02 9.75 1.20 Att U-Net 94.32 ±7.64 1.53 ±0.99 86.24 ±9.91 2.53 ±2.14 8.08 1.00 nnU-Net 94.30 ±7.68 1.54 ±1.03 85.45 ±10.72 2.68 ±2.68 8.85 1.14 nnFormer 93.95 ±7.52 1.95 ±3.12 84.15 ±10.38 3.17 ±2.52 9.80 1.22 SegFormer 92.77 ±8.63 2.22 ±1.41 82.11 ±12.55 3.54 ±3.10 10.66 1.32 TransBTS 94.05 ±8.11 1.60 ±1.14 84.87 ±11.09 2.70 ±2.74 9.18 1.10 UNETR 92.54 ±10.22 2.27 ±1.91 80.65 ±14.01 3.85 ±3.22 11.89 1.58 Swin UNETR 93.80 ±8.57 1.70 ±1.31 83.82 ±12.20 2.76 ±2.99 9.98 1.06 UX Net 93.92 ±8.43 1.69 ±1.51 82.90 ±11.51 3.07 ±2.95 11.02 1.38 MedNeXt 94.19 ±7.82 1.61 ±1.18 85.92 ±10.88 2.67 ±2.70 8.27 1.06 TransHRNet 94.31 ±7.91 1.55 ±1.10 84.35 ±9.77 2.85 ±2.01 9.96 1.30 VSmTrans 94.34 ±7.33 1.57 ±1.09 83.32 ±9.80 2.90 ±2.06 11.02 1.33 MixUNETR 94.09 ±7.83 1.63 ±1.16 83.89 ±9.86 2.92 ±2.12 10.20 1.29 FEFormer 95.02 ∗±5.96 1.40 ∗±1.05 88.54 ∗±8.72 2.32 ∗±1.95 6.48 0.92 
+
+other domains. Thus, FEFormer showed its superior anatom-ical consistency and robustness under external deployment conditions. 
+
+4.8. Interpretability on architectural designs 
+
+To systematically interpret the frequency characteris-tics in analyzing volumetric medical images, we visualized decompositions obtained from 3D DWT on CT volumes from the AMOS dataset and T1w MR volumes from the BraTS dataset (Figs. 8). The 3D DWT provided a spatially localized, multi-resolution representation by decomposing each volume into one low-frequency component (LLL) and seven high-frequency sub-bands along three spatial direc-tions (e.g, H, W, and D), thus preserving both spatial and frequency information. The LLL component preserved dom-inant anatomical structures and global intensity distribu-tions, while high-frequency sub-bands encoded directional edge responses and fine-grained texture variations, high-lighting boundaries and subtle anatomical details. There-fore, the WAFF module leveraged 3D DWT to decompose encoder and decoder features into semantically meaningful sub-bands, enabling frequency-aligned fusion that reduced large semantic discrepancies while preserving structural de-tails. The 3D FFT converted spatial images and features to frequency-domain signals, and these frequency signals were decomposed into low-frequency and high-frequency compo-nents (Figs. 1). Low-frequency components captured coarse structural information, while high-frequency components described peripheral regions and emphasized sharp intensity transitions and detailed patterns. Thus, the FDSA module performed global feature interaction in the frequency do-main via FFT, enabling efficient long-range dependency modeling with 𝑂 (𝑁 log 𝑁 ) complexity while preserving high-frequency signals critical for boundary delineation and detailed structure modeling. The FGMLP module disentan-gled spatial features into low- and high-frequency compo-nents and adaptively re-weighted them, enhancing discrim-inative feature learning across frequency bands. Addition-ally, the FCSB module integrated frequency-domain global interactions into early feature propagation, strengthening low-level feature consistency and improving fine structure recovery. Motivated by these observations, FEFormer was de-signed to explicitly incorporate frequency-aware mecha-nisms at multiple levels, and these designs enabled FE-Former to effectively unify global spectral modeling and localized frequency decomposition, resulting in more robust and discriminative representations for volumetric medical image segmentation. 
+
+5. Conclusion 
+
+In this work, we proposed a Frequency-enhanced Vision Transformer for robust and efficient volumetric medical image segmentation, termed FEFormer. The Frequency-enhanced Dynamic Self-Attention (FDSA) and the Frequency-decomposed Gating MLP modules were developed and in-corporated into the Frequency-enhanced Transformer block for generic feature extraction. Additionally, a Wavelet-guided Adaptive Feature Fusion (WAFF) module was proposed to fuse features by aligning their frequency components based on their semantics. A Frequency-enabled Cross-scale Stem Bridge was developed to enable low-level feature 
+
+Jin Yang: Preprint submitted to Elsevier Page 17 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 
+
+propagation. By incorporating these modules into a hier-archical transformer architecture, FEFormer achieved ef-fective multi-scale representation learning and improved generalizability across diverse segmentation tasks. Exten-sive experiments demonstrated that FEFormer outperformed SOTA methods in segmentation accuracy while maintaining competitively high efficiency. 
+
+Declaration of competing interests 
+
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper. 
+
+CRediT authorship contribution statement 
+
+JY: conceptualization, methodology, formal analysis, writing the original draft, reviewing, and editing, visualiza-tion; XY: conceptualization, writing, reviewing, and editing; PQ: conceptualization, writing, reviewing, and editing. 
+
+Data availability 
+
+The data used in this study are publicly available. 
+
+References 
+
+Antonelli, M., Reinke, A., Bakas, S., Farahani, K., Kopp-Schneider, A., Landman, B.A., Litjens, G., Menze, B., Ronneberger, O., Summers, R.M., et al., 2022. The medical segmentation decathlon. Nature communications 13, 4128. Azad, R., Aghdam, E.K., Rauland, A., Jia, Y., Avval, A.H., Bozorgpour, A., Karimijafarbigloo, S., Cohen, J.P., Adeli, E., Merhof, D., 2024. Medical image segmentation review: The success of u-net. IEEE Transactions on Pattern Analysis and Machine Intelligence 46, 10076–10095. Bai, J., Yuan, L., Xia, S.T., Yan, S., Li, Z., Liu, W., 2022. Improving vision transformers by revisiting high-frequency components, in: European conference on computer vision, Springer. pp. 1–18. Cao, H., Wang, Y., Chen, J., Jiang, D., Zhang, X., Tian, Q., Wang, M., 2022. Swin-unet: Unet-like pure transformer for medical image segmentation, in: European conference on computer vision, Springer. pp. 205–218. Chen, Z., Chen, S., Hu, F., 2023. Cta-unet: Cnn-transformer architecture unet for dental cbct images segmentation. Physics in Medicine & Biology 68, 175042. Chi, L., Jiang, B., Mu, Y., 2020. Fast fourier convolution. Advances in Neural Information Processing Systems 33, 4479–4488. Çiçek, Ö., Abdulkadir, A., Lienkamp, S.S., Brox, T., Ronneberger, O., 2016. 3d u-net: learning dense volumetric segmentation from sparse annotation, in: International conference on medical image computing and computer-assisted intervention, Springer. pp. 424–432. Dai, T., Wang, J., Guo, H., Li, J., Wang, J., Zhu, Z., 2024. Freqformer: Frequency-aware transformer for lightweight image super-resolution., in: IJCAI, pp. 731–739. Dai, Y., Gieseke, F., Oehmcke, S., Wu, Y., Barnard, K., 2021. Attentional feature fusion, in: Proceedings of the IEEE/CVF winter conference on applications of computer vision, pp. 3560–3569. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., Houlsby, N., 2021. An image is worth 16x16 words: Trans-formers for image recognition at scale, in: International Conference on Learning Representations. URL: https://openreview.net/forum?id= YicbFdNTTy .Hatamizadeh, A., Nath, V., Tang, Y., Yang, D., Roth, H.R., Xu, D., 2021. Swin unetr: Swin transformers for semantic segmentation of brain tu-mors in mri images, in: International MICCAI Brainlesion Workshop, Springer. pp. 272–284. Hatamizadeh, A., Tang, Y., Nath, V., Yang, D., Myronenko, A., Landman, B., Roth, H.R., Xu, D., 2022. Unetr: Transformers for 3d medical image segmentation, in: Proceedings of the IEEE/CVF winter conference on applications of computer vision, pp. 574–584. Hatamizadeh, A., Yin, H., Heinrich, G., Kautz, J., Molchanov, P., 2023. Global context vision transformers, in: International conference on machine learning, PMLR. pp. 12633–12646. Hu, J., Shen, L., Sun, G., 2018. Squeeze-and-excitation networks, in: Proceedings of the IEEE conference on computer vision and pattern recognition, pp. 7132–7141. Huang, X., Deng, Z., Li, D., Yuan, X., Fu, Y., 2022. Missformer: An effec-tive transformer for 2d medical image segmentation. IEEE Transactions on Medical Imaging 42, 1484–1494. Isensee, F., Jaeger, P.F., Kohl, S.A., Petersen, J., Maier-Hein, K.H., 2021. nnu-net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods 18, 203–211. Ji, Y., Bai, H., Ge, C., Yang, J., Zhu, Y., Zhang, R., Li, Z., Zhanng, L., Ma, W., Wan, X., et al., 2022. Amos: A large-scale abdominal multi-organ benchmark for versatile medical image segmentation. Advances in neural information processing systems 35, 36722–36732. Kong, L., Dong, J., Ge, J., Li, M., Pan, J., 2023. Efficient frequency domain-based transformers for high-quality image deblurring, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 5886–5895. Lee, H.H., Bao, S., Huo, Y., Landman, B.A., 2022. 3d ux-net: A large kernel volumetric convnet modernizing hierarchical transformer for medical image segmentation. arXiv preprint arXiv:2209.15076 . Li, G.Y., Chen, J., Jang, S.I., Gong, K., Li, Q., 2024. Swincross: Cross-modal swin transformer for head-and-neck tumor segmentation in pet/ct images. Medical physics 51, 2096–2107. Li, J., Chen, J., Li, R., Han, P., Cheng, J., et al., 2025. Seaformer: Selec-tive edge aggregation transformer for 2d medical image segmentation. Biomedical Signal Processing and Control 102, 107203. Li, X., Chen, H., Qi, X., Dou, Q., Fu, C.W., Heng, P.A., 2018. H-denseunet: hybrid densely connected unet for liver and tumor segmentation from ct volumes. IEEE transactions on medical imaging 37, 2663–2674. Li, X., Xu, F., Li, J., Su, Y., Li, L., Lyu, X., Xu, Z., Kaup, A., 2026. Frequency domain-enhanced spectral-spatial fusion transformer for se-mantic segmentation of remote sensing images. Information Fusion , 104248. Lin, A., Chen, B., Xu, J., Zhang, Z., Lu, G., Zhang, D., 2022. Ds-transunet: Dual swin transformer u-net for medical image segmentation. IEEE Transactions on Instrumentation and Measurement 71, 1–15. Liu, Q., Xu, Z., Jiao, Y., Niethammer, M., 2022. isegformer: interactive segmentation via transformers with application to 3d knee mr images, in: International Conference on Medical Image Computing and Computer-Assisted Intervention, Springer. pp. 464–474. Liu, T., Bai, Q., Torigian, D.A., Tong, Y., Udupa, J.K., 2024. Vsmtrans: A hybrid paradigm integrating self-attention and convolution for 3d medical image segmentation. Medical Image Analysis , 103295. Liu, Z., Lin, Y., Cao, Y., Hu, H., Wei, Y., Zhang, Z., Lin, S., Guo, B., 2021. Swin transformer: Hierarchical vision transformer using shifted windows, in: Proceedings of the IEEE/CVF international conference on computer vision, pp. 10012–10022. Ma, J., Zhang, Y., Gu, S., An, X., Wang, Z., Ge, C., Wang, C., Zhang, F., Wang, Y., Xu, Y., et al., 2022. Fast and low-gpu-memory abdomen ct organ segmentation: the flare challenge. Medical Image Analysis 82, 102616. Mao, X., Wang, J., Xie, X., Li, Q., Wang, Y., 2024. Loformer: Local frequency transformer for image deblurring, in: Proceedings of the 32nd ACM International Conference on Multimedia, pp. 10382–10391. Milletari, F., Navab, N., Ahmadi, S.A., 2016. V-net: Fully convolutional neural networks for volumetric medical image segmentation, in: 2016 fourth international conference on 3D vision (3DV), Ieee. pp. 565–571. 
+
+Jin Yang: Preprint submitted to Elsevier Page 18 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 
+
+Oktay, O., Schlemper, J., Folgoc, L.L., Lee, M., Heinrich, M., Misawa, K., Mori, K., McDonagh, S., Hammerla, N.Y., Kainz, B., et al., 2018. Attention u-net: Learning where to look for the pancreas. arXiv preprint arXiv:1804.03999 . Pan, W., Shi, H., Zhao, Z., Zhu, J., He, X., Pan, Z., Gao, L., Yu, J., Wu, F., Tian, Q., 2022. Wnet: Audio-guided video object segmentation via wavelet-based cross-modal denoising networks, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 1320–1331. Pan, Y., Luo, N., Sun, R., Meng, M., Zhang, T., Xiong, Z., Zhang, Y., 2023. Adaptive template transformer for mitochondria segmentation in elec-tron microscopy images, in: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 21474–21484. Patro, B.N., Namboodiri, V.P., Agneeswaran, V.S., 2025. Spectformer: Frequency and attention is what you need in a vision transformer, in: 2025 IEEE/CVF winter conference on applications of computer vision (WACV), IEEE. pp. 9543–9554. Pecco, N., Della Rosa, P.A., Canini, M., Nocera, G., Scifo, P., Cavoretto, P.I., Candiani, M., Falini, A., Castellano, A., Baldoli, C., 2024. Optimiz-ing performance of transformer-based models for fetal brain mr image segmentation. Radiology: Artificial Intelligence 6, e230229. Perera, S., Navard, P., Yilmaz, A., 2024. Segformer3d: an efficient transformer for 3d medical image segmentation, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 4981–4988. Qiu, P., Yang, J., Kumar, S., Ghosh, S.S., Sotiras, A., 2026. Agileformer: Spatially agile and scalable transformer for medical image segmentation. Biomedical Signal Processing and Control 112, 108842. Ren, S., Zhou, D., He, S., Feng, J., Wang, X., 2022. Shunted self-attention via multi-scale token aggregation, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 10853– 10862. Ronneberger, O., Fischer, P., Brox, T., 2015. U-net: Convolutional networks for biomedical image segmentation, in: International Conference on Medical image computing and computer-assisted intervention, Springer. pp. 234–241. Roy, S., Koehler, G., Ulrich, C., Baumgartner, M., Petersen, J., Isensee, F., Jaeger, P.F., Maier-Hein, K.H., 2023. Mednext: transformer-driven scaling of convnets for medical image segmentation, in: International Conference on Medical Image Computing and Computer-Assisted In-tervention, Springer. pp. 405–415. Shang, X., Li, G., Jiang, Z., Zhang, S., Ding, N., Liu, J., 2024. Holistic dy-namic frequency transformer for image fusion and exposure correction. Information Fusion 102, 102073. Shen, Q., Zheng, B., Li, W., Shi, X., Luo, K., Yao, Y., Li, X., Lv, S., Tao, J., Wei, Q., 2025. Mixunetr: A u-shaped network based on w-msa and depth-wise convolution with channel and spatial interactions for zonal prostate segmentation in mri. Neural Networks 181, 106782. Song, J., Sowmya, A., Sun, C., 2025. Efficient frequency feature aggrega-tion transformer for image super-resolution. Pattern Recognition 167, 111735. Song, P., Wang, Z., Zhang, J., Fu, S., Zhang, Y., Wu, W., Bao, F., 2026. Su-rmt: Toward bridging semantic representation and structural detail modeling for medical image segmentation. Information Fusion , 104182. Sun, J., Chen, K., Wu, X., Xu, Z., Wang, S., Zhang, Y., 2025. Msm-unet: a medical image segmentation method based on wavelet transform and multi-scale mamba-unet. Expert Systems with Applications 288, 128241. Valanarasu, J.M.J., Oza, P., Hacihaliloglu, I., Patel, V.M., 2021. Medical transformer: Gated axial-attention for medical image segmentation, in: Medical image computing and computer assisted intervention–MICCAI 2021: 24th international conference, Strasbourg, France, September 27– October 1, 2021, proceedings, part I 24, Springer. pp. 36–46. Wang, H., Xie, S., Lin, L., Iwamoto, Y., Han, X.H., Chen, Y.W., Tong, R., 2022. Mixed transformer u-net for medical image segmentation, in: ICASSP 2022-2022 IEEE international conference on acoustics, speech and signal processing (ICASSP), IEEE. pp. 2390–2394. Wang, Q., Wu, B., Zhu, P., Li, P., Zuo, W., Hu, Q., 2020. Eca-net: Efficient channel attention for deep convolutional neural networks, in: Proceedings of the IEEE/CVF conference on computer vision and pat-tern recognition, pp. 11534–11542. Wang, S., Li, C., Wang, R., Liu, Z., Wang, M., Tan, H., Wu, Y., Liu, X., Sun, H., Yang, R., et al., 2021a. Annotation-efficient deep learning for automatic medical image segmentation. Nature communications 12, 5915. Wang, W., Chen, C., Ding, M., Yu, H., Zha, S., Li, J., 2021b. Transbts: Mul-timodal brain tumor segmentation using transformer, in: Medical Image Computing and Computer Assisted Intervention–MICCAI 2021: 24th International Conference, Strasbourg, France, September 27–October 1, 2021, Proceedings, Part I 24, Springer. pp. 109–119. Wu, H., Chen, S., Chen, G., Wang, W., Lei, B., Wen, Z., 2022. Fat-net: Feature adaptive transformers for automated skin lesion segmentation. Medical image analysis 76, 102327. Wu, Y.H., Zhang, S.C., Liu, Y., Zhang, L., Zhan, X., Zhou, D., Feng, J., Cheng, M.M., Zhen, L., 2025. Low-resolution self-attention for semantic segmentation. IEEE Transactions on Pattern Analysis and Machine Intelligence . Xiao, F., Zhang, J., Han, P., Chen, S., Zhang, H., 2026. Wtclip: A wavelet-aware clip framework for boundary-refined weakly supervised semantic segmentation. IEEE Transactions on Industrial Informatics . Xiao, H., Li, L., Liu, Q., Zhu, X., Zhang, Q., 2023. Transformers in medical image segmentation: A review. Biomedical Signal Processing and Control 84, 104791. Xiao, T., Singh, M., Mintun, E., Darrell, T., Dollár, P., Girshick, R., 2021. Early convolutions help transformers see better. Advances in neural information processing systems 34, 30392–30400. Xu, G., Huang, W., Jia, W., Li, J., Gao, G., Qi, G.J., 2025a. S2aformer: Strip self-attention for efficient vision transformer. IEEE Transactions on Image Processing 34, 8243–8256. Xu, S., Chen, Y., Zhang, X., Sun, F., Chen, S., Ou, Y., Luo, C., 2025b. X-unet: A novel global context-aware collaborative fusion u-shaped network with progressive feature fusion of codec for medical image segmentation. Neural Networks , 107943. Yan, Q., Liu, S., Xu, S., Dong, C., Li, Z., Shi, J.Q., Zhang, Y., Dai, D., 2023. 3d medical image segmentation using parallel transformers. Pattern Recognition 138, 109432. Yan, S., Yang, B., Chen, A., Zhao, X., Zhang, S., 2025. Multi-scale convolutional attention frequency-enhanced transformer network for medical image segmentation. Information Fusion 119, 103019. Yan, X., Tang, H., Sun, S., Ma, H., Kong, D., Xie, X., 2022. After-unet: Axial fusion transformer unet for medical image segmentation, in: Proceedings of the IEEE/CVF winter conference on applications of computer vision, pp. 3971–3981. Yang, J., Marcus, D.S., Sotiras, A., 2025a. Dmc-net: Lightweight dynamic multi-scale and multi-resolution convolution network for pancreas seg-mentation in ct images. Biomedical Signal Processing and Control 109, 107896. Yang, J., Marcus, D.S., Sotiras, A., 2025b. Dynamic u-net: adaptively calibrate features for abdominal multiorgan segmentation, in: Medical Imaging 2025: Computer-Aided Diagnosis, SPIE. pp. 326–334. Yang, J., Marcus, D.S., Sotiras, A., 2025c. Translk-net: Entangling transformer and large kernel for progressive and collaborative feature encoding and decoding in medical image segmentation. arXiv preprint arXiv:2511.17873 . Yang, J., Qiu, P., Zhang, Y., Marcus, D.S., Sotiras, A., 2026. D-net: Dy-namic large kernel with dynamic feature fusion for volumetric medical image segmentation. Biomedical Signal Processing and Control 113, 108837. Yang, J., Yang, J., Yu, X., Qiu, P., Prajapat, S., 2025d. D2-mlp: dynamic decomposed mlp mixer for medical image segmentation, in: ICASSP 2025-2025 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP), IEEE. pp. 1–5. You, C., Zhao, R., Liu, F., Dong, S., Chinchali, S., Topcu, U., Staib, L., Duncan, J., 2022. Class-aware adversarial transformers for medical im-age segmentation. Advances in Neural Information Processing Systems 
+
+Jin Yang: Preprint submitted to Elsevier Page 19 of 20 Frequency-enhanced Vision Transformer in Medical Image Segmentation 
+
+35, 29582–29596. Zeng, J., Huang, L., Bai, X., Wang, K., 2024. Dbfft: Adversarial-robust dual-branch frequency domain feature fusion in vision transformers. Information Fusion 108, 102387. Zhan, C., Yang, K., 2025. Wcmamba: Enhancing high-resolution remote sensing image semantic segmentation with pyramid wavelet convolution and ss2d. Knowledge-Based Systems 324, 113877. Zhang, G., Zhang, Y., Zhang, T., Li, B., Pu, S., 2023. Pha: Patch-wise high-frequency augmentation for transformer-based person re-identification, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 14133–14142. Zhang, N., Yu, L., Zhang, D., Wu, W., Tian, S., Kang, X., Li, M., 2024. Ct-net: Asymmetric compound branch transformer for medical image segmentation. Neural Networks 170, 298–311. Zhang, Y., Wei, L., Zhang, B., Liu, Z., Yi, K., Hu, S., 2025. A lightweight convolution and vision transformer integrated model with multi-scale self-attention mechanism. Neurocomputing , 131670. Zheng, J., Yang, L., Li, Y., Yang, K., Wang, Z., Zhou, J., 2023. Lightweight vision transformer with spatial and channel enhanced self-attention, in: Proceedings of the IEEE/CVF international conference on computer vision, pp. 1492–1496. Zhong, Z., Lin, Z.Q., Bidart, R., Hu, X., Daya, I.B., Li, Z., Zheng, W.S., Li, J., Wong, A., 2020. Squeeze-and-attention networks for semantic segmentation, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 13065–13074. Zhou, H.Y., Guo, J., Zhang, Y., Han, X., Yu, L., Wang, L., Yu, Y., 2023a. nnformer: Volumetric medical image segmentation via a 3d transformer. IEEE Transactions on Image Processing . Zhou, Y., Huang, J., Wang, C., Song, L., Yang, G., 2023b. Xnet: Wavelet-based low and high frequency fusion networks for fully-and semi-supervised semantic segmentation of biomedical images, in: Proceed-ings of the IEEE/CVF international conference on computer vision, pp. 21085–21096. 
+
+Jin Yang: Preprint submitted to Elsevier Page 20 of 20
