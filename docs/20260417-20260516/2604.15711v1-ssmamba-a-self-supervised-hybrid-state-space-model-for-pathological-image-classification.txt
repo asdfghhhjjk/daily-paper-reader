@@ -1,0 +1,636 @@
+Title: SSMamba: A Self-Supervised Hybrid State Space Model for Pathological Image Classification
+
+URL Source: https://arxiv.org/pdf/2604.15711v1
+
+Published Time: Mon, 20 Apr 2026 00:29:35 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# SSMamba: A Self-Supervised Hybrid State Space Model for Pathological Image Classification 
+
+# Enhui Chai 1 Sicheng Chen 2 Tianyi Zhang 3 Xingyu Li 1 Tianxiang Cui 41School of Computer Science, Northwest University 
+
+> 2
+
+# PuzzleLogic Pte Ltd 
+
+> 3
+
+# Department of Electrical & Computer Engineering, National University of Singapore 
+
+> 4
+
+# School of Computer Science, University of Nottingham Ningbo China 
+
+Corresponding author: Tianxiang Cui <tianxiang.cui@nottingham.edu.cn> 
+
+# Abstract 
+
+Pathological diagnosis is highly reliant on image analysis, where Regions of Interest (ROIs) serve as the primary basis for diagnostic evidence, while whole-slide image (WSI)-level tasks primarily capture aggregated patterns. To extract these critical morphological features, ROI-level Foundation Models (FMs) based on Vision Transformers (ViTs) and large-scale self-supervised learning (SSL) have been widely adopted. However, three core limitations remain in their application to ROI analysis: (1) cross-magnification domain shift, as fixed-scale pretraining hinders adaptation to diverse clinical settings; (2) inadequate local-global relationship modeling, wherein the ViT backbone of FMs su ff ers from high computational overhead and imprecise local characterization; (3) insu ffi cient fine-grained sensitivity, as traditional self-attention mechanisms tend to overlook subtle diagnostic cues. To address these challenges, we propose SSMamba, a hybrid SSL framework that enables eff ective fine-grained feature learning without relying on large external datasets. This framework incorporates three domain-adaptive components: Mamba Masked Image Modeling (MAMIM) for mitigating domain shift, a Directional Multi-scale (DMS) module for balanced local-global modeling, and a Local Perception Residual (LPR) module for enhanced fine-grained sensitivity. Employing a two-stage pipeline, SSL pretraining on target ROI datasets followed by supervised fine-tuning (SFT), SSMamba outperforms 11 state-of-the-art (SOTA) pathological FMs on 10 public ROI datasets and surpasses 8 SOTA methods on 6 public WSI datasets. These results validate the superiority of task-specific architectural designs for pathological image analysis. 
+
+Keywords Pathological Classification · Self-supervised Learning · State Space Model 
+
+# 1 Introduction 
+
+Pathological diagnosis is pivotal in clinical cancer manage-ment, as it relies on the interpretation of pathological images to assess disease progression and guide treatment planning [ 1 ]. Within these digital slides, Regions of Interest (ROIs) are spe-cific sub-regions containing critical diagnostic indicators (e.g., abnormal cells, tissue structures) and serve as the primary focus for detailed examination, given their direct relevance to disease characteristics. Deep learning exhibits robust representation learning capabilities in this field [ 2, 3 ]; however, its success is often contingent on large-scale annotated datasets, which are notoriously scarce and costly to acquire in pathology. To miti-gate this dependency, Self-Supervised Learning (SSL) [ 4] has emerged as a powerful paradigm, enabling the extraction of gen-eral visual representations from unlabeled data via Contrastive Learning (CL) [ 5] and Masked Image Modeling (MIM) [ 6 ]. While these strategies have narrowed the performance gap with supervised learning across diverse downstream tasks [ 7], they often fail to capture domain-specific distributions or bridge the semantic gap between upstream natural image datasets (e.g., ImageNet [ 8, 9 ]) and downstream pathological images, yielding suboptimal representations. To address this gap, large-scale SSL on diverse pathologi-cal cohorts has driven the development of pathological foun-dation models (FMs) [ 10 ]. Predominantly based on Vision Transformer (ViT)-derived architectures [11, 12], these models have been widely adopted for their cross-task and cross-dataset generalizability. Nevertheless, recent studies have revealed a critical insight: even when trained on extensive datasets, general-purpose FMs often reach a performance plateau, whereas task-specific models with domain-aware designs consistently outper-form them [ 13 , 14 ]. These observations suggest that embed-ding pathology-aware inductive biases, coupled with targeted in-domain SSL and lightweight task-specific adaptation, may more e ff ectively leverage limited labels and heterogeneous co-horts. Considering the unique morphological characteristics of pathological images, we identify three critical challenges: 
+
+Magnification and image domain shift. Variations in mag-nification, scanning hardware, and staining protocols induce significant distribution shifts [ 15 , 16 ]. Most mainstream FMs adopt Transformer architectures pretrained at a fixed magnifica-tion (e.g., UNI uses 0 .5mpp , with 256 pixels corresponding to 
+
+≈ 128 μm ROIs). This single-scale paradigm fails to accom-modate the diverse magnification levels required in clinical practice, leading to domain mismatch when applied to high-or low-magnification ROIs. Consequently, downstream tasks cannot fully exploit the pathological knowledge embedded in FMs. 
+
+Inadequate local-global integration. Accurate diagnosis de-pends on both capturing subtle cellular morphology and inte-
+
+> arXiv:2604.15711v1 [cs.CV] 17 Apr 2026
+
+Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 2grating structural patterns across the entire visual field. CNN-based methods [ 17 ] possess strong local inductive biases but struggle to model long-range structural relationships; in con-trast, Transformer-based methods [ 18 ] can model long-range dependencies but incur prohibitive computational costs on high-resolution images and often fail to characterize continuous local transitions. State Space Models (SSMs) [ 19 ] o ff er a promising alternative by treating image tokens as continuous sequences with linear complexity. However, existing Mamba-based mod-els [ 20 ] still su ff er from autoregressive bias [ 21 ], which conflicts with the non-sequential and spatially entangled nature of patho-logical tissues. 
+
+Fine-grained modeling misalignment. Pathological analysis is inherently a fine-grained recognition task. Critical diagnostic clues often reside in subtle variations in glandular contours, nuclear pleomorphism, and texture boundaries. Traditional self-attention mechanisms prioritize global relationships and lack the inherent inductive bias required for local pattern modeling, resulting in insu ffi cient sensitivity to these subtle yet decisive morphological cues [22]. These findings indicate that the distinctive attributes of histopathological images—spatial heterogeneity and multiscale dependencies—demand pathology-aware inductive biases and training regimes that prioritize in-domain robustness over mere pretraining scale. Accordingly, we propose SSMamba, a two-stage framework for ROI classification. Our approach combines targeted in-domain SSL with task-specific fine-tuning, integrat-ing three core components: (i) Mamba Masked Image Modeling (MAMIM) for robust visual initialization; (ii) the SSMamba encoder, which achieves joint local-global modeling with lin-ear complexity; and (iii) Local Perception Residual (LPR) and Directional Multi-scale (DMS) modules to explicitly enhance fine-grained sensitivity. Our main contributions are: 
+
+In-domain SSL fine-tuning integrated framework. We pro-pose an end-to-end framework that combines MAMIM initial-ization with SSMamba encoder fine-tuning for downstream ROI datasets. MAMIM adopts MAE-style masking and reconstruc-tion tailored to SSM architectures, directing the model to critical structural signals (e.g., cell morphology, tissue topology) and mitigating cross-magnification domain shift. The hierarchical SSMamba encoder enables long-range context modeling via sequential scanning and hidden-state maintenance, preserving multi-scale structures. It achieves full integration of nuclear- or gland-level features with linear complexity, realizing synergy between initialization and fine-tuning. 
+
+Enhanced fine-grained sensitivity. We introduce the LPR and DMS modules to refine local patterns. LPR employs depthwise convolutions for spatial filtering to enhance boundary sensitivity, while DMS decomposes the Mamba backbone into multi-branch paths to capture local neighborhood relationships, e ff ectively amplifying subtle morphological di ff erences. 
+
+State-of-the-art (SOTA) performance. Across 10 ROI bench-marks, SSMamba outperforms 11 pathological FMs; on CAM16, it achieves +5.09% Acc and +3.83% F1 over Gigapath, vali-dating the e ff ectiveness of the proposed components. SSMam-baMIL demonstrates superior performance across 6 WSI-based downstream tasks on 6 datasets, achieving the best results in 12 out of 17 metrics. Compared with other large-parameter algorithms, SSMamba only has 25.3M parameters. 
+
+# 2 Related Works 
+
+2.1 Self-Supervised Learning in Computational Pathology 
+
+SSL has become a cornerstone of representation learning in computational pathology, where expert annotations are no-toriously scarce and costly. Contemporary SSL paradigms are primarily categorized into CL and MIM. 
+
+Contrastive Learning. Early advancements in pathological SSL were fueled by CL, which centers on instance discrimina-tion. CTransPath [ 23 ] proposed a seminal transformer-based CL approach, utilizing context-aware contrastive objectives to extract discriminative features from unlabeled whole-slide im-ages (WSIs) and achieving state-of-the-art performance across diverse downstream tasks. 
+
+Masked Image Modeling. Recently, MIM has gained promi-nence due to its reconstruction-centric objectives and inherent robustness to label noise. Modern pathology FMs, such as UNI [ 24 ] and Virchow2 [ 25 ], leverage the DINOv2 framework with teacher-student distillation and tissue-specific masking to preserve critical morphology. Furthermore, GigaPath [ 26 ] scaled this paradigm to a billion-parameter model pretrained on 15 mil-lion patches, demonstrating that massive-scale MIM can signifi-cantly improve generalization across diverse cancer types. These models generally outperform earlier medical-specific MIM vari-ants, such as SelfMedMAE [ 27 ], in modeling complex tissue architectures. 
+
+Multimodal SSL. To integrate domain-specific knowledge, multimodal SSL aligns visual features with clinical text data. MUSK [ 28 ] leverages vision-language alignment to exploit paired histopathology reports, while CONCH [ 29 ] employs language-supervised pretraining on specialized medical corpora to inject diagnostic semantics into image embeddings, enabling more interpretable feature extraction. 
+
+2.2 State Space Models in Computer Vision. 
+
+The Mamba architecture [ 20 ], rooted in structured state space models (SSMs), has emerged as a robust alternative to Transformers, attributed to its linear computational complexity and superior long-range dependency modeling. VMamba [ 30 ]adapted this architecture for 2D vision via a Cross-Scan Module, which serializes images into directional sequences to balance spatial modeling capability with computational e ffi ciency. Despite these merits, standard Mamba-based models en-counter unique challenges in pathological ROI analysis: 
+
+Causal and autoregressive bias: The sequential scanning mech-anism of Mamba often conflicts with the spatially entangled and non-sequential nature of tissues [ 21 ], where diagnostic signals (e.g., cell clusters) do not adhere to a fixed 1D order. 
+
+Structural inflexibility: Fixed scanning paths cannot dynami-cally adapt to the hierarchical and heterogeneous characteristics of tissues, frequently failing to prioritize clinically relevant struc-tures. Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 3
+
+Sensitivity to artifacts: Linear scanning may inadvertently amplify staining variations and translational noise, stemming from the absence of explicit pathology-aware inductive biases. While recent adaptations (e.g., NaMA-Mamba [ 31 ], Spine-Mamba [ 32 ]) have been developed for 3D or endoscopic data, they fail to address the specific demands of fine-grained ROI classification—such as cross-magnification shift and subtle glan-dular morphological features. This motivates our development of SSMamba, which tailors the SSM paradigm to the unique nuances of histopathology. 
+
+# 3 Methods 
+
+3.1 Overall Architecture 
+
+Existing pathological FMs are predominantly based on ViT architectures and generic computer vision SSL paradigms (e.g., MAE, CL). However, their designs often overlook pathology-specific characteristics, leading to suboptimal feature representa-tions for pathological image analysis. To bridge this gap, we pro-pose SSMamba, a task-specific two-stage framework (Fig. 1(a)) featuring a four-stage hierarchical encoder ( L1–L4) customized for pathological scenarios. This architecture is designed to tackle three core challenges inherent to ROI analysis. To mitigate cross-magnification domain shift, we propose the MAMIM module (Sec. 3.2), which reduces domain discrep-ancies and suppresses artifact-prone regions. For an input image 
+
+X ∈ RH×W×3, a 75% random masking strategy ( mr = 0.75) is adopted, where mr · (H · W) patches are replaced with learnable mask tokens Xm. This design preserves contextual cues through unmasked anchor patches, ensuring compatibility with down-stream diagnostic tasks. For enhanced local-global relationship modeling, a hierarchical encoder (SSMamba encoder) based on the SSM is developed. This encoder serializes ROI features for long-range context modeling, while preserving multi-scale structures through layer-wise fusion of nuclear- and gland-level features. Specifically, SSMamba incorporates a DMS module (Sec. 3.3) to enable full token interaction. Diverging from con-ventional MIM designs, the DMS adopts a pyramidal architec-ture where each stage Lk refines and aggregates multi-scale rep-resentations. Moreover, the DMS module facilitates concurrent local-global information flow via bidirectional state propagation, enabling e ff ective feature extraction ranging from fine-grained cellular patterns ( L1) to high-level tissue topology ( L4). Conventional coordinate-based encodings (e.g., ViT’s abso-lute positional embeddings) are vulnerable to tissue shifts and ro-tations. To resolve this, we introduce the LPR module (Sec. 3.4), which replaces these encodings with dynamic depthwise con-volutions to enable spatially invariant modeling of architectural patterns. Formally, the hierarchical encoding process is defined as: 
+
+Fk+1 = DMS k(LPR k(Fk)) , k ∈ 1, 2, 3, 4 (1) where F denotes features. Each stage k progressively down-scales the spatial resolution while increasing channel depth, thus preserving high diagnostic fidelity. For ROI classification, the model’s head consists of a global average pooling layer applied to the final feature map, followed by a single fully-connected (linear) layer that projects the fea-tures to the number of target classes. For WSI classification tasks, the model’s prediction head adopts a multi-task learning (MTL) design where outputs from SSMambaMIL are fed into multiple task-specific heads, with a modular pipeline automat-ically constructing corresponding classification or regression layers based on task configurations, supporting flexible gradient computation for tasks with available indicators and joint learning via aggregated task losses (cross-entropy loss for classification and mean absolute error loss for regression). Overall, SSMamba requires no auxiliary annotations or pre-processing, exhibiting strong adaptability across diverse patho-logical datasets. It prioritizes domain-aware robustness over generic large-scale pretraining. 
+
+3.2 MAMIM-based Encoder and Decoder 
+
+Cross-magnification domain shift impairs model general-ization and elevates the risk of misdiagnosis in pathological image analysis. To address this, we propose MAMIM, whose core innovation lies in replacing all vanilla ViT blocks in the standard MAE encoder-decoder framework with customized SSMamba blocks (integrating DMS and LPR modules). This targeted replacement resolves the mismatch between generic MAE and pathological image characteristics, enabling e ff ective mitigation of cross-magnification domain shift. MAMIM follows MAE’s classic masking-reconstruction paradigm but incorporates architecture-specific optimizations for pathology: For an input image X ∈ RH×W×3, it is first parti-tioned into non-overlapping patches, a 75% masking ratio is ap-plied, and the masked sequence is fed into the SSMamba-based encoder (stacked SSMamba blocks) for multi-scale feature ex-traction, which distinct from MAE’s ViT-based encoder. The integrated modules of the SSMamba block are key to distinguish-ing it from MAE’s ViT blocks: (1) Instead of ViT’s absolute positional encoding (susceptible to staining artifacts and tissue shifts), the LPR module employs dynamic depthwise convolu-tions to achieve translation invariance, adapting to pathological image variations. (2) Unlike ViT’s unidirectional self-attention (inadequate for capturing tissue interactions), the DMS mod-ule enables bidirectional context aggregation and fuses parallel convolutional features, e ff ectively capturing global tissue topol-ogy (e.g., tumor-stroma boundaries) and local cellular patterns. These designs ensure the encoder extracts domain-invariant, di-agnostically relevant features, avoiding MAE’s tendency to learn magnification-specific artifacts. Fig. 1(e) illustrates the architecture of the SSMamba de-coder, a core component of the MAMIM pretraining framework. For decoding, MAMIM adopts an SSMamba-based decoder (instead of MAE’s ViT-based decoder) to maintain architec-tural consistency with the encoder. Leveraging the DMS mod-ule’s direction-aware propagation, the decoder recovers masked patches using contextual cues from unmasked anchors and out-puts a reconstructed image. Compared to MAE’s generic de-coder, this SSMamba-based design enhances the capture of com-plex pathological structures, ensuring consistent feature learning during pretraining. Facilitated by the encoder-decoder’s archi-tectural advantages over MAE, the reconstruction task drives the model to learn consistent pathological tissue patterns across magnifications, fundamentally alleviating domain shift. These architectural improvements endow MAMIM with superior patho-logical adaptability and e ffi cient cross-magnification domain Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 4Image                   
+
+> Masking
+> Masked Image
+> DMS Module
+> Stage 1 ×��
+> �
+> �×�
+> �
+> Stage 2 ×��
+> LPR Module
+> DMS Module
+> �
+> �×�
+> �
+> �
+> �  ×�
+> � 
+> Stage 3 ×��Stage 4 ×��
+> SSMamba Encoder (e) SSMamba Decoder
+> Linear
+> …
+> DMS Module
+> …
+> �
+> �� ×�
+> ��
+> Reconstruct ed
+> Image
+> (a) Architecture of the SSMamba
+> Linear
+> Linear Linear
+> SSM
+> Cau-
+> Conv1D
+
+σ σ 
+
+> (b) Mamba Module
+> Linear
+> Linear Linear
+> SSM
+> Reg-
+> Conv1D
+> Sep-
+> Conv1D
+
+σ σ
+
+c        
+
+> (c) DMS Module
+> primary_conv
+> depthwise_conv
+> (d) LPR Module
+> Xi1: Hi×Wi×��
+> �
+> Xi: H i×Wi×Ci
+
+c     
+
+> DWConv
+> ReLU
+> Batch Norm
+> Conv
+> ReLU
+> Batch Norm
+> Conv
+> Xi2: Hi×Wi×��
+> �
+> …
+> LPR Module
+> DMS Module
+> LPR Module
+> DMS Module
+
+Figure 1: The Architecture of the SSMamba. (a) Overall architecture of SSMamba. (b) The original Mamba Module. (c) The proposed DMS Module. (d) The proposed LPR Module. (e) The SSMamba decoder for MAMIM. alignment, advantages lacking in standard MAE, which relies on generic ViT blocks, absolute positional encoding, and unidi-rectional self-attention that are mismatched with pathological image characteristics. Table 1: Architectural Comparison: Mamba Module in VMamba vs. DMS Module in SSMamba 
+
+Feature Mamba DMS 
+
+Token Mixing Unidirectional Bidirectional MAE Compatibility Limited Full Spatial Processing SSM SSM + Parallel Conv Pathology Optimization Foundation model Tissue integrity Activation GeLU SiLU 
+
+3.3 DMS Module 
+
+To address inherent limitations of the original Mamba mod-ule (Fig. 1(c)) in pathological image analysis tasks, we redesign it into the DMS module. The DMS module targets three core flaws of vanilla Mamba, with corresponding optimized designs tailored for pathological image analysis. First, DMS overcomes the unidirectional constraint of vanilla Mamba, which relies on causal convolution (Cau-Conv1D) to enforce left-to-right sequence modeling (Eq. 2): 
+
+Xcausal [t] =
+
+> k
+
+X
+
+> i=0
+
+W[i] · X[t − i] (2) where Xcausal [t] is the output at position t, and k denotes the kernel size, W[i] is the learnable weight, and X[t − i] is the input feature at position t−i. This unidirectional design fails to capture bidirectional spatial context, which is critical for pathology, as malignant patterns (e.g., tumor-stroma boundaries) depend on mutual interactions between adjacent regions. To resolve this, we replace Cau-Conv1D with bidirectional depthwise separable convolution (Sep-Conv1D), consisting of per-channel depthwise filtering and cross-channel pointwise mixing (Eq. 3): Depthwise: Xdw [c, t] =
+
+> k/2
+
+X
+
+> i=−k/2
+
+Wdw [c, i] · X[c, t + i]Pointwise: X′ 
+
+> 1
+
+= Wpw · Xdw 
+
+(3) where Xdw [c, t] is the depthwise output at channel c and posi-tion t, Wdw [c, i] is the channel-specific depthwise weight, and 
+
+Wpw denotes the pointwise weight matrix. This design enables centered bidirectional context aggregation to capture global tis-sue topology (e.g., tumor-stroma interfaces) while reducing the parameter count by a factor of 1 /k + 1/C compared to stan-dard convolution, ensuring e ffi ciency without compromising expressiveness. Second, DMS remedies the lack of parallel spatial depen-dencies in vanilla Mamba. The sequential nature of SSM ne-glects parallel spatial interactions, which are essential for cap-turing local cellular patterns. We thus introduce a symmetric convolutional branch with regular 1D convolution and SiLU Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 5activation (Eq. 4): 
+
+X2 = σ  Reg-Conv1D  Linear C→C/2(Xin ) (4) where σ(·) is the SiLU activation, Linear C→C/2 projects channels from C to C/2, and Xin is the input feature map. This branch processes tokens concurrently, enhancing local discriminability and robustness to visual degradation—critical for distinguishing visually similar cancer subtypes. Third, DMS resolves the incompatibility between Mamba’s autoregressive bias and the non-autoregressive MAE framework, which induces training instability. We fuse the bidirectional SSM pathway and convolutional pathway via channel-split con-catenation to maintain e ffi ciency (Eq. 5): 
+
+X1 = Scan  σ  Sep-Conv1D  Linear C→C/2(Xin ) 
+
+Xout = Linear C→C ([ X1 ⊕ X2]) (5) where Scan denotes Mamba’s selective scan operation (formu-lated as ht = ¯Atht−1 + ¯Bt xt, yt = Ctht, where ¯At = exp (−∆t A)and ¯Bt = ∆ t B are discretized via zero-order hold), ⊕ denotes channel-wise concatenation, and Linear C→C restores the chan-nel dimension. The C → C/2 channel-split design ensures full token interaction while preserving the parameter count of the original Mamba block. In summary, the DMS module extends Mamba’s sequence modeling capability to pathological spatial feature extraction by integrating bidirectional recurrence, parallel convolution, and MAE-compatible fusion. Table 1 summarizes its architectural advantages over the Mamba module in VMamba. The pseu-docode of DMS is provided in Algorithm 1. 
+
+3.4 LPR Module 
+
+Pathological image analysis presents unique spatial chal-lenges: diagnostic features (e.g., nuclear morphology) demand translation invariance, while Hematoxylin and Eosin (H&E) staining-induced artifactual patterns (e.g., dye di ff usion, tissue folds) readily corrupt inappropriate positional encodings and amplify noise. Conventional positional embedding methods fail to meet these domain-specific requirements: ViT’s linear po-sitional encoding introduces fixed coordinate biases, violating translation invariance; Swin’s Patch-Merge achieves hierarchical downsampling but aggressively compresses spatial information, exacerbating staining artifacts; the Local Perception Unit (LPU) in CMT [ 33 ] employs depthwise separable convolutions for local feature extraction but lacks explicit adaptation to pathological artifacts. To tackle these issues, we propose the LPR module, a domain-adaptive positional encoding module tailored for patho-logical scenarios. The LPR module consists of three core se-quential operations, with stage input Xi ∈ RHi×Wi×Ci
+
+(where 
+
+Hi, Wi are spatial dimensions and Ci is channel count): First, pointwise convolution compresses channels while preserving fine-grained cellular details: 
+
+XL = ReLU BN Conv Ci→Ci/2(Xi) (6) where Conv Ci→Ci/2 denotes a pointwise convolution mapping channels from Ci to Ci/2, BN is batch normalization for training stability, and ReLU is the activation function. This operation 
+
+Algorithm 1 DMS Module 
+
+Require: Input sequence Xin ∈ RL×d, sequence length L, hid-den dimension d
+
+Ensure: Output sequence Xout ∈ RL×d 
+
+> 1:
+
+Parameters:  
+
+> 2:
+
+A ∈ RN×N {State transition matrix}  
+
+> 3:
+
+B, C ∈ Rd×N {Projection matrices}  
+
+> 4:
+
+K ∈ Rk {Depthwise convolution kernel}  
+
+> 5:
+
+γ, β ∈ Rd {Layer normalization parameters}  
+
+> 6:
+
+Forward Pass:  
+
+> 7:
+
+Step 1: Input Projection  
+
+> 8:
+
+∆ ← Softplus(Linear ∆(Xin ))  
+
+> 9:
+
+Split Xin into two branches: Xin1 , Xin2  
+
+> 10:
+
+Bin ← Linear B(Xin1 ) 
+
+> 11:
+
+Cin ← Linear C (Xin2 ) 
+
+> 12:
+
+Ascaled ← exp( −∆ · A) 
+
+> 13:
+
+Xproj1 ← Linear C→C/2(Xin 1) 
+
+> 14:
+
+Xproj2 ← Linear C→C/2(Xin 2) 
+
+> 15:
+
+Step 2: Convolution  
+
+> 16:
+
+Xconv1 ← Sep-Conv1D( Xproj1 , K) 
+
+> 17:
+
+Xconv2 ← Reg-Conv1D( Xproj2 ) 
+
+> 18:
+
+Xact1 ← SiLU( Xconv1 ) 
+
+> 19:
+
+Xact2 ← SiLU( Xconv2 ) 
+
+> 20:
+
+Step 3: Selective Scan  
+
+> 21:
+
+Xssm ← SSM( Ascaled , Bin , ∆)( Xact1 ) 
+
+> 22:
+
+Step 4: Gating Mechanism  
+
+> 23:
+
+Xgated ← Xact2 ⊕ Xssm  
+
+> 24:
+
+Step 5: Output Projection  
+
+> 25:
+
+Xout ← Linear out (Xgated ) 
+
+> 26:
+
+return Xout 
+
+reduces computational overhead while retaining critical cellular features, yielding XL ∈ RHi×Wi×Ci/2.Second, depthwise convolution (DWConv) is applied to XL
+
+to introduce translation-invariant local perception: 
+
+XDW = BN (DWConv k×k(XL)) (7) where k × k kernel (typically 3 × 3) is applied independently to each channel, enabling localized feature extraction with spatially shared weights to enhance translation invariance. Compared to standard convolution, DWConv reduces the parameter cost from 
+
+O(k2 · (Ci/2) 2) to O(k2 · Ci/2) by avoiding inter-channel mixing. Third, residual fusion restores the original representation to stabilize training and enhance context flow: 
+
+XFinal = Conv Ci/2→Ci (ReLU( XDW )) + Xi (8) This residual pathway facilitates gradient propagation, preserves original spatial semantics, and fuses multi-scale local perception with global tissue context—e ff ectively decoupling staining noise from diagnostic signals. As summarized in Table 2, LPR fundamentally improves pathology-oriented feature embedding by integrating DWConv-based implicit positional encoding with residual pathways. The pseudocode of the LPR module is provided in Algorithm 2. Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 6Table 2: Embedding Method Comparison for Pathology Image Classification. 
+
+Characteristic Linear PE (ViT) Patch-Merge (Swin) LPU (CMT) LPR (Ours) Translation Invariance × ✓ ✓ ✓
+
+Resolution Preservation ✓ × ✓ ✓
+
+Local Feature Extraction × × ✓ ✓
+
+Stain Artifact Robustness × × × ✓
+
+Computational Cost O(N) O(N/4) O(k2 NC ) O(k2 NC /2) 
+
+Implementation Linear Projection Patch Concatenation Conv +ReLU DWConv +Residual 
+
+Gradient Propagation Standard Limited Residual Multi-scale residual Table 3: Dataset Details. 
+
+# Dataset Classes Resolution (pixels) Sample Number Organ /Tissue Scale 
+
+# LaC 5 768 × 768 25000 Colorectal Tissue NCT 9 224 × 224 100000 Colorectal Tissue PBC 8 360 × 363 38938 Blood Cellular pRCC 2 2000 × 2000 1419 Kidney Glandular PAIP2019 2 384 × 384 2165 Liver Tissue CAM16 2 8000 × 8000 1081 Lymph Nodes Tissue SIPa 5 384 × 384 1004 Cervical Cellular MHIST 2 224 × 224 3152 Colorectal Tissue TCGA-CRC-MSI 2 512 × 512 51916 Colorectal Tissue Osteosarcoma 3 1024 × 1024 1144 Bone Tissue 
+
+Algorithm 2 LPR Module 
+
+Require: Xi, Cint , Cout , s, k, st 
+
+Ensure: XFinal  
+
+> 1:
+
+Cint ← Cout /s {Intrinsic channels}  
+
+> 2:
+
+Cghost ← Cint × (s − 1) {Ghost channels}  
+
+> 3:
+
+Step 1: Primary convolution  
+
+> 4:
+
+XL ← Conv k×k(Xi) {Generate Cint features}  
+
+> 5:
+
+XL ← BN( XL) 
+
+> 6:
+
+XL ← ReLU( XL) 
+
+> 7:
+
+Step 2: Depthwise convolution  
+
+> 8:
+
+XDW ← DWConv 3×3(XL) {Generate Cghost features}  
+
+> 9:
+
+XDW ← BN( XDW ) 
+
+> 10:
+
+XDW ← ReLU( XDW ) 
+
+> 11:
+
+Step 3: Concatenate  
+
+> 12:
+
+XFinal ← Concat( XL, XDW , dim = 1)  
+
+> 13:
+
+return XFinal 
+
+# 4 Experimental Results 
+
+4.1 Datasets 
+
+To ensure the generalizability of our proposed frame-work, we selected 10 publicly available pathology ROI datasets covering diverse tissue types, pathological fields, and scale ranges: Lung and Colon Cancer (LaC) [ 34 ], NCT-CRC-HE-100K (NCT) [ 35 ], Peripheral Blood Cell (PBC) [ 36 ], Papillary Renal Cell Carcinoma (pRCC) [ 37 ], PAIP2019 [ 38 ], CAME-LYON16 (CAM16) [ 39 ], SIPaKMeD (SIPa) [ 40 ], MHIST [ 41 ], TCGA-CRC-MSI (CRC) [ 42 ] and Osteosarcoma (Ost) [ 43 ]. De-tails of these datasets are summarized in Table 3. Meanwhile, we evaluated our proposed algorithm on 6 public WSI datasets: 1)For prostate cancer subtyping using the PANDA [ 44 ] dataset, and 2) TCGA [42] datasets, sourced from The Cancer Genome Atlas (TCGA) project, provide publicly accessible, high-quality WSIs along with matched clinical and molecular data. These datasets span a broad spectrum of cancers and have become standard benchmarks for deep learning research in histopathol-ogy. Specifically, the following subsets are used: TCGA-ESCA, TCGA-BRCA, TCGA-CESC, TCGA-LGG, and TCGA-BLCA. The details of the dataset are in Dataset Details of Appendix. 
+
+4.2 Implementation Details 
+
+All experiments were conducted on a hardware setup con-sisting of 3 RTX A6000 GPUs and 1 RTX A5000 GPU, with Python 3.10.16, PyTorch 2.4.0, and CUDA 12.1. For ROI classification tasks, all datasets were partitioned into training, validation, and test sets following a 7:1:2 split ratio. For fair comparison, all images were resized to 224 × 224 × 3prior to model training, followed by normalization to a standard distribution across each dataset. Consistent with the MAE frame-work, a 75% masking ratio was adopted for pretraining, with a total of 100 pretraining epochs conducted across all datasets. The pretraining process employed the AdamW optimizer with a base learning rate of 5 × 10 −5, weight decay of 0.05, cosine learning rate decay scheduling, a batch size of 64, and a 10-epoch warmup phase; data augmentation was primarily based on Random Resized Crop. For fine-tuning, the AdamW opti-mizer and weight decay of 0.05 were retained, while a higher Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 7base learning rate (1 × 10 −3), cosine learning rate decay, batch size of 8, 10-epoch warmup, and Mixup augmentation were adopted. Model performance was evaluated using three standard metrics: F1-score (F1), Accuracy (Acc), and Area Under the Curve (AUC). For WSI classification tasks, models were trained for 100 epochs (20 epochs for warmup and 80 epochs for main train-ing), employing the AdamW optimizer with an initial learn-ing rate of 1 × 10 −4 and a cosine decay schedule annealing to 1 × 10 −6. Model performance was evaluated using the accuracy metric. Each WSI was divided into 224 × 224 tiles, with features represented by Gigapath embeddings. To mitigate sampling variance—especially for small datasets—15 independent test inferences with di ff erent random tile samplings were performed for each scenario, and the predictions were aggregated. A batch size of 4 was maintained across all WSI experiments. SOTA models and the training framework were implemented based on the UnPuzzle Benchmark [45]. 
+
+4.3 Comparison with SOTA Methods 
+
+To validate the ROI pathological image classification per-formance of SSMamba, comparative experiments were con-ducted against 11 SOTA methods on the 10 aforementioned ROI datasets. The comparative baselines include ViT [ 46 ], Swin-Transformer (Swin) [ 47 ], MAE [ 48 ], VMamba [ 49 ], UNI [ 24 ], UNI2 [ 24 ], MUSK [ 28 ], CONCH [ 29 ], CTransPath [ 23 ], Prov-GigaPath (Gigapath) [26], and Virchow2 [25]. For validating SSMamba’s performance on WSI patholog-ical image classification, comparative experiments were per-formed against 8 SOTA methods across 6 core downstream tasks on 6 WSI datasets. The comparative baselines consist of 2 baseline methods (SlideAve, SlideMax) and 6 SOTA meth-ods (ABMIL [ 50 ], CLAM [ 51 ], DSMIL [ 52 ], Gigapath [ 26 ], S4MIL [ 53 ], MambaMIL [ 54 ]). SSMamba was fine-tuned on 6 datasets: PANDA, TCGA-ESCA, TCGA-BRCA, TCGA-CESC, TCGA-LGG, and TCGA-BLCA. Performance comparisons be-tween SSMamba and the competing methods across these down-stream tasks—covering diverse scenarios of WSI-based patho-logical diagnosis—are presented in Tab. 6. 
+
+Classification tasks: (1) I-Grade: Assessing prostate cancer aggressiveness on the PANDA dataset, where the ISUP Grade serves as a standardized classification of Gleason patterns to guide prognosis and treatment planning; (2) Grade: Evaluating tumor grade via cellular di ff erentiation and structural pattern analysis on the TCGA-ESCA dataset; (3) IHC-HER2: Predict-ing HER2 expression status from WSIs of the TCGA-BRCA dataset to determine suitability for targeted therapy; (4) LymInv: Identifying cancer invasion into lymphatic or vascular channels on the TCGA-CESC dataset; (5) T-Stage: Predicting AJCC-defined tumor staging (reflecting local tumor progression) on the TCGA-LGG dataset. 
+
+Regression task: OS Months: Estimating overall survival time from initial diagnosis on the TCGA-BLCA dataset, using Corre-lation (Corr) as the evaluation metric. 
+
+4.3.1 ROI Pathological Image Classification 
+
+As demonstrated in Tables 4a, 4b, and 4c, comprehen-sive evaluations were conducted across 10 diverse patholog-ical datasets to assess the performance of SSMamba against 11 SOTA models. The F1-score, accuracy, and Area Under the Curve (AUC) were adopted as core metrics to respectively evaluate the balance between precision and recall, classification reliability, and discriminative capability. SSMamba achieved outstanding results across all measures: an average F1-score of 95.56%, an average accuracy of 95.98%, and an average AUC of 95.02%, outperforming the second-ranked model, Vir-chow2, by margins of 1.13%, 1.19%, and 1.88%, respectively, thereby establishing a clear performance hierarchy. The model significantly surpassed traditional Transformer-based architec-tures (e.g., ViT, Swin) and even the Mamba-based VMamba (exceeding it by 9.36% in F1-score), validating the e ffi cacy of its optimized selective state space design. In detailed dataset-wise performance, SSMamba exhibited remarkable adaptabil-ity: it ranked first in all 10 tasks based on F1-score, includ-ing perfect 100.00% scores on SIPa and top results on PBC, pRCC, PAIP2019, CAM16, and Ost; it also secured the high-est accuracy on 5 datasets, including SIPa (100.00%), pRCC, PAIP2019, CAM16, and CRC, while remaining highly com-petitive on the others; in terms of AUC, it achieved leading performance on 5 key datasets, including perfect 100.00% on SIPa. SSMamba ranks first in 10 F1-score, 5 Accuracy, and 5 AUC tasks (e.g., 99.54% F1-score on PBC, 99.53% Accuracy on PAIP2019, 99.85% AUC on NCT), and remains top-tier in the remaining tasks (e.g., 83.19% F1-score on MHIST, only 0.66% lower than GigaPath; 97.68% Accuracy on Ost, 0.06% lower than UNI2). Statistical analysis confirmed that all performance advantages of SSMamba over competing models were highly significant ( p < 0.001), e ff ectively ruling out random variations and sampling bias. The core advantage of SSMamba stems from its optimized selective state space architecture, which enables linear-time modeling of long-sequence pathological features and dynamic information propagation. This design e ffi ciently cap-tures disease-specific diagnostic signals (e.g., cell morphology, tissue topology) while suppressing interference from normal tissues and mitigating domain shifts, thereby enhancing clas-sification reliability and discriminative power across diverse pathological scenarios. To intuitively and quantitatively demonstrate the trade-o ff 
+
+between model performance and computational e ffi ciency, we have added a new bubble chart (Fig. 2). This chart plots Average Accuracy against Number of Parameters, where the size of the bubble indicates the number of parameters of the algorithm: the larger the bubble size, the more parameters the model has, and the smaller the bubble size, the fewer parameters it has. It can be clearly observed from the chart that compared with mainstream foundational models like Virchow2, our model achieves com-petitive or superior performance with a significantly reduced parameter count (25.3M parameters), fully demonstrating its advantages in computational e ffi ciency and addressing the gap in resource consumption-related information. 
+
+4.3.2 Evaluation of Cross-Dataset Generalization 
+
+To validate the e ff ectiveness of SSMamba in address-ing cross-magnification domain shift and the limitation that fixed-scale pretraining fails to adapt to diverse clinical sce-narios, we conduct cross-dataset generalization experiments. The model is trained on the NCT dataset and evaluated on two independent test datasets (MHIST and CRC), with re-Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 8Table 4: Performance Comparison of SSMamba with 11 SOTA Methods on 10 ROI Pathology Datasets. Bold : the best result. Underline: the second best result. 
+
+> (a) F1 Score Results Comparison of SSMamba with 11 SOTA Methods on 10 Pathology Datasets.
+
+Method LaC NCT PBC pRCC PAIP2019 CAM16 SIPa MHIST CRC Ost Ave-F1 p-value 
+
+ViT 89.92 96.39 95.14 90.04 89.88 87.87 93.79 77.25 77.55 88.46 88.63 0.000002 Swin 92.03 97.33 97.59 92.69 87.67 90.73 94.77 77.45 79.25 89.64 89.92 0.000005 MAE 95.88 98.57 98.47 87.17 76.24 89.80 90.33 76.79 77.80 89.52 88.06 0.000010 VMamba 90.40 90.80 87.19 84.20 79.39 84.40 95.22 76.87 82.84 90.71 86.20 0.000001 UNI 99.98 99.51 98.07 87.50 95.61 85.86 78.00 81.81 88.74 94.35 90.94 0.000028 UNI2 98.07 99.14 98.15 97.13 91.54 85.87 77.96 82.56 89.38 96.61 91.64 0.000003 MUSK 98.72 98.46 97.39 89.85 92.79 82.65 78.00 82.06 85.22 94.35 89.95 0.000004 CONCH 99.70 99.29 97.44 90.17 80.54 83.33 90.50 83.63 86.60 94.58 90.58 0.000008 GigaPath 99.98 99.73 98.21 92.89 94.46 88.04 98.50 83.85 89.09 95.95 94.07 0.000127 Virchow2 99.90 99.36 98.26 94.68 96.49 89.95 98.00 83.42 88.98 95.24 94.43 0.000015 CTransPath 91.29 92.16 95.87 92.80 88.23 90.04 98.30 79.73 84.87 91.42 90.47 0.000001 SSMamba 98.47 99.38 99.54 97.87 98.17 91.87 100.00 83.19 89.80 97.31 95.56 -
+
+> (b) Accuracy Results Comparison of SSMamba with 11 SOTA Methods on 10 Pathology Datasets.
+
+Method LaC NCT PBC pRCC PAIP2019 CAM16 SIPa MHIST CRC Ost Ave-Acc p-value 
+
+ViT 92.11 97.63 96.84 92.55 91.89 90.31 95.13 83.19 79.36 92.50 91.15 0.000001 Swin 93.61 97.57 96.93 92.03 92.10 92.50 95.35 83.19 79.59 95.59 91.85 0.000002 MAE 98.49 98.71 97.33 88.98 78.20 92.24 93.27 84.78 79.04 93.81 90.49 0.000001 VMamba 92.13 91.57 85.33 86.39 81.67 86.69 96.80 85.33 79.07 90.71 87.57 0.000000 UNI 99.99 99.89 99.52 90.81 95.60 87.04 91.20 86.41 81.54 96.23 92.72 0.000005 UNI2 98.66 99.24 99.51 90.88 95.65 87.87 91.60 87.40 82.62 97.74 93.12 0.000003 MUSK 99.49 99.66 99.35 92.58 93.05 84.26 91.20 86.87 76.10 96.23 91.88 0.000001 CONCH 99.88 99.84 99.36 92.93 76.85 85.15 96.20 88.10 77.82 96.39 91.25 0.000001 GigaPath 99.99 99.94 99.55 94.70 94.21 88.42 99.40 88.22 81.99 97.30 94.37 0.000018 Virchow2 99.96 99.86 99.56 96.11 96.53 90.28 99.20 87.57 81.95 96.83 94.79 0.000012 CTransPath 92.92 89.03 97.31 94.61 89.73 92.21 98.90 85.34 80.77 95.79 91.66 0.000001 SSMamba 99.84 99.46 99.17 98.58 99.53 93.51 100.00 87.73 84.26 97.68 95.98 -
+
+> (c) Area Under Curve (AUC) Results Comparison of SSMamba with 11 SOTA Methods on 10 Pathology Datasets.
+
+Method LaC NCT PBC pRCC PAIP2019 CAM16 SIPa MHIST CRC Ost Ave-AUC p-value 
+
+ViT 90.92 84.63 91.55 87.45 86.25 84.27 56.81 80.76 78.44 90.40 83.15 0.000002 Swin 92.46 89.38 95.67 88.99 87.33 78.26 81.92 80.54 79.41 92.44 86.64 0.000003 MAE 92.67 83.19 93.12 90.74 86.62 88.89 71.60 81.01 78.39 91.59 85.78 0.000002 VMamba 92.44 85.28 94.03 90.00 88.42 86.38 83.80 81.47 81.27 90.71 87.38 0.000001 UNI 96.08 91.14 96.76 88.08 95.51 79.06 64.79 84.38 85.45 95.27 87.65 0.000005 UNI2 96.70 91.54 97.32 88.52 95.47 80.43 66.40 85.12 86.18 96.17 88.38 0.000003 MUSK 93.64 93.19 98.54 91.48 94.71 83.39 85.19 84.58 80.90 95.27 90.09 0.000001 CONCH 92.52 91.60 98.16 95.27 83.85 74.36 91.37 86.01 82.61 95.47 89.12 0.000001 GigaPath 99.48 99.36 99.51 92.92 94.25 72.87 99.19 86.08 85.70 96.60 92.60 0.000127 Virchow2 98.07 99.28 99.37 94.51 97.05 77.40 98.47 85.66 85.60 96.03 93.14 0.000015 CTransPath 94.47 90.75 97.09 91.95 88.43 83.89 98.90 82.72 82.94 93.57 90.47 0.000001 SSMamba 99.65 99.85 99.37 94.77 97.19 89.06 100.00 85.63 87.23 97.49 95.02 -Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 9
+
+Figure 2: Bubble plot of the e ff ectiveness of SSMamba. Table 5: Performance Evaluation of Cross-Dataset Generaliza-tion.(The training data set is NCT. The test data sets correspond to MHIST and CRC, respectively.)                                                  
+
+> Method MHIST CRC
+> F1 Acc AUC F1 Acc AUC UNI 77.19 85.29 81.17 76.77 80.05 77.39 UNI2 78.00 85.97 82.03 77.06 80.10 78.03 MUSK 82.00 86.83 84.77 77.31 71.13 78.13 CONCH 80.26 84.09 84.01 83.79 78.66 78.52 GigaPath 82.31 86.59 84.29 83.43 80.44 83.63 Virchow2 80.56 85.76 84.78 81.59 80.13 80.25 SSMamba 83.00 87.03 84.99 87.08 83.76 86.27
+
+sults summarized in Table 5. On the MHIST dataset, SS-Mamba achieves balanced and superior performance across F1-score (83.00%), accuracy (Acc, 87.03%), and AUC (84.99%). Compared with SOTA baselines, it outperforms Gi-gaPath (F1 =82.31%, Acc =86.59%, AUC =84.29%) and MUSK (F1 =82.00%, Acc =86.83%, AUC =84.77%) in all metrics. This indicates that SSMamba can e ff ectively capture discriminative structural features from histopathological images, which helps mitigate cross-magnification domain shift. For the CRC dataset, SSMamba maintains stable and leading performance, with F1-score of 87.08%, Acc of 83.76%, and AUC of 86.27%. It outperforms the second-best baseline GigaPath by 3.65% in F1-score, 3.32% in Acc, and 2.64% in AUC. In contrast, other baselines show inconsistent performance across datasets: MUSK achieves relatively high F1 on MHIST but drops to 71.13% in Acc on CRC, reflecting poor adaptability to diverse scenarios. SSMamba’s consistent performance across two datasets verifies its ability to overcome the limitation of fixed-scale pretraining. The above results demonstrate that SSMamba’s MAMIM bal-ances the retention of discriminative contextual cues and the enhancement of domain-invariant feature learning through a targeted MIM paradigm. Meanwhile, SSMamba’s hierarchical SSM-based encoder contributes to integrating multi-scale fea-tures and modeling long-range contexts, thereby enhancing its robustness to cross-magnification domain shift and adaptability to diverse clinical scenarios. 
+
+4.3.3 Downstream Tasks of WSI Pathological Image 
+
+As shown in Table 6, SSMambaMIL delivers superior over-all performance across six downstream tasks on six datasets, achieving the best results (bold) in 12 out of 17 metrics and the second-best (underline) in 4 metrics. It outperforms 8 SOTA methods, including MIL-based approaches (ABMIL, CLAM, DSMIL) and SSM-based models (S4MIL, MambaMIL). On the PANDA dataset’s I-Grade task, SSMambaMIL ranks first in F1-score and Accuracy, which are 0.91% and 0.12% higher than the second-ranked S4MIL respectively. In terms of AUC, S4MIL takes the lead, while SSMambaMIL ranks second with a narrow gap. For the TCGA-ESCA Grade task, SSMambaMIL secures the top position in AUC and Acc. Its AUC is 1.20% higher than MambaMIL, the second-ranked method in this metric. In Acc, it ties with CLAM and S4MIL for the first place. In F1-score, GigaPath ranks first, and SSMambaMIL takes the second place, which is higher than most competing methods such as CLAM and S4MIL. In the IHC-HER2 task of TCGA-BRCA, SSMam-baMIL performs best in AUC and Acc. Its AUC is 0.39% higher than SlideMax, the second-ranked method, and its Acc is 0.55% higher than the second-best CLAM. S4MIL ranks first in F1-score (28.66%), with SSMambaMIL following closely in the second place (27.74%). Notably, SSMambaMIL achieves a clean sweep of the first place in all three metrics on the LymInv task of TCGA-CESC. Specifically, its AUC is 4.12% higher than DSMIL, the second-ranked method, and its F1-score is 4.61% higher than the second-place MambaMIL. On the T-Stage task of TCGA-LGG, SSMambaMIL ranks first in both AUC and Acc. Its AUC is 4.54% higher than the second-ranked MambaMIL, and its Acc is 3.12% higher than SlideAve, which takes the sec-ond place. For the OS regression task of TCGA-BLCA, ABMIL ranks first in Correlation, while SSMambaMIL ranks second, outperforming MambaMIL and SlideAve. These results confirm that SSMambaMIL’s advanced sequence modeling capability can e ff ectively capture discriminative features in WSIs. 
+
+4.4 Visualization Analysis 
+
+Figure 3 presents a qualitative comparison of feature repre-sentations produced by di ff erent vision models using Gradient Class Activation Maps (Grad-CAM) on Region of Interest (ROI) patches from Warwick dataset [ 55 ]. We use Warwick for this qualitative analysis because it shares the same pathology type as NCT (H&E-stained colorectal adenocarcinoma), while ad-ditionally providing pixel-level annotations (e.g., segmentation masks) that serve as a convenient visual reference for assessing whether highlighted regions align with disease-relevant struc-tures. Therefore, all models are trained only on the NCT dataset, and Warwick is introduced solely as an independent cohort for visualization. This setting allows to examine whether represen-tations learned from NCT transfer to a di ff erent dataset with consistent morphology, and make a clearer side-by-side com-parison between SSMamba and competing methods in terms of where and how they attend. The visualization is structured as follows: the first column displays the original input patches; the second column shows the corresponding ground-truth anno-tations; subsequent columns present the Grad-CAM generated by each evaluated algorithm. A critical analysis of these visu-Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 10 Table 6: The Performance Comparison with 8 SOTA methods on 6 Downstream Datasets. Bold : the best result. Underline : the second best result. 
+
+Method PANDA TCGA-ESCA TCGA-BRCA TCGA-CESC TCGA-LGG TCGA-BLCA I-Grade Grade IHC-HER2 LymInv T-Stage OS 
+
+AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc Corr SlideAve 89.95 60.76 66.93 57.37 15.22 38.89 55.99 23.28 59.02 49.45 44.14 44.44 70.85 70.47 69.47 56.00 SlideMax 94.88 70.52 76.68 55.18 14.89 38.89 64.32 27.92 57.92 50.55 51.59 51.85 62.82 57.05 55.80 51.08 ABMIL 94.56 69.70 75.93 54.33 21.79 41.67 59.19 25.60 60.11 56.04 55.49 55.56 58.35 51.01 50.93 61.20 
+
+CLAM 94.81 71.68 77.48 61.05 25.34 47.22 58.52 27.34 62.84 58.24 55.00 55.56 58.63 58.39 57.70 46.05 DSMIL 94.88 71.39 77.11 55.59 20.33 41.67 62.19 22.46 60.11 60.44 48.08 48.15 64.06 59.06 56.81 55.52 GigaPath 94.16 69.27 74.00 64.52 31.59 41.67 54.37 22.14 49.73 51.65 55.49 55.56 64.04 61.74 60.89 50.37 S4MIL 95.78 74.40 79.79 66.64 25.12 47.22 60.02 28.66 61.20 49.45 50.00 55.56 67.53 60.40 52.74 55.10 MambaMIL 92.74 62.90 71.36 70.63 20.38 41.67 62.56 22.74 61.20 52.20 58.35 59.26 72.87 69.80 68.69 57.86 SSMambaMIL 95.40 75.31 79.91 71.83 27.35 47.22 64.71 27.74 63.39 64.56 62.96 62.90 77.41 69.93 71.81 59.28 Image Ground           
+
+> Truth ViT Swin-
+> Transformer VMamba MAE SSMamba UNI MUSK CONCH GigaPath Virchow2 CTransPath
+
+Figure 3: Grad-CAM Visualizations of Feature Representations on ROI Pathological Image. alizations reveals distinct characteristics, along with potential strengths and limitations, across models: 
+
+ViT excels at capturing global architecture but tends to over-homogenize fine-grained cellular structures, which may blur critical boundaries (e.g., nuclear-cytoplasmic interfaces) in some cases; Swin enhances local localization capabilities but may struggle to fully integrate long-range dependencies, leading to potential fragmentation of attention between related struc-tures; VMamba demonstrates e ffi ciency advantages but may generate artifactual "striping" due to fixed unidirectional scan-ning; MAE is e ff ective at reconstructing low-level statistics but may over-smooth or fragment nuclear and cellular boundaries to some extent; UNI tends to neglect hierarchical structures due to rigid tokenization, which may result in the loss of subcellular details (manifested as minimal regions of interest, mostly blue) in relevant scenarios; MUSK may dilute micro-scale features, Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 11 potentially leading to misfocus on negative samples in sparse tumor regions; CONCH may introduce noise from heuristic la-bels, with attention possibly scattered over non-abnormal areas in some cases; Gigapath can induce spatial fragmentation at tile boundaries under certain circumstances, which may sever con-tinuous patterns (e.g., microvascular invasion); Virchow2 may struggle to resolve 3D relationships e ff ectively and is relatively vulnerable to staining variations, often resulting in large indis-tinct regions; CTransPath may dilute discriminative features in some scenarios, potentially misfocusing on negative samples in partial images. In contrast, SSMamba integrates strengths of these mod-els while mitigating their limitations. It retains ViT’s grasp of global tissue architecture without sacrificing fine-grained cel-lular details, ensuring sharp delineation of critical boundaries like nuclear-cytoplasmic interfaces. By seamlessly bridging local feature precision (as in Swin) and long-range biological dependencies, it avoids fragmented attention, enabling holistic assessment of tissue structures. Free from VMamba’s "strip-ing" artifacts and MAE’s over-smoothed boundaries, SSMamba preserves subcellular nuances essential for grading subtle malig-nancies, while its flexible tokenization outperforms UNI’s rigid-ity. Unlike MUSK’s diluted micro-scale features or CONCH’s scattered attention, it hones in on diagnostically critical regions, and it avoids Gigapath’s spatial fragmentation and Virchow2’s vulnerability to staining variations. By prioritizing clinically consequential features over irrelevant areas (unlike CTransPath), SSMamba sets a new standard for robust, context-aware patho-logical image analysis. 
+
+# 5 Discussion 
+
+To comprehensively evaluate the e ff ectiveness of each pro-posed component, we conducted a series of ablation studies on 6 benchmark pathology image datasets. This section validates SSMamba’s three core components (MAMIM, DMS, LPR) via 3 subsections. Each subsection combines quantitative and qual-itative analyses on public datasets to verify their e ffi cacy in addressing pathology model limitations. 
+
+5.1 Eff ectiveness of the MAMIM 5.1.1 Analysis of the MAMIM’s Quantitative Comparison Results 
+
+To mitigate domain shift in ROI data, MAMIM adopts the DMS module as a dedicated decoder for reconstructing par-tially masked pathological ROI inputs in SSMamba. Table 7 validates MAMIM against three baselines: no pretraining, CL-based pretraining (CTransPath), and MAE pretraining. For NCT, it delivers Acc 99.46%, F1-score 99.38%, and a notable AUC of 99.85%, outperforming all baselines by resolving nuclear morphology distortions from multi-center variations. On PBC, its top F1-score of 99.54% represents improvements of 4.21%, 1.84%, and 1.47% over the three baselines, overcoming CL’s limitation in handling cross-domain intensity variations via pre-cise masked leukocyte reconstruction. For pRCC, MAMIM’s F1-score of 97.87% (3.80% higher than no pretraining, 1.10% higher than CL, 1.44% higher than MAE) preserves glandu-lar continuity and reduces domain-induced feature fragmenta-tion. For CAM16, it achieves Acc improvements of 4.86%, 3.16%, and 3.18% over the three baselines, enhancing cross-domain transferability critical for subtle lesion detection. Across MHIST and CRC, MAMIM maintains leading performance: top metrics on MHIST, F1-score (89.80%) and AUC (87.23%) on CRC. Overall, quantitative results across 6 datasets demonstrate MAMIM’s consistent superiority over all baselines in F1-score, Acc, and AUC, validating its domain-invariant pretraining mech-anism for enhanced cross-institutional generalization. 
+
+5.1.2 The MAMIM’s Grad-CAM Visual Result Analysis 
+
+Analysis of Fig. 4(v, vii, viii) provides insights into the fea-ture representation strengths of our proposed MAMIM. Notably, MAMIM draws on the masking-based learning paradigm but dif-fers fundamentally from Masked Autoencoders (MAE): instead of relying on Vision Transformers (ViT) as MAE does, MAMIM integrates masking strategies with VMamba to optimize feature learning for pathological images. Therefore, MAMIM performs masking-based self-supervised learning (SSL) directly on tar-get ROI data with consistent magnification and field-of-view to downstream tasks, leveraging a 75% high masking ratio to infer occluded tissue regions. This design inherently shifts atten-tion from artifacts to diagnostically relevant structural signals (e.g., cell morphology, tissue topology) while alleviating cross-magnification domain shift—advantages observed across diverse pathological datasets. Unpretrained SSMamba consistently fixates on non-diagnostic artifacts (e.g., uneven staining, low-magnification blur, impurities) due to the absence of guidance for prioritizing clinically meaningful signals. CL-pretrained SSMamba su ff ers from compromised feature discrimination and generalization, primarily caused by cross-magnification do-main shift induced by mismatched FOV between pretraining and downstream tasks. This mismatch leads to issues such as misidentification of benign /malignant tissues, misattribution to background artifacts, and poor cross-magnification adaptability. However, MAMIM e ff ectively suppresses magnification-specific noise and irrelevant artifacts. 
+
+5.1.3 Masked Reconstruction Performance Analysis 
+
+To further validate SSMamba’s robustness against domain shifts, we assessed its masked reconstruction performance across datasets with substantial staining and processing variations. As illustrated in Fig. 5, SSMamba retains exceptional diagnostic fidelity across all scenarios: NCT: Preserves subtle nuclear chro-matin patterns across 5 + hospital sources. LaC: Reconstructs consistent glandular architectures resilient to H&E staining batch variations. PBC: Maintains precise boundaries between lymphocytes and myelocytes amid fixation artifacts. pRCC: Preserves papillary core structures and clear cell cytoplasmic integrity across 12 institutional staining protocols. SIPa: Accu-rately reconstructs diagnostic nuclear chromocenters and cyto-plasmic keratinization despite 3 × staining concentration varia-tions and liquid-based preparation smearing. PAIP2019: Main-tains sharp tumor margins and microvascular invasion traces amid heterogeneous necrosis. CAM16: Preserves single tumor cell distribution and lymphocyte infiltration topology across 8 scanner types. MHIST: Retains nuclear pleomorphism and ductal and lobular topology across magnifications, mitigating cross-magnification domain shift via field-of-view matched pre-training. CRC: Preserves glandular disorganization and invasive fronts across staining variations. Ost: Maintains pleomorphic tu-Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 12 (i) Input 
+
+> (ii) Linear
+> (iii) Patch
+> Merging
+> (iv) LPU
+> (v) LPR
+> (vii) Only
+> Fineture
+> (vi) No
+> DMS
+> (viii) CL
+
+Figure 4: Grad-CAM visualization of the influence of di ff erent modules on the feature representation of ROI pathology images. ((i) original image; (ii) SSMamba with Linear projection; (iii) SSMamba with Patch Merge; (iv) SSMamba with Local Perception Unit (LPU); (v) SSMamba with LPR (our final model); (vi) SSMamba using traditional Mamba modules; (vii) SSMamba without pre-training; (viii) SSMamba pre-trained in CL.) 
+
+Figure 5: Masked Reconstruction Samples on ROI Image (masking ratio: 75%). Left: Masked input; Middle: SSMamba reconstruction; Right: Ground truth. mor cell morphology and abnormal bone matrix infiltration amid calcification artifacts, resisting cross-magnification domain shift via magnification-matched SSL. Overall, SSMamba’s recon-structions (middle column) align closely with the ground truth (right column), confirming its ability to learn domain-invariant representations. 
+
+5.2 Eff ectiveness of the DMS Module 5.2.1 Analysis of the DMS’s Quantitative Comparison Results 
+
+To further evaluate the e ffi cacy of the proposed DMS mod-ule, we conduct comparative experiments among four config-urations: the original VMamba (VMamba o /DMS), VMamba with our DMS module replacing the original VMamba module Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 13 Table 7: Performance Evaluation of MAMIM Pretraining Strategy. (The table compares the performance of di ff erent pre-training strategies across 6 pathology datasets.)                                                                                                
+
+> Pre-training NCT PBC pRCC CAM16 MHIST CRC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC
+> None 90.07 90.50 90.50 95.33 95.08 95.08 94.07 94.95 94.95 87.44 88.65 88.65 81.48 83.69 84.48 87.55 83.49 85.38 CL 96.90 96.99 96.99 97.70 97.98 97.98 96.77 97.91 97.91 90.50 90.35 90.35 82.12 84.07 84.92 88.71 85.11 86.21 MAE 97.00 97.03 97.03 98.07 97.81 97.81 96.43 97.91 97.91 88.85 90.33 90.33 80.70 82.78 83.47 87.29 82.83 84.69 MAMIM 99.38 99.46 99.85 99.54 99.17 99.37 97.87 98.58 94.77 91.87 93.51 89.06 83.19 87.73 85.63 89.80 84.26 87.23
+
+Table 8: Performance Evaluation of the DMS Module. (This table presents the performance evaluation of the DMS module on 6 selected pathology datasets (NCT, PBC, pRCC, CAM16, MHIST, and CRC). “o /DMS” indicates without the DMS module, while “w /DMS” indicates with the DMS module.)                                                                                                
+
+> Method NCT PBC pRCC CAM16 MHIST CRC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC
+> VMamba o /DMS 90.80 91.57 85.28 87.19 85.33 94.03 84.20 86.39 90.00 84.40 86.69 86.38 76.87 85.33 81.47 82.84 79.07 81.27 VMamba w /DMS 92.47 93.87 88.02 89.47 87.76 94.19 86.15 88.07 91.33 86.36 88.66 86.50 77.50 86.00 82.74 84.07 79.97 82.90 SSMamba o /DMS 95.91 97.30 98.79 97.75 97.80 97.83 94.57 96.01 90.88 87.88 88.96 88.36 81.58 85.45 83.58 87.33 82.03 85.40 SSMamba w /DMS 99.38 99.46 99.85 99.54 99.17 99.37 97.87 98.58 94.77 91.87 93.51 89.06 83.19 87.73 85.63 89.80 84.26 87.23
+
+(VMamba w /DMS), SSMamba with the original VMamba mod-ule (SSMamba o /DMS), and SSMamba with the DMS module (SSMamba w /DMS). As shown in Table 8, the DMS-enhanced architecture outperforms all baselines across 6 datasets. On the NCT dataset, SSMamba w /DMS reaches 99.46% accuracy. DMS’s multi-scale directional kernels aggregate nuclear fea-tures, preserve local-global histological context, and address the original decoder’s deficiency in fine-grained spatial feature extraction. On the PBC dataset, SSMamba w /DMS improves Acc, F1-score, and AUC by 1.37%, 1.79%, and 1.54% over SSMamba o /DMS, respectively. DMS’s direction-aware fusion integrates erythrocyte and leukocyte features, eliminates edge artifacts from staining variations, and enhances target cell iden-tification. On the pRCC dataset, SSMamba w /DMS achieves 98.58% accuracy, 97.87% F1-score, and 94.77% AUC. DMS’s trajectory-aligned convolutions model glandular continuity, re-solve tumor-stroma fragmentation, and improve tissue di ff eren-tiation. On the CAM16 dataset, SSMamba w /DMS improves Acc, F1-score, and AUC by 4.55%, 3.99%, and 0.70% over SSMamba o /DMS. DMS’s hierarchical directional receptive fields retain cellular and tissue-level features, mitigating down-sampling losses and enhancing subtle lesion discriminability. For MHIST and CRC, SSMamba w /DMS maintains leading performance. In summary, DMS enhances the model’s ability to capture fine-grained structural features and spatial relation-ships. Consistent improvements across 6 datasets validate the eff ectiveness and generalization of DMS when integrated with SSMamba. 
+
+5.2.2 The DMS’s Grad-CAM Visual Result Analysis 
+
+Analysis of Fig. 4(v, vi) reveals consistent feature activa-tion visualization patterns across diverse datasets, underscor-ing the functional contribution of our proposed DMS module. Specifically, without the DMS module incorporated (SSMamba o/DMS), the class activation maps are characterized by promi-nent artifacts. The model exhibits a propensity for global at-tention coverage while lacking accurate localization of local structures, which manifests as coarse-grained and indistinct cell boundaries that fail to resolve fine-grained structural details. Fur-thermore, spurious background activation is observed in certain images, where non-diagnostic background regions are inappro-priately accentuated at the expense of core cellular and tissue regions of interest. In contrast, the class activation maps of SS-Mamba integrated with the DMS module (SSMamba w /DMS) demonstrate remarkable improvements in visualization fidelity. Artifacts are markedly mitigated, and the model shifts from a pattern of exclusive global attention to a balanced global-local at-tention framework. Cell boundaries exhibit enhanced sharpness and clarity, with concomitant precise delineation of fine-grained structural details. Furthermore, background confounding signals are e ffi ciently suppressed, ensuring that the model’s attention is selectively directed toward target cellular and tissue regions rather than non-diagnostic background compartments. 
+
+5.3 Eff ectiveness of the LPR Module 5.3.1 Analysis of the LPR’s Quantitative Comparison Results 
+
+To further enhance spatial representation, we extend the proposed SSMamba framework and compare our LPR module with three commonly employed embedding methods: (1) Linear projection (ViT-style), (2) Patch Merge (Swin-style), and (3) Locality-Preserving Unit (LPU). Table 9 presents the perfor-mance of the LPR module against three baseline embedding methods (Linear PE, Patch Merge, LPU) across 6 pathological datasets, with F1-score, Accuracy (Acc), and AUC as evaluation metrics. Experimental results confirm that LPR outperforms all baselines consistently across all metrics, verifying its e ff ec-tiveness for pathology-specific feature embedding. Specifically, Table 9 shows LPR achieves the highest F1-scores on 6 datasets: 99.54% on PBC (4.21% improvement over Linear PE). For Acc and AUC, LPR maintains SOTA performance, including per-fect scores on CAM16 (Acc: 93.51%, 3.14% higher than Patch Merge; AUC: 93.51%, 2.63% above LPU). Even on MHIST and CRC where baseline performance is already competitive, LPR still delivers marginal but consistent improvements, e.g., 89.80% F1-score on CRC (1.14% higher than LPU). These consistent performance gains validate that LPR’s integration of depthwise convolution and residual fusion e ff ectively enhances translation invariance and robustness to staining artifacts. Its lightweight ar-Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 14 Table 9: Performance Evaluation of the LPR Module on Selected Datasets. (This table presents the performance evaluation of the LPR module on 6 selected pathology datasets (NCT, PBC, pRCC, CAM16, MHIST, and CRC).)                                                                                                
+
+> Method NCT PBC pRCC CAM16 MHIST CRC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC
+> Linear 98.86 98.98 98.98 98.17 98.22 98.22 96.67 97.33 97.33 87.92 90.37 90.37 81.49 85.17 84.44 87.47 82.79 85.71 Patch Merge 99.02 99.31 99.31 99.11 98.98 98.98 97.19 98.00 98.00 90.06 91.88 91.88 81.88 86.41 84.90 88.08 82.96 86.63 LPU 98.90 99.20 99.20 99.04 98.70 98.70 96.97 97.97 97.97 89.17 90.69 90.69 82.07 87.05 85.18 88.66 83.46 86.83
+> LPR 99.38 99.46 99.46 99.54 99.17 99.17 97.87 98.58 98.58 91.87 93.51 93.51 83.19 87.73 85.63 89.80 84.26 87.23
+
+chitecture further ensures e ffi cient and reliable feature extraction across diverse pathological scenarios. 
+
+5.3.2 The LPR’s Grad-CAM Visual Result Analysis 
+
+Analysis of Fig. 4 (ii-v) demonstrates distinct visualization patterns across di ff erent modules, highlighting the advantages of our designed LPR module. For linear projection, the generated class activation maps exhibit notable positional sensitivity and prominent artifacts. Identical features across di ff erent spatial locations show inconsistent activation intensities, with erroneous attention allocation to non-diagnostic regions such as areas with staining di ff usion, tissue folds, and ductal structures. Addi-tionally, hierarchical downsampling via patch merge induces excessive compression of spatial information, which exacerbates staining-related artifacts. This manifests as blurred structural boundaries, degraded fine-grained details, obscured key morpho-logical features, and weakened attention responses in heteroge-neously stained regions and tissue interfaces. In comparison, the class activation maps of the LPU module show improved edge delineation relative to linear projection but remain limited in visualization stability. The maps lack robustness to staining vari-ations, with excessive attention focused on regions a ff ected by residual dye. Moreover, long-range spatial correlation modeling is inadequate, leading to spurious attention to background areas and failure to capture the spatial relationships between target tissues and adjacent structures. In contrast, the class activation maps of SSMamba integrated with the proposed LPR module exhibit remarkable optimization across diverse datasets. The module e ff ectively mitigates positional sensitivity, resulting in stable activation patterns for identical features regardless of spa-tial location. Visual artifacts are significantly reduced, with clear structural boundaries, well-preserved fine-grained morphologi-cal details, and balanced attention allocation in heterogeneously stained regions. Background interference is minimized, and the spatial relationships between target tissues and adjacent struc-tures are accurately reflected in the activation maps. 
+
+# 6 Conclusion 
+
+In this work, we pinpoint three key limitations in existing pathology FMs: (1) sensitivity to translations and rotations, (2) ine ffi cient local–global feature integration, and (3) susceptibility to scanner - and stain - induced domain shifts. To address them, we present SSMamba, a task - specific, two -stage framework that couples in -domain SSL pretraining (MAMIM) on ROI data with lightweight supervised fine - tuning. Its hybrid state -space back-bone incorporates a Local Perception Residual (LPR) module for translation and rotation invariance and a Directional Multi - scale (DMS) module for hierarchical feature fusion. Tested on 10 pub-lic ROI datasets, SSMamba surpasses 6 leading pathology FMs (e.g., +1.83 F1 on CAM16 over CTransPath), demonstrating that pathology - aware architectures and targeted in - domain SSL achieve superior accuracy and robustness without billion - scale pretraining. Meanwhile, SSMambaMIL delivers superior over-all performance across 6 downstream tasks on 6 WSI datasets. It outperforms 8 SOTA methods, including MIL-based approaches (ABMIL, CLAM, DSMIL) and SSM-based models (S4MIL, MambaMIL). Despite these promising results, the current scope of our framework has a notable limitation: our validation and optimiza-tion are exclusively focused on pathological image classification tasks (both ROI-level and WSI-level). Future work will extend the SSMamba framework to other pathology-relevant tasks, such as semantic segmentation of tissue regions and mitosis detection. 
+
+# 7 Acknowledgements 
+
+7.1 Declaration of competing interest 
+
+The authors declare that they have no known competing financial interests or personal relationships that could have ap-peared to influence the work reported in this paper. 
+
+7.2 Data availability 
+
+The authors use public datasets. The public datasets can be downloaded from the corresponding o ffi cial websites. 
+
+# References 
+
+[1] Chetan L Srinidhi, Ozan Ciga, and Anne L Martel. Deep neural network models for computational histopathology: A survey. Medical image analysis , 67:101813, 2021. [2] Anant Madabhushi and George Lee. Image analysis and machine learning in digital pathology: Challenges and opportunities. Medical image analysis , 33:170–175, 2016. [3] Yann LeCun, Yoshua Bengio, and Geo ff rey Hinton. Deep learning. nature , 521(7553):436–444, 2015. [4] Shekoofeh Azizi, Basil Mustafa, Fiona Ryan, Zachary Beaver, Jan Freyberg, Jonathan Deaton, Aaron Loh, Alan Karthikesalingam, Simon Kornblith, Ting Chen, et al. Big self-supervised models advance medical image classifi-cation. In Proceedings of the IEEE /CVF international conference on computer vision , pages 3478–3488, 2021. [5] Yuhao Zhang, Hang Jiang, Yasuhide Miura, Christopher D Manning, and Curtis P Langlotz. Contrastive learning of medical visual representations from paired images and text. In Machine Learning for Healthcare Conference , pages 2–25. PMLR, 2022. Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 15 [6] Zhihong Chen, Yuhao Du, Jinpeng Hu, Yang Liu, Guanbin Li, Xiang Wan, and Tsung-Hui Chang. Mapping medical image-text to a joint space via masked modeling. Medical Image Analysis , 91:103018, 2024. [7] Longlong Jing and Yingli Tian. Self-supervised visual fea-ture learning with deep neural networks: A survey. IEEE transactions on pattern analysis and machine intelligence ,43(11):4037–4058, 2020. [8] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition , pages 248–255. Ieee, 2009. [9] Zakaria Senousy, Mohammed M Abdelsamea, Mo-hamed Medhat Gaber, Moloud Abdar, U Rajendra Acharya, Abbas Khosravi, and Saeid Nahavandi. Mcua: Multi-level context and uncertainty aware dynamic deep ensemble for breast cancer histology image classification. 
+
+IEEE Transactions on Biomedical Engineering , 69(2):818– 829, 2021. [10] Alexandre Filiot, Nicolas Dop, Oussama Tchita, Auriane Riou, Rémy Dubois, Thomas Peeters, Daria Valter, Marin Scalbert, Charlie Saillard, Geneviève Robin, et al. Distill-ing foundation models for robust and e ffi cient models in digital pathology. In International Conference on Medi-cal Image Computing and Computer-Assisted Intervention ,pages 162–172. Springer, 2025. [11] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, and Sylvain Gelly. An image is worth 16x16 words: Trans-formers for image recognition at scale. In International Conference on Learning Representations , 2021. [12] Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo. Swin transformer: Hierarchical vision transformer using shifted windows. In 
+
+Proceedings of the IEEE /CVF international conference on computer vision , pages 10012–10022, 2021. [13] Yuxuan Sun, Chenglu Zhu, Sunyi Zheng, Kai Zhang, Lin Sun, Zhongyi Shui, Yunlong Zhang, Honglin Li, and Lin Yang. Pathasst: A generative foundation ai assistant to-wards artificial general intelligence of pathology. In Pro-ceedings of the AAAI Conference on Artificial Intelligence ,volume 38, pages 5034–5042, 2024. [14] Maithra Raghu, Chiyuan Zhang, Jon Kleinberg, and Samy Bengio. Transfusion: Understanding transfer learning for medical imaging. Advances in neural information processing systems , 32, 2019. [15] Bing Li, Danyang Xu, Hongxin Lin, Ruodai Wu, Songx-iong Wu, Jingjing Shao, Jinxiang Zhang, Haiyang Dai, Dan Wei, and Bingsheng Huang. Domain adaptive detec-tion framework for multi-center bone tumor detection on radiographs. Computerized Medical Imaging and Graph-ics , 123, 2025. [16] Xiaoming Jiang, Yongxin Yang, Tong Su, Kai Xiao, Li Dan Lu, Wei Wang, Changsong Guo, Lizhi Shao, Mingjing Wang, and Dong Jiang. Unsupervised domain adaptation based on feature and edge alignment for femur x-ray im-age segmentation. Computerized medical imaging and graphics , page 116, 2024. [17] Marvin Lerousseau, Maria Vakalopoulou, Marion Classe, Julien Adam, Enzo Battistella, Alexandre Carré, Théo Estienne, Théophraste Henry, Eric Deutsch, and Nikos Paragios. Weakly supervised multiple instance learning histopathological tumor segmentation. In Medical Image Computing and Computer Assisted Intervention–MICCAI 2020: 23rd International Conference, Lima, Peru, Octo-ber 4–8, 2020, Proceedings, Part V 23 , pages 470–479. Springer, 2020. [18] Thomas Stegmüller, Behzad Bozorgtabar, Antoine Spahr, and Jean-Philippe Thiran. Scorenet: Learning non-uniform attention and augmentation for transformer-based histopathological image classification. In Proceedings of the IEEE /CVF winter Conference on applications of com-puter vision , pages 6170–6179, 2023. [19] Albert Gu, Isys Johnson, Karan Goel, Khaled Saab, Tri Dao, Atri Rudra, and Christopher Ré. Combining recur-rent, convolutional, and continuous-time models with lin-ear state space layers. Advances in neural information processing systems , 34:572–585, 2021. [20] Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. arXiv preprint arXiv:2312.00752 , 2023. [21] Weihao Yu and Xinchao Wang. Mambaout: Do we really need mamba for vision? In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 4484– 4496, 2025. [22] Osman Semih Kayhan and Jan C van Gemert. On transla-tion invariance in cnns: Convolutional layers can exploit absolute spatial location. In Proceedings of the IEEE /CVF Conference on Computer Vision and Pattern Recognition ,pages 14274–14285, 2020. [23] Xiyue Wang, Sen Yang, Jun Zhang, Minghui Wang, Jing Zhang, Wei Yang, Junzhou Huang, and Xiao Han. Transformer-based unsupervised contrastive learning for histopathological image classification. Medical image anal-ysis , 81:102559, 2022. [24] Richard J Chen, Tong Ding, Ming Y Lu, Drew FK Williamson, Guillaume Jaume, Bowen Chen, Andrew Zhang, Daniel Shao, Andrew H Song, Muhammad Shaban, et al. Towards a general-purpose foundation model for computational pathology. Nature Medicine , 2024. [25] Eric Zimmermann, Eugene Vorontsov, Julian Viret, Adam Casson, Michal Zelechowski, George Shaikovski, Neil Tenenholtz, James Hall, David Klimstra, Razik Yousfi, et al. Virchow2: Scaling self-supervised mixed magnification models in pathology. arXiv preprint arXiv:2408.00738 , 2024. [26] Hanwen Xu, Naoto Usuyama, Jaspreet Bagga, Sheng Zhang, Rajesh Rao, Tristan Naumann, Cli ff Wong, Ze-lalem Gero, Javier González, Yu Gu, et al. A whole-slide foundation model for digital pathology from real-world data. Nature , 630(8015):181–188, 2024. [27] Lei Zhou, Huidong Liu, Joseph Bae, Junjun He, Dimitris Samaras, and Prateek Prasanna. Self pre-training with Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 16 masked autoencoders for medical image classification and segmentation. In 2023 IEEE 20th International Symposium on Biomedical Imaging (ISBI) , pages 1–6. IEEE, 2023. [28] Jinxi Xiang, Xiyue Wang, Xiaoming Zhang, Yinghua Xi, Feyisope Eweje, Yijiang Chen, Yuchen Li, Colin Bergstrom, Matthew Gopaulchan, Ted Kim, et al. A vision– language foundation model for precision oncology. Nature ,638(8051):769–778, 2025. [29] Ming Y. Lu, Bowen Chen, Andrew Zhang, Drew F. K. Williamson, Richard J. Chen, Tong Ding, Long Phi Le, Yung-Sung Chuang, and Faisal Mahmood. Visual lan-guage pretrained multiple instance zero-shot transfer for histopathology images. In Proceedings of the IEEE /CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 19764–19775, June 2023. [30] Yue Liu, Yunjie Tian, Yuzhong Zhao, Hongtian Yu, Lingxi Xie, Yaowei Wang, Qixiang Ye, Jianbin Jiao, and Yunfan Liu. Vmamba: Visual state space model. Advances in neu-ral information processing systems , 37:103031–103063, 2024. [31] Wensheng Wang, Zewen Jin, Xueli Liu, and Xinrong Chen. Nama-mamba: Foundation model for generalizable nasal disease detection using masked autoencoder with mamba on endoscopic images. Computerized Medical Imaging and Graphics , 122:102524, 2025. [32] Zhiqing Zhang, Tianyong Liu, Guojia Fan, Na Li, Bin Li, Yao Pu, Qianjin Feng, and Shoujun Zhou. Spine-mamba: Enhancing 3d spinal segmentation in clinical imaging through residual visual mamba layers and shape priors. Computerized Medical Imaging and Graphics , 123: 102531, 2025. [33] Jianyuan Guo, Kai Han, Han Wu, Yehui Tang, Xinghao Chen, Yunhe Wang, and Chang Xu. Cmt: Convolutional neural networks meet vision transformers. In Proceed-ings of the IEEE /CVF conference on computer vision and pattern recognition , pages 12175–12185, 2022. [34] Andrew A. Borkowski, Marilyn M. Bui, L. Brannon Thomas, Catherine P. Wilson, Lauren A. DeLand, and Stephen M. Mastorides. Lung and colon cancer histopatho-logical image dataset (lc25000), 2019. URL https: //arxiv.org/abs/1912.12142 .[35] Jakob Nikolas Kather, Johannes Krisam, Pornpimol Charoentong, Tom Luedde, Esther Herpel, Cleo-Aron Weis, Timo Gaiser, Alexander Marx, Nektarios A Val-ous, Dyke Ferber, et al. Predicting survival from colorectal cancer histology slides using deep learning: A retrospec-tive multicenter study. PLoS medicine , 16(1):e1002730, 2019. [36] Andrea Acevedo, Anna Merino González, Edwin San-tiago Alférez Baquero, Ángel Molina Borrás, Laura Boldú Nebot, and José Rodellar Benedé. A dataset of microscopic peripheral blood cell images for development of automatic recognition systems. Data in brief , 30(article 105474), 2020. [37] Zeyu Gao, Bangyang Hong, Xianli Zhang, Yang Li, Chang Jia, Jialun Wu, Chunbao Wang, Deyu Meng, and Chen Li. Instance-based vision transformer for subtyping of papil-lary renal cell carcinoma in histopathological image. In 
+
+International conference on medical image computing and computer-assisted intervention , pages 299–308. Springer, 2021. [38] Yoo Jung Kim, Hyungjoon Jang, Kyoungbun Lee, Seongkeun Park, Sung-Gyu Min, Choyeon Hong, Jeong Hwan Park, Kanggeun Lee, Jisoo Kim, Wonjae Hong, et al. Paip 2019: Liver cancer segmentation chal-lenge. Medical image analysis , 67:101854, 2021. [39] Babak Ehteshami Bejnordi, Mitko Veta, Paul Johannes Van Diest, Bram Van Ginneken, Nico Karssemeijer, Geert Litjens, Jeroen AWM Van Der Laak, Meyke Hermsen, Quirine F Manson, Maschenka Balkenhol, et al. Diagnostic assessment of deep learning algorithms for detection of lymph node metastases in women with breast cancer. Jama ,318(22):2199–2210, 2017. [40] Marina E. Plissiti, P. Dimitrakopoulos, G. Sfikas, Christophoros Nikou, O. Krikoni, and A. Charchanti. Sipakmed: A new dataset for feature and image based classification of normal and pathological cervical cells in pap smear images. In 2018 25th IEEE International Con-ference on Image Processing (ICIP) , pages 3144–3148, 2018. doi: 10.1109 /ICIP.2018.8451588. [41] Jerry Wei, Arief Suriawinata, Bing Ren, Xiaoying Liu, Mikhail Lisovsky, Louis Vaickus, Charles Brown, Michael Baker, Naofumi Tomita, Lorenzo Torresani, et al. A petri dish for histopathology image analysis. In International Conference on Artificial Intelligence in Medicine , pages 11–24. Springer, 2021. [42] Antonio Colaprico, Tiago C Silva, Catharina Olsen, Lu-ciano Garofano, Claudia Cava, Davide Garolini, Thais S Sabedot, Tathiane M Malta, Stefano M Pagnotta, Isabella Castiglioni, et al. Tcgabiolinks: an r /bioconductor package for integrative analysis of tcga data. Nucleic acids research ,44(8):e71–e71, 2016. [43] Hannah C Beird, Stefan S Bielack, Adrienne M Flanagan, Jonathan Gill, Dominique Heymann, Katherine A Janeway, J Andrew Livingston, Ryan D Roberts, Sandra J Strauss, and Richard Gorlick. Osteosarcoma. Nature reviews Dis-ease primers , 8(1):77, 2022. [44] Wouter Bulten, Kimmo Kartasalo, Po-Hsuan Cameron Chen, Peter Ström, Hans Pinckaers, Kunal Nagpal, Yuan-nan Cai, David F Steiner, Hester Van Boven, Robert Vink, et al. Artificial intelligence for diagnosis and gleason grading of prostate cancer: the panda challenge. Nature medicine , 28(1):154–163, 2022. [45] Dankai Liao, Sicheng Chen, Nuwa Xi, Qiaochu Xue, Jieyu Li, Lingxuan Hou, Zeyu Liu, Chang Han Low, Yufeng Wu, Yiling Liu, et al. Unpuzzle: A unified framework for pathol-ogy image analysis. arXiv preprint arXiv:2503.03152 ,2025. [46] Meidan Ding, Aiping Qu, Haiqin Zhong, Zhihui Lai, Shuomin Xiao, and Penghui He. An enhanced vision trans-former with wavelet position embedding for histopatholog-ical image classification. Pattern Recognition , 140:109532, 2023. [47] Hongbin Cai, Xiaobing Feng, Ruomeng Yin, Youcai Zhao, Lingchuan Guo, Xiangshan Fan, and Jun Liao. Mist: mul-tiple instance learning network based on swin transformer Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 17 for whole slide image classification of colorectal adenomas. 
+
+The Journal of pathology , 259(2):125–135, 2023. [48] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Pi-otr Dollár, and Ross Girshick. Masked autoencoders are scalable vision learners. In Proceedings of the IEEE /CVF conference on computer vision and pattern recognition ,pages 16000–16009, 2022. [49] Jingwei Zhang, Anh Tien Nguyen, Xi Han, Vincent Quoc-Huy Trinh, Hong Qin, Dimitris Samaras, and Mahdi S Hosseini. 2dmamba: E ffi cient state space model for im-age representation with applications on giga-pixel whole slide image classification. In Proceedings of the Com-puter Vision and Pattern Recognition Conference , pages 3583–3592, 2025. [50] Maximilian Ilse, Jakub Tomczak, and Max Welling. Attention-based deep multiple instance learning. In In-ternational conference on machine learning , pages 2127– 2136. PMLR, 2018. [51] Ming Y Lu, Drew FK Williamson, Ti ff any Y Chen, Richard J Chen, Matteo Barbieri, and Faisal Mahmood. Data-e ffi cient and weakly supervised computational pathol-ogy on whole-slide images. Nature biomedical engineer-ing , 5(6):555–570, 2021. [52] Bin Li, Yin Li, and Kevin W Eliceiri. Dual-stream multiple instance learning network for whole slide image classifica-tion with self-supervised contrastive learning. In Proceed-ings of the IEEE /CVF conference on computer vision and pattern recognition , pages 14318–14328, 2021. [53] Leo Fillioux, Joseph Boyd, Maria Vakalopoulou, Paul-Henry Cournède, and Stergios Christodoulidis. Structured state space models for multiple instance learning in digital pathology. In International Conference on Medical Im-age Computing and Computer-Assisted Intervention , pages 594–604. Springer, 2023. [54] Shu Yang, Yihui Wang, and Hao Chen. Mambamil: En-hancing long sequence modeling with sequence reordering in computational pathology. In International conference on medical image computing and computer-assisted inter-vention , pages 296–306. Springer, 2024. [55] Korsuk Sirinukunwattana, Josien PW Pluim, Hao Chen, Xiaojuan Qi, Pheng-Ann Heng, Yun Bo Guo, Li Yang Wang, Bogdan J Matuszewski, Elia Bruni, Urko Sanchez, et al. Gland segmentation in colon histology images: The glas challenge contest. Medical image analysis , 35:489– 502, 2017. 
+
+# 8 Appendix 
+
+8.1 Dataset Details 
+
+The LaC dataset is characterized by a multi-organ, balanced distribution oriented to tumor classification tasks. It covers two distinct organ systems (lung and colon) with disparate histo-logical architectures, lung tissue with alveolar structures and colon tissue with glandular crypts, leading to significant inter-organ morphological variability. The LaC consists of 25,000 ROI in the size of 768 × 768. They are evenly distributed across 5 classes (5,000 images per class): lung normal tissue (LN), lung adenocarcinoma (LACA), lung squamous cell carcinoma (LSCC), colon normal tissue (CN), and colon adenocarcinoma (CACA). This balanced distribution and multi-organ coverage make its data distribution feature of "cross-organ consistency in sample quantity, cross-organ di ff erence in morphology". 
+
+The NCT dataset contains 100,000 ROIs of colorectal tissues in the size of 224 × 224 at 0.5 μm per pixel. It includes 9 tis-sue types: adipose (ADI), background (BACK), debris (DEB), lyphocytes (LYM), mucus (MUC), smooth muscle (MUS), nor-mal colon mucosa (NORM), cancer-associated stroma (STR) and colorectal adenocarcinoma epithelium (TUM). The NCT dataset is the most comprehensive, covering 9 tissue and cell categories with a total of 100 , 000 samples. The number of samples per category is relatively balanced, and it includes both normal tissues (NORM) and cancer-related components (TUM, STR). 
+
+The PBC dataset comprises 38,938 ROIs of individual periph-eral blood cells in the size of 360 ×363. They are categorized into 8 classes: neutrophils (NE), eosinophils (EO), basophils (BA), lymphocytes (LY), monocytes (MO), immature granulocytes (IG), erythroblasts (ERB), and platelets (PL). The PBC dataset has two key distribution characteristics: first, it expands the cell type scope to include immature granulocytes, erythroblasts, and platelets, covering a more comprehensive hematopoietic cell spectrum; second, its samples are all from healthy individ-uals without infection or hematological diseases, and the cell morphology is more homogeneous. 
+
+The pRCC dataset comprises 1,419 ROIs in the size of 2000 × 2000 pixels in two types. Type I images feature small cells with clear cytoplasm, whereas type II images exhibit cells with voluminous cytoplasm and high-grade nuclei. The pRCC dataset focuses on papillary renal cell carcinoma, with only two subtypes and large ROI size (2000 ×2000 pixels). Its distribution is characterized by clear morphological di ff erences between the two subtypes (small clear cytoplasm vs. voluminous cytoplasm), which is suitable for fine-grained tumor subtyping. 
+
+The PAIP2019 dataset is derived from the Pathology Artificial Intelligence Platform (PAIP) challenge, focusing on liver cancer segmentation and viable tumor burden estimation. It consists of 100 whole slide images (WSIs) of hepatocellular carcinoma (HCC) and surrounding tissues. In this work, they were split into 2,165 ROIs in the size of 384 ×384 in two classes. The PAIP2019 dataset is dedicated to liver cancer segmentation and viable tumor burden estimation. Its ROI size is significantly smaller than that of CAM16 and pRCC, and the data is derived from a unified challenge platform, ensuring standardized annotation criteria. 
+
+The CAM16 dataset is designed for the development and evalu-ation of breast cancer metastasis detection algorithms. It consists of 400 lymph node WSIs from multiple medical centers, with pixel-level annotations provided by expert pathologists. In this work, they were split into 1,081 ROIs, in the size of 8000 × 8000 in two classes. The CAM16 dataset targets breast cancer metasta-sis detection, with 400 whole slide images (WSIs) from multiple medical centers split into 1,081 large ROIs (8000 × 8000 pixels). Its most prominent distribution advantage is the multi-center data source, which reduces single-institution bias, and the pixel-level annotations provide more detailed semantic information Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 18 than the pRCC dataset. The binary classification task (metastatic vs. non-metastatic) is highly consistent with clinical diagnostic needs. 
+
+The SIPa dataset exhibits a single-organ, imbalanced distri-bution focused on fine-grained cervical cell classification. It is confined to cervical Pap smear samples (single organ and tis-sue type), with data distribution centered on the morphological variations of individual cervical cells at di ff erent physiological and pathological states. A prominent distribution feature is class imbalance: rare abnormal cell types (koilocytotic cells, dysker-atotic cells) account for a small proportion of the total 1,004 ROIs in the size of 384 × 384, while normal and mature cell types (superficial and intermediate squamous cells) are relatively abundant. 
+
+The MHIST dataset is designed to classify colorectal polyps as benign and precancerous, which consists of 3,152 images with the size of (5 × magnification ) 224 × 224 pixels. Following the o ffi cial data splitting, 2,175 images (1,545 benign and 630 precancerous) are used for training and 977 images (617 benign and 360 precancerous) are used for evaluation. The MHIST dataset simplifies the task to binary classification (benign vs. precancerous colorectal polyps). Its distribution is characterized by an unbalanced ratio of positive and negative samples, which is quite di ff erent from the multi-category balanced distribution of the NCT dataset. 
+
+The TCGA-CRC-MSI dataset is oriented to microsatellite in-stability (MSI) classification of colorectal cancer, presenting clinically stratified distribution. It contains 51916 ROIs with a pixel size of (10 × magnification ) 512 × 512, extracted from colorectal cancer tissue samples of The Cancer Genome Atlas (TCGA) database. The dataset covers two core categories: MSI-high (MSIH) and microsatellite stable (nonMSIH). Specifically, there are 15001 MSIH samples and 36915 nonMSIH samples, with an approximate 1:2.5 ratio that reflects the clinical preva-lence of MSI subtypes in colorectal cancer. As a multi-center dataset from TCGA, it integrates samples from 15 clinical insti-tutions, reducing institutional biases and ensuring high clinical representativeness of its distribution. All annotations are verified by senior gastrointestinal pathologists, consistent with clinical diagnostic standards. 
+
+The Osteosarcoma dataset is constructed based on archival samples from 50 patients who received treatment at Children’s Medical Center Dallas between 1995 and 2015. The dataset comprises a total of 1,144 histopathological images with a uni-fied resolution of 10 × magnification and a spatial dimension of 1024 × 1024 pixels. The sample distribution across the three categories is as follows: 536 non-tumor images (accounting for 47% of the total), 263 necrotic tumor images (23%), and 345 viable tumor images (30%). This distribution reflects the typical compositional characteristics of osteosarcoma surgical speci-mens, providing a clinically relevant benchmark for evaluating tumor segmentation and classification algorithms in osteosar-coma pathological analysis. 
+
+The PANDA dataset , released as part of the Prostate cAN-cer graDe Assessment (PANDA) challenge, contains 10,616 high-resolution WSIs of prostate biopsies labeled with clinician-annotated Gleason scores (ranging from 6 to 10). Acquired at a 20 × objective magnification (corresponding to a pixel size of 0.5 μm/pixel), these WSIs exhibit native full-slide pixel reso-lutions of approximately 20 , 000 × 20 , 000 pixels on average, with spatial variability depending on biopsy core size and tis-sue density. It is widely used to benchmark AI-based grading systems in uropathology, enabling rigorous evaluation of model performance on fine-grained histological pattern recognition. The TCGA datasets, sourced from The Cancer Genome Atlas (TCGA) project, provide publicly accessible, high-quality whole-slide images (WSIs) along with matched clinical and molecular data. These datasets span a broad spectrum of can-cers and have become standard benchmarks for deep learning research in histopathology. Specifically, the following subsets are used: 
+
+The TCGA-BRCA dataset includes 1,125 WSIs from patients with diverse breast cancer subtypes, including invasive ductal carcinoma (IDC) and invasive lobular carcinoma (ILC). Cap-tured at 20 × or 40 × objective magnifications (with correspond-ing pixel sizes of 0.5 μm/pixel and 0.25 μm/pixel, respec-tively), the full-slide pixel resolutions of these images range from 30 , 000 × 30 , 000 to 80 , 000 × 80 , 000 pixels, reflecting the larger tissue area of breast resections compared to prostate biop-sies. The dataset supports a wide range of computational pathol-ogy tasks, such as histological subtype classification, tumor microenvironment segmentation, and patient survival prediction based on morphological features. 
+
+The TCGA-LGG dataset (Lower Grade Glioma) encompasses 844 WSIs of lower grade glioma tissues. Acquired at 20 × objec-tive magnification (with a pixel size of 0.5 μm/pixel), the native full-slide pixel resolutions of these WSIs average approximately 25 , 000 × 25 , 000 pixels, with spatial variability depending on tumor tissue volume and sampling location. The dataset is vital for studying the molecular classification of gliomas, predicting tumor behavior and patient outcomes, and is specifically used for the task of T-Stage prediction by leveraging fine-grained histological pattern recognition. 
+
+The TCGA-BLCA dataset (Bladder Cancer) provides 455 WSIs that reflect significant tumor heterogeneity, including both muscle-invasive and non-muscle-invasive bladder cancer types. Captured at 20 × magnification (pixel size 0.5 μm/pixel), the full-slide pixel resolutions range from 20 , 000 × 20 , 000 to 50 , 000 × 50 , 000 pixels, corresponding to the varying size of bladder tissue specimens. It is utilized for the task of overall survival (OS) estimation, a regression task focusing on predict-ing the overall survival time since initial diagnosis, and enables the exploration of correlations between histological morphology and long-term patient prognosis. 
+
+The TCGA-CESC dataset (Cervical Squamous Cell Carci-noma and Endocervical Adenocarcinoma) contains 279 WSIs, which are particularly relevant for HPV-related cancer studies, biomarker discovery, and immune profiling. Acquired at 20 ×
+
+objective magnification (pixel size 0.5 μm/pixel), the WSIs have an average full-slide resolution of around 22 , 000 × 22 , 000 pix-els. The dataset supports the task of LymInv (Lymphovascular Invasion) identification, which detects the presence of cancer in-vasion into lymphatic or vascular channels by evaluating subtle histological changes in vascular structures. 
+
+The TCGA-ESCA dataset (Esophageal Carcinoma) includes 158 WSIs, valuable for studying the molecular and histological Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 19 characteristics of esophageal cancer. Captured at 20 × or 40 ×
+
+magnification (pixel sizes 0.5 μm/pixel or 0.25 μm/pixel), the full-slide pixel resolutions vary from 25 , 000 × 25 , 000 to 60 , 000 × 60 , 000 pixels, reflecting the anatomical variability of esophageal tissue specimens. It is used for the task of tumor Grade assessment, which evaluates cellular di ff erentiation and structural patterns to determine tumor malignancy, providing a critical benchmark for models targeting malignant grading of gastrointestinal tract cancers. 
+
+8.2 Supplementary Experimental Results 
+
+To mitigate domain shift in ROI data, MAMIM adopts the DMS module as a dedicated decoder for reconstructing par-tially masked pathological ROI inputs in SSMamba. Table 10 validates MAMIM against three baselines on 4 datasets: no pretraining, CL-based pretraining (CTransPath), and MAE pre-training. On LaC, MAMIM achieves a leading Acc of 99.84% (2.89% higher than no pretraining, 2.05% higher than CL, 2.27% higher than MAE), with top-ranked F1-score (98.47%) and AUC (99.65%), attributed to its directional decoder that preserves spa-tial relationships across staining protocols. On PAIP2019, its Acc of 99.53% outperforms no pretraining by 4.82%, CL by 4.56%, and MAE by 1.26%; its multi-scale decoding outper-forms MAE in reconstructing microvascular features, facilitating better bridging of tumor heterogeneity across institutional pro-tocols. On Ost, MAMIM achieves perfect scores. Notably, MAMIM achieves perfect scores (100%) in F1-score, Acc, and AUC on SIPa, validating strong cytological invariance. To further evaluate the e ffi cacy of the proposed DMS mod-ule, we conduct comparative experiments among four config-urations: the original VMamba (VMamba o /DMS), VMamba with our DMS module replacing the original VMamba module (VMamba w /DMS), SSMamba with the original VMamba mod-ule (SSMamba o /DMS), and SSMamba with the DMS module (SSMamba w /DMS). As shown in Table 11, the DMS-enhanced architecture outperforms all baselines across 4 datasets. On the LaC dataset, SSMamba w /DMS achieves 99.84% accuracy, 98.47% F1-score, and 99.65% AUC, with improvements of 2.07%, 2.62%, and 0.97% over SSMamba o /DMS, respectively. This is attributed to DMS’s directional convolutions, which cap-ture lymphocyte radial growth, mitigate feature fragmentation in heterogeneous regions, and enhance classification reliabil-ity. Notably, PAIP2019 shows the most significant accuracy gain for SSMamba w /DMS, along with 2.10% and 1.50% im-provements in F1-score and AUC. DMS’s directional operations bridge tumor-stroma boundaries and preserve microvascular invasion signatures critical for tumor grading. A remarkable result is observed on SIPa: SSMamba w /DMS achieves perfect classification, with improvements of 1.06%, 1.67%, and 1.10% over SSMamba o /DMS. DMS’s directional feature propagation preserves nuclear-cytoplasmic spatial relationships in overlap-ping cells, overcoming boundary ambiguity. For Ost, SSMamba w/DMS maintains leading performance. To further enhance spatial representation, we extend the proposed SSMamba framework and compare our LPR module with three commonly employed embedding methods: (1) Linear projection (ViT-style), (2) Patch Merge (Swin-style), and (3) Locality-Preserving Unit (LPU). Table 12 presents the perfor-mance of the LPR module against three baseline embedding methods (Linear PE, Patch Merge, LPU) across 4 pathological datasets, with F1-score, Accuracy (Acc), and AUC as evaluation metrics. Experimental results confirm that LPR outperforms all baselines consistently across all metrics, verifying its e ff ective-ness for pathology-specific feature embedding. Preprint – SSM amba : A S elf -S upervised Hybrid State Space Model for Pathological Image Classification 20 Table 10: Performance Evaluation of MAMIM Pretraining Strategy on Remaining Pathology Datasets (LaC, PAIP2019, SIPa, and Ost). 
+
+Pre-training LaC PAIP2019 SIPa Ost F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC 
+
+None 95.13 96.95 96.95 94.77 94.71 94.71 96.03 96.90 96.90 94.64 96.43 95.75 CL 97.73 97.79 97.79 94.79 94.97 94.97 97.00 97.22 97.22 95.35 97.62 97.75 
+
+MAE 97.79 97.57 97.57 98.00 98.27 98.27 98.64 98.21 98.21 94.56 96.43 95.54 MAMIM 98.47 99.84 99.65 98.17 99.53 97.19 100.00 100.00 100.00 97.31 97.68 97.49 Table 11: Performance Evaluation of the DMS Module on Remaining Datasets ((LaC, PAIP2019, SIPa, and Ost). (“o /DMS” indicates without the DMS module, while “w /DMS” indicates with the DMS module.)                                                                
+
+> Method LaC PAIP2019 SIPa Ost F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC
+> VMamba o /DMS 90.40 92.13 92.44 79.39 81.67 88.42 95.22 96.80 83.80 90.71 90.71 90.71 VMamba w /DMS 92.25 94.55 93.60 81.50 83.99 89.97 97.10 98.77 86.33 91.33 92.04 92.77 SSMamba o /DMS 95.85 97.77 98.68 96.07 96.11 95.69 98.33 98.94 98.90 95.77 96.00 95.27 SSMamba w /DMS 98.47 99.84 99.65 98.17 99.53 97.19 100.00 100.00 100.00 97.31 97.68 97.49
+
+Table 12: Performance Evaluation of the LPR Module on Remaining Datasets (LaC, PAIP2019, SIPa, and Ost). 
+
+Method LaC PAIP2019 SIPa Ost F1 Acc AUC F1 Acc AUC F1 Acc AUC F1 Acc AUC 
+
+Linear 97.16 99.15 99.15 97.05 98.24 98.24 95.30 96.84 96.84 93.90 96.08 95.15 Patch Merge 98.02 99.68 99.68 97.66 98.82 98.82 96.86 98.57 98.57 94.23 96.85 97.09 LPU 97.20 99.41 99.41 97.22 98.50 98.50 96.88 98.50 98.50 94.23 97.03 97.44 
+
+LPR 98.47 99.84 99.84 98.17 99.53 99.53 100.00 100.00 100.00 97.31 97.68 97.49
