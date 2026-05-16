@@ -6,73 +6,64 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-17 ~ 2026-05-16
-- 运行时间：2026-05-16 07:56:44 UTC
+- 最新运行日期：2026-05-16
+- 运行时间：2026-05-16 20:04:06 UTC
 - 运行状态：成功
-- 本次总论文数：17
-- 精读区：6
-- 速读区：11
+- 本次总论文数：14
+- 精读区：2
+- 速读区：12
 
 ### 今日简报（AI）
-聚焦病理影像智能解析，本期共阅读 17 篇论文（精读 6 篇、速读 11 篇）。  
-空间转录组替代人工标注与自监督混合状态空间模型成为最具潜力的技术亮点。  
-建议关注多模态病理大模型及无监督分割方法在临床泛化上的落地与验证。
-- 详情：[/20260417-20260516/README](/20260417-20260516/README)
+今日聚焦医学影像智能分析，共阅读 14 篇论文，其中深度精读 2 篇。  
+DiffSegLung 的无监督肺部病灶分割和 MicroscopyMatching 的显微图像通用框架显示出较强跨域泛化潜力。  
+建议关注医学影像中扩散模型与多模态匹配算法的应用落地进展。
+- 详情：[/202605/16/README](/202605/16/README)
 
 ### 精读区论文标签
-1. [Leveraging Spatial Transcriptomics as Alternative to Manual Annotations for Deep Learning-Based Nuclei Analysis](/20260417-20260516/2604.23481v1-leveraging-spatial-transcriptomics-as-alternative-to-manual-annotations-for-deep-learning-based-nuclei-analysis)  
-   标签：评分：9.0/10、query:cellseg
-   evidence：利用空间转录组学作为监督的细胞核分割和分类框架
-2. [SSMamba: A Self-Supervised Hybrid State Space Model for Pathological Image Classification](/20260417-20260516/2604.15711v1-ssmamba-a-self-supervised-hybrid-state-space-model-for-pathological-image-classification)  
-   标签：评分：8.0/10、query:pathfeat
-   evidence：从病理感兴趣区域（ROI）中提取形态学特征
-3. [Is SAM3 ready for pathology segmentation?](/20260417-20260516/2604.18225v1-is-sam3-ready-for-pathology-segmentation)  
-   标签：评分：8.0/10、query:cellseg
-   evidence：对SAM3在包括细胞核级别在内的病理分割能力的评估
-4. [Clinically-Informed Modeling for Pediatric Brain Tumor Classification from Whole-Slide Histopathology Images](/20260417-20260516/2604.21060v1-clinically-informed-modeling-for-pediatric-brain-tumor-classification-from-whole-slide-histopathology-images)  
-   标签：评分：8.0/10、query:pathfeat
-   evidence：专家引导的对比微调用于病理图像块级表示学习
-5. [Hierarchical Prototype-based Domain Priors for Multiple Instance Learning in Multimodal Histopathology Analysis](/20260417-20260516/2604.23982v1-hierarchical-prototype-based-domain-priors-for-multiple-instance-learning-in-multimodal-histopathology-analysis)  
-   标签：评分：8.0/10、query:pathfeat
-   evidence：将视觉特征与高级诊断知识和形态语义对齐
-6. [Geometry-Aware State Space Model: A New Paradigm for Whole-Slide Image Representation](/20260417-20260516/2605.05164v1-geometry-aware-state-space-model-a-new-paradigm-for-whole-slide-image-representation)  
-   标签：评分：8.0/10、query:pathfeat
-   evidence：将切片级嵌入与幻灯片级预测解耦，用于全切片图像表示
+1. [DiffSegLung: Diffusion Radiomic Distillation for Unsupervised Lung Pathology Segmentation](/202605/16/2605.11758v1-diffseglung-diffusion-radiomic-distillation-for-unsupervised-lung-pathology-segmentation)  
+   标签：评分：9.5/10、query:pathfeat
+   evidence：手工放射组学描述符作为教师引导学习表征
+2. [MicroscopyMatching: Towards a Ready-to-use Framework for Microscopy Image Analysis in Diverse Conditions](/202605/16/2605.14980v1-microscopymatching-towards-a-ready-to-use-framework-for-microscopy-image-analysis-in-diverse-conditions)  
+   标签：评分：8.5/10、query:cellseg
+   evidence：用于提取生物对象属性的显微镜图像分析框架
 
 ### 速读区论文标签
-1. [Unified Multi-Foundation-Model Slide Representation for Pan-Cancer Recognition and Text-Guided Tumor Localization](/20260417-20260516/2604.22846v1-unified-multi-foundation-model-slide-representation-for-pan-cancer-recognition-and-text-guided-tumor-localization)  
-   标签：评分：8.0/10、query:pathfeat
-   evidence：将异构基础模型表示集成到共享的切片级表示空间中
-2. [Benchmarking Pathology Foundation Models for Breast Cancer Survival Prediction](/20260417-20260516/2604.24679v1-benchmarking-pathology-foundation-models-for-breast-cancer-survival-prediction)  
-   标签：评分：8.0/10、query:pathfeat
-   evidence：基于基础模型图像块级特征提取的标准流水线
-3. [DiffSegLung: Diffusion Radiomic Distillation for Unsupervised Lung Pathology Segmentation](/20260417-20260516/2605.11758v1-diffseglung-diffusion-radiomic-distillation-for-unsupervised-lung-pathology-segmentation)  
-   标签：评分：8.0/10、query:pathfeat
-   evidence：手工设计的放射组学描述符作为教师来塑造学习到的表征
-4. [Dino-NestedUNet: Unlocking Foundation Vision Encoders for Pathology Tumor Bulk Segmentation via Dense Decoding](/20260417-20260516/2605.00894v1-dino-nestedunet-unlocking-foundation-vision-encoders-for-pathology-tumor-bulk-segmentation-via-dense-decoding)  
+1. [Benchmarking Foundation Models for Renal Lesion Stratification in CT](/202605/16/2605.07749v1-benchmarking-foundation-models-for-renal-lesion-stratification-in-ct)  
    标签：评分：7.5/10、query:pathfeat
-   evidence：在病理学中将高层语义与底层形态纹理对齐
-5. [Multimodal Fusion of Histopathology Images and Electronic Health Records for Early Breast Cancer Diagnosis](/20260417-20260516/2604.17122v1-multimodal-fusion-of-histopathology-images-and-electronic-health-records-for-early-breast-cancer-diagnosis)  
-   标签：评分：7.0/10、query:pathfeat
-   evidence：整合图像块级病理特征与结构化临床数据进行分类
-6. [PBSBench: A Multi-Level Vision-Language Framework and Benchmark for Hematopathology Whole Slide Image Interpretation](/20260417-20260516/2604.17570v1-pbsbench-a-multi-level-vision-language-framework-and-benchmark-for-hematopathology-whole-slide-image-interpretation)  
+   evidence：将基础模型嵌入与手工制作的影像组学分类器进行比较
+2. [Med-DisSeg: Dispersion-Driven Representation Learning for Fine-Grained Medical Image Segmentation](/202605/16/2605.14579v1-med-disseg-dispersion-driven-representation-learning-for-fine-grained-medical-image-segmentation)  
    标签：评分：7.0/10、query:cellseg
-   evidence：带有细胞类型标签和形态学注释的细胞级图像裁剪
-7. [Attention-based multiple instance learning for predominant growth pattern prediction in lung adenocarcinoma wsi using foundation models](/20260417-20260516/2604.21530v1-attention-based-multiple-instance-learning-for-predominant-growth-pattern-prediction-in-lung-adenocarcinoma-wsi-using-foundation-models)  
-   标签：评分：7.0/10、query:pathfeat
-   evidence：集成病理基础模型作为图像块编码器以提取特征
-8. [On the Complementarity of Quantum and Classical Features: Adaptive Hybrid Quantum-Classical Feature Fusion for Breast Cancer Classification](/20260417-20260516/2604.22903v1-on-the-complementarity-of-quantum-and-classical-features-adaptive-hybrid-quantum-classical-feature-fusion-for-breast-cancer-classification)  
-   标签：评分：7.0/10、query:pathfeat
-   evidence：统一互补表示的双分支特征提取流水线
-9. [Detecting Breast Carcinoma Metastasis on Whole-Slide Images by Partially Subsampled Multiple Instance Learning](/20260417-20260516/2604.17254v1-detecting-breast-carcinoma-metastasis-on-whole-slide-images-by-partially-subsampled-multiple-instance-learning)  
+   evidence：基于离散驱动表征的细粒度医学图像分割
+3. [Multimodal Stepwise Clinically-Guided Attention Learning for Pathological Complete Response Prediction in Breast Cancer](/202605/16/2605.07561v1-multimodal-stepwise-clinically-guided-attention-learning-for-pathological-complete-response-prediction-in-breast-cancer)  
    标签：评分：6.5/10、query:pathfeat
-   evidence：使用多实例学习从全切片图像中提取图像块级表示
-10. [SegMix:Shuffle-based Feedback Learning for Semantic Segmentation of Pathology Images](/20260417-20260516/2604.15777v1-segmixshuffle-based-feedback-learning-for-semantic-segmentation-of-pathology-images)  
+   evidence：利用多模态集成进行病理响应预测
+4. [XTinyU-Net: Training-Free U-Net Scaling via Initialization-Time Sensitivity](/202605/16/2605.09639v1-xtinyu-net-training-free-u-net-scaling-via-initialization-time-sensitivity)  
+   标签：评分：6.5/10、query:cellseg
+   evidence：用于医学图像分割的U-Net架构及其模型压缩
+5. [XTinyU-Net: Training-Free U-Net Scaling via Initialization-Time Sensitivity](/202605/16/2605.09639v2-xtinyu-net-training-free-u-net-scaling-via-initialization-time-sensitivity)  
+   标签：评分：6.5/10、query:cellseg
+   evidence：用于医学图像分割的U-Net缩放
+6. [MedCore: Boundary-Preserving Medical Core Pruning for MedSAM](/202605/16/2605.13688v1-medcore-boundary-preserving-medical-core-pruning-for-medsam)  
+   标签：评分：6.5/10、query:cellseg
+   evidence：保持边界的医学分割基础模型剪枝
+7. [SpectraFlow: Unifying Structural Pretraining and Frequency Adaptation for Medical Image Segmentation](/202605/16/2605.14566v1-spectraflow-unifying-structural-pretraining-and-frequency-adaptation-for-medical-image-segmentation)  
+   标签：评分：6.5/10、query:cellseg
+   evidence：面向边界的医学图像分割解码
+8. [Explanation-Aware Learning for Enhanced Interpretability in Biomedical Imaging](/202605/16/2605.10054v1-explanation-aware-learning-for-enhanced-interpretability-in-biomedical-imaging)  
    标签：评分：6.0/10、query:pathfeat
-   evidence：使用图像级标签进行病理图像的语义分割
-11. [Dual-Modal Lung Cancer AI: Interpretable Radiology and Microscopy with Clinical Risk Integration](/20260417-20260516/2604.16104v1-dual-modal-lung-cancer-ai-interpretable-radiology-and-microscopy-with-clinical-risk-integration)  
+   evidence：生物医学成像诊断中增强可解释性的解释监督
+9. [DetRefiner: Model-Agnostic Detection Refinement with Feature Fusion Transformer](/202605/16/2605.10190v1-detrefiner-model-agnostic-detection-refinement-with-feature-fusion-transformer)  
    标签：评分：6.0/10、query:pathfeat
-   evidence：整合H&E组织病理学特征用于肺癌诊断和亚型分类
+   evidence：融合基础模型的全局和图像块特征以优化检测
+10. [Principle-Guided Supervision for Interpretable Uncertainty in Medical Image Segmentation](/202605/16/2605.10984v1-principle-guided-supervision-for-interpretable-uncertainty-in-medical-image-segmentation)  
+   标签：评分：6.0/10、query:cellseg
+   evidence：医学图像分割中可解释的不确定性
+11. [DenseTRF: Texture-Aware Unsupervised Representation Adaptation for Surgical Scene Dense Prediction](/202605/16/2605.11265v1-densetrf-texture-aware-unsupervised-representation-adaptation-for-surgical-scene-dense-prediction)  
+   标签：评分：6.0/10、query:cellseg
+   evidence：手术场景密集预测的无监督表示自适应
+12. [CheXTemporal: A Dataset for Temporally-Grounded Reasoning in Chest Radiography](/202605/16/2605.11304v1-chextemporal-a-dataset-for-temporally-grounded-reasoning-in-chest-radiography)  
+   标签：评分：6.0/10、query:cellseg
+   evidence：胸部X光片中病理的局部空间监督
 
 
 <div class="dpr-home-promo-card">

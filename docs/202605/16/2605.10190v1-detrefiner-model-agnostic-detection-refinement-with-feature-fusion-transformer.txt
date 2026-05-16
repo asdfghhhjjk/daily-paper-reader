@@ -1,0 +1,427 @@
+Title: DetRefiner: Model-Agnostic Detection Refinement with Feature Fusion Transformer
+
+URL Source: https://arxiv.org/pdf/2605.10190v1
+
+Published Time: Tue, 12 May 2026 03:02:25 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# DetRefiner: Model-Agnostic Detection Refinement with Feature Fusion Transformer 
+
+## Soichiro Okazaki 1 Tatsuya Sasaki 1 Hiroki Ohashi 11Hitachi, Ltd. Research and Development Group, Japan 
+
+{soichiro.okazaki.xs, tatsuya.sasaki.gb, hiroki.ohashi.uo }@hitachi.com 
+
+## Abstract 
+
+Open-vocabulary object detection (OVOD) aims to detect both seen and unseen categories, yet existing methods often struggle to generalize to novel objects due to limited inte-gration of global and local contextual cues. We propose 
+
+DetRefiner , a simple yet effective plug-and-play framework that learns to fuse global and local features to refine open-vocabulary detection. DetRefiner processes global image features and patch-level image features from foundational models (e.g., DINOv3) through a lightweight Transformer encoder. The encoder produces a class vector capturing image-level attributes and patch vectors representing local region attributes, from which attribute reliability is inferred to recalibrate the base model’s confidence. Notably, De-tRefiner is trained independently of the base OVOD model, requiring neither access to its internal features nor retrain-ing. At inference, it operates solely on the base detector’s predictions, producing auxiliary calibration scores that are merged with the base detector’s scores to yield the final re-fined confidence. Despite this simplicity, DetRefiner con-sistently enhances multiple OVOD models across COCO, LVIS, ODinW13, and Pascal VOC, achieving gains of up to +10.1 AP on novel categories. These results highlight that learning to fuse global and local representations offers a powerful and general mechanism for advancing open-world object detection. Our codes and models are avail-able at https://github.com/hitachi-rd-cv/ detrefiner .
+
+## 1. Introduction 
+
+Object detection aims to localize and categorize visual in-stances by predicting bounding boxes and class labels. Con-ventional detectors [1, 34] and more recent Transformer-based models [2, 49] have achieved remarkable progress by learning powerful visual representations and global context modeling. However, their label spaces are typically closed ,constrained to a fixed set of categories defined during train-
+
+Figure 1. Qualitative comparison on LVIS between the baseline detector (Grounding DINO-T [29]) and the proposed DetRefiner .DetRefiner significantly improves detection performance (AP r :19.9 → 30.0 / AP all : 27.4 → 34.1), successfully detecting more objects and producing better calibrated scores (e.g., fork , knife ,
+
+painting , polo shirt ). For visualization, a box score threshold of 0.3 and an IoU threshold of 0.3 are applied for class-wise NMS. 
+
+ing. This closed-world assumption severely limits scalabil-ity in practical applications, where new concepts continu-ally emerge, long-tail categories are common, and unseen objects frequently appear in the wild [11, 44]. Open-vocabulary object detection (OVOD) addresses this limitation by coupling region localization with text-based classification, typically leveraging large-scale vision– language pretraining (VLP) models [16, 32]. These mod-1
+
+> arXiv:2605.10190v1 [cs.CV] 11 May 2026
+
+els learn joint image–text representations from web-scale data and enable category generalization beyond the train-ing label set. Building on this foundation, methods such as ViLD [10] and RegionCLIP [52] extend pretrained em-beddings to the detection setting, aligning region propos-als with textual concepts to recognize unseen categories. More recent approaches including GLIP [25] and Ground-ing DINO [29] jointly optimize grounding and detection for stronger open-vocabulary generalization, allowing cat-egories to be specified at inference time as natural-language prompts. Despite this flexibility, OVOD models still struggle with 
+
+semantic alignment and score calibration [37, 45, 46, 51]. The image–text representations learned via pretraining may misalign with a detector’s region embeddings, making it difficult to reliably match visual features to textual de-scriptions [37, 46]. Furthermore, detectors frequently en-counter ambiguous or fine-grained categories, where visu-ally similar objects correspond to semantically overlapping prompts. In such cases, confidence scores often become un-stable and poorly calibrated: high scores may be assigned to visually or semantically incorrect detections, while cor-rect predictions—especially for rare or unseen categories— receive low confidence [45, 51]. We address these issues by introducing DetRefiner , a lightweight, detector-agnostic plug-and-play module that 
+
+post hoc refines OVOD predictions. DetRefiner operates purely on the outputs of existing detectors at inference time and jointly reasons about image-level and box-level confi-dence. It produces semantically aligned and well-calibrated confidence scores for ambiguous, fine-grained, and rare or unseen categories. Concretely, DetRefiner fuses global and local features extracted from DINO [3, 39] using a compact Transformer-based encoder [43], producing a class vector that captures global scene semantics and a patch vector that encodes local region evidence. These embeddings jointly predict refined confidence scores, which are used to recalibrate the base detector’s predictions and correct classification inconsisten-cies. To further improve semantic alignment, calibration, and generalization to rare and unseen categories, we in-troduce a distillation-based alignment mechanism [14, 36] that transfers semantic knowledge from CLIP-based vision– language models [32, 42, 48], encouraging both vectors to inherit strong vision–language alignment. In practice, we run the base OVOD detector with a zero detection thresh-old and refine all candidate boxes in a single forward pass, enabling DetRefiner to rescue many low-scored but correct boxes while keeping the inference overhead moderate. Fig-ure 1 and Figure 3 illustrate how our method improves de-tection results on LVIS by producing semantically coherent and well-calibrated outputs, while also addressing common failure modes. Our contributions are threefold: 1. Lightweight fusion of global and local features. We design a 7.5M-parameter Transformer encoder that fuses global and local features from DINO [3, 39] into class and patch vectors, which recalibrate base detector scores without modifying or retraining the detector. 2. Distillation-enhanced calibration for rare and unseen categories. We apply a knowledge distillation loss from CLIP-based image features [32, 42, 48] to both class and patch vectors, enabling DetRefiner to inherit strong vision–language alignment and improve calibration on rare and unseen classes. 3. Consistent gains across diverse detectors and bench-marks. Our method consistently improves multiple OVOD models [9, 25, 29, 50] on COCO [28], LVIS [11], ODinW13 [24, 25], and Pascal VOC [7], achieving up to 
+
++10.1 AP improvement on rare and unseen categories. 
+
+## 2. Related Work 
+
+2.1. Open-Vocabulary Object Detection 
+
+Open-vocabulary object detection (OVOD) [5, 10, 19, 25, 29, 31, 47, 52, 53] extends traditional detection by recog-nizing categories beyond a fixed label set through vision– language alignment. Early methods such as OVR-CNN [47] and MDETR [19] ground textual queries to visual regions via multimodal pretraining, while ViLD [10] and Region-CLIP [52] align region proposals with textual embeddings for zero-shot recognition. More recent models, includ-ing GLIP [25] and Grounding DINO [29], jointly optimize grounding and detection for stronger open-vocabulary gen-eralization. Our DetRefiner is complementary to these frameworks: instead of designing a new detector, it operates on top of 
+
+existing OVOD models and post hoc refines both image-and box-level confidence without modifying or retraining the base model. 
+
+2.2. Complementary Approaches for OVOD Models 
+
+To mitigate semantic misalignment and unreliable confi-dence estimation, recent studies propose complementary methods that augment existing detectors. SIC-CADS [8] performs image-level confidence calibration using contex-tual cues, improving reliability without altering the detec-tor but leaving box-level scores unchanged. DVDet [18] uses LLM-assisted descriptor generation and conditional prompts to expand detector vocabularies and enhance se-mantic consistency, yet requires joint training with the base detector and access to internal features. CODet [26] lever-ages LLM-guided pseudo-labeling based on visual–textual co-occurrence to refine box-level predictions during train-ing, and it also requires access to the detector’s internal ar-chitecture. 2Figure 2. Overall pipeline of DetRefiner. A base open-vocabulary detector takes an input image and outputs bounding boxes and category scores. In parallel, a vision encoder (e.g., DINOv3) extracts global and local features, which DetRefiner fuses and learns via classification and distillation losses. At inference, DetRefiner outputs image- and box-level confidence scores that are combined with the base detector scores to obtain the final detection confidence. For visualization of the results (bottom right), a box score threshold of 0.3 and an IoU threshold of 0.3 are applied for class-wise NMS. 
+
+In contrast, DetRefiner treats the base OVOD model as a black box while jointly refining image- and box-level confidence through lightweight semantic fusion. More-over, whereas DVDet [18] and CODet [26] mainly evalu-ate on earlier OVOD baselines [5, 10, 27, 46, 52, 53], we demonstrate DetRefiner’s practicality by attaching it to re-cent high-performing detectors [9, 25, 29, 50] across multi-ple benchmarks. As some earlier OVOD baselines and com-plementary approaches are not publicly available or difficult to reproduce, we construct reproducible baselines following their published settings and evaluate DetRefiner on top of them for fair and reliable comparison. 
+
+2.3. Fusion of Vision and Vision-Language Founda-tion Models 
+
+Recent work explores combining complementary founda-tion models to improve visual–language understanding and transferability [6, 20, 33, 38, 41]. BRAVE [20] integrates features from multiple frozen vision encoders into uni-fied representations, and AM-RADIO [33] distills knowl-edge from backbones such as CLIP [32], DINOv2 [3], and SAM [23] into a generalist model, showing that combining CLIP’s global semantics with DINO’s rich local and global features improves robustness. DetRefiner adopts a related philosophy but applies foundation-model complementarity to OVOD as a post-hoc 
+
+refinement module. 
+
+## 3. Method 
+
+We propose DetRefiner (Figure 2), a lightweight refine-ment module that operates on top of an arbitrary open-vocabulary detector. Given an input image, we first extract rich visual representations from a frozen DINOv3 [4, 39]. A compact Transformer encoder then refines these features into an image-level class vector and region-level patch vec-tors , which are aligned with text embeddings from Mobile-CLIP [42] through joint classification and distillation objec-tives. At inference time, DetRefiner takes the base detec-tor’s predictions—a fixed set of bounding boxes and their category-wise confidence scores—and keeps both the box coordinates and category labels unchanged, while refining the confidence scores for each (box, category) pair. 
+
+3.1. Preliminaries 
+
+Let I ∈ RH×W ×3 denote an input image. We employ the DINOv3 Vision Transformer as a frozen feature extractor to obtain three levels of visual representation: a global fea-ture token g ∈ Rdg , four register tokens {ri}4 
+
+> i=1
+
+∈ Rdr ,and patch features {pj }196  
+
+> j=1
+
+∈ Rdp . These features encode complementary contextual information—global semantics, intermediate structural priors, and fine-grained local cues, respectively. Each feature type is independently projected into a com-mon latent space through learnable linear transformations: 
+
+g′ = Wg g, r′ 
+
+> i
+
+= Wr ri, p′ 
+
+> j
+
+= Wppj , (1) 3where Wg , Wr , and Wp are linear layers mapping to a unified hidden dimension d. A learnable class token c′ is prepended to the input sequence to aggregate global seman-tics during self-attention. To distinguish heterogeneous token types, we introduce learnable segment embeddings [21], which assign a unique embedding to each token type (class, global, register, and patch) and are added to the corresponding token features. For spatial encoding, we apply fixed 2D sine-cosine posi-tional embeddings to patch tokens, constructed based on the spatial grid of patch features following MAE-style de-signs [13]. The complete token sequence is then formed as: 
+
+T = [ c′′ ; g′′ ; r′′  
+
+> 1
+
+, . . . , r′′  
+
+> 4
+
+; p′′  
+
+> 1
+
+, . . . , p′′ 
+
+> 196
+
+], (2) which is processed by a lightweight Transformer encoder, referred to as the Refinement Encoder (Figure 2). The Transformer output consists of: • a class vector vcls ∈ Rd (the output at the class token), representing image-level semantic content, and • patch vectors {vpatch,j }196  
+
+> j=1
+
+∈ Rd, encoding localized visual evidence. For region-level reasoning, we further pool patch vec-tors within each bounding box by ROI Align [12] to ob-tain an ROI patch vector vroi . This vector captures fine-grained appearance within predicted object regions, en-abling region-wise calibration and classification. ROI Align pools patch features into region-level representations that suppress background context, while global features provide complementary scene-level priors. This design is impor-tant, as local cues alone can be visually and semantically ambiguous. In training, bounding boxes and category la-bels are provided by the dataset annotations; at inference, we use the boxes from the base detector. 
+
+3.2. Feature-Text Alignment Framework 
+
+DetRefiner aligns visual and textual representations through joint optimization that enforces both global and local se-mantic consistency. Given visual embeddings from DI-NOv3 and text embeddings from MobileCLIP, the model learns to associate global image semantics and region-level evidence with corresponding textual categories. Let vcls and vroi denote the class-level and ROI-level visual embeddings, respectively. We obtain normalized fea-tures ˆvcls = vcls /∥vcls ∥2, ˆvroi = vroi /∥vroi ∥2, and nor-malized text embeddings {ˆtk}Ck=1 for C seen categories. Their cosine similarities are converted into logits as: logit cls,k = scls (ˆ v⊤
+
+> cls
+
+ˆtk), logit roi,k = scls (ˆ v⊤
+
+> roi
+
+ˆtk),
+
+(3) where scls = 1 /τ is a temperature scaling factor. Training uses images that may contain both seen and un-seen categories, but supervision is applied only to the seen label set: all losses are computed over Cseen and ignore un-seen labels. For LVIS, we further treat only negatives from ”neg category ids” 1 as valid negative labels and ignore all other negatives when computing losses. We then optimize the model using the following losses: 
+
+Image-level classification loss. The class vector vcls pre-dicts the global presence of categories within an image us-ing binary cross-entropy: 
+
+Lcls img = − 1
+
+|Cseen |
+
+X
+
+> k∈Cseen
+
+h
+
+yk log σ(logit cls,k )+(1 − yk) log  1 − σ(logit cls,k )i
+
+,
+
+(4) where σ(·) denotes the sigmoid function and yk ∈ { 0, 1}
+
+indicates the presence of category k in the image. 
+
+Region-level classification loss. ROI patch embeddings 
+
+vroi , pooled from region proposals via ROI Align, are su-pervised similarly to predict the object category in each bounding box: 
+
+Lcls roi = − 1
+
+|B|| Cseen |
+
+> B
+
+X
+
+> b=1
+
+X
+
+> k∈Cseen
+> h
+
+yk log σ(logit roi,k )+(1 − yk) log  1 − σ(logit roi,k )i
+
+,
+
+(5) where yk is defined according to the ground-truth label of the region and B denotes the number of ROIs for an image. 
+
+Global distillation loss. To transfer semantic alignment from MobileCLIP, we apply a cosine similarity constraint between the learned class vector and the CLIP-aligned im-age feature mimg :
+
+Lckd = 1 − v⊤
+
+> cls
+
+mimg 
+
+∥vcls ∥2 ∥mimg ∥2
+
+. (6) This loss encourages the global representation of DetRe-finer to inherit the semantic structure of the vision–language teacher at the image level. 
+
+Local distillation loss. To encourage locally aggregated representations to share the same semantic direction as the CLIP-aligned visual space, we align the average-pooled patch vectors with the MobileCLIP image feature. Let 
+
+¯vpatch = 1196 
+
+P196  
+
+> j=1
+
+vpatch,j denote the mean of the patch embeddings. The local distillation loss is then defined as: 
+
+Lpkd = 1 − ¯v⊤
+
+> patch
+
+mimg 
+
+∥¯vpatch ∥2 ∥mimg ∥2
+
+. (7) 
+
+> 1https://www.lvisdataset.org/dataset
+
+4This cosine similarity loss aligns the pooled patch repre-sentation with the CLIP-aligned image feature, encourag-ing DetRefiner’s locally aggregated features to remain con-sistent with the global semantic structure of the vision– language teacher. 
+
+Overall objective. The overall objective combines classi-fication and distillation losses, each serving complementary roles in enforcing semantic alignment and confidence cali-bration: 
+
+L = Lcls img + Lcls roi + λ1Lckd + λ2Lpkd , (8) where λ1 and λ2 are the weights for the distillation terms. 
+
+3.3. Inference 
+
+Given a novel image, the base OVOD model produces bounding boxes and class scores for a set of candidate categories. In parallel, MobileCLIP provides text embed-dings {tk} for these categories, and DetRefiner computes similarity-based probabilities for both class and ROI patch vectors: 
+
+Pcls,k = σ scls (ˆ v⊤
+
+> cls
+
+ˆtk), Proi,k = σ scls (ˆ v⊤
+
+> roi
+
+ˆtk).
+
+(9) The final detection confidence is obtained by linearly combining the base detector score Pdet with these semantic cues. (wd, w c, w p) are the weights parameters: 
+
+Pf inal = wdPdet + wcPcls + wpProi , (10) Importantly, DetRefiner does not alter box coordinates or category assignments, but only recalibrates confidence scores. Through this mechanism, unseen categories—defined solely by text embeddings at inference—can be recognized in a zero-shot manner. The class vector captures global scene priors, while ROI patch vectors refine fine-grained localization, jointly improving open-vocabulary detection performance. 
+
+## 4. Experiments 
+
+4.1. Datasets 
+
+We evaluate DetRefiner on four benchmarks, covering both zero-shot and cross-dataset settings. 
+
+OV-COCO. Following OVR-CNN [47], we split COCO [28] into 48 base classes (seen) and 17 novel classes (unseen). The training set contains 118,287 images and the validation set includes 5,000 images. We use COCO API 2 for evaluation. 
+
+OV-LVIS. Following ViLD [10], we use LVIS [11] with 405 frequent and 461 common classes as seen, and 337 rare 
+
+> 2https://github.com/cocodataset/cocoapi
+
+classes as unseen. We adopt the minival split [25], consist-ing of 100,170 training images and 4,809 validation images. We use LVIS API 3 for evaluation. 
+
+ODinW13. To assess cross-dataset generalization, we fol-low [24, 25] and evaluate OV-LVIS-trained detectors on the ODinW13 suite. Table 1 in Appendix 1 summarizes the number of classes and test images for each dataset. 
+
+Pascal VOC. Because several ODinW13 datasets contain very few test images and classes, we additionally report re-sults on Pascal VOC [7], a subset of ODinW13 with 20 cat-egories and over 3,000 test images. 
+
+4.2. Implementation Details 
+
+Global and local visual features extracted from DINOv3 (ViT-B/16) [39] are used as inputs to Refinement Encoder, while MobileCLIP-B [42] provides global visual features for distillation and text embeddings for classification. Text prompts are constructed using raw category names without templates. All image and text features are pre-extracted and fixed during training, and no data augmentation is applied. The refinement encoder is a 2-layer Transformer (hidden size 512, 8 heads) [43]. We train with AdamW [22, 30] for 30 epochs (batch size 64), using a learning rate of 1 × 10 −3, weight decay 0.01, cosine learning rate decay, and EMA [15, 40] for stability. We set the loss weights for the distillation terms to λ1 =
+
+λ2 = 0 .1, and use a temperature of τ = 0 .03 with a label-smoothing ratio of 0.2.
+
+4.3. Evaluation Protocol 
+
+Unless otherwise noted, we train a DetRefiner on OV-LVIS and evaluate it on OV-LVIS, ODinW13, and Pascal VOC. For OV-COCO experiments, we train a separate DetRefiner on OV-COCO. Evaluations on OV-COCO and OV-LVIS are designed to assess in-domain performance under an open-vocabulary setting, where the model is tested on novel categories be-yond those seen during training. This allows us to isolate the model’s ability to generalize across label space while keeping the data distribution consistent. In contrast, evaluation on ODinW13 is intended to mea-sure out-of-domain generalization under distribution shift. As some categories overlap with the training data, this set-ting is not strictly zero-shot, but provides a complementary perspective on robustness to domain changes. 
+
+4.4. Main Results 
+
+We reproduce ten representative open-vocabulary detectors under a unified evaluation protocol, and report all improve-ments based on these baselines for fair comparison. Details are in Appendix 1. 
+
+> 3https://github.com/lvis-dataset/lvis-api
+
+5Figure 3. Qualitative comparison of detection results before and after applying DetRefiner. Top: base detector (left) vs. base detector + DetRefiner (right). Bottom: predictions based on the class vector (left) and patch vector (right). DetRefiner suppresses overconfident false positives and recovers missed objects by combining global and local cues. For visualization, a box score threshold of 0.3 and an IoU threshold of 0.3 are applied for class-wise NMS on all images. More visualization results are in Appendix 2. Table 1. Open-vocabulary detection results on OV-LVIS [11] with and without DetRefiner. AP denotes AP@[0 .5:0 .95] . MM-Grounding-DINO-Large [50] shows lower performance likely due to training data differences (e.g., V3Det [44]); similar trends are observed in prior work (e.g., LLMDet [9]). 
+
+Method Trained Data AP r AP c AP f AP all 
+
+GLIP (Tiny) [25] O365, GoldG, CC3M, SBU 18.0 20.5 32.3 26.0 +DetRefiner +OV-LVIS 22.7 (+4.7) 25.2 (+4.7) 33.8 (+1.5) 29.1 (+3.1) GLIP (Large) [25] FourODs, GoldG, CC3M+12M, SBU 29.1 34.7 42.3 37.9 +DetRefiner +OV-LVIS 30.2 (+1.1) 37.6 (+2.9) 42.9 (+0.6) 39.5 (+1.6) Grounding DINO (Tiny) [29] O365, GoldG, Cap4M 19.9 22.6 33.1 27.4 +DetRefiner +OV-LVIS 30.0 (+10.1) 31.6 (+9.0) 37.1 (+4.0) 34.1 (+6.7) Grounding DINO (Base) [29] COCO, O365, GoldG, Cap4M, OpenImages, ODinW35, RefCOCO 27.3 31.6 36.5 33.6 +DetRefiner +OV-LVIS 33.5 (+6.2) 37.1 (+5.5) 37.0 (+0.5) 36.7 (+3.1) MM-Grounding DINO (Tiny) [50] O365, GoldG, GRIT, V3Det 34.3 35.7 45.9 40.5 +DetRefiner +OV-LVIS 39.4 (+5.1) 40.7 (+5.0) 48.1 (+2.2) 44.2 (+3.7) MM-Grounding DINO (Base) [50] O365, GoldG, V3Det 35.4 37.8 48.5 42.8 +DetRefiner +OV-LVIS 41.6 (+6.2) 43.0 (+5.2) 50.4 (+1.9) 46.4 (+3.6) MM-Grounding DINO (Large) [50] O365V2, OpenImageV6, GoldG 30.4 32.0 42.7 37.0 +DetRefiner +OV-LVIS 34.2 (+3.8) 38.2 (+6.2) 43.5 (+0.8) 40.4 (+3.4) LLMDet (Tiny) [9] GroundingCap-1M 36.7 37.6 49.7 43.4 +DetRefiner +OV-LVIS 41.9 (+5.2) 44.5 (+6.9) 51.9 (+2.2) 47.9 (+4.5) LLMDet (Base) [9] GroundingCap-1M 39.2 42.1 53.1 47.2 +DetRefiner +OV-LVIS 46.1 (+6.9) 47.3 (+5.2) 55.0 (+1.9) 50.9 (+3.7) LLMDet (Large) [9] GroundingCap-1M 43.9 43.6 55.4 49.3 +DetRefiner +OV-LVIS 50.1 (+6.2) 49.3 (+5.7) 57.1 (+1.7) 53.2 (+3.9) 
+
+Table 2. Open-vocabulary detection results on OV-COCO [28] using baseline detectors trained with the same data as in Table 1, and a DetRefiner trained on OV-COCO, evaluated with and with-out DetRefiner. AP denotes AP@[0 .5:0 .95] .
+
+Method AP novel AP base AP all 
+
+GLIP (Tiny) [25] 53.4 44.2 46.6 +DetRefiner 53.8 (+0.4) 46.3 (+2.1) 48.2 (+1.6) Grounding DINO (Tiny) [29] 57.4 46.6 49.4 +DetRefiner 58.1 (+0.7) 48.9 (+2.3) 51.3 (+1.9) MM-Grounding DINO (Tiny) [50] 59.3 47.8 50.8 +DetRefiner 59.5 (+0.2) 49.4 (+1.6) 52.1 (+1.3) LLMDet (Tiny) [9] 61.6 53.0 55.3 +DetRefiner 61.7 (+0.1) 54.0 (+1.0) 56.0 (+0.7) 
+
+Table 3. Cross-dataset generalization on ODinW13 [24, 25] and 
+
+Pascal VOC [7] using baseline detectors trained with the same data as in Table 1, and a DetRefiner trained on OV-LVIS, evaluated with and without DetRefiner. AP denotes AP@[0 .5:0 .95] .
+
+Method mAP (ODinW13) AP (Pascal VOC) GLIP (Tiny) [25] 41.7 56.6 +DetRefiner 43.3 (+1.6) 59.2 (+2.6) Grounding DINO (Tiny) [29] 38.4 56.3 +DetRefiner 38.9 (+0.5) 60.0 (+3.7) MM-Grounding DINO (Tiny) [50] 41.1 57.6 +DetRefiner 42.2 (+1.1) 60.4 (+2.8) LLMDet (Tiny) [9] 31.5 59.4 +DetRefiner 32.2 (+0.7) 61.3 (+1.9) 
+
+6Table 4. Ablation on main components for DetRefiner using Grounding DINO (Tiny). “Refine” indicates the presence of Re-finement Encoder. Lckd and Lpkd denote distillation on class and patch vectors. “CLIP-V” indicates direct CLIP visual features fed into the refinement encoder.                                                 
+
+> Main Components OV-LVIS OV-COCO
+> Refine Lckd Lpkd CLIP-V AP rAP cAP fAP all AP novel AP base AP all
+> ✓✓✓30.0 31.6 37.1 34.1 58.1 48.9 51.3
+> ✓✓26.9 29.8 37.0 33.1 57.7 48.1 50.6
+> ✓✓29.1 31.6 37.1 34.1 58.1 49.0 51.3
+> ✓✓29.2 31.4 37.2 34.0 56.9 49.0 51.0
+> ✓26.4 31.2 37.0 33.6 56.8 49.0 51.0
+> ✓✓26.1 31.6 37.1 33.8 56.9 49.0 51.0
+
+4.4.1. Results on OV-LVIS 
+
+Table 1 summarizes OV-LVIS results, where DetRefiner consistently improves all base detectors across diverse backbones and training data. Gains are especially pro-nounced on rare classes (e.g., +10.1 AP r for Grounding DINO (Tiny)), indicating that post-hoc semantic refinement is particularly beneficial for long-tail categories. Larger backbones also improve across AP r , AP c, AP f , and AP all ,showing that DetRefiner complements strong OVOD base-lines by enhancing alignment and calibration. 
+
+4.4.2. Results on OV-COCO 
+
+Table 2 reports results on OV-COCO using Tiny-scale de-tectors. DetRefiner yields consistent gains for all models, with the largest improvement of +1.9 AP all on Grounding DINO (Tiny). Improvements on AP novel are modest but positive, as COCO contains fewer rare or fine-grained cat-egories and thus is less challenging than LVIS. These re-sults confirm that DetRefiner provides robust benefits across datasets, while the magnitude of gains correlates with the difficulty of semantic calibration. 
+
+4.4.3. Results on ODinW13 and Pascal VOC 
+
+Table 3 shows cross-dataset generalization results on ODinW13 and Pascal VOC when all detectors are trained on OV-LVIS and evaluated zero-shot. DetRefiner provides consistent gains across both datasets and all models, indi-cating that the refined confidence scores transfer well under domain shift. The largest gain is +3.7 AP on Pascal VOC with Grounding DINO (Tiny). Since Pascal VOC provides a larger and more balanced test set than most ODinW13 datasets, these improvements demonstrate robustness on more stable cross-dataset evaluations. 
+
+4.5. Ablation Studies 
+
+We now ablate components of DetRefiner, analyzing the Refinement Encoder and CLIP-based distillation, architec-tural and hyperparameter choices, and ensemble weights for combining detector and refinement scores. 
+
+4.5.1. Effect of Main Components 
+
+Table 4 analyzes the contribution of the refinement encoder, distillation losses ( Lckd and Lpkd ), and direct CLIP fea-ture inputs. To isolate the source of gains, we compare with a projector-only baseline that uses identical features, losses, and training data, but removes the refinement en-coder. The resulting performance drop indicates that ex-plicit global–local interaction plays a critical role, support-ing the effectiveness of the detect-then-refine design beyond stronger features or supervision alone. Using both class-level ( Lckd ) and patch-level ( Lpkd ) distillation yields the best performance, demonstrating that global and local align-ment signals are complementary. We use CLIP global vi-sual features via distillation rather than as direct inputs, as direct CLIP inputs introduce a distribution mismatch with DINOv3 features. Since CLIP visual and text embeddings share the same space, jointly aligning refiner outputs to both provides a more stable and optimization-friendly objective. 
+
+4.5.2. Model Architecture and Hyperparameters 
+
+Table 5 studies the effect of Transformer depth, tempera-ture τ , feature encoders, and ROI extraction. A shallow 2-layer Transformer with τ =0 .03 , DINOv3, MobileCLIP, and ROI Align provides the best trade-off between accuracy and complexity; deeper models or higher temperatures lead to degradation, likely due to overfitting or oversmoothing of confidence scores. Replacing DINOv3 or MobileCLIP with alternative encoders slightly lowers AP, indicating the im-portance of the visual backbone. Nevertheless, our method consistently improves performance even with alternative backbones such as DINOv2 or CLIP, demonstrating ro-bustness to backbone variations. Variations in ROI extrac-tion have a smaller but noticeable impact. We adopt DI-NOv3 as the visual backbone rather than MobileCLIP, as MobileCLIP is optimized for global image–text alignment, whereas DINO-style features provide fine-grained, spatially localized representations better suited for detection. 
+
+4.5.3. Ensemble Weights 
+
+Table 6 evaluates different ensemble weights (wd, w c, w p)
+
+for combining the base detector score with class- and ROI-level scores from DetRefiner using Grounding DINO (Tiny). The default configuration (0 .8, 0.1, 0.1) yields sta-ble gains on both OV-LVIS and OV-COCO and is used in all main experiments. In OVOD, many predictions have competing confidence scores, and even a modest contribu-tion from DetRefiner (e.g., 20%) can meaningfully affect ranking and overall performance. Giving too little weight to the detector score or over-emphasizing DetRefiner tends to hurt performance, confirming that DetRefiner works best as a calibration-aware refinement module rather than a stan-dalone detector. While learning ensemble weights could further improve performance, it would require tighter in-tegration with the base detector, which is beyond the scope 7Table 5. Ablation on Transformer depth, temperature τ , feature encoders, and ROI extraction in DetRefiner using Grounding DINO (Tiny). Baseline: 2 layers, τ =0 .03 , DINOv3, MobileCLIP, ROI Align. Here, ”Inclusion” denotes averaging all patch vectors whose corresponding patches overlap the ground-truth bounding box, and ”DINOv2-reg” denotes DINOv2 features augmented with register tokens [4].                                                                                                             
+
+> num layers τDINO CLIP ROI OV-LVIS OV-COCO
+> AP rAP cAP fAP all AP novel AP base AP all
+> Baseline
+> 20.03 DINOv3 MobileCLIP ROI Align 30.0 31.6 37.1 34.1 58.1 48.9 51.3
+> Varying Transformer depth
+> 129.1 31.7 37.2 34.1 57.9 48.8 51.2 328.5 31.0 37.1 33.7 58.2 49.0 51.4 625.5 27.6 36.2 31.6 58.3 49.0 51.4 12 20.2 23.0 33.6 27.9 58.2 48.9 51.4
+> Varying temperature τ
+> 0.01 29.3 32.3 37.2 34.4 58.2 48.8 51.3 0.05 28.5 30.8 37.0 33.6 57.7 49.0 51.2 0.10 26.1 28.6 36.5 32.2 57.3 48.8 51.0
+> Different feature encoders
+> DINOv2-reg 28.6 31.8 36.9 34.0 58.2 48.8 51.2 CLIP 26.4 30.6 36.9 33.3 57.4 48.9 51.1 LongCLIP 27.1 30.2 37.0 33.2 57.4 48.8 51.2
+> ROI extraction methods
+> Inclusion 29.5 31.3 37.1 33.9 58.1 48.9 51.3 ROI Pooling 29.0 31.1 37.0 33.8 58.1 48.8 51.2
+
+Table 6. Ablation on ensemble weights (wd, w c, w p) on OV-LVIS and OV-COCO using Grounding DINO (Tiny).                                                                           
+
+> Ensemble Weight OV-LVIS OV-COCO
+> wdwcwpAP rAP cAP fAP all AP novel AP base AP all
+> 0.8 0.10 0.10 30.0 31.6 37.1 34.1 58.1 48.9 51.3 0.5 0.25 0.25 30.2 35.2 35.4 34.9 54.5 46.4 48.5 0.6 0.20 0.20 30.1 35.8 36.5 35.6 56.8 47.6 50.0 0.7 0.15 0.15 30.6 34.6 37.2 35.5 57.8 48.6 51.0 0.9 0.05 0.05 24.7 27.5 35.8 31.3 57.9 48.4 50.9 0.8 0.20 028.0 31.7 36.9 33.9 58.2 48.5 51.0 0.8 00.20 29.1 30.8 37.0 33.7 56.9 48.0 50.8
+
+Table 7. Inference cost of GDINO-T with and without DetRefiner. DetRefiner introduces moderate latency and VRAM overhead.                
+
+> Model Latency (ms) ↓FPS ↑GPU Mem. (MB) ↓
+> GDINO-T 324 3.08 4752 + DetRefiner 428 2.01 6984
+> Components of DetRefiner
+> DINOv3 75 13.3 0 (CPU) Refinement Encoder 29 34.5 2232
+
+of our post-hoc, model-agnostic design. 
+
+4.6. Training and Inference Cost 
+
+Table 7 reports the inference cost of Grounding DINO-Tiny with and without DetRefiner. Latency and VRAM are mea-sured on an RTX 2080Ti and an Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz. In our setup, DINOv3 feature extraction runs on the CPU; moving it to the GPU would reduce latency at the cost of higher VRAM usage. DetRe-finer processes all proposals in a single forward pass of the refinement encoder, so even when the number of boxes is large, the additional latency remains moderate. From the training perspective, DetRefiner is lightweight: all experiments are conducted on a single NVIDIA V100 GPU for 30 epochs (about 15 hours on OV-COCO or 20 hours on OV-LVIS), after which each DetRefiner can be attached to any detector without further fine-tuning. 
+
+4.7. Visualization 
+
+Figure 3 illustrates how DetRefiner refines predictions from the base detector. Compared to the original outputs (top-left), DetRefiner (top-right) suppresses overconfident false positives and recovers missed objects using both global and local evidence. The bottom row shows the contributions of class and patch vectors: the former captures scene-level context, while the latter emphasizes region-level details, jointly improving open-vocabulary detection reliability. 
+
+## 5. Conclusion 
+
+We present DetRefiner, a lightweight drop-in module for open-vocabulary object detection (OVOD). It improves detection by unifying global and local features from foun-dation models such as DINOv3 [39] and processing them with a compact Transformer encoder to produce image-and patch-level confidence scores for refinement. Unlike conventional approaches, DetRefiner operates solely on detection outputs, requiring no access to internal features or retraining of the base OVOD model. While DetRefiner cannot recover objects that are entirely missed by the base detector, using a zero detection threshold helps rescue many low-scored but correct boxes in practice. Thanks to its model-agnostic design, DetRefiner can also be applied to black-box detectors such as T-Rex2 [17] and Grounding DINO 1.5 [35], which are not publicly avail-able; we plan to explore their use via APIs in future work. 8References 
+
+[1] Alexey Bochkovskiy, Chien-Yao Wang, and Hong-Yuan Mark Liao. Yolov4: Optimal speed and accuracy of object detection. arXiv preprint arXiv:2004.10934 , 2020. 1 [2] Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In European confer-ence on computer vision , pages 213–229. Springer, 2020. 1 [3] Mathilde Caron, Hugo Touvron, Ishan Misra, Herv´ e J´ egou, Julien Mairal, Piotr Bojanowski, and Armand Joulin. Emerg-ing properties in self-supervised vision transformers. In Pro-ceedings of the IEEE/CVF international conference on com-puter vision , pages 9650–9660, 2021. 2, 3 [4] Timoth´ ee Darcet, Maxime Oquab, Julien Mairal, and Piotr Bojanowski. Vision transformers need registers. In The Twelfth International Conference on Learning Representa-tions , 2024. 3, 8 [5] Yu Du, Fangyun Wei, Zihe Zhang, Miaojing Shi, Yue Gao, and Guoqi Li. Learning to prompt for open-vocabulary ob-ject detection with vision-language model. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 14084–14093, 2022. 2, 3 [6] Mohamed El Banani, Amit Raj, Kevis-Kokitsi Maninis, Ab-hishek Kar, Yuanzhen Li, Michael Rubinstein, Deqing Sun, Leonidas Guibas, Justin Johnson, and Varun Jampani. Prob-ing the 3d awareness of visual foundation models. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 21795–21806, 2024. 3 [7] Mark Everingham, Luc Van Gool, Christopher KI Williams, John Winn, and Andrew Zisserman. The pascal visual object classes (voc) challenge. International journal of computer vision , 88(2):303–338, 2010. 2, 5, 6 [8] Ruohuan Fang, Guansong Pang, and Xiao Bai. Simple image-level classification improves open-vocabulary object detection. In The 38th Annual AAAI Conference on Artificial Intelligence , 2024. 2 [9] Shenghao Fu, Qize Yang, Qijie Mo, Junkai Yan, Xihan Wei, Jingke Meng, Xiaohua Xie, and Wei-Shi Zheng. Llmdet: Learning strong open-vocabulary object detectors under the supervision of large language models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 14987–14997, 2025. 2, 3, 6 [10] Xiuye Gu, Tsung-Yi Lin, Weicheng Kuo, and Yin Cui. Open-vocabulary object detection via vision and language knowledge distillation. In International Conference on Learning Representations , 2022. 2, 3, 5 [11] Agrim Gupta, Piotr Dollar, and Ross Girshick. Lvis: Adataset for large vocabulary instance segmentation. In Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5356–5364, 2019. 1, 2, 5, 6 [12] Kaiming He, Georgia Gkioxari, Piotr Doll´ ar, and Ross Gir-shick. Mask r-cnn. In Proceedings of the IEEE/CVF inter-national conference on computer vision , pages 2961–2969, 2017. 4 [13] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll´ ar, and Ross Girshick. Masked autoencoders are scalable vision learners. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16000– 16009, 2022. 4 [14] Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distill-ing the knowledge in a neural network. arXiv preprint arXiv:1503.02531 , 2015. 2 [15] P Izmailov, AG Wilson, D Podoprikhin, D Vetrov, and T Garipov. Averaging weights leads to wider optima and better generalization. In 34th Conference on Uncertainty in Artifi-cial Intelligence 2018, UAI 2018 , pages 876–885, 2018. 5 [16] Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc Le, Yun-Hsuan Sung, Zhen Li, and Tom Duerig. Scaling up visual and vision-language representa-tion learning with noisy text supervision. In International conference on machine learning , pages 4904–4916. PMLR, 2021. 1 [17] Qing Jiang, Feng Li, Zhaoyang Zeng, Tianhe Ren, Shilong Liu, and Lei Zhang. T-rex2: Towards generic object detec-tion via text-visual prompt synergy. In European Conference on Computer Vision , pages 38–57. Springer, 2024. 8 [18] Sheng Jin, Xueying Jiang, Jiaxing Huang, Lewei Lu, and Shijian Lu. LLMs meet VLMs: Boost open vocabu-lary object detection with fine-grained descriptors. In The Twelfth International Conference on Learning Representa-tions , 2024. 2, 3 [19] Aishwarya Kamath, Mannat Singh, Yann LeCun, Gabriel Synnaeve, Ishan Misra, and Nicolas Carion. Mdetr-modulated detection for end-to-end multi-modal understand-ing. In Proceedings of the IEEE/CVF international confer-ence on computer vision , pages 1780–1790, 2021. 2 [20] O˘ guzhan Fatih Kar, Alessio Tonioni, Petra Poklukar, Achin Kulshrestha, Amir Zamir, and Federico Tombari. Brave: Broadening the visual encoding of vision-language models. In European Conference on Computer Vision , pages 113– 132. Springer, 2024. 3 [21] Wonjae Kim, Bokyung Son, and Ildoo Kim. Vilt: Vision-and-language transformer without convolution or region su-pervision. In International conference on machine learning ,pages 5583–5594. PMLR, 2021. 4 [22] Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In In The Third International Con-ference on Learning Representations , 2015. 5 [23] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-thing. In Proceedings of the IEEE/CVF international confer-ence on computer vision , pages 4015–4026, 2023. 3 [24] Chunyuan Li, Haotian Liu, Liunian Li, Pengchuan Zhang, Jyoti Aneja, Jianwei Yang, Ping Jin, Houdong Hu, Zicheng Liu, Yong Jae Lee, et al. Elevater: A benchmark and toolkit for evaluating language-augmented visual models. Advances in Neural Information Processing Systems , 35:9287–9301, 2022. 2, 5, 6, 1 [25] Liunian Harold Li, Pengchuan Zhang, Haotian Zhang, Jian-wei Yang, Chunyuan Li, Yiwu Zhong, Lijuan Wang, Lu 
+
+9Yuan, Lei Zhang, Jenq-Neng Hwang, et al. Grounded language-image pre-training. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10965–10975, 2022. 2, 3, 5, 6, 1 [26] Yanqi Li, Jianwei Niu, and Tao Ren. Benefit from seen: Enhancing open-vocabulary object detection by bridging vi-sual and textual co-occurrence knowledge. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 22110–22119, 2025. 2, 3 [27] Chuang Lin, Peize Sun, Yi Jiang, Ping Luo, Lizhen Qu, Gho-lamreza Haffari, Zehuan Yuan, and Jianfei Cai. Learning object-language alignments for open-vocabulary object de-tection. In The Eleventh International Conference on Learn-ing Representations , 2023. 3 [28] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll´ ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In 
+
+European conference on computer vision , pages 740–755. Springer, 2014. 2, 5, 6, 1 [29] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang, Chunyuan Li, Jianwei Yang, Hang Su, et al. Grounding dino: Marrying dino with grounded pre-training for open-set object detection. In Euro-pean conference on computer vision , pages 38–55. Springer, 2024. 1, 2, 3, 6 [30] Ilya Loshchilov and Frank Hutter. Decoupled weight de-cay regularization. In International Conference on Learning Representations , 2019. 5 [31] Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, et al. Simple open-vocabulary object detection. In 
+
+European conference on computer vision , pages 728–755. Springer, 2022. 2 [32] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervi-sion. In International conference on machine learning , pages 8748–8763. PmLR, 2021. 1, 2, 3 [33] Mike Ranzinger, Greg Heinrich, Jan Kautz, and Pavlo Molchanov. Am-radio: Agglomerative vision foundation model reduce all domains into one. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 12490–12500, 2024. 3 [34] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object detection with region proposal networks. IEEE transactions on pattern analysis and machine intelligence , 39(6):1137–1149, 2016. 1 [35] Tianhe Ren, Qing Jiang, Shilong Liu, Zhaoyang Zeng, Wen-long Liu, Han Gao, Hongjie Huang, Zhengyu Ma, Xiaoke Jiang, Yihao Chen, et al. Grounding dino 1.5: Advance the” edge” of open-set object detection. arXiv preprint arXiv:2405.10300 , 2024. 8 [36] Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, Antoine Chassang, Carlo Gatta, and Yoshua Bengio. Fitnets: Hints for thin deep nets. In In Proceedings of ICLR , 2015. 2 [37] Cheng Shi and Sibei Yang. Edadet: Open-vocabulary object detection using early dense alignment. In Proceedings of the IEEE/CVF international conference on computer vision ,pages 15724–15734, 2023. 2 [38] Min Shi, Fuxiao Liu, Shihao Wang, Shijia Liao, Subhashree Radhakrishnan, Yilin Zhao, De-An Huang, Hongxu Yin, Karan Sapra, Yaser Yacoob, et al. Eagle: Exploring the de-sign space for multimodal llms with mixture of encoders. In 
+
+The Thirteenth International Conference on Learning Rep-resentations , 2025. 3 [39] Oriane Sim´ eoni, Huy V Vo, Maximilian Seitzer, Federico Baldassarre, Maxime Oquab, Cijo Jose, Vasil Khalidov, Marc Szafraniec, Seungeun Yi, Micha¨ el Ramamonjisoa, et al. Dinov3. arXiv preprint arXiv:2508.10104 , 2025. 2, 3, 5, 8 [40] Antti Tarvainen and Harri Valpola. Mean teachers are better role models: Weight-averaged consistency targets improve semi-supervised deep learning results. Advances in neural information processing systems , 30, 2017. 5 [41] Shengbang Tong, Zhuang Liu, Yuexiang Zhai, Yi Ma, Yann LeCun, and Saining Xie. Eyes wide shut? exploring the visual shortcomings of multimodal llms. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9568–9578, 2024. 3 [42] Pavan Kumar Anasosalu Vasu, Hadi Pouransari, Fartash Faghri, Raviteja Vemulapalli, and Oncel Tuzel. Mobile-clip: Fast image-text models through multi-modal reinforced training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 15963– 15974, 2024. 2, 3, 5 [43] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszko-reit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information processing systems , 30, 2017. 2, 5 [44] Jiaqi Wang, Pan Zhang, Tao Chu, Yuhang Cao, Yujie Zhou, Tong Wu, Bin Wang, Conghui He, and Dahua Lin. V3det: Vast vocabulary visual detection dataset. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion , pages 19844–19854, 2023. 1, 6 [45] Shuoyuan Wang, Jindong Wang, Guoqing Wang, Bob Zhang, Kaiyang Zhou, and Hongxin Wei. Open-vocabulary calibration for fine-tuned clip. In International Conference on Machine Learning , pages 51734–51754. PMLR, 2024. 2 [46] Size Wu, Wenwei Zhang, Sheng Jin, Wentao Liu, and Chen Change Loy. Aligning bag of regions for open-vocabulary object detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 15254–15264, 2023. 2, 3 [47] Alireza Zareian, Kevin Dela Rosa, Derek Hao Hu, and Shih-Fu Chang. Open-vocabulary object detection using captions. In Proceedings of the IEEE/CVF conference on computer vi-sion and pattern recognition , pages 14393–14402, 2021. 2, 5[48] Beichen Zhang, Pan Zhang, Xiaoyi Dong, Yuhang Zang, and Jiaqi Wang. Long-clip: Unlocking the long-text capability of clip. In European conference on computer vision , pages 310–325. Springer, 2024. 2 
+
+10 [49] Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel Ni, and Heung-Yeung Shum. Dino: Detr with improved denoising anchor boxes for end-to-end object de-tection. In The Eleventh International Conference on Learn-ing Representations , 2023. 1 [50] Xiangyu Zhao, Yicheng Chen, Shilin Xu, Xiangtai Li, Xin-jiang Wang, Yining Li, and Haian Huang. An open and com-prehensive pipeline for unified object grounding and detec-tion. arXiv preprint arXiv:2401.02361 , 2024. 2, 3, 6 [51] Yanhao Zheng and Kai Liu. Training-free boost for open-vocabulary object detection with confidence aggregation. 
+
+arXiv preprint arXiv:2404.08603 , 2024. 2 [52] Yiwu Zhong, Jianwei Yang, Pengchuan Zhang, Chun-yuan Li, Noel Codella, Liunian Harold Li, Luowei Zhou, Xiyang Dai, Lu Yuan, Yin Li, et al. Regionclip: Region-based language-image pretraining. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16793–16803, 2022. 2, 3 [53] Xingyi Zhou, Rohit Girdhar, Armand Joulin, Philipp Kr¨ ahenb¨ uhl, and Ishan Misra. Detecting twenty-thousand classes using image-level supervision. In European confer-ence on computer vision , pages 350–368. Springer, 2022. 2, 3
+
+11 DetRefiner: Model-Agnostic Detection Refinement with Feature Fusion Transformer 
+
+# Supplementary Material 
+
+## 1. Reproducible Evaluation of Open-Vocabulary Object Detectors 
+
+Before applying DetRefiner, we reproduce ten representa-tive open-vocabulary detectors across all benchmarks under a unified evaluation protocol. All reported improvements are measured with respect to these reproduced baselines to ensure consistent comparison. GLIP [25] is implemented using its official repository 4
+
+with min image size set to 800. All other detectors are instantiated via the HuggingFace transformers library 567 .For evaluation, we set the box score threshold to 0 for all models, ensuring that all predicted boxes are retained before computing AP. Unless otherwise specified, we use default inference-time settings for each model (e.g., NMS thresholds), except for the unified zero score threshold and the GLIP image resolution setting. We note that differences in implementation (e.g., Hug-gingFace vs. official repositories), evaluation configura-tions such as the maximum number of predictions per im-age (300 for COCO and 100,000 for LVIS in our setup), and dataset-specific choices (e.g., ODinW13 test splits) may lead to discrepancies with originally reported results. To facilitate reproducibility, we release the full evaluation code and configurations at https://github.com/ hitachi-rd-cv/detrefiner .For COCO [28], we follow the common open-vocabulary setting and feed a single concatenated text prompt containing all 80 category names into models. The category names are concatenated in ascending order of the category IDs defined in the ground-truth annotations. For LVIS [11], we adopt the same strategy as GLIP [25]: the 1,203 category names are first sorted by their category IDs and then partitioned into groups of 40, where each group is used as a separate text prompt. The last three cat-egories, which do not form a full group of 40, are used as a single text prompt containing only these three category names. For both COCO and LVIS, we apply a simple text pre-processing step to the category names: we convert all char-acters to lowercase, replace underscores and hyphens with 
+
+> 4https://github.com/microsoft/GLIP/tree/main
+> 5https : / / huggingface . co / docs / transformers / model_doc/grounding-dino
+> 6https : / / huggingface . co / docs / transformers / model_doc/mm-grounding-dino
+> 7https : / / huggingface . co / collections / iSEE -Laboratory/llmdet
+
+Table 8. Detailed statistics of the ODinW13 datasets [24, 25]. 
+
+Dataset #Classes Test Images AerialMaritimeDrone-Large 5 15 Aquarium-Combined 7 127 CottontailRabbits 1 19 EgoHands-Generic 1 200 North-American-Mushrooms 2 5Packages-Raw 1 4
+
+PascalVOC 20 3422 
+
+Pistols-Export 1 297 Pothole 1 133 Raccoon 1 29 ShellfishOpenImages 3 116 ThermalDogsAndPeople 2 41 VehiclesOpenImages-416x416 5 200 
+
+spaces, and remove parentheses. We observed that these pre-processing steps have negligible impact on the final per-formance, but we apply them consistently for reproducibil-ity. For ODinW13 [24, 25], we follow the official GLIP con-figuration 8. We use as test images the datasets specified in the DATASETS:TEST field of each YAML file in the con-figuration directory, and we construct the text prompts from the corresponding OVERRIDE CATEGORY field. The num-ber of categories and test images for each ODinW13 dataset is summarized in Table 8. 
+
+## 2. Additional Visualization Results 
+
+Figure 4 illustrates how DetRefiner refines predictions from the base detector. It suppresses overconfident false positives and boosts missed true positives using both global and local cues. The bottom row indicates scene-level (class vector) and region-level (patch vector) calibration, which together improve open-vocabulary detection reliability. 
+
+pizza scene Fig. 4(a) shows a pizza image with sev-eral small toppings. The base detector (top-left) assigns low confidence to many pepper and mushroom instances, whereas applying the class and patch vectors (bottom row) upweights boxes supported by global and local cues, so the full DetRefiner (top-right) yields consistently high confi-dence for most true toppings. 
+
+Group photo Fig. 4(b) shows a crowded group photo with unusual color tones and many tiny neckties, socks, and awnings. Although categories such as awning and sock 
+
+remain missed because the original detector cannot detect 
+
+> 8https://github.com/microsoft/GLIP/tree/main/ configs
+
+1them even with a zero-threshold setting, DetRefiner (top-right) reliably detects tiny neckties in the crowd. 
+
+street scene Fig. 4(c) presents a street scene with sign-board, lamppost, trousers, and manhole. Here DetRefiner uses the class vector to boost scene-consistent categories and the patch vector to further upweight boxes aligned with local structures, producing a more complete and reliable confidence distribution than the base detector. 
+
+indoor table scene Fig. 4(d) shows an indoor table with a flower arrangement, tablecloth, and knife. While the base detector mainly scores the central flower highly, DetRefiner raises the confidence of table-related boxes whose features match knives and tablecloth regions, leading to dense and well-calibrated scores for the relevant objects. Figure 5 shows two additional scenes highlighting both the strengths and limitations of DetRefiner. For each exam-ple, the top row shows ground-truth boxes, the middle row compares the base detector (left) with DetRefiner (right), and the bottom row shows predictions from the class-vector branch (left) and the patch-vector branch (right). 
+
+skateboard scene In Figure 5(a), the base detector as-signs low confidence to the wheels and tends to miss them. DetRefiner successfully recovers the wheels with higher confidence, indicating that fused global–local cues can res-cue missed objects. At the same time, spurious boot pre-dictions are actually reinforced and even newly introduced. Because the objects detected as boot are visually ambiguous and can be interpreted as boots, both the class and patch branches assign relatively high probability to boot , so the fused score becomes even larger than the base detector’s score and the false positives remain. 
+
+street worker scene In Figure 5(b), the base detector hallucinates a recliner and misses several signboards and a broom. DetRefiner suppresses the recliner false positive and recovers some signboards, but still fails to detect the broom and some other signboards. In addition, it intro-duces visually plausible yet incorrect predictions such as 
+
+car automobile around the scooter, where the local appear-ance is highly confounding. Moreover, an overconfident 
+
+seahorse prediction is only slightly reduced and remains above the threshold. These cases illustrate that DetRefiner is effective for moderate miscalibration and missed detec-tions, but highly misaligned base scores can still dominate the final confidence and may even increase false positives for ambiguous classes. 2Figure 4. Another qualitative comparison of detection results before and after applying DetRefiner. Top: base detector (left) vs. base detec-tor + DetRefiner (right). Bottom: predictions based on the class vector (left) and patch vector (right). DetRefiner suppresses overconfident false positives and recovers missed objects by combining global and local cues. For visualization, a box score threshold of 0.3 and an IoU threshold of 0.3 are applied for class-wise NMS on all images. 
+
+3Figure 5. Additional qualitative success and failure cases. Top row: ground-truth bounding boxes. For each example, the middle row shows predictions from the base detector (left) and from the base detector with DetRefiner (right). The bottom row shows predictions from the class-vector branch (left) and patch-vector branch (right). For visualization, a box score threshold of 0.3 and an IoU threshold of 0.3 are applied for class-wise NMS on all images. 
+
+4
