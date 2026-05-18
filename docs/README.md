@@ -6,64 +6,64 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-16
-- 运行时间：2026-05-16 20:04:06 UTC
+- 最新运行日期：2026-05-18
+- 运行时间：2026-05-18 20:25:31 UTC
 - 运行状态：成功
 - 本次总论文数：14
-- 精读区：2
-- 速读区：12
+- 精读区：3
+- 速读区：11
 
 ### 今日简报（AI）
-今日聚焦医学影像智能分析，共阅读 14 篇论文，其中深度精读 2 篇。  
-DiffSegLung 的无监督肺部病灶分割和 MicroscopyMatching 的显微图像通用框架显示出较强跨域泛化潜力。  
-建议关注医学影像中扩散模型与多模态匹配算法的应用落地进展。
-- 详情：[/202605/16/README](/202605/16/README)
+今日聚焦医学影像智能化，共精读与速读论文 14 篇，重点解析肺病无监督分割与显微图像处理新框架。  
+扩散式特征提炼与多模态显微匹配是最值得关注的技术方向。  
+建议读者重点了解扩散模型在病灶分割中的应用趋势，关注自动化影像分析的跨平台可用性。
+- 详情：[/202605/18/README](/202605/18/README)
 
 ### 精读区论文标签
-1. [DiffSegLung: Diffusion Radiomic Distillation for Unsupervised Lung Pathology Segmentation](/202605/16/2605.11758v1-diffseglung-diffusion-radiomic-distillation-for-unsupervised-lung-pathology-segmentation)  
+1. [DiffSegLung: Diffusion Radiomic Distillation for Unsupervised Lung Pathology Segmentation](/202605/18/2605.11758v1-diffseglung-diffusion-radiomic-distillation-for-unsupervised-lung-pathology-segmentation)  
    标签：评分：9.5/10、query:pathfeat
-   evidence：手工放射组学描述符作为教师引导学习表征
-2. [MicroscopyMatching: Towards a Ready-to-use Framework for Microscopy Image Analysis in Diverse Conditions](/202605/16/2605.14980v1-microscopymatching-towards-a-ready-to-use-framework-for-microscopy-image-analysis-in-diverse-conditions)  
-   标签：评分：8.5/10、query:cellseg
+   evidence：手工放射组学描述符作为病理分割的教师
+2. [MicroscopyMatching: Towards a Ready-to-use Framework for Microscopy Image Analysis in Diverse Conditions](/202605/18/2605.14980v1-microscopymatching-towards-a-ready-to-use-framework-for-microscopy-image-analysis-in-diverse-conditions)  
+   标签：评分：9.0/10、query:cellseg
    evidence：用于提取生物对象属性的显微镜图像分析框架
+3. [MorphoHELM: A Comprehensive Benchmark for Evaluating Representations for Microscopy-Based Morphology Assays](/202605/18/2605.15383v1-morphohelm-a-comprehensive-benchmark-for-evaluating-representations-for-microscopy-based-morphology-assays)  
+   标签：评分：8.5/10、query:pathfeat
+   evidence：评估基于显微镜形态学分析的特征提取方法的基准
 
 ### 速读区论文标签
-1. [Benchmarking Foundation Models for Renal Lesion Stratification in CT](/202605/16/2605.07749v1-benchmarking-foundation-models-for-renal-lesion-stratification-in-ct)  
-   标签：评分：7.5/10、query:pathfeat
-   evidence：将基础模型嵌入与手工制作的影像组学分类器进行比较
-2. [Med-DisSeg: Dispersion-Driven Representation Learning for Fine-Grained Medical Image Segmentation](/202605/16/2605.14579v1-med-disseg-dispersion-driven-representation-learning-for-fine-grained-medical-image-segmentation)  
+1. [FEFormer: Frequency-enhanced Vision Transformer for Generic Knowledge Extraction and Adaptive Feature Fusion in Volumetric Medical Image Segmentation](/202605/18/2605.11434v1-feformer-frequency-enhanced-vision-transformer-for-generic-knowledge-extraction-and-adaptive-feature-fusion-in-volumetric-medical-image-segmentation)  
+   标签：评分：7.5/10、query:cellseg
+   evidence：器官和病变的体积医学图像分割
+2. [Segmentation, Detection and Explanation: A Unified Framework for CT Appearance Reasoning](/202605/18/2605.15997v1-segmentation-detection-and-explanation-a-unified-framework-for-ct-appearance-reasoning)  
+   标签：评分：7.5/10、query:cellseg
+   evidence：集成解剖结构检测与分割的统一框架
+3. [CRAFT: Clinical Reward-Aligned Finetuning for Medical Image Synthesis](/202605/18/2605.12650v1-craft-clinical-reward-aligned-finetuning-for-medical-image-synthesis)  
+   标签：评分：7.0/10、query:pathfeat
+   evidence：医学合成中的病理相关标准和临床对齐评分
+4. [Towards Unified Surgical Scene Understanding:Bridging Reasoning and Grounding via MLLMs](/202605/18/2605.13530v1-towards-unified-surgical-scene-understandingbridging-reasoning-and-grounding-via-mllms)  
    标签：评分：7.0/10、query:cellseg
-   evidence：基于离散驱动表征的细粒度医学图像分割
-3. [Multimodal Stepwise Clinically-Guided Attention Learning for Pathological Complete Response Prediction in Breast Cancer](/202605/16/2605.07561v1-multimodal-stepwise-clinically-guided-attention-learning-for-pathological-complete-response-prediction-in-breast-cancer)  
-   标签：评分：6.5/10、query:pathfeat
-   evidence：利用多模态集成进行病理响应预测
-4. [XTinyU-Net: Training-Free U-Net Scaling via Initialization-Time Sensitivity](/202605/16/2605.09639v1-xtinyu-net-training-free-u-net-scaling-via-initialization-time-sensitivity)  
+   evidence：在单一模型中桥接推理和视觉定位的统一框架
+5. [Evaluation of Anatomical Shape Priors in Deep Learning-Based Cardiac Multi-Compartment Segmentation](/202605/18/2605.15707v1-evaluation-of-anatomical-shape-priors-in-deep-learning-based-cardiac-multi-compartment-segmentation)  
    标签：评分：6.5/10、query:cellseg
-   evidence：用于医学图像分割的U-Net架构及其模型压缩
-5. [XTinyU-Net: Training-Free U-Net Scaling via Initialization-Time Sensitivity](/202605/16/2605.09639v2-xtinyu-net-training-free-u-net-scaling-via-initialization-time-sensitivity)  
-   标签：评分：6.5/10、query:cellseg
-   evidence：用于医学图像分割的U-Net缩放
-6. [MedCore: Boundary-Preserving Medical Core Pruning for MedSAM](/202605/16/2605.13688v1-medcore-boundary-preserving-medical-core-pruning-for-medsam)  
-   标签：评分：6.5/10、query:cellseg
-   evidence：保持边界的医学分割基础模型剪枝
-7. [SpectraFlow: Unifying Structural Pretraining and Frequency Adaptation for Medical Image Segmentation](/202605/16/2605.14566v1-spectraflow-unifying-structural-pretraining-and-frequency-adaptation-for-medical-image-segmentation)  
-   标签：评分：6.5/10、query:cellseg
-   evidence：面向边界的医学图像分割解码
-8. [Explanation-Aware Learning for Enhanced Interpretability in Biomedical Imaging](/202605/16/2605.10054v1-explanation-aware-learning-for-enhanced-interpretability-in-biomedical-imaging)  
+   evidence：基于深度学习的心脏多腔室分割和形状先验
+6. [Spectral Vision Transformer for Efficient Tokenization with Limited Data](/202605/18/2605.12026v1-spectral-vision-transformer-for-efficient-tokenization-with-limited-data)  
    标签：评分：6.0/10、query:pathfeat
-   evidence：生物医学成像诊断中增强可解释性的解释监督
-9. [DetRefiner: Model-Agnostic Detection Refinement with Feature Fusion Transformer](/202605/16/2605.10190v1-detrefiner-model-agnostic-detection-refinement-with-feature-fusion-transformer)  
+   evidence：医学影像中高效的标记化和特征提取
+7. [Uncovering Latent Pathological Signatures in Pulmonary CT via Cross-Window Knowledge Distillation](/202605/18/2605.12562v1-uncovering-latent-pathological-signatures-in-pulmonary-ct-via-cross-window-knowledge-distillation)  
    标签：评分：6.0/10、query:pathfeat
-   evidence：融合基础模型的全局和图像块特征以优化检测
-10. [Principle-Guided Supervision for Interpretable Uncertainty in Medical Image Segmentation](/202605/16/2605.10984v1-principle-guided-supervision-for-interpretable-uncertainty-in-medical-image-segmentation)  
+   evidence：通过跨窗口知识蒸馏揭示CT中的病理特征
+8. [Weakly Supervised Segmentation as Semantic-Based Regularization](/202605/18/2605.13674v1-weakly-supervised-segmentation-as-semantic-based-regularization)  
    标签：评分：6.0/10、query:cellseg
-   evidence：医学图像分割中可解释的不确定性
-11. [DenseTRF: Texture-Aware Unsupervised Representation Adaptation for Surgical Scene Dense Prediction](/202605/16/2605.11265v1-densetrf-texture-aware-unsupervised-representation-adaptation-for-surgical-scene-dense-prediction)  
+   evidence：使用基础模型的弱监督语义分割
+9. [JANUS: Anatomy-Conditioned Gating for Robust CT Triage Under Distribution Shift](/202605/18/2605.13813v1-janus-anatomy-conditioned-gating-for-robust-ct-triage-under-distribution-shift)  
+   标签：评分：6.0/10、query:pathfeat
+   evidence：通过门控机制将视觉嵌入与宏观放射组学先验结合
+10. [Deep Image Segmentation via Discriminant Feature Learning](/202605/18/2605.14609v1-deep-image-segmentation-via-discriminant-feature-learning)  
    标签：评分：6.0/10、query:cellseg
-   evidence：手术场景密集预测的无监督表示自适应
-12. [CheXTemporal: A Dataset for Temporally-Grounded Reasoning in Chest Radiography](/202605/16/2605.11304v1-chextemporal-a-dataset-for-temporally-grounded-reasoning-in-chest-radiography)  
-   标签：评分：6.0/10、query:cellseg
-   evidence：胸部X光片中病理的局部空间监督
+   evidence：用于精确图像分割边界的损失函数
+11. [Computational Imaging Priors for Wireless Capsule Endoscopy: Monte Carlo-Guided Hemoglobin Mapping for Rare-Anomaly Detection](/202605/18/2605.15062v1-computational-imaging-priors-for-wireless-capsule-endoscopy-monte-carlo-guided-hemoglobin-mapping-for-rare-anomaly-detection)  
+   标签：评分：6.0/10、query:pathfeat
+   evidence：将分析性血红蛋白先验与RGB分类器特征融合
 
 
 <div class="dpr-home-promo-card">

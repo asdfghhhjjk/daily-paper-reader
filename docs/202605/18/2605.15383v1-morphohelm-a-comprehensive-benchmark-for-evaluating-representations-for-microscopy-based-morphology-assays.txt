@@ -1,0 +1,1886 @@
+Title: MorphoHELM: A Comprehensive Benchmark for Evaluating Representations for Microscopy-Based Morphology Assays
+
+URL Source: https://arxiv.org/pdf/2605.15383v1
+
+Published Time: Mon, 18 May 2026 00:22:16 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+# MorphoHELM: A Comprehensive Benchmark for Evaluating Representations for Microscopy-Based Morphology Assays 
+
+Emre Hayir 
+
+Microsoft Research New England 
+
+v-emrehayir@microsoft.com 
+
+Lorin Crawford 
+
+Microsoft Research New England 
+
+lcrawford@microsoft.com 
+
+Alex X. Lu 
+
+Microsoft Research New England 
+
+lualex@microsoft.com 
+
+Abstract 
+
+Microscopy images contain rich information about how cells respond to pertur-bations, making them essential to applications like drug screening. To quantify images, researchers often use representation extraction methods, and recent years have seen a proliferation of deep learning methods. While measuring the quality of these representations is essential, evaluation remains fragmented, with each proposed model evaluated on different tasks and datasets, using custom pipelines and metrics, making it difficult to fairly compare models. Here, we introduce MorphoHELM, a comprehensive open benchmark for evaluating feature extraction methods for Cell Painting, the most widely-used morphological profiling assay. MorphoHELM consolidates evaluation standards in the field, extends and corrects them to be more robust, and evaluates on the widest range of methods to date. A defining feature of the benchmark is that each task is evaluated at different degrees of batch effects (or technical noise), directly quantifying how the ability of methods to detect biological signal degrades as noise increases. Together, these properties enable MorphoHELM to detect trade-offs between methods, and we demonstrate that models that excel at certain kinds of biological signal are weaker at others. We show that no existing model outperforms classic computer vision analytic strategies across all settings, which remain the strongest general use-case representations. All datasets, code, and evaluation tools are publicly available at https://github.com/microsoft/MorphoHELM. 
+
+1 Introduction 
+
+High-content microscopy has emerged as a key technology for measuring how cells respond to perturbations [ 1, 2 ]. Rather than taking a single specialized measurement, microscopy images capture how many different aspects of the morphology of cells may respond to perturbation, from nuclear shape to cytoskeletal organization to organelle distribution [ 3]. Because cell morphology is the consequence of many biological processes, it serves as a holistic, unbiased readout, making image-based assays critical for drug discovery and functional genomics [4, 5]. Since screens can generate millions of images, their utility depends on the quality of downstream computational methods. Researchers quantify images using representations, vectors of features that quantify cellular morphology holistically [ 6 , 7]. Because perturbations can alter cell morphology in ways that are statistically reproducible yet visibly imperceptible, analyses demand representations that are not only sensitive to these subtle biological changes but also robust to technical confounders 
+
+> Preprint.
+> arXiv:2605.15383v1 [cs.CV] 14 May 2026
+
+(often referred to as “batch effects”) such as differences in laboratory-specific imaging hardware [ 5, 8]. This has motivated a growing body of work on representations, spanning classical image analysis pipelines, self-supervised learning, and zero-shot transfer of pretrained vision models [9]. However, the evaluation of representations remains fragmented. Many works evaluate on their own proposed tasks using different preprocessing pipelines and metrics, thus making direct comparison across studies impossible. While some systematic benchmarks exist, most focus on a narrow range of settings, usually relying on a single definition of biological signal in a single batch effect setting (e.g., requiring methods to compare different experiments reproduced by the same laboratory, but not across laboratories). This means that trade-offs between methods, which can influence adoption for applications, remain unclear. We reason that certain methods can excel for some types of biological signal (e.g., assessing chemical versus genetic perturbations), or identify biological signal in settings where batch effects are less severe. To address this, we introduce MorphoHELM (Holistic Evaluation of Learned Morphological Rep-resentations), an open benchmark for evaluating feature extraction methods for the morphological profiling of microscopy images. Here, we focus on Cell Painting data, the most widely adopted assay in the field, which stains cells with six fluorescent dyes imaged over five channels [ 1] to visualize eight cellular compartments. MorphoHELM provides several key contributions: • We aim to be more comprehensive of biological signal. We aggregate existing proposals for evaluating Cell Painting representations, including enriching for chemical compounds with similar mechanisms of action (MoA) during retrieval, enriching for genes of similar function during retrieval, and clustering replicates of compound perturbations. • Although our tasks are inspired by previous benchmarks, we evaluate a broader range of representation methods than prior studies. We also identify and address implementation choices that can distort benchmark interpretation, including clustering metrics that are sensitive to latent dimensionality and correlation structure, and odds-ratio summaries that can be skewed by biased imputation of infinite values. We show that these issues can substantially affect conclusions about representation quality • Finally, we extend tasks so that they are assessed with varying degrees of batch effects, quantifying how biological signal degrades as confounding becomes more severe. This enables the articulation of trade-offs between methods as a function of batch effect severity. We evaluate a diverse set of feature extraction methods adopted in the field: classical hand-crafted features, transfer learning from vision foundation models, and domain-specific models pre-trained on large-scale microscopy data. All datasets, code, and evaluation tools are publicly available at https://github.com/microsoft/MorphoHELM. 
+
+2 Related Works 
+
+Evaluating sensitivity to biological signal: A variety of metrics have been proposed to assess if representation methods are sensitive to morphological changes induced by a perturbation. Some works rely upon replicate retrieval or clustering [ 10 , 11 ], which tests if replicates of the same perturbation are grouped in representation space. While this strategy rewards methods that identify reproducible biological changes across independent experiments, it can be noisy as some perturbations may not induce morphological responses from cells. Hence, other works have proposed assessing if biologically related perturbations—MoA for compound perturbations [ 12 ], and gene pathway or interaction for genetic perturbations [ 13 ]—are preferentially retrieved given a sample. However, these strategies are limited by the availability and bias of labels. Hence, existing evaluations of biological signal have trade-offs. For this reason, we aggregate and standardize all of these strategies in MorphoHELM, while prior benchmarks have typically focused on one strategy. 
+
+Testing robustness to batch effects: Prior replicate retrieval and clustering benchmarks test at different levels of batch effect severity. The earliest benchmarks using the BBBC021 dataset originally proposed reporting Not Same Batch (NSB) matching, which restricts nearest neighbors to those not in the same experimental batch [ 14 , 15 ]. This idea has been adopted in later works, most ambitiously by the benchmarks of Arevalo et al. [8] , which evaluate five scenarios of increasing complexity. The importance of this procedure was demonstrated with the RxRx1 [ 11 ] benchmark, which originally did not implement this and reported accuracies of over 80% on gene perturbation replicate retrieval. Updated work in the RxRx1-WILDS [ 16 ] version of the benchmark with held out batches resulted in 2accuracies around 40%, suggesting performance was overestimated due to overfitting on batch effects. Despite their importance, these ideas have not yet been implemented for MoA or gene pathway enrichment, so MorphoHELM extends batch effect robustness testing to these strategies. 
+
+3 Methods 
+
+3.1 Overview of Benchmark Design 
+
+MorphoHELM includes three categories of biological signal retrieval tasks: • Mechanism of action (MoA) enrichment measures if, given images of cells treated with a chemical compound, a method retrieves images of cells treated with other compounds with the same MoA. • Gene pathway enrichment measures if, given images of cells with a specific gene knocked out, a method retrieves images of cells with other gene knock-outs where the genes have similar functions (e.g., are in the same pathway or interact). • Replicate retrieval consistency measures if, given an image of a cell treated with a pertur-bation, a method preferentially retrieves replicates treated with the same perturbation (as opposed to other, different perturbations). A central design principle of MorphoHELM is that biological signal retrieval and robustness to batch effects cannot be meaningfully evaluated in isolation. A model that is effective at comparing images generated by the same laboratory may fail entirely comparing images across laboratories. MorphoHELM evaluates each biological retrieval task across different levels of batch effect stringency, directly quantifying how signal degrades as technical variation increases. We define four levels of stringency that apply across all tasks (although note some tasks may be missing some levels due to data availability): 1. No Restriction (Baseline/NR) : Retrieved samples can be any sample. 2. Not Same Batch (NSB) : Candidates from the same experimental batch are excluded, testing robustness to day-to-day variation between batches. 3. Not Same Source (NSS) : Candidates from the same institution are excluded, testing robust-ness to domain shifts like microscopy hardware differences. 4. Not Same Layout (NSL) : High-throughput microscopy experiments are conducted on plates, which contain hundreds of individual wells, each containing an independent perturbation. In many experiments, the position of perturbations on plates is fixed across replicates, but previous work has demonstrated that position on a plate induces significant batch effects [ 5]. Hence, in this setting, we exclude candidates sharing the same position. A robust model minimizes the performance drop across levels, while a biologically sensitive model may have the highest performance across all or some of these settings. More details on the implemen-tation of these levels of batch effect stringency are provided in Appendix A.1. 
+
+3.2 Metrics 3.2.1 Enrichment task metrics 
+
+Our MoA and gene pathway enrichment tasks rank image representations based upon their similarity to a query sample (by cosine similarity) and measure if samples sharing the same biological label are enriched at the top of the ranking. Previous works have proposed different metrics across tasks. For MoA enrichment, Moshkov et al. [12] proposed reporting the average odds ratio of enrichment across samples. For gene pathway enrichment, Celik et al. [13] proposed the percentage of samples with a significant number of retrievals sharing the same gene pathway at a predefined cut-off. We reasoned these metrics complement each other: the average odds ratio can be skewed by a small number of highly enriched samples, while the percent significant may overly reward methods that have low recall but significant enrichment across many samples. Hence, we report both metrics for both tasks, harmonizing the evaluations. A more detailed description of both metrics is available in Appendix A.2 and Appendix A.3. Additionally, we update the average odds ratio metric to be more robust to biological labels with few members. In these cases, there is a higher chance of all members being retrieved within the top 3of the ranking, yielding an infinite odds ratio. Moshkov et al. [12] arbitrarily impute with the total sample size when this occurs which results in a tail of extremely high odds ratios that skews the average (Appendix D.1). Instead, we apply modified Haldane-Anscombe correction [ 17 ], which is less arbitrary and quenches extreme values (Appendix D.1). Finally, as some outliers still persist, we report the geometric mean as our final metric, which further reduces the influence of extreme outliers as shown in statistical practice [18]. 
+
+3.2.2 Replicate retrieval consistency metrics 
+
+We adopt K-nearest-neighbor (kNN) accuracy metrics introduced in a variety of previous works [15 , 19 ]. Given query samples treated with specific perturbations, this metric measures the percent of times the nearest neighbor (based upon cosine similarity in representation space) is treated with the same perturbation when retrieving from a large database of samples treated with different perturbations. However, kNN is a highly local metric that may not fully identify methods that globally cluster samples with the same perturbation. To address this, Arevalo et al. [8] proposed applying clustering metrics originally adopted by single-cell transcriptomic benchmarks, including Leiden ARI, Leiden NMI, and Silhouette label scores. We found that these metrics are brittle when the number of unique perturbations is large relative to the number of replicates per perturbation, as is the case in large-scale compound screens. Specifically, in the scenario of Arevalo et al. [8] that evaluates across multiple microscopes, laboratories, and tens of thousands of compounds with few replicates, the resulting clustering problems can have over 80,000 clusters with as few as 2 samples per cluster. Under these conditions, clustering metric differences between methods are not driven by biological signal: in Appendix D.3, we show that randomly permuting treatment labels while preserving batch structure yields the same performance gaps between methods, indicating the gaps are attributable to differences in latent dimensionality and correlation structure rather than biological content. Arevalo et al. [8] propose contrasting these clustering metrics for the same representations on biological labels versus batch labels, to assess trade-offs in biological sensitivity versus batch effects. MorphoHELM instead evaluates replicate retrieval at increasing degrees of batch effects. We also instead adopt as our global metric, the mean average precision (mAP) across samples. We rank other samples based on their distance from a query sample. The mAP then measures if samples with the same compound treatment are preferentially retrieved at the top of the ranking. However, including all samples means the mAP focuses on measuring if methods identify morphological impacts of compounds that distinguish them from other compounds. Hence, we also calculate the mAP using only negative controls as confounders, which less stringently measures if methods detect whether cells exhibit some phenotype distinct from negative controls. A full description of how metrics are implemented across levels of batch effect severity is in Appendix A.1. 
+
+3.3 Dataset Curation 
+
+As our benchmarks rely on identifying datasets with chemical and genetic perturbations, and with replicates reproduced across batches, laboratories, and plate layouts, we curated public datasets derived from two primary sources: the Broad Bioimage Benchmark Collection (BBBC) and the JUMP-Cell Painting (JUMP-CPG) consortium. A summary of these datasets is provided in Table 1, with detailed statistics in Appendix B.1. Table 1: Summary of the included datasets used for evaluation. 
+
+Dataset Name Replicated Across Multiple Institutions Genetic Perturbation Chemical Perturbation 
+
+BBBC036 ✗ ✗ ✓
+
+cpg-MoA ✓ ✗ ✓
+
+cpg-CRISPR ✗ ✓ ✗
+
+cpg-target2 ✓ ✗ ✓
+
+cpg-compound ✓ ✗ ✓
+
+For gene set enrichment tasks, we follow Celik et al. [13] and use labels derived from five databases of cellular signaling pathways and protein complexes: CORUM [ 20 ], HuMAP [ 21 ], StringDB [ 22 ], SIGNOR [ 23 ], and Reactome [ 24 ]. These databases are described further in Appendix 6. For MoA 4enrichment tasks, we use MoA labels for BBBC036 and cpg-MoA compounds, originally transferred from the Drug Repurposing Hub [25]. 
+
+3.4 Model Selection 
+
+We curate a cross-section of representation learning and extraction strategies currently used for morphological profiling including classical feature engineering methods (CellProfiler [ 6]), trans-fer learning from natural vision foundation models (ImageNet-Trained ResNet101 [ 26 ], DINOv2 (ViT-B/14) [ 27 ]), and microscopy foundation models trained on large-scale Cell Painting datasets (OpenPhenom [ 28 ]), on distinct fluorescent microscopy datasets that have been demonstrated to transfer well to Cell Painting datasets (SubCell [ 29 ]), and multi-modally on Cell Painting and chem-ical compound structures (CLOOME [ 30 ]). Since it remains undetermined if using a CLS token embedding or averaging patch embeddings is best practice, we experiment with both when perform-ing transfer learning from DINOv2,. In addition, we include an untrained, randomly initialized ResNet101 as a lower bound baseline. A detailed description of models is available in Appendix C.1. 
+
+3.5 Preprocessing, Postprocessing and Quality Control Pipelines 
+
+To ensure reliability, we implemented a rigorous quality-control pipeline. This pipeline addresses technical artifacts at the image level and filters low-quality samples to maximize the chance that sam-ples reflect their label, as opposed to having no signal identifiable by any method (e.g., because they are empty images). In addition, we preprocess images and postprocess representations consistently to ensure fairness across all methods. 
+
+3.5.1 Image Preprocessing 
+
+Prior to feature extraction, raw microscopy images were converted to 8-bit PNG format to standardize dynamic range and reduce storage requirements. We then applied illumination correction to all fields of view to rectify uneven lighting and vignetting artifacts introduced by the optical system. 
+
+3.5.2 Sample Quality Control 
+
+We applied a series of filtering steps to remove noisy data at the batch, well, and channel levels: • Channel De-duplication: Cell Painting collects five fluorescent channels for each mi-croscopy image. As each channel should show a distinct set of cellular compartments, images with duplicated imaging channels are removed as artifacts. • Cell Count Filtering: We removed wells with insufficient cell counts. We estimated the global cell count distribution by sampling 5,000 images. Based on this distribution, we removed wells falling in the bottom 5th percentile. 
+
+3.5.3 Feature Normalization 
+
+While some previous benchmarks have used representations as-is (e.g. [ 12 ]), we observed that this does not control for varying dimensionality or redundant features across methods. In particular, CellProfiler features depend upon scaling and PCA for performance Appendix D.4, likely due to its much higher dimensionality and inclusion of many redundant features. Hence, we decided to standardize all features to the same dimensionality and postprocess with basic batch effect correction methods in a fixed feature normalization pipeline applied to each method: 1. Platewise Scaling and PCA: First, features were scaled to a standard range on a per-plate basis. We then applied Principal Component Analysis (PCA) across the entire dataset to reduce dimensionality and denoise the feature space. 2. Platewise Robust Standardization: To align distributions across different experimental runs, we applied a Median Absolute Deviation (MAD) "Robustize" transformation. This was performed on a per-plate basis. Previous works have proposed applying whitening transformations to reduce batch-specific signatures in representations. However, these works generally assess whitening as part of a pipeline with scaling and PCA, and do not isolate the impact of steps. We systematically ablate parts of this pipeline, and find that scaling and PCA improve representation performance across tasks and settings, but whitening harms performance in most cases Appendix D.4. This is consistent with findings of Arevalo et al. [8] where whitening can reduce performance under high noise scenarios. We also show the above proposed pipeline yields performance increases for almost all representations and settings. 54 Results 
+
+4.1 MoA Enrichment                                     
+
+> NR
+> DINOv2 CLS
+> ResNet
+> DINOv2 Patch
+> CellProfiler
+> OpenPhenom
+> SubCell
+> CLOOME
+> ResNet (Untrained)
+> 0.095
+> 0.089
+> 0.085
+> 0.084
+> 0.075
+> 0.075
+> 0.074
+> 0.036
+> Fraction Significant
+> BBBC036
+> NR NSB NSS
+> 0.143 0.071 0.037
+> 0.137 0.073 0.035
+> 0.136 0.07 0.036
+> 0.128 0.06 0.025
+> 0.12 0.05 0.022
+> 0.13 0.046 0.006
+> 0.094 0.032 0.011
+> 0.07 0.017 0.007
+> Fraction Significant
+> cpg-MoA
+> 0
+> 0.05
+> 0.1
+> 0.15
+> NR
+> DINOv2 CLS
+> CellProfiler
+> CLOOME
+> DINOv2 Patch
+> ResNet
+> OpenPhenom
+> SubCell
+> ResNet (Untrained)
+> 11 .37
+> 11 .23
+> 11 .09
+> 11 .05
+> 10 .92
+> 10 .9
+> 10 .78
+> 9.72
+> Geometric Mean OR
+> BBBC036
+> NR NSB NSS
+> 12 .110 .16 9.51
+> 12 .13 10 .12 9.52
+> 11 .94 10 .04 9.53
+> 11 .53 10 .01 9.44
+> 11 .35 9.65 9.19
+> 11 .36 9.62 8.78
+> 10 .54 9.19 8.9
+> 9.61 8.93 8.74
+> Geometric Mean OR
+> cpg-MoA
+> 8
+> 9
+> 10
+> 11
+> 12
+
+Figure 1: MoA enrichment. Restrictions: NR = No Restriction, NSB = Not Same Batch, NSS = Not Same Source. We report MoA enrichment results in Figure 1 where we observe that both metrics degrade in performance as batch effects become more severe. All models perform best on settings with no matching restriction (we note that the BBBC036 dataset only has this setting due to the nature of its data collection). However, all models also exhibit the worst performance on the “Not Same Source” setting. This performance drop is particularly stark for the Fraction Significant metric. Statistically, this metric has the same interpretation as a false discovery rate equal to 0.05. All models perform below this level, suggesting that retrieving biologically similar compounds when comparing with data generated from a different distribution remains an unsolved problem, even when institutions use similar collection procedures and when data is postprocessed to mitigate batch effects. Across all settings, natural image foundation models are the best performers, with DINOv2 CLS token outperforming ResNet, possibly due to its self-supervised training strategy enabling a more expansive training dataset. Foundation models trained on microscopy images perform worse than DINOv2. This is most pronounced on the Fraction Significant metric, and less so on the Geometric Mean OR. We observed some disagreement between our Fraction Significant and Geometric Mean OR metrics: for the “Not Same Batch” setting, while DINOv2 and ResNet outperform CellProfiler and CLOOME for Fraction Significant, with the exception of DINOv2 using the CLS token, these models perform worse for Geometric Mean OR. This suggests that, while natural image foundation models may capture a wider breadth of MoAs, other models may more deeply enrich for particular MoAs. To investigate this behavior further, we calculated the Jaccard similarity between lists of compounds that retrieve significantly enriched MoAs as shown in Figure 2. We find methods exhibit trade-offs in which compounds they discover enriched signal. Crucially, while natural image foundation models enrich for similar compounds across models, other strategies find associations for distinct compounds not uncovered by natural image foundation models. This result cautions against drawing the conclusion that because they achieve the highest metrics on our benchmark, natural image foundation models are superior for all applications, as they appear to be relatively insensitive to certain MoAs captured by other models. 
+
+4.2 Gene Pathway Enrichment 
+
+We report average cpg-CRISPR metrics over all gene annotation databases in Figure 3 (results for individual databases are available in Appendix D.2). Similar to MoA enrichment, performance drops as the severity of batch effects increases. Note that due to the nature of the cpg-CRISPR dataset, only the Not Same Batch setting is possible. Compared to the MoA enrichment benchmarks, the performance of models changes. Although the natural image foundation models (DINOv2 and ResNet) remain strong performers, CellProfiler and CLOOME emerge as the top models in the No Restriction setting (although CLOOME loses its 6CellProfiler 
+
+> CLOOME
+> DINOv2 CLS
+> DINOv2 Patch
+> OpenPhenom
+> ResNet
+> ResNet (Untrained)
+> SubCell
+
+CellProfiler 
+
+CLOOME 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+ResNet 
+
+ResNet (Untrained) 
+
+SubCell                                                                                                                 
+
+> 10.42 0.47 0.39 0.44 0.48 0.21 0.41
+> 0.42 10.46 0.40.44 0.44 0.24 0.42
+> 0.47 0.46 10.66 0.50.60.22 0.46
+> 0.39 0.40.66 10.48 0.53 0.20.47
+> 0.44 0.44 0.50.48 10.50.29 0.49
+> 0.48 0.44 0.60.53 0.510.19 0.48
+> 0.21 0.24 0.22 0.20.29 0.19 10.24
+> 0.41 0.42 0.46 0.47 0.49 0.48 0.24 1
+> BBBC036 MoA
+> compounds
+> 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> CellProfiler
+> CLOOME
+> DINOv2 CLS
+> DINOv2 Patch
+> OpenPhenom
+> ResNet
+> ResNet (Untrained)
+> SubCell
+> 10.50.56 0.53 0.46 0.51 0.33 0.51
+> 0.510.51 0.56 0.43 0.52 0.28 0.52
+> 0.56 0.51 10.74 0.48 0.62 0.30.54
+> 0.53 0.56 0.74 10.48 0.64 0.31 0.53
+> 0.46 0.43 0.48 0.48 10.47 0.32 0.45
+> 0.51 0.52 0.62 0.64 0.47 10.28 0.5
+> 0.33 0.28 0.30.31 0.32 0.28 10.32
+> 0.51 0.52 0.54 0.53 0.45 0.50.32 1
+> cpg-MoA
+> compounds
+> 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+
+Figure 2: Pairwise Jaccard similarity between least-restrictive MoA significant-compound discovery sets under the main postprocessing setting. 
+
+NR NSB 
+
+CLOOME 
+
+CellProfiler 
+
+DINOv2 Patch 
+
+DINOv2 CLS 
+
+OpenPhenom 
+
+ResNet 
+
+SubCell 
+
+ResNet (Untrained) 
+
+0.072 0.006 
+
+0.065 0.014 
+
+0.063 0.011 
+
+0.061 0.012 
+
+0.06 0.006 
+
+0.059 0.009 
+
+0.059 0.006 
+
+0.047 0.001 
+
+Fraction Significant 
+
+cpg-CRISPR 
+
+0
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.1
+
+NR NSB 
+
+CLOOME 
+
+CellProfiler 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+SubCell 
+
+ResNet 
+
+ResNet (Untrained) 
+
+13 .01 11 .85 
+
+12 .86 11 .96 
+
+12 .77 11 .95 
+
+12 .77 11 .98 
+
+12 .71 11 .77 
+
+12 .71 11 .79 
+
+12 .7 11 .89 
+
+12 .32 11 .59 
+
+Geometric Mean OR 
+
+cpg-CRISPR 
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+Figure 3: Gene Pathway Enrichment. performance advantage in the Not Same Batch setting). Conversely, ResNet is the worst performing model on our Geometric Mean OR metric (except for our untrained ResNet baseline), despite being relatively strong for MoA enrichment. This indicates that different models may have trade-offs across biological tasks. Intriguingly, models may exhibit generalization among tasks that doesn’t match its training distribution: CLOOME is trained multi-modally on chemical compounds, which are more relevant for MoA enrichment than genetic function enrichment. 
+
+4.3 Replicate Retrieval Consistency 
+
+We show metrics for replicate retrieval consistency in Figure 4. As with prior tasks, performance degrades across models with stronger batch effects. For these datasets, we have some replicates employing different plate layouts on which all models perform substantially worse relative to even the Not Same Source evaluations for the cpg-target2 dataset, suggesting that position on a plate is a major contributor to batch effects (consistent with observations previously documented by Chandrasekaran et al. [31] ). This observation is not made for the cpg-compound dataset. We speculate that this is because this dataset reflects a more challenging replicate retrieval problem due to the much larger number of compounds, so even at the Not Same Source level, all methods already have very low performance. However, for the kNN Recall@1 metric, models show some improvements over random 7NR NSB NSS NSL 
+
+CellProfiler 
+
+DINOv2 CLS 
+
+ResNet 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+CLOOME 
+
+SubCell 
+
+ResNet (Untrained)                             
+
+> 25 .38 28 .49 14 .64 5.04
+> 20 .33 21 .73 12 .77 5.07
+> 18 .92 20 .06 11 .09 4.59
+> 18 .34 19 .93 11 .43 4.82
+> 17 .59 20 .13 9.13 4.2
+> 18 .37 22 .24 5.65 4.38
+> 16 .81 18 .39 10 .12 3.97
+> 3.56 4.12 1.78 0.87
+> kNN Recall@1 — cpg-tgt2 (301 compounds)
+> 0
+> 10
+> 20
+> 30
+> NR NSB NSS NSL
+
+CellProfiler 
+
+CLOOME 
+
+OpenPhenom 
+
+DINOv2 CLS 
+
+ResNet 
+
+SubCell 
+
+DINOv2 Patch 
+
+ResNet (Untrained)                             
+
+> 0.89 0.73 0.08 0.28
+> 0.42 0.31 0.01 0.2
+> 0.30.23 0.04 0.12
+> 0.27 0.18 0.04 0.1
+> 0.24 0.15 0.04 0.11
+> 0.22 0.14 0.03 0.09
+> 0.21 0.13 0.03 0.09
+> 0.03 0.02 0.01 0.01
+> kNN Recall@1 — cpg-compound (30,138 compounds)
+> 0
+> 1
+> 2
+> 3
+> 4
+> NR NSB NSS NSL
+
+CellProfiler 
+
+DINOv2 CLS 
+
+ResNet 
+
+DINOv2 Patch 
+
+SubCell 
+
+OpenPhenom 
+
+CLOOME 
+
+ResNet (Untrained)                             
+
+> 4.66 4.82 3.93 0.68
+> 3.53 3.69 3.12 0.74
+> 3.33 3.45 2.61 0.66
+> 3.04 3.22.71 0.61
+> 2.44 2.59 2.03 0.51
+> 2.34 2.51.74 0.47
+> 1.69 1.86 0.93 0.35
+> 0.62 0.64 0.52 0.19
+> mAP — cpg-tgt2 (301 compounds)
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> NR NSB NSS NSL
+
+CellProfiler 
+
+CLOOME 
+
+OpenPhenom 
+
+DINOv2 CLS 
+
+ResNet 
+
+DINOv2 Patch 
+
+SubCell 
+
+ResNet (Untrained)                          
+
+> 0.42 0.36 0.11 0.14
+> 0.25 0.17 0.02 0.12
+> 0.20.16 0.05 0.08
+> 0.17 0.13 0.06 0.07
+> 0.16 0.11 0.06 0.08
+> 0.14 0.10.05 0.06
+> 0.14 0.10.05 0.06
+> 0.03 0.03 0.02 0.01
+> mAP — cpg-compound (30,138 compounds)
+> 0
+> 0.2
+> 0.4
+> 0.6
+
+Figure 4: kNN replicate retrieval. matching. For example, the expected random Recall@1 for cpg-target2 is 0.33, and the weakest models show about 10 × better performance even in the most challenging Not in Same Layout setting, contrary to MoA enrichment, suggesting for replicate retrieval consistency, all methods detect some reproducible biological signature. CellProfiler features are superior to any representation learning strategy on the kNN Recall@1 and mAP metrics across most settings. This contradicts some previous works that show CellProfiler features being outperformed by representation learning procedures [ 12 ]. One explanation is in this work, we apply standardized postprocessing operations that control for dimensionality, de-correlate redundant features, and reduce batch effects to all representations. While this procedure benefits all methods, it most disproportionately benefits CellProfiler features (Appendix D.4), which are higher dimensionality and contain many more redundant features than representations learned by deep learning. Additionally, we note, unlike the MoA and gene pathway enrichment tasks which query using averaged representations across multiple samples and can reduce noise, replicate retrieval consistency operates on individual samples, so it is possible that CellProfiler features are more robust in this setting. 
+
+5 Conclusion 
+
+We introduce MorphoHELM, a comprehensive benchmark for evaluating representations for microscopy-based morphology assays. While MorphoHELM draws from existing proposals for evaluation, it aggregates strategies from previously proposed benchmarks in a single standardized 8benchmark suite, corrects issues in the implementation of previous proposals, and evaluates over a much wider range of methods than previous works. Each of these advances yields insights for the field. First, by contrasting evaluation strategies, MorphoHELM exposes trade-offs between methods. We show trade-offs with microscopy foundation models. For example, CLOOME excels at gene pathway enrichment tasks but not MoA enrichment or replicate retrieval consistency, and SubCell shows opposite trends. CellProfiler features perform consistently well across all tasks, which may be consistent with continued adoption of these features despite representation learning methods frequently claiming better performance. Although a clear ranking of methods by performance emerges for each task, methods still exhibit trade-offs in what kinds of biological signal they detect within tasks: for our MoA enrichment tasks, we show that distinct methods enrich MoAs for distinct compounds. Second, correcting implementation issues and standardizing processing alters interpretation. Most notably, we show that CellProfiler performance may have been underestimated in previous works, because lightweight postprocessing corrections like PCA disproportionately affect these features which can be seen in Appendix D.4. Third, by benchmarking a wider range of models, we show that microscopy foundation model efforts fall short of using frozen natural image foundation models out-of-the-box, with DINOv2 outperforming all microscopy foundation models we evaluated in almost all settings. Together, these insights mean that MorphoHELM highlights opportunities for model improvement. When comparing data generated by different laboratories, we showed that models have negligible performance over random guessing. This suggests that detecting biological signal in a high noise environment remains an area for significant improvement in the future. We note some limitations and future directions. We apply a simple, standardized normalization pipeline that ensures that no method receives bespoke treatment. However, some prior methods implement extensive postprocessing of their features [ 3, 12 , 8 ], and future work should assess if some of these postprocessing strategies are more critical to some methods over others. Critically, we showed that all representation learning methods are worse than CellProfiler in the replicate retrieval consistency task, and unlike the other two tasks, this task operates on individual sample-level representations (rather than averaging multiple samples together). Averaging over samples reduces noise because variability in representations across replicates averages out, so it is possible this task requires more extensive post-processing than others. Additionally, we only focus on Cell Painting, but morphological profiling extends to other staining panels, label-free imaging, and live-cell assays. The transferability of our findings to these other modalities is unverified. Extending the benchmark to additional assays would test whether the conclusions reflect more general properties of the methods. 
+
+6 Broader Impacts 
+
+Cell Painting benchmarks can accelerate biological discovery by making representation-learning methods easier to compare across datasets, perturbation types, and batch-effect settings. By em-phasizing robustness under increasingly stringent evaluation conditions, this work may help reduce overoptimistic claims and encourage more reliable deployment of image-based profiling methods in drug discovery and functional genomics. At the same time, benchmarks can shape research incentives: if used uncritically, they may overemphasize leaderboard performance over biological validity, reproducibility, or downstream utility. We encourage users to use MorphoHELM results in accordance with dataset provenance, perturbation coverage, and task-specific biological assumptions. 9References 
+
+[1] Mark-Anthony Bray, Shantanu Singh, Han Han, Chadwick T Davis, Blake Borgeson, Cathy Hartland, Maria Kost-Alimova, Sigrun M Gustafsdottir, Christopher C Gibson, and Anne E Carpenter. Cell painting, a high-content image-based assay for morphological profiling using multiplexed fluorescent dyes. Nature Protocols , 11(9):1757–1774, August 2016. URL: http: //dx.doi.org/10.1038/nprot.2016.105 , doi:10.1038/nprot.2016.105. [2] Srijit Seal, Maria-Anna Trapotsi, Ola Spjuth, Shantanu Singh, Jordi Carreras-Puigvert, Nigel Greene, Andreas Bender, and Anne E. Carpenter. Cell painting: a decade of discovery and innovation in cellular imaging. Nature Methods , 22(2):254–268, December 2024. URL: 
+
+http://dx.doi.org/10.1038/s41592-024-02528-8 , doi:10.1038/s41592-024-02528-8. [3] Juan C Caicedo, Sam Cooper, Florian Heigwer, Scott Warchal, Peng Qiu, Csaba Molnar, Aliaksei S Vasilevich, Joseph D Barry, Harmanjit Singh Bansal, Oren Kraus, Mathias Wawer, Lassi Paavolainen, Markus D Herrmann, Mohammad Rohban, Jane Hung, Holger Hennig, John Concannon, Ian Smith, Paul A Clemons, Shantanu Singh, Paul Rees, Peter Horvath, Roger G Linington, and Anne E Carpenter. Data-analysis strategies for image-based cell profiling. 
+
+Nature Methods , 14(9):849–863, 2017. URL: http://dx.doi.org/10.1038/nmeth.4397 ,doi:10.1038/nmeth.4397. [4] Christian Scheeder, Florian Heigwer, and Michael Boutros. Machine learning and image-based profiling in drug discovery. Current Opinion in Systems Biology , 10:43–52, 2018. URL: 
+
+http://dx.doi.org/10.1016/j.coisb.2018.05.004 , doi:10.1016/j.coisb.2018.05.004. [5] Srinivas Niranj Chandrasekaran, Hugo Ceulemans, Justin D Boyd, and Anne E Carpenter. Image-based profiling for drug discovery: due for a machine-learning upgrade? Nat. Rev. Drug Discov. , 20(2):145–159, February 2021. [6] Anne E Carpenter, Thouis R Jones, Michael R Lamprecht, Colin Clarke, In Han Kang, Ola Friman, David A Guertin, Joo Han Chang, Robert A Lindquist, Jason Moffat, Polina Golland, and David M Sabatini. CellProfiler: image analysis software for identifying and quantifying cell phenotypes. Genome Biol. , 7(10):R100, October 2006. [7] David R. Stirling, Madison J. Swain-Bowden, Alice M. Lucas, Anne E. Carpenter, Beth A. Cimini, and Allen Goodman. Cellprofiler 4: improvements in speed, utility and usability. 
+
+BMC Bioinformatics , 2021. URL: http://dx.doi.org/10.1186/s12859-021-04344-9 ,doi:10.1186/s12859-021-04344-9. [8] John Arevalo, Ellen Su, Jessica D Ewald, Robert van Dijk, Anne E Carpenter, and Shantanu Singh. Evaluating batch correction methods for image-based cell profiling. Nat. Commun. ,15(1):6516, August 2024. [9] Qiaosi Tang, Ranjala Ratnayake, Gustavo Seabra, Zhe Jiang, Ruogu Fang, Lina Cui, Yousong Ding, Tamer Kahveci, Jiang Bian, Chenglong Li, Hendrik Luesch, and Yanjun Li. Morphological profiling for drug discovery in the era of deep learning. Briefings in Bioinformatics , 25(4):bbae284, 07 2024. URL: https://doi.org/10.1093/bib/bbae284 ,arXiv:https://academic.oup.com/bib/article-pdf/25/4/bbae284/58244094/bbae284.pdf, doi:10.1093/bib/bbae284. [10] Zitong Chen, Chau Pham, Siqi Wang, Michael Doron, Nikita Moshkov, Bryan A. Plummer, and Juan C Caicedo. CHAMMI: a benchmark for channel-adaptive models in microscopy imaging. In Thirty-seventh Conference on Neural Information Processing Systems Datasets and Bench-marks Track . NeurIPS, 2023. URL: https://openreview.net/forum?id=Luc1bZLeMY .[11] Maciej Sypetkowski, Morteza Rezanejad, Saber Saberian, Oren Kraus, John Urbanik, James Taylor, Ben Mabey, Mason Victors, Jason Yosinski, Alborz Rezazadeh Sereshkeh, Imran Haque, and Berton Earnshaw. Rxrx1: a dataset for evaluating experimental batch correction methods. 2023. URL: https://arxiv.org/abs/2301.05768 , arXiv:2301.05768. [12] Nikita Moshkov, Michael Bornholdt, Santiago Benoit, Matthew Smith, Claire McQuin, Allen Goodman, Rebecca A Senft, Yu Han, Mehrtash Babadi, Peter Horvath, Beth A Cimini, Anne E Carpenter, Shantanu Singh, and Juan C Caicedo. Learning representations for image-based profiling of perturbations. Nat. Commun. , 15(1):1594, February 2024. 10 [13] Safiye Celik, Jan-Christian Hütter, Sandra Melo Carlos, Nathan H. Lazar, Rahul Mohan, Conor Tillinghast, Tommaso Biancalani, Marta M. Fay, Berton A. Earnshaw, and Imran S. Haque. Building, benchmarking, and exploring perturbative maps of transcriptional and morphological data. PLOS Computational Biology , 20(10):1–24, 10 2024. URL: https://doi.org/10. 1371/journal.pcbi.1012463 , doi:10.1371/journal.pcbi.1012463. [14] Peter D. Caie, Rebecca E. Walls, Alexandra Ingleston-Orme, Sandeep Daya, Tom Houslay, Rob Eagle, Mark E. Roberts, and Neil O. Carragher. High-content phenotypic profiling of drug response signatures across distinct cancer cells. Molecular Cancer Therapeutics ,9(6):1913–1926, 06 2010. URL: https://doi.org/10.1158/1535-7163.MCT-09-1148 ,arXiv:https://aacrjournals.org/mct/article-pdf/9/6/1913/1886797/1913.pdf, doi:10.1158/1535-7163.MCT-09-1148. [15] D. Michael Ando, Cory Y. McLean, and Marc Berndl. Improving phe-notypic measurements in high-content imaging screens. bioRxiv , 2017. URL: https://www.biorxiv.org/content/early/2017/07/10/161422 ,arXiv:https://www.biorxiv.org/content/early/2017/07/10/161422.full.pdf, doi:10.1101/161422. [16] Pang Wei Koh, Shiori Sagawa, Henrik Marklund, Sang Michael Xie, Marvin Zhang, Akshay Balsubramani, Weihua Hu, Michihiro Yasunaga, Richard Lanas Phillips, Irena Gao, Tony Lee, Etienne David, Ian Stavness, Wei Guo, Berton Earnshaw, Imran Haque, Sara M Beery, Jure Leskovec, Anshul Kundaje, Emma Pierson, Sergey Levine, Chelsea Finn, and Percy Liang. WILDS: A Benchmark of in-the-Wild Distribution Shifts. In Marina Meila and Tong Zhang, editors, Proceedings of the 38th International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research, 5637–5664. PMLR, July 2021. URL: 
+
+https://proceedings.mlr.press/v139/koh21a.html .[17] Frank Weber, Guido Knapp, Katja Ickstadt, Günther Kundt, and Änne Glass. Zero-cell corrections in random-effects meta-analyses. Research Synthesis Methods ,11(6):913–919, 2020. URL: https://onlinelibrary.wiley.com/doi/abs/10. 1002/jrsm.1460 , arXiv:https://onlinelibrary.wiley.com/doi/pdf/10.1002/jrsm.1460, doi:https://doi.org/10.1002/jrsm.1460. [18] B Woolf. On estimating the relation between blood group and disease. Ann. Hum. Genet. ,19(4):251–253, June 1955. [19] Yemin Yu, Neil Tenenholtz, Lester Mackey, Ying Wei, David Alvarez-Melis, Ava P. Amini, and Alex X. Lu. Causal integration of chemical structures improves representations of microscopy images for morphological profiling. 2025. URL: https://arxiv.org/abs/2504.09544 ,arXiv:2504.09544. [20] George Tsitsiridis, Ralph Steinkamp, Madalina Giurgiu, Barbara Brauner, Gisela Fobo, Goar Frishman, Corinna Montrone, and Andreas Ruepp. Corum: the comprehensive resource of mam-malian protein complexes–2022. Nucleic Acids Research , 51(D1):D539–D545, 01 2023. URL: 
+
+https://doi.org/10.1093/nar/gkac1015 , arXiv:https://academic.oup.com/nar/article-pdf/51/D1/D539/48440639/gkac1015.pdf, doi:10.1093/nar/gkac1015. [21] Kevin Drew, John B Wallingford, and Edward M Marcotte. hu.MAP 2.0: integration of over 15,000 proteomic experiments builds a global compendium of human multiprotein assemblies. 
+
+Mol. Syst. Biol. , 17(5):e10016, May 2021. [22] Damian Szklarczyk, Katerina Nastou, Mikaela Koutrouli, Rebecca Kirsch, Farrokh Mehryary, Radja Hachilif, Dewei Hu, Matteo E Peluso, Qingyao Huang, Tao Fang, Nadezhda T Doncheva, Sampo Pyysalo, Peer Bork, Lars J Jensen, and Christian von Mering. The string database in 2025: protein networks with directional-ity of regulation. Nucleic Acids Research , 53(D1):D730–D737, 01 2025. URL: 
+
+https://doi.org/10.1093/nar/gkae1113 , arXiv:https://academic.oup.com/nar/article-pdf/53/D1/D730/60743732/gkae1113.pdf, doi:10.1093/nar/gkae1113. [23] Luana Licata, Prisca Lo Surdo, Marta Iannuccelli, Alessandro Palma, Elisa Micarelli, Livia Perfetto, Daniele Peluso, Alberto Calderone, Luisa Castagnoli, and Gianni Ce-sareni. Signor 2.0, the signaling network open resource 2.0: 2019 update. Nucleic Acids Research , 48(D1):D504–D510, 01 2020. URL: https://doi.org/10.1093/nar/ 
+
+11 gkz949 , arXiv:https://academic.oup.com/nar/article-pdf/48/D1/D504/31697942/gkz949.pdf, doi:10.1093/nar/gkz949. [24] David Croft, Gavin O’Kelly, Guanming Wu, Robin Haw, Marc Gillespie, Lisa Matthews, Michael Caudy, Phani Garapati, Gopal Gopinath, Bijay Jassal, Steven Jupe, Irina Kalatskaya, Shahana Mahajan, Bruce May, Nelson Ndegwa, Esther Schmidt, Veronica Shamovsky, Christina Yung, Ewan Birney, Henning Hermjakob, Peter D’Eustachio, and Lincoln Stein. Reactome: a database of reactions, pathways and biological processes. Nucleic Acids Res. , 39(Database issue):D691–7, January 2011. [25] Steven M Corsello, Joshua A Bittker, Zihan Liu, Joshua Gould, Patrick McCarren, Jodi E Hirschman, Stephen E Johnston, Anita Vrcic, Bang Wong, Mariya Khan, Jacob Asiedu, Rajiv Narayan, Christopher C Mader, Aravind Subramanian, and Todd R Golub. The drug repurposing hub: a next-generation drug library and information resource. Nat. Med. , 23(4):405–408, April 2017. [26] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) ,volume, 770–778. 2016. doi:10.1109/CVPR.2016.90. [27] Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy V. Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel HAZIZA, Francisco Massa, Alaaeldin El-Nouby, Mido Assran, Nicolas Ballas, Wojciech Galuba, Russell Howes, Po-Yao Huang, Shang-Wen Li, Ishan Misra, Michael Rabbat, Vasu Sharma, Gabriel Synnaeve, Hu Xu, Herve Jegou, Julien Mairal, Patrick Labatut, Armand Joulin, and Piotr Bojanowski. DINOv2: learning robust visual features without supervision. Transactions on Machine Learning Research , 2024. Featured Certification. URL: https://openreview.net/forum?id=a68SUt6zFt .[28] Oren Kraus, Kian Kenyon-Dean, Saber Saberian, Maryam Fallah, Peter McLean, Jess Le-ung, Vasudev Sharma, Ayla Khan, Jia Balakrishnan, Safiye Celik, Dominique Beaini, Maciej Sypetkowski, Chi Vicky Cheng, Kristen Morse, Maureen Makes, Ben Mabey, and Berton Earnshaw. Masked autoencoders for microscopy are scalable learners of cellular biology. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,11757–11768. June 2024. [29] Ankit Gupta, Zoe Wefers, Konstantin Kahnert, Jan N. Hansen, Mohini K. Misra, Will Leineweber, Anthony Cesnik, Dan Lu, Ulrika Axelsson, Frederic Ballllosera, Russ B. Altman, Theofanis Karaletsos, and Emma Lundberg. Subcell: proteome-aware vision foundation models for microscopy capture single-cell biology. bioRxiv ,2025. URL: https://www.biorxiv.org/content/early/2025/10/30/2024.12.06. 627299 , arXiv:https://www.biorxiv.org/content/early/2025/10/30/2024.12.06.627299.full.pdf, doi:10.1101/2024.12.06.627299. [30] Ana Sanchez-Fernandez, Elisabeth Rumetshofer, Sepp Hochreiter, and Günter Klambauer. CLOOME: contrastive learning unlocks bioimaging databases for queries with chemical struc-tures. Nat. Commun. , 14(1):7339, November 2023. [31] Srinivas Niranj Chandrasekaran, Jeanelle Ackerman, Eric Alix, D. Michael Ando, John Arevalo, Melissa Bennion, Nicolas Boisseau, Adriana Borowa, Justin D. Boyd, Laurent Brino, Patrick J. Byrne, Hugo Ceulemans, Carolyn Ch’ng, Beth A. Cimini, Djork-Arne Clevert, Nicole Deflaux, John G Doench, Thierry Dorval, Regis Doyonnas, Vincenza Dragone, Ola Engkvist, Patrick W. Faloon, Briana Fritchman, Florian Fuchs, Sakshi Garg, Tamara J. Gilbert, David Glazer, David Gnutt, Amy Goodale, Jeremy Grignard, Judith Guenther, Yu Han, Zahra Hanifehlou, Santosh Hariharan, Desiree Hernandez, Shane R Horman, Gisela Hormel, Michael Huntley, Ilknur Icke, Makiyo Iida, Christina B. Jacob, Steffen Jaensch, Jawahar Khetan, Maria Kost-Alimova, Tomasz Krawiec, Daniel Kuhn, Charles-Hugues Lardeau, Amanda Lembke, Francis Lin, Kevin D. Little, Kenneth R. Lofstrom, Sofia Lotfi, David J. Logan, Yi Luo, Franck Madoux, Paula A. Marin Za-pata, Brittany A. Marion, Glynn Martin, Nicola Jane McCarthy, Lewis Mervin, Lisa Miller, Haseeb Mohamed, Tiziana Monteverde, Elizabeth Mouchet, Barbara Nicke, Arnaud Ogier, Anne-Laure Ong, Marc Osterland, Magdalena Otrocka, Pieter J. Peeters, James Pilling, Stefan Prechtl, Chen Qian, Krzysztof Rataj, David E Root, Sylvie K. Sakata, Simon Scrace, Hajime Shimizu, David Simon, Peter Sommer, Craig Spruiell, Iffat Sumia, Susanne E Swalley, Hiroki Terauchi, Amandine Thibaudeau, Amy Unruh, Jelle Van de Waeter, Michiel Van Dyck, Carlo van 12 Staden, Michał Warchoł, Erin Weisbart, Amélie Weiss, Nicolas Wiest-Daessle, Guy Williams, Shan Yu, Bolek Zapiec, Marek ˙ Zyła, Shantanu Singh, and Anne E. Carpenter. Jump cell painting dataset: morphological impact of 136,000 chemical and genetic perturbations. bioRxiv ,2023. URL: https://www.biorxiv.org/content/early/2023/03/27/2023.03.23. 534023 , arXiv:https://www.biorxiv.org/content/early/2023/03/27/2023.03.23.534023.full.pdf, doi:10.1101/2023.03.23.534023. [32] Mark-Anthony Bray, Sigrun M Gustafsdottir, Mohammad H Rohban, Shantanu Singh, Veb-jorn Ljosa, Katherine L Sokolnicki, Joshua A Bittker, Nicole E Bodycombe, Vlado Danˇ cík, Thomas P Hasaka, Cindy S Hon, Melissa M Kemp, Kejie Li, Deepika Walpita, Mathias J Wawer, Todd R Golub, Stuart L Schreiber, Paul A Clemons, Alykhan F Shamji, and Anne E Carpenter. A dataset of images and morphological profiles of 30 000 small-molecule treatments using the cell painting assay. GigaScience , 6(12):giw014, 12 2017. URL: https://doi. org/10.1093/gigascience/giw014 , arXiv:https://academic.oup.com/gigascience/article-pdf/6/12/giw014/60711176/gigascience_6_12_giw014.pdf, doi:10.1093/gigascience/giw014. 13 Appendix 
+
+Appendix A: Tasks and Metrics A.1 Batch Effect Stringency Levels 
+
+MorphoHELM evaluates each biological retrieval task across four levels of batch effect stringency. The levels are defined consistently across tasks, but their implementation differs depending on whether the task operates on consensus profiles (enrichment tasks) or individual well-level profiles (replicate retrieval). The four levels are: 1. No Restriction (Baseline/NR) : Retrieved samples can be any sample. 2. Not Same Batch (NSB) : Candidates from the same experimental batch are excluded, testing robustness to day-to-day variation between batches. 3. Not Same Source (NSS) : Candidates from the same institution are excluded, testing robust-ness to domain shifts such as microscopy hardware differences. 4. Not Same Layout (NSL) : Candidates sharing the same plate position as the query are excluded, controlling for position-induced batch effects [5]. For the enrichment tasks (MoA and gene pathway enrichment), stringency is implemented by constructing separate consensus profiles from non-overlapping subsets of replicates. At the No Restriction level, all replicates of a perturbation are aggregated into a single consensus profile. At stricter levels, replicates are split by the relevant experimental condition: by experimental batch (NSB) or by institution (NSS). The query consensus is built from each unique batch. For NSB, query consensus is compared against any other batchwise representations of compounds and for NSS query consensus is compared against batchwise representations that are not in the same source as the query batchwise representation. In cases where a compound is replicated in more than one batch we use majority voting and if more than half of the batchwise representations of the compound are significantly enriched we consider the compound enriched. For each batchwise representation top 1% of the unique compound representation are considered. It is also important to note that the No Restriction setting for enrichment tasks have more replicates available for profile aggregation compared to NSB and NSS stringencies. This might create more robust biological profiles in the No Restriction setting in addition to the more lenient batch effect environment. For replicate retrieval, stringency is implemented differently because the task operates on individual well-level profiles rather than consensus representations. Rather than constructing separate consensus profiles, we apply exclusion constraints to the neighbor search: at each stringency level, candidates sharing the relevant experimental condition with the query are removed from consideration prior to ranking. Not all stringency levels apply to all datasets. NSS cannot be evaluated on single-institution datasets (BBBC036, cpg-CRISPR) because no cross-institutional candidates exist. The available levels per dataset are noted in the task descriptions below. 
+
+A.2 MoA Enrichment 
+
+This task quantifies a model’s ability to cluster compounds sharing the same Mechanism of Action. We average well-level profiles into a consensus compound representation to mitigate outlier noise, then rank candidate compounds by cosine similarity to the query consensus. We evaluate this task on two datasets: • BBBC036 : A single-institution dataset from the Broad Institute. MoA retrieval within this dataset serves as an upper-bound estimate of performance in the absence of cross-site batch effects. Only the No Restriction level is evaluated. • cpg-MoA : A subset of the JUMP-Cell Painting dataset containing chemical perturbations with mechanism-of-action annotations. Compounds are profiled across multiple batches and institutions, enabling MoA retrieval to be evaluated under No Restriction, Not Same Batch, and Not Same Source stringency levels. 14 Metric: Permutation-Based Enrichment Analysis. 
+
+We use a cutoff k to convert the ranked list of candidate compounds into a retrieval set. Let a be the number of samples matching the same MoA in the retrieval set, b the number of non-matching samples in the retrieval set, c the number of matching samples not retrieved, and d the number of non-matching samples not retrieved. The Odds Ratio (OR) quantifies how enriched the retrieval set is in the target class: 
+
+OR = a · db · c . (1) Previous work has proposed reporting the average OR across queries [ 12 ]. However, this approach is unstable when an MoA is associated with very few samples: the denominator terms ( b or c) can be zero, yielding an infinite OR. Prior works impute these cases with arbitrary, static values, which skews the average even when behavior between methods is otherwise similar [ 12 ]. We address this in two ways. First, we apply the modified Haldane-Anscombe correction [ 17 ], which adds a small constant to all cells of the contingency table, mitigating extreme values without arbitrary imputation. Second, we report the geometric mean rather than the arithmetic mean, following standard statistical practice for log-odds ratios [18], which further reduces the influence of outliers. In addition to the geometric mean OR, we report the percentage of queries achieving statistically significant enrichment. Significance is determined by a permutation test: the observed Odds Ratio (OR obs ) is compared against Odds Ratios computed from randomly selected sample sets ( OR rand ) of the same size. Using M = 100 random permutations, the P -value for the j-th query is: 
+
+Pj = 1
+
+M
+
+> M
+
+X
+
+> i=1
+
+1
+
+
+
+OR (i) 
+
+> rand
+
+≥ OR obs 
+
+
+
+(2) where 1(·) is the indicator function. The final fraction-significant metric is 
+
+Psig =
+
+PNj=1 1(Pj < 0.05) 
+
+N × 100 (3) where N is the total number of queries. Reporting both metrics is necessary because they capture complementary failure modes: the geometric mean OR can be skewed by a small number of highly enriched queries, while the fraction significant may overly reward methods with low recall but consistent enrichment across many queries. 
+
+A.3 Gene Pathway Enrichment 
+
+This task parallels MoA enrichment but uses genetic perturbations, assessing whether the phenotypic profile of a CRISPR knockout retrieves other genes within the same biological pathway or protein complex. Including a distinct perturbation modality allows us to evaluate whether models generalize beyond chemical phenotypes. We evaluate this task on the cpg-CRISPR subset, which consists of CRISPR-Cas9 knockouts collected from a single institution. Retrieval is evaluated at two stringency levels: No Restriction and NSB. NSS is not applicable as the data come from a single source. The metric framework is identical to that of MoA enrichment (Section A.2): we report the geometric mean Odds Ratio and the percentage of queries with significant enrichment under permutation testing. The only difference is the source of ground-truth labels, which are derived from five databases of gene pathways and protein complexes (CORUM, HuMAP, StringDB, SIGNOR, Reactome). These databases are described in Appendix B.3.. Each query gene is evaluated separately against each database, and we report metrics per database. 
+
+A.4 Replicate Retrieval and Mean Average Precision kNN Replicate Retrieval. 
+
+This task measures a model’s ability to retrieve biological replicates of the same perturbation via 
+
+k-Nearest Neighbor (kNN) search. Unlike the enrichment tasks, replicate retrieval operates on individual well-level profiles rather than consensus representations, directly testing whether a model places replicates of the same perturbation in close proximity in the embedding space. 15 For each query well, we identify the nearest neighbor by cosine similarity within the candidate set defined by the stringency level. Accuracy is the fraction of queries whose nearest neighbor shares the same perturbation. To account for class imbalance, we use a two-step macro-averaging strategy: accuracy is first calculated per perturbation, then averaged across perturbations to yield the final reported metric. We evaluate this task on two subsets of the JUMP-CPG dataset: • cpg-target2 : A curated subset of 301 compounds with known strong phenotypic effects, replicated across all sources. Evaluated at all four stringency levels. • cpg-compound : A larger, noisier subset spanning three institutions (Sources 5, 9, and 11), testing robustness in a high-throughput, sparse-replicate regime. Evaluated at all four stringency levels. We have downsampled to ensure that every compound has a replicate to match to in every level of stringency. The primary indicator of model robustness is not absolute accuracy at any single level, but the degree of degradation from baseline to the most stringent setting. 
+
+Mean Average Precision (mAP) 
+
+For each query well, we rank all eligible candidate wells by cosine similarity and treat wells with the same perturbation as positives. Average precision summarizes how highly these matching replicates appear in the ranked list, and we average this quantity across queries to obtain the final mAP score. Unlike Recall@1, which only evaluates the nearest neighbor, mAP captures whether same-perturbation replicates are consistently amongst the top of the ranking. 
+
+Negative Control Mean Average Precision (NegCon mAP) 
+
+We additionally compute mAP after restricting distractor candidates to DMSO negative-control wells while preserving same-compound replicates as positives. This variant measures whether a representation separates perturbed cells from baseline morphology, rather than requiring it to discriminate every compound from every other compound. As with replicate retrieval, we evaluate each query under NR, NSB, NSS, and NSL scenarios.                                                       
+
+> NR NSB NSS NSL
+> CellProfiler
+> DINOv2 CLS
+> DINOv2 Patch
+> ResNet
+> OpenPhenom
+> SubCell
+> CLOOME
+> ResNet (Untrained)
+> 14 .45 14 .53 12 .92.3
+> 13 .46 13 .52 12 .32 2.79
+> 12 .82 12 .87 11 .82 2.69
+> 12 .27 12 .28 10 .84 2.58
+> 11 .52 11 .62 10 .34 2.31
+> 11 .06 11 .13 10 .08 2.41
+> 6.18 6.26 4.36 1.44
+> 4.39 4.43 3.67 1.24
+> Negative Control mAP
+> cpg-tgt2
+> 0
+> 5
+> 10
+> 15
+> NR NSB NSS NSL
+> CellProfiler
+> CLOOME
+> OpenPhenom
+> ResNet
+> DINOv2 CLS
+> DINOv2 Patch
+> SubCell
+> ResNet (Untrained)
+> 1.91.56 0.71 0.59
+> 1.08 0.72 0.13 0.43
+> 0.94 0.74 0.26 0.29
+> 0.86 0.67 0.43 0.37
+> 0.85 0.67 0.36 0.29
+> 0.75 0.59 0.36 0.28
+> 0.63 0.49 0.25 0.21
+> 0.23 0.18 0.14 0.09
+> Negative Control mAP
+> cpg-compound
+> 0
+> 0.5
+> 1
+> 1.5
+> 2
+
+Appendix Figure 1: Negative-control mean average precision after 5% well-level cell-count QC. DMSO wells are used as distractor candidates and same-compound wells are retained as positives. Restrictions: NR No Restriction, NSB = Not Same Batch, NSS = Not Same Source, NSL = Not Same Layout. 16 Appendix Table 1: Summary of the included datasets used for evaluation. 
+
+Dataset Name Sources Batches Plates Wells Biological Groups Unique Perturbations 
+
+BBBC036 1 1 406 153,370 676 1,551 cpg-MoA 10 104 1,562 24,309 698 1,845 cpg-CRISPR 1 6 148 56,832 5,287 † 7,974 cpg-target2 11 107 141 64,485 - 301 cpg-compound 3 49 460 157,462 - 30,138 
+
+> †Mean number of biological groups (protein complexes, clusters, and pathways from CORUM, HuMAP, and Reactome) that contain at least two genes present in our perturbation set. Pairwise databases (StringDB, SIGNOR) are excluded from this count.
+
+Appendix B: Datasets and Labels B.1 Dataset Descriptions BBBC036. 
+
+A single-institution Cell Painting dataset from the Broad Institute, part of the Broad Bioimage Benchmark Collection. It contains chemical perturbations and is used as an upper-bound estimate of MoA retrieval performance in the absence of cross-site batch effects [32]. 
+
+cpg-MoA. 
+
+A subset of the JUMP-CPG dataset containing chemical perturbations with mechanism-of-action annotations transferred from the Drug Repurposing Hub. Compounds are profiled across multiple experimental batches and institutions, enabling evaluation of MoA retrieval under increasing batch-effect stringency. This dataset complements BBBC036 by testing whether representations recover shared mechanisms of action in a larger, multi-source Cell Painting setting [31, 25]. 
+
+cpg-CRISPR. 
+
+A subset of the JUMP-CPG dataset containing CRISPR-Cas9 genetic knockouts from a single institution. This dataset enables evaluation of gene pathway enrichment and provides a distinct perturbation modality from the chemical compound datasets [31]. 
+
+cpg-target2. 
+
+A subset of the JUMP-Cell Painting (JUMP-CPG) dataset containing approximately 300 chemical compounds curated for known strong phenotypic effects. Compounds are replicated across multiple institutions, enabling evaluation at all four stringency levels [31]. 
+
+cpg-compound. 
+
+A larger subset of the JUMP-CPG dataset containing chemical perturbations across three institutions (Sources 5, 9, and 11). Compared to cpg-target2, this dataset includes a much broader range of compounds, many of which produce weak or undetectable morphological effects, making it a more challenging high-throughput screening regime [31]. 
+
+B.2 Mechanism of Action Labels 
+
+MoA labels for compounds in BBBC036 and cpg-MoA are derived from the Drug Repurposing Hub [ 25 ], a curated resource that annotates compounds with their known molecular targets and mechanisms of action. We use these labels to define ground-truth class membership for the MoA enrichment task: two compounds are considered to share an MoA if they are annotated with the same mechanism in the Drug Repurposing Hub. 17 B.3 Gene Pathway and Protein Complex Databases 
+
+For the gene pathway enrichment task, ground-truth gene pairs are derived from five complementary databases. Each database captures a different type of functional relationship, and we report metrics per database to surface differences in how methods generalize across relationship types. • CORUM [ 20 ]: A manually curated repository of experimentally verified mammalian protein complexes. • HuMAP [21 ]: A census of human protein complexes derived from integration of mass spectrometry experiments. • StringDB [ 22 ]: A database of known and predicted protein-protein interactions, encompass-ing both physical associations and functional linkages. This is the largest database in our evaluation. • SIGNOR [23 ]: A signaling network database. This is the smallest database in our evaluation, which limits statistical power for enrichment testing. • Reactome [ 24 ]: A curated knowledgebase of biological pathways and molecular reactions in human biology. 
+
+Appendix C: Models and Pipelines C.1 Models Evaluated 
+
+We curate a cross-section of representation extraction strategies currently employed in morphological profiling, spanning classical feature engineering, transfer learning from natural-image foundation models, and microscopy-specific pretrained models. 
+
+CellProfiler. 
+
+The industry standard for over a decade, CellProfiler serves as our primary non-deep-learning baseline [ 6]. The pipeline relies on classical image processing to segment cells and measure predefined, interpretable morphological features including cell size, shape, texture, and intensity distribution. It represents the performance of expert-defined, hand-crafted feature engineering. We used the CellProfiler features released with the BBBC036 [32] and the JUMP-CPG [31] dataset. 
+
+ImageNet ResNet101. 
+
+A ResNet101 pretrained on ImageNet in a supervised manner [ 26 ]. This model serves as a transfer learning baseline, testing whether features learned from natural images are sufficiently general to capture relevant signal in microscopy data without domain-specific fine-tuning. To generate a well-level representation, we average field-of-view (FOV) profiles within each channel and concatenate the five channel-level representations for each well. This yields a 2,048-dimensional embedding per channel and a 10,240-dimensional embedding per well. 
+
+Untrained ResNet101. 
+
+A ResNet101 architecture with randomly initialized weights, included as a negative control. This baseline quantifies how much performance derives solely from the inductive bias of the convolutional architecture itself, independent of any learned features. We follow the same inference procedure described for ImageNet ResNet101. 
+
+DINOv2. 
+
+A Vision Transformer trained with self-supervised learning on a large corpus of natural images [ 27 ]. DINOv2 leverages a distillation-based objective and the attention mechanism, which often yields more robust semantic representations than supervised CNNs. Because it remains unsettled whether the CLS token embedding or mean-pooled patch embeddings is the better practice for downstream tasks, we evaluate both variants. We use the DINOv2 ViT-B/14 model and follow the same well-level aggregation procedure described for ImageNet ResNet101. 18 OpenPhenom. 
+
+A microscopy-specific masked autoencoder pretrained on large-scale Cell Painting data [28]. Open-Phenom is channel-agnostic, allowing it to handle the multi-channel structure of Cell Painting natively. Including this model lets us measure the specific value of microscopy pretraining over transfer learning from natural images. 
+
+SubCell. 
+
+A model pretrained on fluorescent microscopy datasets distinct from Cell Painting, previously demonstrated to transfer well to Cell Painting tasks [ 29 ]. For SubCell, we follow the feature extraction procedure recommended by Gupta et al. [29] for applying the model to Cell Painting data. 
+
+CLOOME. 
+
+A multimodal model trained on Cell Painting images jointly with chemical compound structures [ 30 ]. This model tests whether incorporating chemical structure as an auxiliary modality during pretraining yields better representations for downstream morphological profiling. Appendix Table 2: Summary of the models evaluated in the benchmark. 
+
+Model Pretrained Pretrained on Microscopy Images Extraction Method 
+
+CellProfiler ✗ ✗ Classical / Hand-crafted ResNet101 (ImageNet) ✓ ✗ Supervised CNN ResNet101 (Randomized) ✗ ✗ Untrained CNN DINOv2 ✓ ✗ Self-Supervised ViT OpenPhenom ✓ ✓ Masked Autoencoder (ViT) SubCell ✓ ✓ Self-Supervised ViT CLOOME ✓ ✓ Multimodal Contrastive 
+
+C.2 Image Preprocessing 
+
+Prior to feature extraction, raw microscopy images were converted to 8-bit PNG format to standardize dynamic range and reduce storage requirements. Illumination correction was then applied to all fields of view to rectify uneven lighting and vignetting artifacts introduced by the optical system. 
+
+C.3 Sample Quality Control 
+
+We applied a series of filtering steps to remove noisy data at the batch, channel, and well levels. 
+
+Batch Filtering. 
+
+To ensure experimental consistency, we evaluated batches based on the stability of their negative controls. For each batch, we computed the mean cosine distance of all wells to their nearest negative control using CellProfiler features. Batches where this metric deviated by more than 0.2 from the expected baseline were discarded. The threshold was chosen based on manual verification, which indicated that batches exceeding this value showed extensive contamination or microscopy imaging artifacts. 
+
+Channel De-duplication. 
+
+Cell Painting collects five fluorescent channels per microscopy image, each capturing a distinct set of cellular compartments. Images with duplicated channels were removed as artifacts. 
+
+Cell Count Filtering. 
+
+We removed wells with insufficient cell counts. The global cell count distribution was estimated by sampling 5,000 images. Wells falling in the bottom 5th percentile of this distribution were removed. 19 C.4 Feature Normalization Pipeline 
+
+While some prior benchmarks use representations as-is [ 12 ], this approach does not control for varying dimensionality or feature redundancy across methods. In particular, it disadvantages CellProfiler, which produces a high-dimensional feature space that is partially redundant. To ensure fairness across methods, we standardize all representations to the same dimensionality and apply a consistent batch-effect correction pipeline: 1. Platewise Center Scaling and PCA. All features are scaled to a standard range, then reduced via Principal Component Analysis applied across the entire dataset. This step both standardizes dimensionality and denoises the feature space. We use 64 components for the PCA analysis. 2. Platewise Robust Standardization. A Median Absolute Deviation (MAD) "Robustize" transformation is applied per plate to align distributions across experimental runs while remaining robust to outliers. This pipeline is applied identically to all methods evaluated in the benchmark. 20 Appendix D: Supplementary Analyses D.1 Effect of Modified Haldane-Anscombe Correction on OR Distribution 
+
+When a biological class has few members, all members can appear in the top-k retrieval set, making the OR undefined. Moshkov et al. [12] handled this by imputing infinite values with the total size of the background set. Because the size of the background set is very large, this creates extreme outliers that dominate the arithmetic mean. In the BBBC036 MoA task, 83% of per-query OR values are exactly zero, yet the arithmetic mean is 32.1 (Figure 2, Panel A), making it unrepresentative of typical behavior. We replace this with the modified Haldane-Anscombe (mHA) correction [ 17 ], which adds 12 to all four cells of the contingency table only when at least one cell is zero. We use the modified variant rather than the original Haldane-Anscombe correction, which adds 12 unconditionally. Applying the correction to all tables biases the expected OR away from 1 under the null, because the additive constant is non-negligible relative to cell counts in small tables, shifting the baseline. Even after mHA correction, the distribution remains heavily right-skewed. Following standard practice for ratio-scale effect sizes [ 18 ], we report the geometric mean, which compresses the right tail and yields a nearly symmetric distribution. 
+
+Appendix Figure 2: OR distribution for the BBBC036 MoA task (all models pooled, 1% cutoff). A. 
+
+Old imputation method. B. With mHA correction. C. With mHA correction and Log-transformed OR. 21 D.2 Gene Pathway Enrichment per Database 
+
+Appendix Figure 3: Gene pathway enrichment performance by database. Bars show model perfor-mance separately for each gene-set database. Transparent bars indicate No Restriction results, while hatched bars indicate Not Same Batch results. Panel A reports the fraction of genes with significant enrichment, and Panel B reports the geometric mean odds ratio. 22 D.3 Brittleness of Clustering Metrics under Random Label Permutation 
+
+Appendix Table 3: Raw scores and performance gap ( ∆ = scVI − Baseline) under original labels and three random label permutations, using the evaluation framework of Arevalo et al. [8] . The ∆ in overall score persists under shuffling, indicating it reflects latent space structure rather than biological signal.                                                                                                                                                                     
+
+> Batch Correction Bio Metrics Aggregate Condition Method Graph Conn. KBET LISI batch Silh. batch LISI label Leiden ARI Leiden NMI Silh. label mAP (ctrl) mAP (nonrep) Batch Corr. Bio Overall
+> Original labels scVI 0.34 0.04 0.25 0.78 1.00 0.02 0.28 0.25 0.25 0.06 0.35 0.31 0.33 Baseline 0.34 0.01 0.01 0.80 1.00 0.00 0.23 0.31 0.21 0.03 0.29 0.30 0.29
+> ∆0.00 +.03 +.24 −.02 .00 +.02 +.05 −.06 +.04 +.03 +.06 +.01 +.04
+> Shuffle seed 1 scVI 0.32 0.00 0.36 0.88 1.00 0.00 0.22 0.19 0.16 0.02 0.39 0.27 0.32 Baseline 0.32 0.00 0.03 0.89 1.00 0.00 0.22 0.25 0.14 0.01 0.31 0.27 0.29
+> ∆0.00 .00 +.33 −.01 .00 .00 .00 −.06 +.02 +.01 +.08 .00 +.03
+> Shuffle seed 2 scVI 0.32 0.00 0.35 0.87 1.00 0.00 0.22 0.19 0.17 0.00 0.39 0.26 0.31 Baseline 0.32 0.00 0.03 0.89 1.00 0.00 0.22 0.25 0.14 0.01 0.31 0.27 0.29
+> ∆0.00 .00 +.32 −.02 .00 .00 .00 −.06 +.03 −.01 +.08 −.01 +.02
+> Shuffle seed 3 scVI 0.32 0.00 0.35 0.88 1.00 0.00 0.23 0.19 0.16 0.02 0.39 0.27 0.31 Baseline 0.32 0.00 0.03 0.89 1.00 0.00 0.22 0.25 0.14 0.01 0.31 0.27 0.29
+> ∆0.00 .00 +.32 −.01 .00 .00 +.01 −.06 +.02 +.01 +.08 .00 +.02
+
+D.4 Postprocessing Fairness 
+
+The models compared in this benchmark produce feature spaces with very different dimensionalities and structures. Classical CellProfiler features are high-dimensional and contain many correlated measurements of related cellular properties; learned embeddings are typically lower-dimensional, compressed representations whose internal scaling is determined by the training objective. In order to ensure a degree of fairness in evaluation across models we have chosen a minimal postprocessing pipeline. Otherwise, there is a risk of measuring differences in feature geometry as much as differences in biological content. However, we note that the postprocessing steps do not have neutral effect across all models. The analyses below show that the model rankings are not invariant to these choices. Applying plate-wise CenterScale normalization, PCA, and robust batch-wise normalization produces a setting in which CellProfiler is particularly strong for replicate retrieval. This is biologically plausible: many CellProfiler measurements are redundant or highly correlated, and dimensionality reduction can concentrate a shared morphological signal while suppressing unstable axes. When PCA is removed, learned embeddings become substantially more competitive, and in several panels dominate the ranking. This does not imply that learned models are intrinsically superior, nor that CellProfiler is intrinsically weak. Rather, it suggests that high-dimensional handcrafted features can be penalized when evaluated in their raw embedding, where batch effects and uneven feature scales may occupy many dimensions. Learned embeddings, by contrast, have already undergone a form of compression during model training and may therefore be less dependent on an external dimensionality-reduction step. It is also important to note that ResNet benefits substantially from PCA, which is expected because each well is represented by a high dimensional embedding: 2,048 features per channel, or 10,240 features per well after concatenating all five channels. CenterScale normalization also benefits CellProfiler the most. This is expected because classical CellProfiler features span a wide range of scales, which can cause some measurements to dominate the embedding space without normalization. Batch-wise sphering shows a more mixed pattern. Whitening can reduce batch-specific covariance structure and may help enrichment tasks that rely on consensus profiles, where averaging already suppresses some well-level noise. However, the same operation can be detrimental for nearest-neighbor replicate retrieval, where individual-well geometry is the object of evaluation. In that setting, sphering may overcorrect batch structure that is partially entangled with biological signal. This illustrates why a correction that is reasonable for one biological retrieval task may not be uniformly beneficial across all tasks. For these reasons, we treat the main postprocessing pipeline as minimal as possible while ensuring a fair comparison. The panels below show how results would change under plausible alternatives. The 23 important conclusion is that postprocessing can shape benchmark rankings and should be reported as part of the benchmark specification. 
+
+> NR
+
+CellProfiler 
+
+DINOv2 CLS 
+
+ResNet 
+
+DINOv2 Patch 
+
+SubCell 
+
+CLOOME 
+
+OpenPhenom 
+
+ResNet (Untrained) 
+
+> 0.101
+> 0.091
+> 0.089
+> 0.086
+> 0.075
+> 0.074
+> 0.074
+> 0.038
+
+Fraction Significant 
+
+BBBC036                   
+
+> NR NSB NSS
+> 0.135 0.07 0.036
+> 0.133 0.076 0.031
+> 0.131 0.074 0.034
+> 0.137 0.07 0.03
+> 0.126 0.066 0.025
+> 0.12 0.047 0.004
+> 0.096 0.036 0.015
+> 0.067 0.009 0.004
+
+Fraction Significant 
+
+cpg-MoA 
+
+> 0
+> 0.05
+> 0.1
+> 0.15
+> NR
+
+CellProfiler 
+
+DINOv2 CLS 
+
+CLOOME 
+
+ResNet 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+SubCell 
+
+ResNet (Untrained) 
+
+> 11 .51
+> 11 .15
+> 11 .08
+> 11 .06
+> 10 .91
+> 10 .8
+> 10 .71
+> 9.75
+
+Geometric Mean OR 
+
+BBBC036                   
+
+> NR NSB NSS
+> 11 .84 10 .19 9.58
+> 11 .710 .18 9.49
+> 11 .63 10 .21 9.49
+> 11 .51 10 .18 9.63
+> 11 .28 9.99.32
+> 11 .05 9.52 8.7
+> 10 .39 9.22 8.91
+> 9.44 8.65 8.61
+
+Geometric Mean OR 
+
+cpg-MoA 
+
+> 8
+> 9
+> 10
+> 11
+> 12
+
+Appendix Figure 4: MoA enrichment under the batch-sphered normalization variant. 
+
+NR NSB 
+
+CLOOME 
+
+CellProfiler 
+
+DINOv2 CLS 
+
+SubCell 
+
+ResNet 
+
+OpenPhenom 
+
+DINOv2 Patch 
+
+ResNet (Untrained) 
+
+0.074 0.005 
+
+0.073 0.018 
+
+0.063 0.012 
+
+0.063 0.006 
+
+0.063 0.012 
+
+0.061 0.008 
+
+0.061 0.01 
+
+0.056 0.001 
+
+Fraction Significant 
+
+cpg-CRISPR 
+
+0
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.1
+
+NR NSB 
+
+CLOOME 
+
+CellProfiler 
+
+SubCell 
+
+DINOv2 CLS 
+
+OpenPhenom 
+
+DINOv2 Patch 
+
+ResNet 
+
+ResNet (Untrained) 
+
+13 .07 11 .88 
+
+13 .03 12 .12 
+
+12 .82 11 .9
+
+12 .8 12 
+
+12 .78 11 .88 
+
+12 .78 12 .03 
+
+12 .77 11 .98 
+
+12 .55 11 .49 
+
+Geometric Mean OR 
+
+cpg-CRISPR 
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+Appendix Figure 5: CRISPR pathway enrichment under the batch-sphered normalization variant. 24 NR NSB NSS NSL 
+
+CellProfiler 
+
+DINOv2 CLS 
+
+ResNet 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+SubCell 
+
+CLOOME 
+
+ResNet (Untrained) 
+
+8.73 9.74 5.39 3.16 
+
+7.46 7.51 4.38 2.68 
+
+6.64 6.84 4.03 2.47 
+
+6.41 6.8 4.04 2.39 
+
+5.84 6.35 3.43 2.49 
+
+5.63 6.32 3.56 2.11 
+
+4.25 5.55 1.59 2.7
+
+0.55 0.84 0.5 0.44 
+
+kNN Recall@1 — cpg-tgt2 (301 compounds) 
+
+0
+
+10 
+
+20 
+
+30 
+
+NR NSB NSS NSL 
+
+CellProfiler 
+
+OpenPhenom 
+
+CLOOME 
+
+DINOv2 CLS 
+
+ResNet 
+
+DINOv2 Patch 
+
+SubCell 
+
+ResNet (Untrained) 
+
+0.74 0.59 0.08 0.44 
+
+0.25 0.19 0.04 0.14 
+
+0.26 0.14 0 0.2
+
+0.21 0.15 0.04 0.11 
+
+0.21 0.12 0.04 0.12 
+
+0.18 0.12 0.04 0.1
+
+0.17 0.12 0.04 0.09 
+
+0.01 0 0 0
+
+kNN Recall@1 — cpg-compound (30,138 compounds) 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+NR NSB NSS NSL 
+
+CellProfiler 
+
+ResNet 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+SubCell 
+
+CLOOME 
+
+ResNet (Untrained) 
+
+1.25 1.41 0.92 0.19 
+
+0.85 0.94 0.75 0.17 
+
+0.83 0.91 0.64 0.23 
+
+0.74 0.84 0.62 0.19 
+
+0.72 0.81 0.63 0.17 
+
+0.64 0.77 0.66 0.16 
+
+0.5 0.57 0.41 0.16 
+
+0.36 0.37 0.37 0.14 
+
+mAP — cpg-tgt2 (301 compounds) 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+NR NSB NSS NSL 
+
+CellProfiler 
+
+CLOOME 
+
+OpenPhenom 
+
+DINOv2 CLS 
+
+ResNet 
+
+SubCell 
+
+DINOv2 Patch 
+
+ResNet (Untrained) 
+
+0.4 0.32 0.11 0.23 
+
+0.16 0.1 0.02 0.13 
+
+0.16 0.13 0.07 0.09 
+
+0.15 0.12 0.07 0.07 
+
+0.14 0.1 0.07 0.09 
+
+0.13 0.11 0.06 0.07 
+
+0.12 0.1 0.06 0.06 
+
+0.01 0.02 0.02 0.01 
+
+mAP — cpg-compound (30,138 compounds) 
+
+0
+
+0.2
+
+0.4
+
+0.6
+
+Appendix Figure 6: k-nearest-neighbor replicate retrieval under the batch-sphered normalization variant. 
+
+> NR
+
+DINOv2 CLS 
+
+ResNet 
+
+SubCell 
+
+CLOOME 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+CellProfiler 
+
+ResNet (Untrained) 
+
+> 0.091
+> 0.09
+> 0.078
+> 0.075
+> 0.075
+> 0.074
+> 0.074
+> 0.037
+
+Fraction Significant 
+
+BBBC036                   
+
+> NR NSB NSS
+> 0.14 0.067 0.024
+> 0.13 0.066 0.03
+> 0.123 0.07 0.032
+> 0.115 0.054 0.021
+> 0.129 0.049 0.007
+> 0.091 0.03 0.016
+> 0.082 0.026 0.01
+> 0.059 0.017 0.006
+
+Fraction Significant 
+
+cpg-MoA 
+
+> 0
+> 0.05
+> 0.1
+> 0.15
+> NR
+
+ResNet 
+
+DINOv2 CLS 
+
+CLOOME 
+
+OpenPhenom 
+
+DINOv2 Patch 
+
+SubCell 
+
+CellProfiler 
+
+ResNet (Untrained) 
+
+> 11 .39
+> 11 .2
+> 11
+> 10 .91
+> 10 .86
+> 10 .7
+> 10 .68
+> 9.75
+
+Geometric Mean OR 
+
+BBBC036                   
+
+> NR NSB NSS
+> 11 .93 10 .07 9.41
+> 11 .84 9.98 9.38
+> 11 .54 10 .19.54
+> 11 .06 9.67 9.18
+> 11 .16 9.65 8.84
+> 10 .38 9.27 8.96
+> 10 .12 9.18 8.78
+> 9.35 8.85 8.59
+
+Geometric Mean OR 
+
+cpg-MoA 
+
+> 8
+> 9
+> 10
+> 11
+> 12
+
+Appendix Figure 7: MoA enrichment under the no center scaling normalization variant. 25 NR NSB 
+
+CLOOME 
+
+ResNet 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+SubCell 
+
+OpenPhenom 
+
+ResNet (Untrained) 
+
+CellProfiler 
+
+0.07 0.008 
+
+0.069 0.009 
+
+0.06 0.01 
+
+0.057 0.009 
+
+0.056 0.004 
+
+0.055 0.005 
+
+0.054 0
+
+0.052 0.005 
+
+Fraction Significant 
+
+cpg-CRISPR 
+
+0
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.1
+
+NR NSB 
+
+ResNet 
+
+CLOOME 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+SubCell 
+
+ResNet (Untrained) 
+
+CellProfiler 
+
+12 .98 11 .91 
+
+12 .89 11 .88 
+
+12 .7 11 .89 
+
+12 .65 11 .85 
+
+12 .58 11 .8
+
+12 .58 11 .77 
+
+12 .52 11 .56 
+
+12 .47 11 .76 
+
+Geometric Mean OR 
+
+cpg-CRISPR 
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+Appendix Figure 8: CRISPR pathway enrichment under the no center scaling normalization variant. 
+
+NR NSB NSS NSL 
+
+DINOv2 CLS 
+
+ResNet 
+
+CLOOME 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+SubCell 
+
+CellProfiler 
+
+ResNet (Untrained) 
+
+19 .2 21 .21 11 .8 4.88 
+
+19 .1 21 .79 10 .58 4.69 
+
+18 .58 22 .55 6.36 4.39 
+
+16 .96 19 .31 10 .59 4.58 
+
+16 .89 19 .52 8.34 4.14 
+
+15 .17 17 .02 9.21 3.73 
+
+14 .22 18 .18 5.81 3.47 
+
+3.06 3.78 1.57 0.84 
+
+kNN Recall@1 — cpg-tgt2 (301 compounds) 
+
+0
+
+10 
+
+20 
+
+30 
+
+NR NSB NSS NSL 
+
+CLOOME 
+
+CellProfiler 
+
+ResNet 
+
+OpenPhenom 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+SubCell 
+
+ResNet (Untrained) 
+
+0.39 0.24 0.01 0.2
+
+0.34 0.18 0.03 0.21 
+
+0.33 0.19 0.03 0.18 
+
+0.26 0.19 0.03 0.11 
+
+0.25 0.17 0.03 0.1
+
+0.19 0.12 0.04 0.09 
+
+0.18 0.12 0.03 0.08 
+
+0.02 0.01 0.01 0.01 
+
+kNN Recall@1 — cpg-compound (30,138 compounds) 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+NR NSB NSS NSL 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+ResNet 
+
+SubCell 
+
+OpenPhenom 
+
+CellProfiler 
+
+CLOOME 
+
+ResNet (Untrained) 
+
+3.08 3.28 2.78 0.66 
+
+2.71 2.87 2.34 0.59 
+
+2.68 2.88 2.16 0.51 
+
+2.2 2.34 1.86 0.47 
+
+2.28 2.46 1.62 0.43 
+
+1.78 1.91 1.36 0.34 
+
+1.83 2.02 1.15 0.36 
+
+0.57 0.59 0.5 0.19 
+
+mAP — cpg-tgt2 (301 compounds) 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+NR NSB NSS NSL 
+
+CLOOME 
+
+ResNet 
+
+CellProfiler 
+
+OpenPhenom 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+SubCell 
+
+ResNet (Untrained) 
+
+0.22 0.15 0.03 0.11 
+
+0.21 0.13 0.05 0.13 
+
+0.19 0.12 0.04 0.12 
+
+0.17 0.14 0.06 0.07 
+
+0.16 0.12 0.06 0.07 
+
+0.14 0.1 0.05 0.06 
+
+0.12 0.09 0.05 0.06 
+
+0.03 0.02 0.02 0.02 
+
+mAP — cpg-compound (30,138 compounds) 
+
+0
+
+0.2
+
+0.4
+
+0.6
+
+Appendix Figure 9: k-nearest-neighbor replicate retrieval under the no center scaling normalization variant. 26 NR 
+
+DINOv2 CLS 
+
+CLOOME 
+
+SubCell 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+CellProfiler 
+
+ResNet 
+
+ResNet (Untrained) 
+
+> 0.071
+> 0.07
+> 0.07
+> 0.068
+> 0.051
+> 0.028
+> 0.022
+> 0.019
+
+Fraction Significant 
+
+BBBC036                   
+
+> NR NSB NSS
+> 0.122 0.064 0.029
+> 0.117 0.063 0.032
+> 0.101 0.046 0.023
+> 0.065 0.069 0.035
+> 0.107 0.043 0.006
+> 0.09 0.031 0.019
+> 0.032 0.005 0.001
+> 0.03 0.001 0
+
+Fraction Significant 
+
+cpg-MoA 
+
+> 0
+> 0.05
+> 0.1
+> 0.15
+> NR
+
+CLOOME 
+
+DINOv2 CLS 
+
+SubCell 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+CellProfiler 
+
+ResNet 
+
+ResNet (Untrained) 
+
+> 10 .65
+> 10 .53
+> 10 .44
+> 10 .42
+> 10 .08
+> 9.35
+> 9.24
+> 9.19
+
+Geometric Mean OR 
+
+BBBC036                   
+
+> NR NSB NSS
+> 11 .49.96 9.42
+> 11 .24 9.87 9.41
+> 10 .62 9.59.12
+> 9.610 .15 9.46
+> 10 .59 9.53 8.9
+> 10 .25 9.15 8.94
+> 8.72 8.52 8.53
+> 8.67 8.32 8.4
+
+Geometric Mean OR 
+
+cpg-MoA 
+
+> 8
+> 9
+> 10
+> 11
+> 12
+
+Appendix Figure 10: MoA enrichment under the no PCA normalization variant. 
+
+NR NSB 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+SubCell 
+
+OpenPhenom 
+
+CLOOME 
+
+ResNet 
+
+ResNet (Untrained) 
+
+CellProfiler 
+
+0.07 0.013 
+
+0.07 0.013 
+
+0.069 0.007 
+
+0.062 0.005 
+
+0.061 0.004 
+
+0.038 0.022 
+
+0.019 0
+
+0.015 0.003 
+
+Fraction Significant 
+
+cpg-CRISPR 
+
+0
+
+0.02 
+
+0.04 
+
+0.06 
+
+0.08 
+
+0.1
+
+NR NSB 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+SubCell 
+
+OpenPhenom 
+
+CLOOME 
+
+ResNet 
+
+ResNet (Untrained) 
+
+CellProfiler 
+
+13 .06 12 
+
+13 .05 11 .93 
+
+12 .98 11 .81 
+
+12 .78 11 .68 
+
+12 .62 11 .73 
+
+11 .93 11 .56 
+
+11 .47 11 .42 
+
+11 .14 11 .68 
+
+Geometric Mean OR 
+
+cpg-CRISPR 
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+Appendix Figure 11: CRISPR pathway enrichment under the no PCA normalization variant. 27 NR NSB NSS NSL 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+CLOOME 
+
+OpenPhenom 
+
+SubCell 
+
+ResNet 
+
+CellProfiler 
+
+ResNet (Untrained) 
+
+18 .25 22 12 .02 4.8
+
+15 .44 19 .99 10 .59 4.42 
+
+15 .29 19 .85 5.17 3.86 
+
+12 .63 18 .75 8.32 3.95 
+
+13 .44 17 .2 9.3 3.6
+
+4.77 6.1 3.29 1.52 
+
+2.69 2.87 1.48 0.66 
+
+0.76 0.8 0.58 0.42 
+
+kNN Recall@1 — cpg-tgt2 (301 compounds) 
+
+0
+
+10 
+
+20 
+
+30 
+
+NR NSB NSS NSL 
+
+DINOv2 CLS 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+CLOOME 
+
+SubCell 
+
+ResNet 
+
+CellProfiler 
+
+ResNet (Untrained) 
+
+0.34 0.26 0.07 0.13 
+
+0.25 0.19 0.07 0.1
+
+0.23 0.2 0.04 0.11 
+
+0.26 0.18 0.01 0.13 
+
+0.18 0.13 0.03 0.07 
+
+0.06 0.03 0.01 0.03 
+
+0.05 0.05 0.01 0
+
+0 0 0 0
+
+kNN Recall@1 — cpg-compound (30,138 compounds) 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+NR NSB NSS NSL 
+
+DINOv2 CLS 
+
+SubCell 
+
+DINOv2 Patch 
+
+OpenPhenom 
+
+CLOOME 
+
+CellProfiler 
+
+ResNet 
+
+ResNet (Untrained) 
+
+2.89 3.11 2.35 0.63 
+
+2.22 2.42 1.83 0.5
+
+2.22 2.43 1.76 0.46 
+
+2.04 2.3 1.56 0.36 
+
+1.57 1.75 0.97 0.32 
+
+1.26 1.29 1.19 0.42 
+
+1.25 1.34 1.22 0.25 
+
+0.45 0.46 0.43 0.19 
+
+mAP — cpg-tgt2 (301 compounds) 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+NR NSB NSS NSL 
+
+DINOv2 CLS 
+
+CellProfiler 
+
+OpenPhenom 
+
+DINOv2 Patch 
+
+CLOOME 
+
+SubCell 
+
+ResNet 
+
+ResNet (Untrained) 
+
+0.19 0.16 0.09 0.08 
+
+0.16 0.16 0.17 0.11 
+
+0.16 0.14 0.05 0.08 
+
+0.16 0.13 0.07 0.07 
+
+0.15 0.11 0.03 0.07 
+
+0.12 0.1 0.06 0.06 
+
+0.05 0.03 0.03 0.03 
+
+0.01 0.01 0.02 0.01 
+
+mAP — cpg-compound (30,138 compounds) 
+
+0
+
+0.2
+
+0.4
+
+0.6
+
+Appendix Figure 12: k-nearest-neighbor replicate retrieval under the no PCA normalization variant. 28
