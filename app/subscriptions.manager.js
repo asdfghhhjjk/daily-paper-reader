@@ -452,6 +452,14 @@ window.SubscriptionsManager = (function () {
     }
   };
 
+  const clearQuickRunUnsavedMessage = () => {
+    if (!quickRunMsgEl) return;
+    if (/未保存修改|先保存|先点击/.test(quickRunMsgEl.textContent || '')) {
+      quickRunMsgEl.textContent = '配置已保存，可以发起快速抓取。';
+      quickRunMsgEl.style.color = '#080';
+    }
+  };
+
   const setQuickRunMessage = (text, color) => {
     if (quickRunMsgEl) {
       quickRunMsgEl.textContent = text || '';
@@ -987,6 +995,7 @@ window.SubscriptionsManager = (function () {
       draftConfig = toSave;
       hasUnsavedChanges = false;
       refreshQuickRunButtons();
+      clearQuickRunUnsavedMessage();
       if (window.SubscriptionsSmartQuery && window.SubscriptionsSmartQuery.clearPendingDeletedProfileIds) {
         window.SubscriptionsSmartQuery.clearPendingDeletedProfileIds();
       }
@@ -1267,6 +1276,14 @@ window.SubscriptionsManager = (function () {
       buildDefaultSourceBackend: (sourceKey, config) => buildDefaultSourceBackend(sourceKey, cloneDeep(config || {})),
       normalizePaperSources: (values, options) => normalizePaperSources(values, options),
       isConferenceYearSelectable: (conference, year) => isConferenceYearSelectable(conference, year),
+      __setQuickRunMsgEl: (el) => {
+        quickRunMsgEl = el || null;
+      },
+      __setUnsavedChanges: (value) => {
+        hasUnsavedChanges = !!value;
+      },
+      refreshQuickRunButtons,
+      clearQuickRunUnsavedMessage,
     },
   };
 })();

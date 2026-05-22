@@ -11,6 +11,10 @@ require('../app/subscriptions.manager.js');
 const {
   normalizeSubscriptions,
   isConferenceYearSelectable,
+  refreshQuickRunButtons,
+  clearQuickRunUnsavedMessage,
+  __setQuickRunMsgEl,
+  __setUnsavedChanges,
 } = global.window.SubscriptionsManager.__test;
 
 function buildBaseConfig() {
@@ -131,9 +135,30 @@ function testConferenceCurrentYearDisabledForPendingSources() {
   assert.equal(isConferenceYearSelectable('ICML', previousYear), true);
 }
 
+function testQuickRunUnsavedMessageClearsAfterSave() {
+  const msgEl = {
+    textContent: '',
+    style: {
+      color: '',
+    },
+  };
+  __setQuickRunMsgEl(msgEl);
+  __setUnsavedChanges(true);
+  refreshQuickRunButtons();
+  assert.equal(msgEl.textContent, '检测到未保存修改，请先保存后再发起快速抓取。');
+  assert.equal(msgEl.style.color, '#c00');
+
+  __setUnsavedChanges(false);
+  refreshQuickRunButtons();
+  clearQuickRunUnsavedMessage();
+  assert.equal(msgEl.textContent, '配置已保存，可以发起快速抓取。');
+  assert.equal(msgEl.style.color, '#080');
+}
+
 testNormalizeSubscriptionsAddsBiorxivBackend();
 testNormalizeSubscriptionsPreservesCustomBiorxivBackendFields();
 testRunProfileQuickFetchPassesProfileTagToWorkflow();
 testConferenceCurrentYearDisabledForPendingSources();
+testQuickRunUnsavedMessageClearsAfterSave();
 
 console.log('subscriptions manager tests passed');
