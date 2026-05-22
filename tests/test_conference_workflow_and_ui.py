@@ -92,6 +92,8 @@ class ConferenceWorkflowAndUiTest(unittest.TestCase):
         self.assertIn("CONFIG_PATH.write_text", server)
         self.assertIn("/api/local/secret", server)
         self.assertIn("SECRET_PATH.write_text", server)
+        self.assertIn("ENV_PATH", server)
+        self.assertIn("update_env_file", server)
         self.assertIn("build_secret_env", server)
         self.assertIn("DEEPSEEK_API_KEY", server)
         self.assertIn("SUMMARY_API_KEY", server)
@@ -108,6 +110,7 @@ class ConferenceWorkflowAndUiTest(unittest.TestCase):
 
         self.assertIn("/api/local/secret", secret_js)
         self.assertIn("saveLocalSecretPayloadToDisk", secret_js)
+        self.assertIn("body.secret = secretPlain", secret_js)
         self.assertIn("loadLocalSecretPayloadPreferred", secret_js)
         self.assertIn("DEFAULT_RERANKER_PROFILE.value", secret_js)
         self.assertIn("secret.private", gitignore)

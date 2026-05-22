@@ -63,12 +63,16 @@
     return data.payload;
   }
 
-  async function saveLocalSecretPayloadToDisk(payload) {
+  async function saveLocalSecretPayloadToDisk(payload, secretPlain) {
     if (!isLocalDebugHost()) return false;
+    const body = { payload };
+    if (secretPlain && typeof secretPlain === 'object') {
+      body.secret = secretPlain;
+    }
     const res = await fetch(getLocalApiUrl('/api/local/secret'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payload }),
+      body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
@@ -1751,7 +1755,7 @@
 
           if (localOnly) {
             try {
-              await saveLocalSecretPayloadToDisk(payload);
+              await saveLocalSecretPayloadToDisk(payload, plainConfig);
             } catch (e) {
               console.error(e);
               setErrorText('❌ 保存到本地 secret.private 失败，请确认本地后端已启动。', '#c00');

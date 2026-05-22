@@ -26,6 +26,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 RUNS_DIR = ROOT_DIR / ".local-runs"
 CONFIG_PATH = ROOT_DIR / "config.yaml"
 SECRET_PATH = ROOT_DIR / "secret.private"
+ENV_PATH = ROOT_DIR / ".env"
 
 
 def utc_now() -> str:
@@ -50,14 +51,12 @@ def build_secret_env(secret: dict[str, Any] | None) -> dict[str, str]:
         model = norm_text(first_chat.get("models")[0])
 
     env: dict[str, str] = {}
-    if api_key:
+    if summarized or first_chat:
         env["SUMMARY_API_KEY"] = api_key
         env["DEEPSEEK_API_KEY"] = api_key
-    if base_url:
         env["SUMMARY_BASE_URL"] = base_url
         env["DEEPSEEK_BASE_URL"] = base_url
         env["LLM_PRIMARY_BASE_URL"] = base_url
-    if model:
         env["SUMMARY_MODEL"] = model
         env["DEEPSEEK_MODEL"] = model
 
@@ -67,25 +66,53 @@ def build_secret_env(secret: dict[str, Any] | None) -> dict[str, str]:
     rerank_model = norm_text(reranker.get("model"))
     rerank_key = norm_text(reranker.get("apiKey"))
     rerank_base = norm_text(reranker.get("baseUrl"))
-    if rerank_profile:
+    if reranker:
         env["RERANK_PROFILE"] = rerank_profile
-    if rerank_provider:
         env["RERANK_PROVIDER"] = rerank_provider
-    if rerank_model:
         env["RERANK_MODEL"] = rerank_model
-    if rerank_key:
         env["RERANK_API_KEY"] = rerank_key
-        if rerank_provider == "public_zwwen":
-            env["PUBLIC_RERANK_API_KEY"] = rerank_key
-        if rerank_provider == "siliconflow":
-            env["SILICONFLOW_API_KEY"] = rerank_key
-    if rerank_base:
         env["RERANK_API_BASE_URL"] = rerank_base
         if rerank_provider == "public_zwwen":
+            env["PUBLIC_RERANK_API_KEY"] = rerank_key
             env["PUBLIC_RERANK_API_BASE_URL"] = rerank_base
         if rerank_provider == "siliconflow":
+            env["SILICONFLOW_API_KEY"] = rerank_key
             env["SILICONFLOW_RERANK_URL"] = rerank_base
     return env
+
+
+def quote_env_value(value: str) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    if any(ch.isspace() or ch in {'"', "'", "#", "\\"} for ch in text):
+        escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return text
+
+
+def update_env_file(path: Path, values: dict[str, str]) -> None:
+    clean_values = {str(k): str(v).strip() for k, v in values.items() if str(k).strip()}
+    existing = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    updated_keys: set[str] = set()
+    next_lines: list[str] = []
+    for line in existing:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            next_lines.append(line)
+            continue
+        prefix = "export " if stripped.startswith("export ") else ""
+        body = stripped[len("export ") :] if prefix else stripped
+        key = body.split("=", 1)[0].strip()
+        if key in clean_values:
+            next_lines.append(f"{prefix}{key}={quote_env_value(clean_values[key])}")
+            updated_keys.add(key)
+        else:
+            next_lines.append(line)
+    for key in clean_values:
+        if key not in updated_keys:
+            next_lines.append(f"{key}={quote_env_value(clean_values[key])}")
+    path.write_text("\n".join(next_lines).rstrip() + "\n", encoding="utf-8")
 
 
 class RunStore:
@@ -356,7 +383,22 @@ class Handler(SimpleHTTPRequestHandler):
                 json.dumps(secret_payload, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
-            return self._json({"ok": True, "path": str(SECRET_PATH), "savedAt": utc_now()})
+            secret_plain = payload.get("secret") if isinstance(payload.get("secret"), dict) else None
+            env_path = ""
+            env_keys: list[str] = []
+            if secret_plain:
+                secret_env = build_secret_env(secret_plain)
+                if secret_env:
+                    update_env_file(ENV_PATH, secret_env)
+                    env_path = str(ENV_PATH)
+                    env_keys = sorted(secret_env.keys())
+            return self._json({
+                "ok": True,
+                "path": str(SECRET_PATH),
+                "envPath": env_path,
+                "envKeys": env_keys,
+                "savedAt": utc_now(),
+            })
         except Exception as exc:
             return self._json({"ok": False, "error": str(exc)}, status=400)
 
