@@ -1,29 +1,42 @@
 # 日报 · 2026-05-17 ~ 2026-06-15
 
-- 生成时间：2026-06-15 11:37:35 UTC
-- 当次推荐总数：11
-- 精读区：5
-- 速读区：6
+- 生成时间：2026-06-15 13:04:31 UTC
+- 当次推荐总数：24
+- 精读区：15
+- 速读区：9
 
 ## 今日简报（AI）
-1) 本期日报聚焦计算病理学，精选了细胞核分割与可部署诊断模型的高分论文。
-2) 最值得关注的是《AMN》中基于边界与不确定性建模的多尺度分割方法（10分），以及《Pathway-Structured Privileged Distillation》提出的通道结构特权蒸馏技术（9分）。
-3) 建议优先阅读这两篇精读论文，理解其核心理念后，可尝试将改进应用于病理图像分析的实际任务中。
+本月精读15篇、速读9篇，重点关注高分病理图像分析论文。  
+最值得看的是《Thinking in Scales》与《AGE-MIL》，分别创新自适应连续推理和锚引导证据学习，均获满分评价。  
+建议优先精读这两篇满分论文，理解其病理切片分析的核心方法。
 
 ## 精读区
-1. [AMN: An Adaptive Multi-Scale Fusion Network with Boundary and Uncertainty Modeling for Nuclei Segmentation](/20260517-20260615/2606.07633v1-amn-an-adaptive-multi-scale-fusion-network-with-boundary-and-uncertainty-modeling-for-nuclei-segmentation) （10.0/10）
-2. [Pathway-Structured Privileged Distillation for Deployable Computational Pathology](/20260517-20260615/2606.02877v1-pathway-structured-privileged-distillation-for-deployable-computational-pathology) （9.0/10）
-3. [Beyond Morphology: Quantifying the Diagnostic Power of Color Features in Cancer Classification](/20260517-20260615/2605.18522v1-beyond-morphology-quantifying-the-diagnostic-power-of-color-features-in-cancer-classification) （8.0/10）
-4. [DaX: Learning General Pathology Representations Across Scales](/20260517-20260615/2606.06983v1-dax-learning-general-pathology-representations-across-scales) （8.0/10）
-5. [From Patches to Patients: A study of the tile-to-slide performance transferability in Digital Pathology](/20260517-20260615/2606.10778v1-from-patches-to-patients-a-study-of-the-tile-to-slide-performance-transferability-in-digital-pathology) （8.0/10）
+1. [Thinking in Scales: Accelerating Gigapixel Pathology Image Analysis via Adaptive Continuous Reasoning](/20260517-20260615/2605.19491v2-thinking-in-scales-accelerating-gigapixel-pathology-image-analysis-via-adaptive-continuous-reasoning) （10.0/10）
+2. [AGE-MIL: Anchor-Guided Evidence Learning for Patient-Level Prediction](/20260517-20260615/2606.12126v1-age-mil-anchor-guided-evidence-learning-for-patient-level-prediction) （10.0/10）
+3. [Spatial Blindness in Whole-Slide Multiple Instance Learning](/20260517-20260615/2605.17449v1-spatial-blindness-in-whole-slide-multiple-instance-learning) （9.0/10）
+4. [GCE-MIL: Faithful and Recoverable Evidence for Multiple Instance Learning in Whole-Slide Imaging](/20260517-20260615/2605.17456v1-gce-mil-faithful-and-recoverable-evidence-for-multiple-instance-learning-in-whole-slide-imaging) （9.0/10）
+5. [Thinking in Scales: Accelerating Gigapixel Pathology Image Analysis via Adaptive Continuous Reasoning](/20260517-20260615/2605.19491v1-thinking-in-scales-accelerating-gigapixel-pathology-image-analysis-via-adaptive-continuous-reasoning) （9.0/10）
+6. [One Click per Cell Type Suffices: Training-free Group Interaction for Cell Instance Segmentation](/20260517-20260615/2605.29429v1-one-click-per-cell-type-suffices-training-free-group-interaction-for-cell-instance-segmentation) （9.0/10）
+7. [Aligning Cellular Sheaves with Classifier Attention for Interpretable Weakly-Supervised Pathology Localization](/20260517-20260615/2606.00092v1-aligning-cellular-sheaves-with-classifier-attention-for-interpretable-weakly-supervised-pathology-localization) （9.0/10）
+8. [Symb-xMIL: Symbolic Explanations for Multiple Instance Learning in Digital Pathology](/20260517-20260615/2606.06224v1-symb-xmil-symbolic-explanations-for-multiple-instance-learning-in-digital-pathology) （9.0/10）
+9. [Symb-xMIL: Symbolic Explanations for Multiple Instance Learning in Digital Pathology](/20260517-20260615/2606.06224v2-symb-xmil-symbolic-explanations-for-multiple-instance-learning-in-digital-pathology) （9.0/10）
+10. [In-Context Multiple Instance Learning](/20260517-20260615/2606.06458v1-in-context-multiple-instance-learning) （9.0/10）
+11. [LRMIL: Efficient Low-Resolution Multiple Instance Learning via High-Resolution Knowledge Distillation for Whole Slide Image Classification](/20260517-20260615/2606.06864v1-lrmil-efficient-low-resolution-multiple-instance-learning-via-high-resolution-knowledge-distillation-for-whole-slide-image-classification) （9.0/10）
+12. [AMN: An Adaptive Multi-Scale Fusion Network with Boundary and Uncertainty Modeling for Nuclei Segmentation](/20260517-20260615/2606.07633v1-amn-an-adaptive-multi-scale-fusion-network-with-boundary-and-uncertainty-modeling-for-nuclei-segmentation) （9.0/10）
+13. [Learnable Token Sparsification for Efficient Gigapixel Whole Slide Image Reasoning](/20260517-20260615/2606.08641v1-learnable-token-sparsification-for-efficient-gigapixel-whole-slide-image-reasoning) （9.0/10）
+14. [GD-MIL: Grade-Disentangled Multiple Instance Learning for Multimodal Biochemical Recurrence Prediction in Prostate Cancer](/20260517-20260615/2606.09453v1-gd-mil-grade-disentangled-multiple-instance-learning-for-multimodal-biochemical-recurrence-prediction-in-prostate-cancer) （9.0/10）
+15. [Rethinking Global Average Pooling: Your Classifier Is Secretly a Multi-Instance Learner](/20260517-20260615/2606.14555v1-rethinking-global-average-pooling-your-classifier-is-secretly-a-multi-instance-learner) （9.0/10）
 
 ## 速读区
-1. [Thinking in Scales: Accelerating Gigapixel Pathology Image Analysis via Adaptive Continuous Reasoning](/20260517-20260615/2605.19491v1-thinking-in-scales-accelerating-gigapixel-pathology-image-analysis-via-adaptive-continuous-reasoning) （7.0/10）
-2. [Thinking in Scales: Accelerating Gigapixel Pathology Image Analysis via Adaptive Continuous Reasoning](/20260517-20260615/2605.19491v2-thinking-in-scales-accelerating-gigapixel-pathology-image-analysis-via-adaptive-continuous-reasoning) （7.0/10）
-3. [Simple Token-Efficient Vision-Language Model for Case-level Pathology Synoptic Report Generation](/20260517-20260615/2605.30716v1-simple-token-efficient-vision-language-model-for-case-level-pathology-synoptic-report-generation) （7.0/10）
-4. [Bridging Topology and Deep Representation Learning: A TDA-ViT Fusion Model for Four-Class Brain Tumor Classification](/20260517-20260615/2606.00927v1-bridging-topology-and-deep-representation-learning-a-tda-vit-fusion-model-for-four-class-brain-tumor-classification) （7.0/10）
-5. [DualGate-Net: A Prior-Gated Dual-Encoder Framework for Histopathology Cell Detection](/20260517-20260615/2606.07222v1-dualgate-net-a-prior-gated-dual-encoder-framework-for-histopathology-cell-detection) （7.0/10）
-6. [ConceptM$^3$oE: Concept-Guided Multimodal Mixture of Experts for Interpretable Computational Pathology](/20260517-20260615/2605.24399v2-conceptm3oe-concept-guided-multimodal-mixture-of-experts-for-interpretable-computational-pathology) （6.0/10）
+1. [Normal Guidance is what Attention Needs](/20260517-20260615/2605.27306v1-normal-guidance-is-what-attention-needs) （8.0/10）
+2. [From Patches to Patients: A study of the tile-to-slide performance transferability in Digital Pathology](/20260517-20260615/2606.10778v1-from-patches-to-patients-a-study-of-the-tile-to-slide-performance-transferability-in-digital-pathology) （8.0/10）
+3. [MORI-Seg: Learning Morphological Geometry for Instance Segmentation without Instance Annotations](/20260517-20260615/2605.28261v1-mori-seg-learning-morphological-geometry-for-instance-segmentation-without-instance-annotations) （7.0/10）
+4. [Pathway-Structured Privileged Distillation for Deployable Computational Pathology](/20260517-20260615/2606.02877v1-pathway-structured-privileged-distillation-for-deployable-computational-pathology) （7.0/10）
+5. [DaX: Learning General Pathology Representations Across Scales](/20260517-20260615/2606.06983v1-dax-learning-general-pathology-representations-across-scales) （7.0/10）
+6. [DualGate-Net: A Prior-Gated Dual-Encoder Framework for Histopathology Cell Detection](/20260517-20260615/2606.07222v1-dualgate-net-a-prior-gated-dual-encoder-framework-for-histopathology-cell-detection) （7.0/10）
+7. [Atlas H&E-TME: Scalable AI-Based Tissue Profiling at Expert Pathologist-Level Accuracy](/20260517-20260615/2606.12346v1-atlas-he-tme-scalable-ai-based-tissue-profiling-at-expert-pathologist-level-accuracy) （7.0/10）
+8. [Learning Task-Aware Sampling with Shared Saliency through Density-Equalizing Mappings](/20260517-20260615/2606.12869v1-learning-task-aware-sampling-with-shared-saliency-through-density-equalizing-mappings) （7.0/10）
+9. [PathNavigate: A Training-Free Pathology Agent with Surprise-Guided Scan and Shared Slide Memory for Whole-Slide Image VQA](/20260517-20260615/2605.23559v1-pathnavigate-a-training-free-pathology-agent-with-surprise-guided-scan-and-shared-slide-memory-for-whole-slide-image-vqa) （6.0/10）
 
 ---
 使用键盘方向键可在日报/论文之间快速切换。

@@ -1,0 +1,160 @@
+Title: Aligning Cellular Sheaves with Classifier Attention for Interpretable Weakly-Supervised Pathology Localization
+
+URL Source: https://arxiv.org/pdf/2606.00092v1
+
+Published Time: Tue, 02 Jun 2026 00:05:55 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Aligning Cellular Sheaves with Classifier Attention for Interpretable Weakly-Supervised Pathology Localization 
+
+Devansh Lalwani ∗ Swapnil Bhat Maulik Shah 
+
+Turocrates AI Private Limited, Mumbai, India 
+
+Abstract 
+
+Weakly-supervised classification of whole-slide images with attention-based multiple instance learning (ABMIL) on top of foundation features now reaches near-saturation on Camelyon16 slide-level performance, but the corresponding attention maps are an imperfect localization signal: in clinical interpretation, a model that classifies correctly without firing on the actual lesion is hard to trust. We address this gap with cellular sheaves, which equip each vertex and edge of a graph with a finite-dimensional vector space and consistent linear maps between them, providing a principled way to detect local disagreement on graph-structured data. We apply cellular sheaves to weakly-supervised tumour localization on whole-slide images, combining a sheaf disagreement field with ABMIL. The natural training objective, encouraging consistency between similar features, produces a disagreement field that tracks tissue-level texture rather than diagnostic content. We propose attention-conditional consistency , which uses the classifier’s own attention to define which neighbouring patches should agree. Joint training of the classifier and the sheaf under this objective produces a disagreement field with patch-level AUC 0.940 on Camelyon16 and raises the attention head from its ABMIL-alone level of 0.717 to 0.953 . A two-stage ablation with the classifier frozen at its ABMIL values reaches only 0.727 on the disagreement field and leaves attention at 0.717 , confirming that the gain comes from the projector co-adapting under both objectives, not from the loss change in isolation. The trained model transfers without retraining to annotated slides from Camelyon17, maintaining ∆ AUC 0.932 ± 0.083 and attention AUC 0.955 ± 0.099 . The result is an attention map and a sheaf-disagreement map that fire on the same diagnostic regions, giving the clinician two complementary explanations for each slide-level prediction. 
+
+# 1 Introduction 
+
+Whole-slide images (WSIs) of histology sections are large multi-resolution scans, often exceed-ing 100,000 pixels per side. Slide-level diagnostic labels (“this lymph node contains metastatic carcinoma”) are routinely available; pixel-level annotations are not. Multiple-instance learning (MIL) treats each slide as a bag of patches and learns to predict the slide label from patch-level features, with attention pooling indicating which patches drove the prediction. Attention-based MIL (ABMIL) on top of foundation-model features such as UNI now reaches near-saturation on Camelyon16 slide-level classification. Reaching saturation on slide-level AUC, however, does not solve the clinical problem. Apathologist reading the model’s output needs to see why a slide was called positive: which region 
+
+> ∗
+
+Corresponding author: founders@turocrates.ai 
+
+1
+
+> arXiv:2606.00092v1 [cs.CV] 24 May 2026
+
+triggered the prediction, and how confident the model is locally. ABMIL attention provides a useful proxy but is a known weak localizer. The attention scalar for each patch is a function of that patch alone (through a small gated network), with no explicit modelling of how patches relate to their spatial neighbours. Tumour regions in lymph node biopsies are spatially coherent: a tumour-bearing patch is usually surrounded by other tumour-bearing patches, and the boundary between tumour and normal tissue is the most diagnostically informative region of the slide. A localization signal that explicitly models neighbourhood consistency should produce a more interpretable map for clinical review. Cellular sheaves provide such a signal. A cellular sheaf on a graph attaches a vector space to each vertex and each edge, with linear restriction maps from incident vertices to edges; the sheaf Laplacian then yields a per-vertex disagreement quantity that measures how much each vertex deviates from local consistency. The construction is symmetric, gauge-invariant, and parameterisable, so it can be learned end-to-end alongside the classifier. Applied to a patch graph, the sheaf disagreement field becomes a candidate localization signal that is topological by construction. The natural recipe, train the sheaf to make feature-similar patches agree, produces a disagreement field that tracks general tissue texture rather than diagnostic content. Our contribution is the observation that the consistency target should be the classifier’s own attention, not raw feature similarity. We introduce attention-conditional consistency , a training objective on sheaf restrictions that uses per-edge attention differences as supervision: edges between patches the classifier weights similarly should agree, edges across attention discontinuities should disagree. Joint training of the classifier and the sheaf under this objective produces a sheaf disagreement field whose AUC approaches that of the attention head as a patch-level localizer, and, more surprisingly, sharpens the attention map itself. The combined output, two heads producing localization maps that fire on the same regions but for different mathematical reasons, is the interpretability contribution: a clinician can ask both “where did the classifier focus?” and “where does the tissue itself signal a transition?” and get answers that should agree on a correctly predicted tumour, and disagree informatively when the prediction is uncertain. 
+
+# 2 Background 
+
+2.1 Cellular sheaves on graphs 
+
+Let G = ( V, E ) be an undirected graph. A cellular sheaf F on G assigns to each vertex v ∈ V avector space F(v) = Rd, to each edge e ∈ E an edge stalk F(e) = Rd′
+
+, and to each incidence v ⊴ e
+
+a linear restriction map Fv⊴e : F(v) → F (e).Each edge e = ( u, v ) is given an arbitrary but fixed orientation. The coboundary map δ collects per-edge discrepancies: 
+
+δe = Fu⊴e xu − F v⊴e xv.
+
+The sheaf Laplacian is defined as LF = δ⊤δ, which is symmetric and positive semidefinite by construction. Its action on the v-th block is 
+
+(LF x)v = ∑ 
+
+> e:v=u(e)
+
+F⊤ 
+
+> v⊴e
+
+δe − ∑ 
+
+> e:v=v(e)
+
+F⊤ 
+
+> v⊴e
+
+δe,
+
+where the sign reflects the orientation convention. The kernel of LF is exactly the space of global sections, i.e., the assignments x for which all restriction maps agree. We use the per-vertex norm of the Laplacian image, 
+
+∆v = ∥(LF x)v∥2 ,
+
+2as a per-vertex disagreement signal. 
+
+2.2 Attention-based MIL with foundation features 
+
+ABMIL embeds each patch through a small projection, computes a gated attention scalar for each patch, pools features by attention-weighted sum, and classifies the slide. With UNI patch features (a 1024-dimensional ViT-L/16 representation pretrained on a large pathology corpus) ABMIL attention is already a strong slide-level classifier on Camelyon16 ( ∼0.95 AUC). Treating the attention scalars as a localization map gives a competitive but imperfect patch-level signal. 
+
+# 3 Method 
+
+3.1 Patch graph and low-rank sheaf 
+
+Each slide is processed as a graph G = ( V, E ) where vertices are tissue patches at 128 μm physical resolution. Edges connect each patch to its 8 spatial nearest neighbours by patch centroid. Each vertex stalk F(v) = Rd carries the projected UNI feature with d = 256 , and each edge stalk has dimension d′ = 64 .Restriction maps are produced by a hypernetwork conditioned on the two endpoint features and their spatial offset, in low-rank form Fv⊴e = AB ⊤ with A ∈ Rd′×r, B ∈ Rd×r, and rank r = 8 . The low-rank parameterisation reduces parameter count and forces each restriction map to identify a small set of directions in feature space along which the two endpoint patches are compared. 
+
+3.2 Three properties of the construction 
+
+• Positive semidefiniteness. The sheaf Laplacian LF = δ⊤δ is PSD by construction, so the disagreement ∆v ≥ 0 with equality iff the section is consistent at vertex v.
+
+• Gauge invariance. Replacing each restriction map by an orthogonal change of basis on the edge stalks leaves ∆v unchanged. The disagreement is a property of the sheaf data, not of the parameterisation. 
+
+• Geometric meaning of low rank. With rank r, the local disagreement at a vertex sees only the projection of the feature onto an r-dimensional subspace, selected by the hypernetwork per edge. Larger r gives more capacity per edge; we use r = 8 , which is enough for this task. 
+
+3.3 Joint training: classifier and sheaf 
+
+The model has a single shared input projector. From the projected features, the classifier head computes gated attention and a slide-level logit; the sheaf head computes the disagreement field 
+
+∆. Both heads are exposed simultaneously through one forward pass. Training jointly optimises classification cross-entropy on the slide label, a consistency loss on the sheaf, and a weak orthogonality regulariser on the low-rank factors. 
+
+3.4 Attention-conditional consistency 
+
+The choice of consistency loss determines what the disagreement field learns. We propose the following. Let a be the (detached) attention vector produced by the classifier head. On each edge (u, v ) we form |au − av|: the gap between the classifier’s importance judgements at the two 3endpoints. We split edges by per-slide percentile thresholds: low-gap edges (bottom 30%) are treated as agreeing, high-gap edges (top 30%) as disagreeing. On agreeing edges we minimise ∥δe∥2: the sheaf is encouraged to give consistent restrictions where the classifier already agrees. On disagreeing edges we encourage ∥δe∥2 above a margin: the sheaf is encouraged to express disagreement exactly where the classifier itself sees a boundary. The total loss is the weighted sum of these two terms. Attention is detached when computing this loss, so no gradient flows from the consistency loss back into the classifier through the sheaf branch. Updates to the projector still come from both objectives, allowing the projector to find a representation that serves both heads. The classifier head is not directly modified by the sheaf objective; the sheaf adapts to whatever attention pattern the classifier produces. The intuition: a useful per-patch disagreement signal should fire exactly where the classifier’s per-patch judgements transition. Attention-conditional consistency makes this alignment explicit at training time, rather than hoping it emerges from feature-similarity-based consistency. 
+
+# 4 Experiments 
+
+4.1 Datasets and setup 
+
+We use Camelyon16 for training and primary evaluation, and Camelyon17 for external validation. Camelyon16 contains 270 training slides (110 tumour, 160 normal) and 129 test slides (49 tumour, 80 normal). Camelyon17 contains 50 mask-annotated slides drawn from 5 medical centres in the Netherlands. Patch features are extracted with UNI [ 5 ] (ViT-L/16, 1024-dim) at 128 μm physical resolution using the same tissue-detection, tiling, and inference pipeline for both datasets. kNN graphs use 
+
+k = 8 in spatial coordinates. Training uses AdamW with learning rate 10 −4, weight decay 10 −5,batch size 1 slide, gradient clipping at norm 1.0, and 40 epochs with the first 5 as classifier-only warmup. 
+
+Limitations and future work. We compare against ABMIL [ 3 ] as the sole MIL baseline. Patch-level localization comparisons with CLAM [ 4 ], DSMIL [ 8 ], and TransMIL under the same UNI feature protocol, multi-seed variance estimates, and a sensitivity analysis over architectural hyperparameters ( r=8 , k=8 , d′=64 ) are planned as future work. 
+
+4.2 Camelyon16 localization 
+
+Table 1 reports per-slide patch-level AUC averaged across the 49 tumour test slides, for the trained Sheaf-MIL-Loc model with attention-conditional consistency, the two-stage frozen-classifier ablation, and ABMIL attention as the baseline localizer. Numbers are mean ± SD across slides; ∆ is the sheaf disagreement field; attention is the gated-attention head. The attention-conditional consistency objective produces a disagreement field whose AUC approaches that of the attention head ( 0.940 vs 0.953 ); Figure 1 illustrates this on representative Camelyon17 slides. The ∆ field is stronger in whole-slide ranking (AUC) than in top-k precision: 
+
+∆ prec@50 is 0.521 versus attention prec@50 of 0.632 , reflecting the fact that ∆ activates on tumour–normal transition zones rather than tumour centres. The more striking effect is on the attention head itself: pure ABMIL with no sheaf branch reaches patch-level AUC 0.717 , consistent with the published consensus that ABMIL attention is a weak localizer; the same ABMIL architecture trained jointly with the sheaf and the attention-conditional consistency loss reaches 0.953 , an improvement of 0.236 on the same test slides. The two-stage 4Method ∆ AUC Attn. AUC ∆ p@50 Attn. p@50             
+
+> ABMIL (no sheaf) —0.717 —0.569 Sheaf-MIL-Loc (joint) 0.940 0.953 0.521 0.632 Two-stage (frozen cls.) 0.727 0.717 0.329 0.569
+
+Table 1: Camelyon16 patch-level localization on 49 tumour test slides (single seed). Joint training raises the attention AUC from 0.717 to 0.953 . The two-stage variant with a frozen classifier leaves attention at 0.717 and gives only a modest ∆. The gain comes from the projector co-adapting under both objectives. Note that ∆ prec@50 ( 0.521 ) is lower than attention prec@50 ( 0.632 ): the disagreement field’s strength is in whole-slide ranking (AUC) rather than top-k precision, likely because ∆ fires on tumour–normal boundaries rather than tumour centres. variant isolates the cause. With the classifier frozen at its ABMIL-trained values, training only the sheaf hypernet on top of the new loss raises ∆ to 0.727 but leaves attention at 0.717 by construction. The 0.236 attention gain in the joint setting therefore comes from the projector receiving gradients from both the classification head and the sheaf consistency objective, not from the loss change in isolation. The sheaf branch is acting as a structured regulariser on the projector: the representation that minimises attention-conditional consistency also produces sharper attention for slide-level classification. We also tried a naive feature-similarity consistency loss, where edges between feature-similar patches are pulled toward zero disagreement. This produces a degenerate ∆ field (AUC 0.575 ) that tracks tissue-level texture rather than diagnostic content, while the attention head converges to roughly the same value as ABMIL alone ( 0.717 ). The choice of consistency target is therefore as important as the decision to train the sheaf jointly with the classifier. 
+
+4.3 Camelyon17 evaluation 
+
+We evaluate the trained Camelyon16 model on Camelyon17 without any retraining or fine-tuning. Camelyon17 provides 50 slides with publicly available pixel-level annotations from the official challenge release. These slides were collected at medical centres distinct from those producing the Camelyon16 dataset and with different scanner generations. On these 44 evaluable tumour slides, the disagreement field reaches ∆ AUC 0.932 ± 0.083 and attention AUC 0.955 ± 0.099 (mean ± SD across slides), closely matching the in-domain Camelyon16 results of 0.940 and 0.953 (see Figure 1 for representative examples). That the C17 attention AUC ( 0.955 ) is marginally higher than the C16 value ( 0.953 ) is within the per-slide noise (C17 SD = 0 .099 ); we do not interpret this as a genuine gain from domain shift. The trained model transfers to Camelyon17 without measurable degradation, despite the change in acquisition protocol. 
+
+4.4 Diagnostic interpretation 
+
+We measure per-slide Spearman correlations between ∆ and four reference quantities: the patch feature norm ∥x∥, the mean cosine similarity of each patch to its kNN neighbours, the kNN-graph hop-distance to the nearest opposite-label patch, and the binary tumour label. With attention-conditional consistency, mean correlations across tumour test slides show that ∆ tracks neighbourhood feature dissimilarity (Spearman ρ ≈ − 0.85 with mean neighbour cosine similarity, by construction of the loss) and is positively associated with the tumour label. The disagreement field is functionally distinct from attention: the two heads are not redundant readouts of the same underlying signal. 55 Discussion 
+
+Cellular sheaves provide a natural language for per-patch disagreement on graph-structured WSI data, but the natural training objective, feature-similarity consistency, does not by itself produce a useful localization signal. The fix is to align the consistency objective with the classifier’s attention rather than with raw feature similarity. Attention is a learned signal that already encodes diagnostic relevance; using its edge-wise differences to define agreement and disagreement gives the sheaf a meaningful target. The framing is consistent with concurrent work on aligning classifier prediction with attention saliency in MIL pipelines, but introduces a different alignment mechanism: a structured loss on a topological field rather than a parameter-sharing constraint between heads. The two-stage ablation rules out a possible alternative explanation. If the gain came purely from the new loss, training only the sheaf hypernet on top of a frozen classifier would reproduce the joint result. It does not: the two-stage ∆ AUC of 0.727 , while improved over baseline, falls well short of the joint 0.940 . Both heads need to co-adapt during training; the projector ends up serving classification and sheaf consistency simultaneously, and that joint optimum is what produces the result. A practical consequence is that the sheaf branch can be added to an existing ABMIL pipeline at small additional cost and improves not only localization but the attention map itself. The Camelyon17 evaluation confirms that the result is not specific to Camelyon16 tissue characteristics. The trained model transfers to annotated Camelyon17 slides without retraining, achieving ∆ AUC 0.932 ± 0.083 and attention AUC 0.955 ± 0.099 , matching in-domain numbers despite the different acquisition pipeline. The difference between C16 and C17 attention AUCs (0.953 vs 0.955 ) is well within the per-slide standard deviation and we do not consider it meaningful. The interpretability outcome is twofold. First, the attention map produced by the co-trained model is itself a sharper localization signal than the attention map produced by ABMIL trained alone, requiring no architectural change. Second, the sheaf disagreement field gives a complementary view, derived from the topology of the patch graph rather than from the classifier directly. On a correctly predicted positive slide, the two fields fire on the same regions, providing concordant explanations for the prediction. On a slide where the two fields disagree, the disagreement is itself a useful signal: the classifier’s attention may have been driven by a confounder that the topological view does not corroborate, or vice versa. We leave systematic exploration of this calibration use case to clinical follow-up work. The framework is conservative in important ways. We do not modify the sheaf mathematics, only the consistency loss. The classifier remains a standard ABMIL head, and feature extraction uses publicly available UNI weights without any fine-tuning. The architecture thus inherits the efficiency and reproducibility properties of the underlying ABMIL+UNI pipeline while adding a localization-aware head trained at small additional cost. 
+
+# 6 Conclusion 
+
+We presented an application of cellular sheaf neural networks to weakly-supervised tumour localiza-tion on whole-slide images, with explicit attention to the interpretability requirements of clinical pathology. The key methodological contribution is attention-conditional consistency, a training objective that aligns the sheaf disagreement field with the classifier’s attention. With this objective, joint training of classifier and sheaf produces a disagreement field that approaches attention as a patch-level localizer on Camelyon16 ( ∆ AUC 0.940 ), sharpens the attention map itself (from 0.717 
+
+to 0.953 patch-level AUC), and transfers without retraining to annotated Camelyon17 slides ( ∆
+
+AUC 0.932 ± 0.083 ). The two-stage ablation establishes that joint optimisation is essential. The 6end-result is a pair of complementary localization maps that fire on the same regions for different mathematical reasons, supporting clinical interpretation of individual predictions. The same construction extends naturally to other weakly-supervised localization problems in pathology: detection of mitotic figures, identification of high-grade regions in graded cancers, and characterisation of pre-malignant lesions. We leave these to future work. 
+
+# Acknowledgements 
+
+We thank the organizers of the Camelyon16 and Camelyon17 challenges for making the datasets and ground-truth annotations publicly available, and the Mahmood Lab for releasing the UNI foundation model. 
+
+# References 
+
+[1] J. Hansen and R. Ghrist. Toward a spectral theory of cellular sheaves. Journal of Applied and Computational Topology , 3(4):315–358, 2019. [2] C. Bodnar, F. Di Giovanni, B. P. Chamberlain, P. Liò, and M. M. Bronstein. Neural sheaf diffusion: A topological perspective on heterophily and oversmoothing in GNNs. In Advances in Neural Information Processing Systems (NeurIPS) , 2022. [3] M. Ilse, J. M. Tomczak, and M. Welling. Attention-based deep multiple instance learning. In 
+
+International Conference on Machine Learning (ICML) , 2018. [4] M. Y. Lu, D. F. K. Williamson, T. Y. Chen, R. J. Chen, M. Barbieri, and F. Mahmood. Data-efficient and weakly supervised computational pathology on whole-slide images. Nature Biomedical Engineering , 5(6):555–570, 2021. [5] R. J. Chen, T. Ding, M. Y. Lu, et al. Towards a general-purpose foundation model for computational pathology. Nature Medicine , 30(3):850–862, 2024. [6] B. E. Bejnordi et al. Diagnostic assessment of deep learning algorithms for detection of lymph node metastases in women with breast cancer (CAMELYON16). JAMA , 318(22):2199–2210, 2017. [7] P. Bandi et al. From detection of individual metastases to classification of lymph node status at the patient level: The CAMELYON17 challenge. IEEE Transactions on Medical Imaging ,38(2):550–560, 2019. [8] B. Li, Y. Li, and K. W. Eliceiri. Dual-stream multiple instance learning network for whole slide image classification with self-supervised contrastive learning. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2021. [9] Y. Sharma et al. NRK-ABMIL: Subtle metastatic deposits detection for predicting lymph node metastasis in breast cancer whole-slide images. Cancers , 15(9):2646, 2023. 7Macrometastasis      
+
+> H&E tissue
+> ABMIL attention
+> (no co-training)
+> Attention
+> (co-trained)
+> Ground truth &
+> prediction
+> Macrometastasis
+> Micrometastasis
+> Micrometastasis
+> High attention Low attention Tissue (neutral) Ground truth Predicted (top 10%) Overlap
+
+Figure 1: Attention heatmaps on four Camelyon17 slides (two macrometastases, two micrometas-tases), evaluated without any retraining on C17. Each row shows a different slide. Column 1: H&E tissue. Column 2: ABMIL attention without sheaf co-training (frozen-classifier model): attention fails to localize on tumour regions. Column 3: Attention from the jointly trained Sheaf-MIL-Loc model: attention concentrates on tumour-bearing regions. Red indicates high attention; blue indicates low attention. Column 4: Ground-truth tumour mask (green) overlaid with the predicted tumour region (orange, top-10% co-trained attention patches); yellow indicates overlap between ground truth and prediction. The co-trained model localizes both large macrometastases and small micrometastatic deposits, while ABMIL-only attention does not. 8
