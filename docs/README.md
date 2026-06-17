@@ -6,50 +6,36 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-19 ~ 2026-06-17
-- 运行时间：2026-06-17 12:58:05 UTC
+- 最新运行日期：2026-06-17
+- 运行时间：2026-06-17 22:33:27 UTC
 - 运行状态：成功
-- 本次总论文数：10
-- 精读区：7
+- 本次总论文数：4
+- 精读区：1
 - 速读区：3
 
 ### 今日简报（AI）
-今天聚焦计算病理学可解释弱监督定位与多实例学习，精读两篇高分论文。最值得看的是细胞层对齐注意力机制和基于符号解释的病理定位方法。建议尝试结合概念引导的多模态专家模型提升病理分析可解释性。
-- 详情：[/20260519-20260617/README](/20260519-20260617/README)
+今日精读10分研究：基础模型通用细胞分割框架与LLM驱动的肿瘤微环境表征，另速读多模态病理基础模型预测免疫标志物、以及系统评估多模态癌症分析表示方法。
+
+最值得关注方向：将大语言模型与病理基础模型结合，实现细胞分割到微环境解读的全流程自动化；多模态融合在精准肿瘤学免疫标志物预测中潜力巨大。
+
+建议关注基础模型在病理领域的落地，尤其是结合LLM的可解释性方向，同时留意数据增强与集成方法（如++nnU-Net）对现有工具的改进。
+- 详情：[/202606/17/README](/202606/17/README)
 
 ### 精读区论文标签
-1. [Aligning Cellular Sheaves with Classifier Attention for Interpretable Weakly-Supervised Pathology Localization](/20260519-20260617/2606.00092v1-aligning-cellular-sheaves-with-classifier-attention-for-interpretable-weakly-supervised-pathology-localization)  
-   标签：评分：9.0/10、query:wsi-mil
-   evidence：基于注意力MIL的弱监督全切片定位
-2. [Symb-xMIL: Symbolic Explanations for Multiple Instance Learning in Digital Pathology](/20260519-20260617/2606.06224v1-symb-xmil-symbolic-explanations-for-multiple-instance-learning-in-digital-pathology)  
-   标签：评分：9.0/10、query:wsi-mil
-   evidence：为数字病理学中的多实例学习模型提供符号解释，揭示实例决策的整合方式
-3. [Symb-xMIL: Symbolic Explanations for Multiple Instance Learning in Digital Pathology](/20260519-20260617/2606.06224v2-symb-xmil-symbolic-explanations-for-multiple-instance-learning-in-digital-pathology)  
-   标签：评分：9.0/10、query:wsi-mil
-   evidence：数字病理中MIL的符号解释，与人类可读规则对齐
-4. [AMN: An Adaptive Multi-Scale Fusion Network with Boundary and Uncertainty Modeling for Nuclei Segmentation](/20260519-20260617/2606.07633v1-amn-an-adaptive-multi-scale-fusion-network-with-boundary-and-uncertainty-modeling-for-nuclei-segmentation)  
-   标签：评分：9.0/10、query:cellseg
-   evidence：同时进行细胞核分割与分类的多尺度融合
-5. [Thinking in Scales: Accelerating Gigapixel Pathology Image Analysis via Adaptive Continuous Reasoning](/20260519-20260617/2605.19491v1-thinking-in-scales-accelerating-gigapixel-pathology-image-analysis-via-adaptive-continuous-reasoning)  
-   标签：评分：8.0/10、query:wsi-mil
-   evidence：提出了一种用于全切片图像分析的尺度空间连续推理模型，通过动态选择关键图块减少计算
-6. [Thinking in Scales: Accelerating Gigapixel Pathology Image Analysis via Adaptive Continuous Reasoning](/20260519-20260617/2605.19491v2-thinking-in-scales-accelerating-gigapixel-pathology-image-analysis-via-adaptive-continuous-reasoning)  
-   标签：评分：8.0/10、query:wsi-mil
-   evidence：提出PathCTM通过从低倍到高倍的自适应连续推理识别全切片图像中的判别区域
-7. [DualGate-Net: A Prior-Gated Dual-Encoder Framework for Histopathology Cell Detection](/20260519-20260617/2606.07222v1-dualgate-net-a-prior-gated-dual-encoder-framework-for-histopathology-cell-detection)  
-   标签：评分：8.0/10、query:profile
-   evidence：使用双编码器框架融入组织微环境先验进行组织病理学细胞检测
+1. [SegTME-UNI2: A Foundation Model-Based Framework for Generalisable Multiclass Cell Segmentation and LLM-Driven Tumour Microenvironment Characterisation in Histopathology](/202606/17/2606.17702v1-segtme-uni2-a-foundation-model-based-framework-for-generalisable-multiclass-cell-segmentation-and-llm-driven-tumour-microenvironment-characterisation-in-histopathology)  
+   标签：评分：10.0/10、query:cellseg
+   evidence：使用基础模型进行多类细胞分割和细胞核分类
 
 ### 速读区论文标签
-1. [LRMIL: Efficient Low-Resolution Multiple Instance Learning via High-Resolution Knowledge Distillation for Whole Slide Image Classification](/20260519-20260617/2606.06864v1-lrmil-efficient-low-resolution-multiple-instance-learning-via-high-resolution-knowledge-distillation-for-whole-slide-image-classification)  
-   标签：评分：8.0/10、query:wsi-mil
-   evidence：全切片图像多实例学习，知识蒸馏提升效率并识别判别性图块
-2. [ConceptM$^3$oE: Concept-Guided Multimodal Mixture of Experts for Interpretable Computational Pathology](/20260519-20260617/2605.24399v1-conceptm3oe-concept-guided-multimodal-mixture-of-experts-for-interpretable-computational-pathology)  
-   标签：评分：6.0/10、query:pathfeat
-   evidence：通过概念引导的混合专家模型整合病理图像和分子等多模态特征
-3. [ConceptM$^3$oE: Concept-Guided Multimodal Mixture of Experts for Interpretable Computational Pathology](/20260519-20260617/2605.24399v2-conceptm3oe-concept-guided-multimodal-mixture-of-experts-for-interpretable-computational-pathology)  
-   标签：评分：6.0/10、query:pathfeat
-   evidence：提出多模态专家混合模型，整合包括图像块在内的多种诊断信号
+1. [++nnU-Net: Scaling nnU-Net with Prefix-Based Data Augmentation](/202606/17/2606.10713v1-nnu-net-scaling-nnu-net-with-prefix-based-data-augmentation)  
+   标签：评分：7.0/10、query:cellseg
+   evidence：为nnU-Net设计的数据增强模块，可提升医学图像分割性能，适用于病理细胞分割
+2. [Predicting Immune Biomarkers with MultiModal Mixture-of-Expert Pathology Foundation Models Empowers Precision Oncology](/202606/17/2606.18123v1-predicting-immune-biomarkers-with-multimodal-mixture-of-expert-pathology-foundation-models-empowers-precision-oncology)  
+   标签：评分：7.0/10、query:pathfeat
+   evidence：多模态病理基础模型融合多种基础模型特征预测免疫生物标志物
+3. [Probing, Fusion, and Trustworthiness: A Systematic Evaluation of Foundation Model Representations for Multimodal Cancer Analysis](/202606/17/2606.17115v1-probing-fusion-and-trustworthiness-a-systematic-evaluation-of-foundation-model-representations-for-multimodal-cancer-analysis)  
+   标签：评分：6.0/10、query:wsi-mil
+   evidence：系统评估基础模型在计算病理学全切片图像上的表示能力
 
 
 <div class="dpr-home-promo-card">
