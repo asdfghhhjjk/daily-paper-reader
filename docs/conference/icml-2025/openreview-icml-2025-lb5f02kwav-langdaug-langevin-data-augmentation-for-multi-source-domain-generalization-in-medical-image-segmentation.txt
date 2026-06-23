@@ -1,0 +1,1732 @@
+Title: LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation
+
+URL Source: https://openreview.net/pdf?id=LB5F02kwAv
+
+Number of Pages: 36
+
+Markdown Content:
+# LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Piyush Tiwary 1 Kinjawl Bhattacharyya 1 Prathosh A.P. 1
+
+## Abstract 
+
+Medical image segmentation models often strug-gle to generalize across different domains due to various reasons. Domain Generalization (DG) methods overcome this either through representa-tion learning or data augmentation (DAug). While representation learning methods seek domain-invariant features, they often rely on ad-hoc tech-niques and lack formal guarantees. DAug meth-ods, which enrich model representations through synthetic samples, have shown comparable or superior performance to representation learning approaches. We propose LangDAug, a novel 
+
+Lang evin Data Aug mentation for multi-source domain generalization in 2D medical image seg-mentation. LangDAug leverages Energy-Based Models (EBMs) trained via contrastive divergence to traverse between source domains, generating intermediate samples through Langevin dynam-ics. Theoretical analysis shows that LangDAug induces a regularization effect, and for GLMs, it upper-bounds the Rademacher complexity by the intrinsic dimensionality of the data manifold. Through extensive experiments on Fundus seg-mentation and 2D MRI prostate segmentation benchmarks, we show that LangDAug outper-forms state-of-the-art domain generalization meth-ods and effectively complements existing domain-randomization approaches. The codebase for our method is available at https://github. com/backpropagator/LangDAug .
+
+## 1. Introduction 
+
+Recent years have seen remarkable advancements in the field of Medical image segmentation, particularly through     
+
+> 1Department of Electrical Communication Engineering, Indian Institute of Science, Bangalore, India. Correspondence to: Piyush Tiwary <piyushtiwary@iisc.ac.in >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+supervised learning approaches leveraging Convolutional Neural Networks (CNNs) (Milletari et al., 2016; Falk et al., 2019; Zhou et al., 2019; Jin et al., 2019; Isensee et al., 2020; Shen et al., 2017; Olabarriaga & Smeulders, 2001; Asgari Taghanaki et al., 2021; Tiwary et al., 2023). However, a persistent challenge remains: these models often struggle to generalize from the training set (source domain) to unseen test sets (target domain) (Ganin et al., 2016; Kamnitsas et al., 2017; Li et al., 2018b). The generalization problem stems from the limitations of the Empirical Risk Minimization (ERM) framework, which often performs poorly on out-of-distribution (OOD) test or target domains (Shalev-Shwartz & Ben-David, 2014; Mur-phy, 2022; Hart et al., 2000; Hajek & Raginsky, 2021). This is primarily due to the i.i.d. assumption underlying ERM, where models minimize the loss solely with respect to the training data distribution. As a result, ERM-trained models exhibit degraded performance on test data from different distributions, violating the i.i.d. assumption and leading to sub-optimal generalization to unseen domains (Vapnik, 1999). The challenge is particularly pronounced in medical imag-ing, where domain shifts significantly impact model per-formance. These shifts arise from factors such as differ-ences in imaging protocols across institutions, variations in equipment specifications, diverse patient attributes (e.g., age, gender, demographics), and disparities between modal-ities (e.g., CT, MRI, Ultrasound). As noted by Guan & Liu (2021), such shifts hinder the deployment of machine learning models in new clinical settings. The discrepancies between training and target domains can result in incon-sistent performance, potentially compromising the model’s clinical utility and patient care. Addressing these issues is critical for developing robust and generalizable models. Various approaches have been proposed to address domain generalization. A key strategy is representation learning, which seeks to learn either domain-invariant (DI) features or sufficiently diverse features to generalize to unseen do-mains. These methods often disentangle domain-invariant and domain-specific (DS) features, with some approaches discarding domain-specific features entirely and others com-bining DI-DS pairs to create richer features. Another ap-1LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Figure 1: Overview of the proposed method: (a) We run Langevin dynamics (LD) using trained EBMs to transverse between different domains. The intermediate iterates of LD (called Langevin samples) are stored and used for augmentation, (b) The segmentation model is trained with original domain samples as well as Langevin samples, (c) The trained model is then deployed on unseen target domains. proach is data augmentation, which enhances model rep-resentations by supplementing original samples with aug-mented ones. As shown by (Gulrajani & Lopez-Paz, 2021), data augmentation can achieve comparable performance to representation learning while being simpler to implement. Our work adopts the data augmentation approach to im-prove multi-source domain generalization in 2D medical image segmentation. We propose a novel Lang evin Data 
+
+Aug mentation ( LangDAug ) scheme that leverages Langevin dynamics (LD) iterates to augment the original dataset. Specifically, we train Energy-Based Models (EBMs) to tra-verse between different source domains using a contrastive-divergence (CD) objective. This traversal is achieved via iterative gradient-based MCMC methods like LD, with the iterates representing samples from the manifold bridging the source domains. These samples are then incorporated into the ERM framework for downstream task training, poten-tially enhancing the model’s ability to generalize to unseen domains. Our key contributions are: 1. We introduce LangDAug, an augmentation technique for multi-source domain generalization in 2D medi-cal image segmentation. By training EBMs for each pair of source domains via CD, we generate intermedi-ate domain samples that augment the source domains within the ERM framework. 2. We provide theoretical insights into LangDAug’s ef-fects, demonstrating its regularization impact on ERM training. This leads to Hessian-smoothing and flatter minima, aiding generalization to unseen domains. 3. We conduct rigorous evaluations on two medical im-age segmentation benchmarks: fundus segmentation and 2D MRI image segmentation. Our results show that LangDAug outperforms state-of-the-art domain generalization methods and can enhance the perfor-mance of domain-randomization based generalization approaches. 
+
+## 2. Related Works 
+
+2.1. Domain Generalization 
+
+Domain Generalization (DG) frameworks (Motiian et al., 2017; Wang et al., 2022; Zhou et al., 2022a; Dou et al., 2019; Gu et al., 2021; Cong et al., 2022) aim to train a single model using one or multiple source domains to achieve robust performance on unseen target domains. These methods typically focus on either learning domain-invariant features or developing diverse features capable of generalizing to target domains. Meta-learning DG methods (Li et al., 2018a; Liu et al., 2021b;a; 2020; Finn et al., 2017; Balaji et al., 2018; Du et al., 2020b; Tiwary et al., 2024; 2025) simulate 2LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+domain shifts by splitting source data into meta-train/test sets. Current state-of-the-art DG approaches can be broadly cate-gorized into two main types (Wang et al., 2022): representa-tion learning-based methods and data manipulation-based methods. Representation learning methods (Li et al., 2018c; Muandet et al., 2013; Upchurch et al., 2017; Gardner et al., 2015; Zhang et al., 2022; Li et al., 2022b; 2021b; Zhou et al., 2021; Wang et al., 2020; Chen et al., 2023; Pan et al., 2018; Hu et al., 2022) are further subdivided into domain-invariant (DI) representation learning and feature disentanglement approaches. Domain-invariant methods (Blanchard et al., 2021; Hu et al., 2020; Li et al., 2018b; Garg et al., 2021; Pan et al., 2018; Arjovsky et al., 2019) minimize cross-domain feature discrepancies—e.g., Fish aligns inter-domain gradi-ents, Fishr regularizes gradient variances, and Hutchinson matches Hessian matrices. While effective, these may sac-rifice domain-specific (DS) features to balance single- and multi-domain performance. Another line of work uses test time adaptation (TTA) for DAug using EBMs (Xiao et al., 2023; Yuan et al., 2024; Tiwary et al., 2023). E.g., Xiao et al. (2023) first trains EBM on source domain and during testing, they use LD to convert test samples using these trained EBMs. However, this method has a fundamental flaw akin to that of data coverage problem faced in score-based models (Song & Ermon, 2019). Specifically, since the trained EBMs have never seen the test data, the assigned energy to test data manifold could be arbitrary. This renders TTA unreliable for domain adaptation. Feature disentanglement approaches (Zunino et al., 2021; Peng et al., 2020; Ilse et al., 2020; Qiao et al., 2020; Zhang et al., 2021; Mahajan et al., 2021) aim to separate repre-sentations into domain-invariant and domain-specific com-ponents, allowing combinations that yield diverse repre-sentations for downstream tasks. Mixstyle (Zhou et al., 2021) facilitates generalization by blending instance-level feature statistics across domains, generating novel styles in feature space. RAM (Zhou et al., 2022b) promotes seg-mentation generalization by mixing amplitude spectra from different domains and incorporating a domain-specific im-age restoration module. TriD (Chen et al., 2023) supports generalization in 2D medical image segmentation through uniform sampling and channel-wise style mixing of feature statistics, broadening feature space coverage and enhancing robustness. Our work focuses on this promising stream of data manipulation methods and propose a novel approach called Langevin Data Augmentation (LangDAug) for do-main generalization. 
+
+2.2. Data Manipulation based DG 
+
+Owing to the difficulty in obtaining large datasets, data manipulation-based domain generalization (DG) methods (Xu et al., 2021; Liu et al., 2022; Peng et al., 2021; Zhang et al., 2020b; Zhou et al., 2020c; Robey et al., 2021; Liu et al., 2018; Fick et al., 2021; Li et al., 2022a; Zhou et al., 2022b; Liu et al., 2021a) are often sought in medical settings, to enhance training set diversity. These methods are catego-rized (Wang et al., 2022) into (i) data augmentation (DAug) and (ii) data generation. DAug techniques (Honarvar Nazari & Kovashka, 2020; Prakash et al., 2019; Zhou et al., 2020a; 2023) apply some combination of operations such as flip-ping, rotation, scaling, cropping, or model-based transfor-mations to reduce overfitting, while data generation meth-ods (Rahman et al., 2019; Somavarapu et al., 2020; Zhang, 2017; Zhou et al., 2020b; Li et al., 2021a) utilize generative models to create diverse data that mirrors the training dis-tribution. MTS (Li et al., 2022a) enhances model-agnostic meta-learning for DG via task augmentation through mixed task sampling and a meta-update objective, effectively mit-igating task-level overfitting. RandConv(Xu et al., 2021) uses multi-scale random convolutions as a DAug technique to improve model robustness. FedDG (Liu et al., 2021a) adopts a federated DG strategy that preserves privacy by exchanging amplitude spectra between clients and employs continuous frequency space interpolation and boundary-oriented episodic learning to bolster model generalization to unseen domains. 
+
+## 3. Proposed Methodology 
+
+3.1. Problem Setup and Method Overview 
+
+We consider the standard domain generalization setup in which, we have n domains (also called source domains) 
+
+{D i}ni=1 where each domain admits and underlying prob-ability density Di ∼ PDi (x, y ) on a common support 
+
+X × Y . Further, we are given ni samples from do-main Di that are independent and identically distributed, 
+
+{xj , yj }ni
+
+> j=1
+> i.i.d
+
+∼PDi (x, y ). The goal of an ERM-framework is to learn a parametric mapping fθ (·) : X → Y such that it minimizes the empirical risk. Particularly, the parame-ters θ are obtained via solving the following optimization problem: 
+
+arg min 
+
+> θ
+
+E [ℓ (fθ (x), y)] ≈ arg min 
+
+> θ
+
+1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ℓ (fθ (xi), yi)
+
+where N = P 
+
+> i
+
+ni. Formally, the True risk is approximated with an unbiased estimate using law of large numbers to get the Empirical risk. This is done in order to obtain a tractable objective function which can be minimized using gradient-based optimization methods. However, since the approximation only takes the provided n domains into ac-count, it is not able to generalize on unseen domain (also called target domain) Dn+1 /∈ {D i}ni=1 . The goal of do-main generalization is to aleviate this issue by obtaining 3LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+parameter θ that is able to generalize well on unseen do-mains. To address this issue, we adopt a data-augmentation-based approach by introducing new samples in the ERM frame-work to cover broader support in the X ×Y domain, improv-ing the True risk estimate. Specifically, we train Energy-Based Models (EBMs) to traverse between source domain pairs using gradient-based Markov Chain Monte Carlo (MCMC) methods, such as Langevin dynamics (LD). The intermediate iterates generated during this process act as ‘bridge’ samples between domains. We leverage these in-termediate samples as augmentation data, referred to as 
+
+Langevin-data Augmentation , to enhance the model’s gener-alization to unseen target domains. While LangDAug can be potentially used for normal DG scenarios, we note that there are certain factors that guided our application design. The effectiveness of LangDAug de-pends on the ability of EBMs to effectively traverse and in-terpolate between source domain distributions. Such traver-sal becomes especially natural when source domains share structured similarities or consistent underlying factors of variation. Medical imaging data typically demonstrates structured variations, predominantly reflected through dif-ferences in amplitude spectra across domains (Zhou et al., 2022b; Liu et al., 2021a). EBMs have been shown to excel at capturing and modeling variations in amplitude spectra (Tan-cik et al., 2020; Du et al., 2020a), making them suited for the domain variations characteristic of medical imaging data. Thus, LangDAug’s capability aligns well with the domain shift challenges encountered specifically in medical image segmentation. 
+
+3.2. EBMs for Inter-Domain Transversal 
+
+We train Energy-Based Models (EBMs) (Du & Mordatch, 2019; Zhao & Chen, 2021) to traverse between pairs of source domains. Consider two distinct domains Di and Dj
+
+where i̸ = j. To train an EBM, Eθij that can transverse from 
+
+Di to Dj , we employ the contrastive divergence loss objec-tive (Hinton, 2002), LCD . The gradient of this objective is: 
+
+∇θij LCD = E
+
+> PDj
+
+∇θij Eθij (x) − E
+
+> Pθij
+
+∇θij Eθij (x)
+
+(1) where, Pθij = exp  −Eθij (x) Zθij = R 
+
+> X
+
+exp  −Eθij (x)dx (2) We approximate the expectations in Eq. 1 using finite sample averages from their respective distributions. Since sampling directly from Pθij is intractable due to the partition function 
+
+Zθij , we employ MCMC methods, specifically Langevin dynamics (LD). The LD iteration is initialized with a sample from domain 
+
+Di and then runs for K steps using Eθij as the kernel to approximate sampling from Pθij . Mathematically, 
+
+xt+1 = xt − α2
+
+2 ∇xt Eθij (xt) + αϵ, (3) where, x0 ∼ P Di (x). Thus, we learn θij using Eq. 1, where the second term is approximated using samples from LD initialized with a sample from Di. The LD iteration can be interpreted as starting from a sample under distribution PDi
+
+and gradually transforming it into a sample from PDj . In other words, the LD updates traverse from domain Di to domain Dj . The intermediate samples generated during the LD process can be viewed as forming a bridge between the two domains. We train such an EBM for all 2 n
+
+> 2
+
+ possible pairs within n source domains. 
+
+3.3. Langevin Data Augmentation 
+
+As explained previously, we learn an EBM for transversal between each pair of domains. Here, we explain how to generate the augmentation samples. Consider the EBM 
+
+Eθij which can transverse from domain Di to domain Dj .To generate samples for augmentation, we take a sample 
+
+{xj , yj } ∈ D i and run LD for K steps, starting from xj :
+
+xt+1  
+
+> j
+
+= xtj − β2
+
+2 ∇xtj Eθij (xtj ) + βϵ, where, x0 
+
+> j
+
+= xj
+
+(4) The above process gives rise to K-intermediate samples 
+
+{xtj }Kt=1 . We use the samples {xtj , yj }ni,K j=1 ,t =1 (named ‘Langevin’ data) for augmentation during ERM-based learn-ing 1. On a closer look, we can see that for a given k,
+
+Dkij ≜ {xkj , yj }ni 
+
+> j=1
+
+follow the same distribution as they are obtained via k-step LD updates. This can be viewed as samples from a new domain altogether. Hence, we can see that we are able to obtain data from new novel domains by transversing between the original source domains. While the original dataset consisted of Dsrc ≜ S
+
+> i
+
+Di, the augmented dataset consists of Daug ≜ S 
+
+> i̸=j,k
+
+Dkij . This shows that we can generate novel data-points by simply transversing be-tween source domains in a meaningful way. We refer the reader to Supplementary for all the implementation details. 
+
+## 4. Theoretical Analysis 
+
+Analysis Overview : Our theoretical analysis reveals how LangDAug naturally induces regularization and improves generalization. We follow steps similar to Arora et al. (2021); Zhang et al. (2020a) by first demonstrating that   
+
+> 1Note that we retain original labels while augmentation be-cause, we empirically observe that the Langevin samples preserve the content of xj(see Supplementary for visualizations).
+
+4LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+LangDAug regularizes the directional derivatives of fθ (·)
+
+for any parametric model (Thm. 4.1). This insight leads us to examine generalized linear models (GLMs), where we characterize these regularization effects more precisely (Cor. 4.2). We then establish bounds on the Rademacher complexity of the resulting function class (Thm. 4.3) and use these to bound the generalization gap between true and empirical risk (Cor. 4.4). 
+
+Notations : We denote a general parametric loss function 
+
+ℓ(θ, z), where θ ∈ Θ ⊆ Rd and z = ( x, y) denotes the input output pair. Further, we consider the training dataset 
+
+D = {xi, yi}ki=1 ∈ X × Y such that they follow an un-derlying distribution, zi = ( xi, yi)i.i.d 
+
+∼PD (·). Further, we denote ˜xi(β) = xi − β2 
+
+> 2
+
+∇x log p(xi) + βε , ε ∼ N (0 , I )
+
+which is the sample obtained by running one-step LD start-ing from x0 ∼ P D (x) (we drop the dependence on β for brevity). We denote ˜zi = (˜ xi, yi) as the data pair used for augmentation. Further, we denote the model parameterized by θ as fθ : X → Y , the gradient w.r.t x and θ is denoted by ∇fθ (x) and ∇θ fθ (x) respectively. Lastly, we denote the true risk as L(θ) = E[ℓ(θ, z)] where the expectation is w.r.t true data distribution. The standard empirical and the augmented empirical risks are denoted by: 
+
+Lstd (θ, D) = 1
+
+k
+
+X
+
+> i
+
+ℓ(θ, zi) (5) 
+
+Laug (θ, D) = 1
+
+k
+
+X
+
+> i
+
+E  
+
+> ε∼N (0 ,I )
+
+[ℓ(θ, ˜zi)] (6) We start our alalysis by characterizing the regularization effect of LangDAug: 
+
+Theorem 4.1. Consider a real-valued loss function of the form ℓ(θ, (x, y)) = h(fθ (x)) − y(fθ (x)) where h(·) and 
+
+fθ (·) are twice differentiable for all θ ∈ Θ. Then given a dataset D = {xi, yi}ki=1 , the augmented empirical risk as denoted in Eq. 6 can be written as: 
+
+Laug (θ, D) = Lstd (θ, D) + 
+
+> 3
+
+X
+
+> i=1
+
+Ri(θ, D) (7) 
+
+where, 
+
+R1(θ, D) = − 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+β2(h′(fθ (xi)) − yi)∇fθ (xi)T ∇ log p(xi)
+
+R2(θ, D) = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+β2h′′ (fθ (xi)) Tr( ∇fθ (xi)∇fθ (xi)T )
+
+R3(θ, D) = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+β2(h′(fθ (xi)) − yi) Tr( ∇2fθ (xi)) .
+
+The regularization terms reveal how LangDAug controls model behavior through derivatives of the prediction func-tion. To understand these effects more concretely, we ex-amine GLMs, which model predictive densities using ex-ponential families with linear sufficient statistics (Murphy, 2022): 
+
+p(y|x, θ ) = r(x) exp  yθ T x − A(θT x) (8) where r(x) is the base measure and A(·) is the log parti-tion function. The negative log-likelihood takes the form 
+
+A(θT x) − yθ T x, allowing us to apply Thm. 4.1 to obtain: 
+
+Corollary 4.2. For a GLM, if A(·) is twice differentiable, then the regularization terms obtained via second-order approximation is given by: 
+
+RGLM ≜ β2
+
+2n
+
+> k
+
+X
+
+> i=1
+
+ A′′ (θT xi)θT θ − A′(θT xi)θT s(xi)
+
+where, s(xi) = ∇ log p(xi) is the Stein’s score function. 
+
+Having obtained the above regularization term, we use the techniques in Arora et al. (2021); Zhang et al. (2020a) to bound the Rademacher complexity of the following class of functions which are used in optimization of dual of above regularization term: 
+
+Wγ ≜
+
+n
+
+x → θT x : θT E
+
+> x
+
+h
+
+A′′ 
+
+(θT x)θ − A′
+
+(θT x)s(x)
+
+i
+
+≤ γ
+
+o
+
+The following provides an upper-bound on Rademacher complexity of such class of functions: 
+
+Theorem 4.3. Assume that the distribution of xi is ρ-retentive, and let Σx = E[xx T ] have bounded singular values. Further assume that the norm of the parameters and Ex[∥∇ log p(x)∥2] are bounded. Then the empirical Rademacher complexity of Wγ satisfies: 
+
+Rad (Wγ , D) ≤ C
+
+r rank (Σ x)
+
+k (9) 
+
+where, C =
+
+ γρ
+
+1/2
+
+∨
+
+ γρσ 
+
+1/4
+
+(10) 
+
+here, σ denotes the lowest singular values of Σx.
+
+Now, using this result, we can directly use the results of Bartlett & Mendelson (2002) to bound the generalization gap as follows: 
+
+Corollary 4.4. If A(·) is LA-Lipchitz continuous, X , Y, Θ
+
+are all bounded, then there exists constant L, B > 0 such that for all θ satisfying the constraint in Wγ , we have: 
+
+L ≤ L std + 2 LL A C
+
+r rank (Σ x)
+
+k
+
+!
+
++ B
+
+r log(1 /δ )2k
+
+with probability atleast 1 − δ.
+
+5LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+We note that the appearance of rank (Σ x) rather than the full dimensionality of x suggests that LangDAug’s gener-alization bound depends on how many “true” degrees of freedom the data has (intrinsic dimension) rather than how many numbers we use to store each data point (ambient dimension). The dependence on intrinsic dimensionality rather than ambient dimension is particularly valuable for high-dimensional problems where the data lies on a lower-dimensional manifold (Gorban & Tyukin, 2018; Cayton et al., 2008). 
+
+## 5. Experiments 
+
+5.1. Datasets and Baselines Datasets and Metrics : We evaluate LangDAug’s effective-ness under domain shift using two widely-used medical imaging datasets: Retinal Fundus Segmentation (RFS) (Al-mazroa et al., 2018; Orlando et al., 2020; Zhang et al., 2010; Sivaswamy et al., 2014) and Prostate MRI Segmen-tation (Liu et al., 2020). For both datasets, we employ a leave-one-out protocol (Gulrajani & Lopez-Paz, 2021) to assess domain generalization performance. The RFS dataset challenges models to segment the optical cup (OC) and optical disc (OD) in retinal images. It contains samples from four clinical sites, each representing a distinct domain with its own train/test split. We use the training splits for training and resize all images to 256 × 256 pixels during preprocessing. Segmentation accuracy is evaluated using Intersection-over-Union (IoU) and Dice Similarity Score (DSC) metrics. The Prostate MRI dataset includes 116 T2-weighted MRI scans from six clinical sites (domains). Preprocessing in-volves cropping each scan to the 3D prostate region, extract-ing 2D axial slices, and resizing them to 384 × 384 pixels. We train on these 2D slices and evaluate using: (1) DSC between predicted and ground truth slices, and (2) Average Surface Distance (ASD) for reconstructed 3D volumes, ob-tained by concatenating model-predicted slices. Results are reported as the mean of three independent runs. 
+
+Baselines : We evaluate our method against two categories of domain generalization approaches. First, we consider three recent methods from the DomainBed benchmark (Gul-rajani & Lopez-Paz, 2021): Hutchinson (Hemati et al., 2023), which matches domain statistics using Hessian in-formation; Fish (Shi et al., 2022), which employs gradient-based domain alignment; and Fishr (Rame et al., 2022), which utilizes gradient variance matching. Further, we compare against recent approaches specifically tailored for medical image segmentation: RandConv (Xu et al., 2021), which leverages random convolution for style in-variance; MixStyle (Zhou et al., 2021), which performs feature-level style mixing; FedDG (Liu et al., 2021a), which 
+
+Figure 2: t-SNE visualization comparing domain distribu-tions: (a) the original four domains, and (b) LangDAug generated augmented domains. Origin x denotes samples generated by LangDAug starting from Domain x.      
+
+> GT RandConv MixStyle FedDG RAM TriD Ours
+> Domain A Domain B Domain C Domain D
+
+Figure 3: Visualization of retinal fundus segmentation per-formance of different domain generalization methods. employs federated learning for domain generalization; and TriD (Chen et al., 2023), which exploits distribution-level information. Since, we follow similar steps as Zhang et al. (2020a) for our analysis 2 we also compare our method with RAM (Zhou et al., 2022b) which is a variant of MixUp designed for medical image segmentation. Additionally, we provide comparisons with CORAL (Sun & Saenko, 2016), RSC (Huang et al., 2020), For a fair comparison we use ResNet34 model (He et al., 2016) as the segmentation back-bone for all the methods. All the implementation details including hyperparameters and Ablation studies are pro-vided in Supplementary. 
+
+5.2. Results t-SNE Visualization : Before presenting the main results, we visualize the RFS dataset samples in the feature space using t-SNE plots (Figure 2). The original domain sam-ples show a concentrated distribution, while Langevin sam-ples significantly expand feature space coverage. Notably, Langevin samples bridge gaps between domains, consistent with the framework in Section 3.2. This inter-domain traver-sal property allows the model to learn a more comprehensive 
+
+> 2while the proof steps share similarities, we use different tech-niques and arrive at an independent verification of the result
+
+6LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+representation of the domain space. These observations sup-port our hypothesis on the effectiveness of LangDAug in im-proving domain generalization. Visualizations of Langevin samples are provided in Supplementary. 5.2.1. F UNDUS SEGMENTATION 
+
+We provide the results of optical cup (OC) and optical disc (OD) segmentation on retinal fundus images in Table 1. We present the metrics in the form of (OC, OD) for con-venience, further, we also provide the mean metric across OC and OD. We also provide visual qualitative compari-son of segmentation results in Figure 3. We observe that LangDAug performs most consistently across all domains. Among the DomainBed approaches (Hutchinson, Fish, and Fishr), performance is generally underwhelming. Hutchin-son performed the poorest, with average IoU and DSC of 
+
+67 .39 and 78 .14 respectively. While Fishr showed some im-provement over the others, reaching average IoU and DSC of 72 .28 and 82 .16 respectively. Overall these methods lagged behind other approaches. This pattern was consistent across different domains and metrics. Domain B emerges as the most challenging for generaliza-tion, with most methods failing to achieve mDSC above 
+
+80 . The reason for this is significantly different conditions under which the fundus images are acquired. In other words, the distribution of Domain B is very different from that of other domains. In this domain, LangDAug demonstrates superior performance with an mIoU of 75 .05 , surpassing the next best method (RAM) by 1.26% . For optical disc seg-mentation, LangDAug achieves the highest DSC of 91 .64 ,followed by RAM at 90 .52 . While RAM leads in optical cup segmentation with a DSC of 82 .82 , LangDAug maintains competitive performance at 80 .11 , demonstrating consistent effectiveness across all metrics in this challenging domain. This also shows robustness of LangDAug in limited source distribution setting where source domains are not able to cover the target domain. In such scenarios, previous method fail to generalize effectively whereas LangDAug maintains edge over these methods. In Domain C, LangDAug demonstrates good performance with the highest mIoU of 81 .01 , while maintaining com-petitive mDSC metrics second only to TriD. The method shows balanced effectiveness across both optical cup and disc segmentation, surpassing established approaches like FedDG and RAM. This performance extends to Domain D, where LangDAug leads in both mIoU and mDSC metrics, outperforming comparable methods like TriD and RAM. While established methods MixStyle, RandConv, and TriD demonstrate marginally better performance in Domain A (mDSC: 88 .62 , 87 .90 , and 87 .80 respectively), they exhibit substantial performance deterioration in Domain B, with       
+
+> GT RandConv MixStyle FedDG RAM TriD Ours
+> Domain A Domain B Domain C Domain D Domain E Domain F
+
+Figure 4: Visualization of prostate segmentation perfor-mance of different domain generalization methods. mDSC values dropping to approximately 78 . In contrast, LangDAug maintains remarkable consistency across both domains, achieving competitive mDSC of 86 .99 on Domain A while maintaining its performance with an mDSC of 
+
+85 .87 on Domain B. LangDAug demonstrates superior overall performance, achieving the highest average IoU ( 78 .84% ) and DSC (87 .61% ) across all domains. Notably, it exhibits better stability in cross-domain performance, as evidenced by sig-nificantly lower standard deviations (mIoU: ±2.43 , mDSC: 
+
+±1.89 ) compared to its counterparts TriD (mIoU: ±3.76 ,mDSC: ±5.12 ) and RAM (mIoU: ±2.89 , mDSC: ±3.42 ). This reduced variance underscores LangDAug’s consistent generalization capabilities. 5.2.2. P ROSTATE SEGMENTATION 
+
+Table 2 presents our results for 2D MRI prostate segmenta-tion. We provide visual results in Figure 4. Consistent with the findings from fundus segmentation, the DomainBed methods (Hutchinson, Fish, and Fishr) generally demon-strate lower performance, with Fishr showing the best per-formance and Hutchinson showing the worst performance among the three. LangDAug demonstrates best performance across Domains A through D, consistently outperforming the second-best methods in both ASD and DSC. Specifically, in Domains A and B, LangDAug achieves approximately 0.1mm lower ASD and nearly 0.6% higher DSC compared to the next best method, TriD. In Domain D, LangDAug surpasses other methods with a substantial reduction of 0.14 mm in ASD and an increase in DSC by over 4% . Even in the 7LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Table 1: Cross-domain generalization performance on Retinal Fundus Segmentation. IoU ( %) ( ↑) and DSC ( %) ( ↑) are presented in pairs (x, y ) where, x denotes OC and y denotes OD segmentation metric. Bold ( x) and Underlined ( x) values indicate best and second-best performance respectively for each metric in their respective columns. Average denotes the average metric across all domains. 
+
+Domain A B C D Average IoU mIoU DSC mDSC IoU mIoU DSC mDSC IoU mIoU DSC mDSC IoU mIoU DSC mDSC IoU DSC CORAL (66 .59 , 90 .14 ) 78 .37 (78 .79 , 94 .31) 86 .55 (54 .80 , 73 .07) 63 .94 (66 .95 , 81 .46) 74 .20 (71 .34 , 86 .54) 78 .94 (82 .82 , 92 .59) 87 .71 (67 .82 , 83 .87) 75 .85 (80 .19 , 91 .10) 85 .65 74 .27 83 .53 
+
+RSC (64 .67 , 88 .97) 76 .82 (77 .98 , 94 .24) 86 .11 (53 .34 , 71 .74) 62 .54 (64 .94 , 79 .90) 72 .42 (72 .78 , 86 .67) 79 .73 (83 .53 , 92 .32) 87 .92 (68 .39 , 81 .11) 74 .75 (80 .70 , 89 .38) 85 .04 73 .46 82 .87 
+
+SagNet (64 .45 , 86 .38) 75 .42 (77 .34 , 92 .64) 84 .99 (46 .82 , 62 .21) 54 .51 (57 .44 , 69 .94) 63 .69 (67 .29 , 83 .76) 75 .52 (79 .73 , 90 .86) 85 .29 (55 .14 , 79 .48) 67 .31 (70 .04 , 88 .36) 79 .20 68 .19 78 .29 
+
+SWAD (65 .32 , 87 .06) 76 .19 (77 .09 , 92 .89) 84 .99 (55 .63 , 75 .01) 65 .32 (68 .21 , 83 .92) 76 .07 (67 .94 , 85 .89) 76 .91 (80 .43 , 92 .17) 86 .30 (61 .57 , 82 .60) 72 .09 (75 .37 , 90 .26) 82 .82 72 .63 82 .54 
+
+Hutchinson (55 .19 , 78 .27) 66 .73 (68 .10 , 86 .81) 77 .46 (55 .19 , 78 .27) 66 .73 (68 .10 , 86 .81) 77 .46 (56 .17 , 82 .54) 69 .36 (70 .16 , 90 .17) 80 .17 (50 .45 , 72 .36) 66 .73 (64 .42 , 83 .07) 77 .46 67 .39 78 .14 
+
+Fish (63 .16 , 85 .73) 74 .44 (76 .76 , 91 .16) 83 .96 (48 .91 , 74 .87) 64 .44 (64 .38 , 87 .01) 75 .70 (63 .61 , 82 .92) 73 .26 (79 .99 , 88 .87) 84 .43 (56 .27 , 80 .59) 72 .50 (76 .54 , 89 .94) 83 .24 71 .16 81 .83 
+
+Fishr (65 .35 , 86 .35) 75 .85 (77 .33 , 91 .45) 84 .39 (54 .23 , 73 .82) 64 .03 (65 .17 , 82 .32) 73 .75 (68 .32 , 82 .95) 75 .63 (80 .53 , 89 .45) 84 .99 (64 .09 , 83 .11) 73 .60 (79 .99 , 91 .02) 85 .50 72 .28 82 .16 
+
+RandConv (71 .44 , 88 .49) 79 .96 (81 .99 , 93 .81) 87 .90 (52 .96 , 82 .28) 67 .62 (66 .35 , 90 .11) 78 .23 (67 .78 , 85 .68) 76 .73 (80 .03 , 92 .12) 86 .07 (67 .78 , 85 .68) 74 .73 (78 .15 , 91 .52) 84 .84 74 .76 84 .26 
+
+MixStyle (71 .76 , 89 .77) 80 .76 ( 82 .68 , 94 .56) 88 .62 (58 .15 , 77 .23) 67 .69 (71 .17 , 86 .75) 78 .96 (71 .65 , 87 .93) 79 .79 (83 .38 , 93 .39) 88 .38 (67 .56 , 86 .62) 77 .09 (80 .03 , 92 .72) 86 .37 76 .33 85 .58 
+
+FedDG (73 .30 , 80 .01) 76 .65 (78 .52 , 84 .42) 81 .47 (68 .70 , 75 .58) 72 .14 (77 .81 , 88 .35) 83 .08 (69 .92 , 82 .28) 76 .10 (83 .11 , 87 .32) 85 .21 (69 .01 , 82 .91) 75 .96 (81 .63 , 88 .17) 84 .90 75 .21 83 .67 
+
+RAM (67 .28 , 87 .56) 77 .42 (78 .09 , 91 .66) 84 .87 (68 .92 , 78 .66) 73 .79 ( 82 .82 , 90 .52) 86 .67 (72 .21 , 86 .11) 79 .66 (81 .32 , 90 .02) 85 .67 (71 .61 , 85 .88) 78 .74 (77 .17 , 91 .54) 84 .35 77 .40 85 .39 
+
+TriD (71 .83 , 90 .01) 80 .92 (79 .44 , 96 .16 ) 87 .80 (68 .31 , 76 .59) 72 .45 (66 .01 , 90 .42) 78 .21 (72 .66 , 86 .03) 79 .34 ( 86 .22 , 93 .83) 90 .02 (70 .52 , 87 .41) 78 .96 (83 .08 , 92 .45) 87 .76 77 .92 85 .95 
+
+LangDAug (68 .31 , 89 .26) 78 .79 (79 .75 , 94 .24) 86 .99 (70 .61 , 79 .50 ) 75 .05 (80 .11 , 91 .64 ) 85 .87 (73 .07 , 88 .94 ) 81 .01 (83 .88 , 93 .96 ) 88 .91 (72 .33 , 88 .70 ) 80 .51 (83 .43 , 93 .93 ) 88 .68 78 .84 87 .61 
+
+Table 2: Cross-domain generalization performance on T2-weighted Prostate MRI Segmentation. ASD (mm) ( ↓) and DSC (%) ( ↑) are presented in pairs (x, y ) where, x denotes OC and y denotes OD segmentation metric. Bold ( x) and Underlined (x) values indicate best and second-best performance respectively for each metric in their respective columns. Average denotes the average metric across all domains. 
+
+Unseen Domain A B C D E F Average ASD DSC ASD DSC ASD DSC ASD DSC ASD DSC ASD DSC ASD DSC Hutchinson 3.28 82 .26 1.48 85 .85 2.07 72 .65 3.98 77 .41 2.78 71 .75 1.64 81 .79 2.54 78 .62 
+
+Fish 1.58 84 .40 1.46 85 .09 3.74 70 .59 3.37 78 .45 3.72 74 .26 0.76 83 .43 2.44 79 .37 
+
+Fishr 1.10 88 .03 0.94 88 .41 2.07 83 .21 1.08 83 .94 1.78 81 .41 0.61 84 .41 1.26 84 .90 
+
+RandConv 1.27 87 .90 1.18 88 .24 1.90 81 .96 0.84 84 .44 1.54 83 .04 0.44 86 .37 1.20 85 .33 
+
+MixStyle 0.72 88 .59 0.88 88 .42 1.62 87 .10 0.65 85 .62 1.59 82 .18 0.51 85 .72 1.00 86 .27 
+
+FedDG 1.09 86 .10 0.93 87 .03 1.31 88 .23 0.88 87 .52 1.73 81 .55 0.50 85 .27 1.07 85 .95 
+
+RAM 0.93 88 .72 0.98 87 .20 1.26 88 .78 0.74 89 .18 1.78 81 .01 0.32 87 .25 1.00 87 .02 
+
+TriD 0.70 91 .52 0.72 89 .60 1.39 87 .71 0.71 89 .45 1.43 82 .41 0.46 85 .41 0.90 87 .68 
+
+LangDAug 0.58 92 .15 0.64 90 .31 1.21 89 .53 0.57 93 .41 1.49 83 .17 0.38 86 .41 0.81 89 .16 
+
+Table 3: Cross-domain generalization performance on Retinal Fundus Segmentation of Domain Randomization method, with and without LangDAug. Values in parentheses for Average columns show absolute improvement over base method. 
+
+Unseen Domain A B C D Average IoU mIoU DSC mDSC IoU mIoU DSC mDSC IoU mIoU DSC mDSC IoU mIoU DSC mDSC mIoU mDSC FedDG (73 .30 , 80 .01) 76 .65 (78 .52 , 84 .42) 81 .47 (68 .70 , 75 .58) 72 .14 (77 .81 , 88 .35) 83 .08 (69 .92 , 82 .28) 76 .10 (83 .11 , 87 .32) 85 .21 (69 .01 , 82 .91) 75 .96 (81 .63 , 88 .17) 84 .90 75 .21 83 .67 
+
+FedDG + Ours (74 .28 , 82 .37 ) 78 .32 (79 .66 , 85 .29 ) 82 .47 (70 .03 , 76 .10 ) 73 .06 (79 .12 , 90 .62 ) 84 .87 (71 .80 , 84 .41 ) 78 .10 (83 .68 , 88 .58 ) 86 .13 (70 .57 , 83 .22 ) 76 .89 (82 .79 , 91 .37 ) 87 .08 76 .59 (+1 .38) 85 .14 (+1 .47) 
+
+RAM (67 .28 , 87 .56) 77 .42 (78 .09 , 91 .66) 84 .87 (68 .92 , 78 .66) 73 .79 (82 .82 , 90 .52) 86 .67 (72 .21 , 86 .11) 79 .66 (81 .32 , 90 .02) 85 .67 (71 .61 , 85 .88) 78 .74 (77 .17 , 91 .54) 84 .35 77 .40 85 .39 
+
+RAM + Ours (70 .29 , 90 .51 ) 80 .40 (80 .66 , 94 .76 ) 87 .71 (70 .38 , 80 .11 ) 75 .24 (83 .38 , 91 .47 ) 87 .42 (74 .71 , 87 .99 ) 81 .35 (83 .84 , 92 .64 ) 88 .24 (73 .70 , 86 .37 ) 80 .03 (79 .81 , 92 .89 ) 86 .35 79 .26 (+1 .86) 87 .43 (+2 .04) 
+
+TriD (71 .83 , 90 .01) 80 .92 (79 .44 , 96 .16) 87 .80 (68 .31 , 76 .59) 72 .45 (66 .01 , 90 .42) 78 .21 (72 .66 , 86 .03) 79 .34 (86 .22 , 93 .83) 90 .02 (70 .52 , 87 .41) 78 .96 (83 .08 , 92 .45) 87 .76 77 .92 85 .95 
+
+TriD + Ours (72 .89 , 92 .73 ) 82 .81 (80 .34 , 97 .82 ) 89 .08 (81 .67 , 78 .52 ) 80 .09 (73 .02 , 90 .95 ) 81 .98 (73 .16 , 87 .93 ) 80 .54 (87 .32 , 96 .35 ) 91 .83 (71 .83 , 89 .02 ) 80 .42 (85 .40 , 94 .09 ) 89 .74 80 .97 (+3 .05) 88 .16 (+2 .21) 
+
+Table 4: Cross-domain generalization performance on 2D MRI Prostate Segmentation of Domain Randomization method, with and without LangDAug. Values in paren-theses for Average columns show absolute improvement over base method.                                                                                                               
+
+> Unseen Domain ABCDEFAverage ASD DSC ASD DSC ASD DSC ASD DSC ASD DSC ASD DSC ASD DSC FedDG 1.09 86 .10 0.93 87 .03 1.31 88 .23 0.88 87 .52 1.73 81 .55 0.50 85 .27 1.07 85 .95
+> FedDG + Ours 0.90 88 .24 0.66 89 .31 1.16 90 .22 0.75 88 .19 1.68 82 .03 0.48 86 .10 0.94 (−0.13) 87 .35 (+1 .40)
+> RAM 0.93 88 .72 0.98 87 .20 1.26 88 .78 0.74 89 .18 1.78 81 .01 0.32 87 .25 1.00 87 .02
+> RAM + Ours 0.89 89 .62 0.69 89 .11 1.15 89 .03 0.62 91 .63 1.41 83 .92 0.24 88 .85 0.83 (−0.17) 88 .69 (+1 .67)
+> TriD 0.70 91 .52 0.72 89 .60 1.39 87 .71 0.71 89 .45 1.43 82 .41 0.46 85 .41 0.90 87 .68
+> TriD + Ours 0.64 92 .73 0.61 91 .05 1.09 92 .31 0.55 94 .22 1.29 85 .17 0.35 87 .99 0.76 (−0.14) 90 .58 (+2 .90)
+
+challenging Domain C, LangDAug maintains a significant performance advantage, outperforming other methods by 
+
+0.18 mm in ASD and 1.82% in DSC. Furthermore, in the most difficult Domain E (identified by the highest average ASD and lowest average DSC across methods), LangDAug secures the best DSC, demonstrating its performance con-sistency across domains. While RAM achieves the best performance in Domain F (ASD: 0.32 mm, DSC: 87 .25% ), LangDAug remains com-petitive in this domain (ASD: 0.38 mm, DSC: 86 .41% ) and demonstrates the most consistent performance across all domains. This consistency is highlighted by LangDAug’s 8LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+best overall average performance across domains, which is lower by 0.09 mm in ASD and higher by 1.48% in DSC compared to the second-best TriD, similar to its trend in Fundus segmentation results. 
+
+5.3. LangDAug with Domain Randomization 
+
+LangDAug, described in Section 3, generates samples from intermediate domains using Langevin dynamics. This can enhance domain randomization methods, which combine domain-invariant (DI) and domain-specific (DS) features from source domains. The key assumption is that test domain features lie within the feature space formed by mixing DI-DS features from source domains. Thus, more source domains produce more diverse features, improving target domain performance. By creating new domains via Langevin dynamics, LangDAug enhances domain random-ization methods. We validate this on retinal fundus and prostate segmentation datasets, testing with three leading methods: FedDG (Liu et al., 2021a), RAM (Zhou et al., 2022b), and TriD (Chen et al., 2023). 
+
+Fundus Segmentation : Table 3 presents the performance comparison of domain randomization methods augmented with LangDAug on fundus segmentation. LangDAug demonstrates consistent performance improvements across all baseline methods and domains. Specifically, FedDG aug-mented with LangDAug shows significant enhancements of +1 .38% in average IoU and +1 .47% in average DSC across all domains. RAM exhibits even more substantial gains, with improvements of +1 .86% and +2 .04% in aver-age IoU and DSC respectively, notably achieving an mDSC increase from 84 .87% to 87 .71% on Domain A. Most re-markably, TriD combined with LangDAug demonstrates the highest improvements of +3 .05% and +2 .21% in aver-age IoU and DSC respectively, with particularly significant enhancement in Domain B (mDSC increase from 78 .21% 
+
+to 81 .98% ).These consistent improvements across methods and domains demonstrate LangDAug ’s effectiveness in enhancing domain randomization methods. 
+
+Prostate Segmentation : Table 4 demonstrates LangDAug’s effectiveness in enhancing cross-domain generalization for prostate segmentation. Across all six domains, LangDAug consistently improves both ASD and DSC metrics, paral-leling the improvements observed in fundus segmentation. The most substantial improvements are observed with TriD, yielding average ASD reduction of 0.14 mm and DSC im-provement of +2 .90% . RAM augmented with LangDAug shows similar gains, with average ASD and DSC improve-ments of −0.17 mm and +1 .67% respectively, particularly notable in Domain E where ASD decreased from 1.78 to 
+
+1.41 mm. FedDG, despite moderate baseline performance, demonstrates significant improvement when combined with LangDAug , especially in Domain B (ASD reduction: 0.93 
+
+to 0.66 mm, DSC increase: 87 .03% to 89 .31% ), with overall metrics improving by −0.13 mm ASD and +1 .40% DSC. Notably, while Domain E looks most challenging across all methods, LangDAug consistently enhances performance, underscoring its efficacy in challenging cross-domain sce-narios. These observations conclusively show that LangDAug sig-nificantly boosts the performance of all domain randomiza-tion baselines. 
+
+## 6. Conclusion 
+
+In this work, we propose LangDAug, a novel Langevin data augmentation method for multi-source domain generaliza-tion in 2D medical image segmentation. LangDAug lever-ages Energy-Based Models (EBMs) trained via contrastive divergence to generate intermediate samples between source domains using Langevin dynamics. These samples act as bridges across domain distributions. We establish a theoreti-cal foundation for LangDAug, showing its induced regular-ization effect on parametric models. For Generalized Linear Models (GLMs), we prove that LangDAug’s regularization terms upper-bound the Rademacher complexity based on the data manifold’s intrinsic dimension. Comprehensive experiments on retinal fundus and prostate MRI segmen-tation demonstrate LangDAug’s superiority over existing methods. Moreover, LangDAug effectively complements domain randomization approaches, achieving state-of-the-art performance in domain generalization tasks. 
+
+Limitations : While LangDAug delivers strong perfor-mance, it has two primary limitations. First, the larger number of training samples results in longer training times, though selective sampling can mitigate this. Second, the number of required EBMs scales with the source domains, posing scalability challenges. Future work could address this by adopting shared architectures with domain condi-tioning. We provide detailes quantitative computational cost in Supplementary. Further, we process 3D volumes as 2D slices. Future work could explore training EBMs directly on 3D data to bypass slicing and better model 3D spatial relationships. 
+
+## Acknowledgements 
+
+This work was supported (in part for setting up the GPU compute) by the Indian Institute of Science through a start-up grant. Piyush is supported by Government of India via Prime Minister’s Research Fellowship. Kinjawl is supported by Pre-doctoral fellowship provided by Kotak IISc AI-ML Center (KIAC). Prathosh is supported by Infosys Foundation Young investigator award. 9LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+## Impact Statement 
+
+LangDAug advances domain generalization in medical im-age segmentation by enabling robust adaptation to diverse imaging environments, a critical challenge in deploying AI models across clinical settings. By generating domain-bridging samples through Langevin dynamics and Energy-Based Models, the method enhances segmentation accuracy in scenarios affected by domain shifts (e.g., variations in scanners or protocols), directly supporting more reliable di-agnostics and treatment planning. Its theoretical grounding in bounding model complexity via intrinsic data dimension-ality offers a principled framework for future research. While computational costs and scalability limitations cur-rently constrain its adoption, LangDAug’s compatibility with domain randomization and its ability to preserve anatomical fidelity position it as a versatile tool for real-world applications. Future efforts to optimize training ef-ficiency and extend the framework to 3D volumetric data could further unlock its potential, paving the way for AI systems that generalize seamlessly across evolving medical imaging technologies. 
+
+## References 
+
+Almazroa, A., Alodhayb, S., Osman, E., Ramadan, E., Hum-madi, M., Dlaim, M., Alkatee, M., Raahemifar, K., and Lakshminarayanan, V. Retinal fundus images for glau-coma analysis: the riga dataset. In Medical Imaging 2018: Imaging Informatics for Healthcare, Research, and Ap-plications , volume 10579, pp. 55–62. SPIE, 2018. Arjovsky, M., Bottou, L., Gulrajani, I., and Lopez-Paz, D. Invariant risk minimization. arXiv preprint arXiv:1907.02893 , 2019. Arora, R., Bartlett, P., Mianjy, P., and Srebro, N. Dropout: Explicit forms and capacity control. In International Conference on Machine Learning , pp. 351–361. PMLR, 2021. Asgari Taghanaki, S., Abhishek, K., Cohen, J. P., Cohen-Adad, J., and Hamarneh, G. Deep semantic segmentation of natural and medical images: a review. Artificial Intelli-gence Review , 54:137–178, 2021. Balaji, Y., Sankaranarayanan, S., and Chellappa, R. Metareg: Towards domain generalization using meta-regularization. 
+
+Advances in neural information processing systems , 31, 2018. Bartlett, P. L. and Mendelson, S. Rademacher and gaussian complexities: Risk bounds and structural results. Journal of Machine Learning Research , 3(Nov):463–482, 2002. Blanchard, G., Deshmukh, A. A., Dogan, U., Lee, G., and Scott, C. Domain generalization by marginal transfer learning. Journal of machine learning research , 22(2): 1–55, 2021. Cayton, L. et al. Algorithms for manifold learning . eSchol-arship, University of California, 2008. Chen, Z., Pan, Y., Ye, Y., Cui, H., and Xia, Y. Treasure in distribution: a domain randomization based multi-source domain generalization for 2d medical image segmenta-tion. In International Conference on Medical Image Com-puting and Computer-Assisted Intervention , pp. 89–99. Springer, 2023. Cong, C., Liu, S., Di Ieva, A., Pagnucco, M., Berkovsky, S., and Song, Y. Colour adaptive generative networks for stain normalisation of histopathology images. Medical Image Analysis , 82:102580, 2022. ISSN 1361-8415. doi: https://doi.org/10.1016/j.media.2022.102580. URL https://www.sciencedirect.com/ science/article/pii/S1361841522002195 .Dou, Q., Coelho de Castro, D., Kamnitsas, K., and Glocker, B. Domain generalization via model-agnostic learning of semantic features. Advances in neural information processing systems , 32, 2019. Du, Y. and Mordatch, I. Implicit generation and modeling with energy based models. Advances in Neural Informa-tion Processing Systems , 32, 2019. Du, Y., Li, S., and Mordatch, I. Compositional visual gen-eration with energy based models. Advances in Neural Information Processing Systems , 33:6637–6647, 2020a. Du, Y., Xu, J., Xiong, H., Qiu, Q., Zhen, X., Snoek, C. G., and Shao, L. Learning to learn with variational informa-tion bottleneck for domain generalization. In Computer Vision–ECCV 2020: 16th European Conference, Glas-gow, UK, August 23–28, 2020, Proceedings, Part X 16 ,pp. 200–216. Springer, 2020b. Falk, T., Mai, D., Bensch, R., C¸ i c¸ ek, ¨O., Abdulkadir, A., Marrakchi, Y., B ¨ohm, A., Deubner, J., J ¨ackel, Z., Seiwald, K., et al. U-net: deep learning for cell counting, detection, and morphometry. Nature methods , 16(1):67–70, 2019. Fick, R. H., Moshayedi, A., Roy, G., Dedieu, J., Petit, S., and Hadj, S. B. Domain-specific cycle-gan augmentation improves domain generalizability for mitosis detection. In 
+
+International Conference on Medical Image Computing and Computer-Assisted Intervention , pp. 40–47. Springer, 2021. Finn, C., Abbeel, P., and Levine, S. Model-agnostic meta-learning for fast adaptation of deep networks. In Interna-tional conference on machine learning , pp. 1126–1135. PMLR, 2017. 10 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Ganin, Y., Ustinova, E., Ajakan, H., Germain, P., Larochelle, H., Laviolette, F., March, M., and Lempitsky, V. Domain-adversarial training of neural networks. Journal of ma-chine learning research , 17(59):1–35, 2016. Gardner, J. R., Upchurch, P., Kusner, M. J., Li, Y., Wein-berger, K. Q., Bala, K., and Hopcroft, J. E. Deep manifold traversal: Changing labels with convolutional features. 
+
+arXiv preprint arXiv:1511.06421 , 2015. Garg, V., Kalai, A. T., Ligett, K., and Wu, S. Learn to expect the unexpected: Probably approximately correct domain generalization. In International Conference on Artificial Intelligence and Statistics , pp. 3574–3582. PMLR, 2021. Gorban, A. N. and Tyukin, I. Y. Blessing of dimensionality: mathematical foundations of the statistical physics of data. Philosophical Transactions of the Royal Society A: Mathematical, Physical and Engineering Sciences , 376 (2118):20170237, 2018. Gu, R., Zhang, J., Huang, R., Lei, W., Wang, G., and Zhang, S. Domain composition and attention for unseen-domain generalizable medical image segmentation. In Medical Image Computing and Computer Assisted Intervention– MICCAI 2021: 24th International Conference, Stras-bourg, France, September 27–October 1, 2021, Proceed-ings, Part III 24 , pp. 241–250. Springer, 2021. Guan, H. and Liu, M. Domain adaptation for medical image analysis: a survey. IEEE Transactions on Biomedical Engineering , 69(3):1173–1185, 2021. Gulrajani, I. and Lopez-Paz, D. In search of lost domain generalization. In International Conference on Learning Representations , 2021. URL https://openreview. net/forum?id=lQdXeXDoWtI .Hajek, B. and Raginsky, M. Ece 543: Statistical learning theory. Class notes for ECE , 2021. Hart, P. E., Stork, D. G., and Duda, R. O. Pattern classifica-tion . Wiley Hoboken, 2000. He, K., Zhang, X., Ren, S., and Sun, J. Deep residual learn-ing for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pp. 770–778, 2016. Hemati, S., Zhang, G., Estiri, A., and Chen, X. Under-standing hessian alignment for domain generalization. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 19004–19014, 2023. Hinton, G. E. Training products of experts by minimizing contrastive divergence. Neural computation , 14(8):1771– 1800, 2002. Honarvar Nazari, N. and Kovashka, A. Domain generaliza-tion using shape representation. In European Conference on Computer Vision , pp. 666–670. Springer, 2020. Hu, S., Zhang, K., Chen, Z., and Chan, L. Domain gener-alization via multidomain discriminant analysis. In Un-certainty in artificial intelligence , pp. 292–302. PMLR, 2020. Hu, S., Liao, Z., Zhang, J., and Xia, Y. Domain and content adaptive convolution based multi-source domain general-ization for medical image segmentation. IEEE Transac-tions on Medical Imaging , 42(1):233–244, 2022. Huang, Z., Wang, H., Xing, E. P., and Huang, D. Self-challenging improves cross-domain generalization. In 
+
+Computer vision–ECCV 2020: 16th European conference, Glasgow, UK, August 23–28, 2020, proceedings, part II 16 , pp. 124–140. Springer, 2020. Ilse, M., Tomczak, J. M., Louizos, C., and Welling, M. Diva: Domain invariant variational autoencoders. In Medical Imaging with Deep Learning , pp. 322–348. PMLR, 2020. Isensee, F., Jaeger, P. F., Kohl, S. A. A., Petersen, J., and Maier-Hein, K. nnu-net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods , 18:203 – 211, 2020. URL https://api.semanticscholar. org/CorpusID:227947847 .Jin, Q., Meng, Z., Pham, T. D., Chen, Q., Wei, L., and Su, R. Dunet: A deformable network for retinal vessel segmentation. Knowledge-Based Systems , 178:149–162, 2019. Kamnitsas, K., Baumgartner, C., Ledig, C., Newcombe, V., Simpson, J., Kane, A., Menon, D., Nori, A., Criminisi, A., Rueckert, D., et al. Unsupervised domain adaptation in brain lesion segmentation with adversarial networks. In Information Processing in Medical Imaging: 25th International Conference, IPMI 2017, Boone, NC, USA, June 25-30, 2017, Proceedings 25 , pp. 597–609. Springer, 2017. Li, C., Lin, X., Mao, Y., Lin, W., Qi, Q., Ding, X., Huang, Y., Liang, D., and Yu, Y. Domain generalization on medical imaging classification using episodic training with task augmentation. Computers in biology and medicine , 141: 105144, 2022a. Li, D., Yang, Y., Song, Y.-Z., and Hospedales, T. Learning to generalize: Meta-learning for domain generalization. In Proceedings of the AAAI conference on artificial intel-ligence , volume 32, 2018a. 11 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Li, H., Pan, S. J., Wang, S., and Kot, A. C. Domain general-ization with adversarial feature learning. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 5400–5409, 2018b. Li, L., Gao, K., Cao, J., Huang, Z., Weng, Y., Mi, X., Yu, Z., Li, X., and Xia, B. Progressive domain expansion network for single domain generalization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 224–233, 2021a. Li, P., Li, D., Li, W., Gong, S., Fu, Y., and Hospedales, T. M. A simple feature augmentation for domain general-ization. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 8886–8895, 2021b. Li, X., Dai, Y., Ge, Y., Liu, J., Shan, Y., and Duan, L.-Y. Un-certainty modeling for out-of-distribution generalization. 
+
+arXiv preprint arXiv:2202.03958 , 2022b. Li, Y., Gong, M., Tian, X., Liu, T., and Tao, D. Domain generalization via conditional invariant representations. In Proceedings of the AAAI conference on artificial intel-ligence , volume 32, 2018c. Liu, A. H., Liu, Y.-C., Yeh, Y.-Y., and Wang, Y.-C. F. A unified feature disentangler for multi-domain image trans-lation and manipulation. Advances in neural information processing systems , 31, 2018. Liu, Q., Dou, Q., and Heng, P.-A. Shape-aware meta-learning for generalizing prostate mri segmentation to unseen domains. In Medical Image Computing and Com-puter Assisted Intervention–MICCAI 2020: 23rd Inter-national Conference, Lima, Peru, October 4–8, 2020, Proceedings, Part II 23 , pp. 475–485. Springer, 2020. Liu, Q., Chen, C., Qin, J., Dou, Q., and Heng, P.-A. Feddg: Federated domain generalization on medical image seg-mentation via episodic learning in continuous frequency space. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 1013–1023, 2021a. Liu, X., Thermos, S., O’Neil, A., and Tsaftaris, S. A. Semi-supervised meta-learning with disentanglement for domain-generalised medical image segmentation. In Medical Image Computing and Computer Assisted Intervention–MICCAI 2021: 24th International Confer-ence, Strasbourg, France, September 27–October 1, 2021, Proceedings, Part II 24 , pp. 307–317. Springer, 2021b. Liu, X.-C., Yang, Y.-L., and Hall, P. Geometric and textural augmentation for domain gap reduction. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 14340–14350, 2022. Mahajan, D., Tople, S., and Sharma, A. Domain generaliza-tion using causal matching. In International conference on machine learning , pp. 7313–7324. PMLR, 2021. Milletari, F., Navab, N., and Ahmadi, S.-A. V-net: Fully con-volutional neural networks for volumetric medical image segmentation. In 2016 fourth international conference on 3D vision (3DV) , pp. 565–571. Ieee, 2016. Motiian, S., Piccirilli, M., Adjeroh, D. A., and Doretto, G. Unified deep supervised domain adaptation and gen-eralization. In Proceedings of the IEEE international conference on computer vision , pp. 5715–5725, 2017. Muandet, K., Balduzzi, D., and Sch ¨olkopf, B. Domain generalization via invariant feature representation. In 
+
+International conference on machine learning , pp. 10–18. PMLR, 2013. Murphy, K. P. Probabilistic Machine Learning: An intro-duction . MIT Press, 2022. URL probml.ai .Olabarriaga, S. D. and Smeulders, A. W. Interaction in the segmentation of medical images: A survey. Medical image analysis , 5(2):127–142, 2001. Orlando, J. I., Fu, H., Breda, J. B., Van Keer, K., Bathula, D. R., Diaz-Pinto, A., Fang, R., Heng, P.-A., Kim, J., Lee, J., et al. Refuge challenge: A unified framework for evaluating automated methods for glaucoma assessment from fundus photographs. Medical image analysis , 59: 101570, 2020. Pan, X., Luo, P., Shi, J., and Tang, X. Two at once: En-hancing learning and generalization capacities via ibn-net. In Proceedings of the european conference on computer vision (ECCV) , pp. 464–479, 2018. Peng, D., Lei, Y., Liu, L., Zhang, P., and Liu, J. Global and local texture randomization for synthetic-to-real semantic segmentation. IEEE Transactions on Image Processing ,30:6594–6608, 2021. Peng, X., Li, Y., and Saenko, K. Domain2vec: Domain embedding for unsupervised domain adaptation. In Com-puter Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part VI 16 , pp. 756–774. Springer, 2020. Prakash, A., Boochoon, S., Brophy, M., Acuna, D., Camer-acci, E., State, G., Shapira, O., and Birchfield, S. Struc-tured domain randomization: Bridging the reality gap by context-aware synthetic data. In 2019 International Con-ference on Robotics and Automation (ICRA) , pp. 7249– 7255. IEEE, 2019. Qiao, F., Zhao, L., and Peng, X. Learning to learn single domain generalization. In Proceedings of the IEEE/CVF 
+
+12 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+conference on computer vision and pattern recognition ,pp. 12556–12565, 2020. Rahman, M. M., Fookes, C., Baktashmotlagh, M., and Srid-haran, S. Multi-component image translation for deep domain generalization. In 2019 IEEE Winter Confer-ence on Applications of Computer Vision (WACV) , pp. 579–588. IEEE, 2019. Rame, A., Dancette, C., and Cord, M. Fishr: Invariant gradient variances for out-of-distribution generalization. In International Conference on Machine Learning , pp. 18347–18377. PMLR, 2022. Robey, A., Pappas, G. J., and Hassani, H. Model-based domain generalization. Advances in Neural Information Processing Systems , 34:20210–20229, 2021. Shalev-Shwartz, S. and Ben-David, S. Understanding Ma-chine Learning: From Theory to Algorithms . Cambridge University Press, 2014. Shen, D., Wu, G., and Suk, H.-I. Deep learning in medical image analysis. Annual review of biomedical engineering ,19(1):221–248, 2017. Shi, Y., Seely, J., Torr, P., N, S., Hannun, A., Usunier, N., and Synnaeve, G. Gradient matching for domain gen-eralization. In International Conference on Learning Representations , 2022. URL https://openreview. net/forum?id=vDwBW49HmO .Sivaswamy, J., Krishnadas, S., Joshi, G. D., Jain, M., and Tabish, A. U. S. Drishti-gs: Retinal image dataset for optic nerve head (onh) segmentation. In 2014 IEEE 11th international symposium on biomedical imaging (ISBI) ,pp. 53–56. IEEE, 2014. Somavarapu, N., Ma, C.-Y., and Kira, Z. Frustratingly simple domain generalization via image stylization. arXiv preprint arXiv:2006.11207 , 2020. Song, Y. and Ermon, S. Generative modeling by estimating gradients of the data distribution. Advances in neural information processing systems , 32, 2019. Sun, B. and Saenko, K. Deep coral: Correlation alignment for deep domain adaptation. In Computer vision–ECCV 2016 workshops: Amsterdam, the Netherlands, October 8-10 and 15-16, 2016, proceedings, part III 14 , pp. 443– 450. Springer, 2016. Tancik, M., Srinivasan, P., Mildenhall, B., Fridovich-Keil, S., Raghavan, N., Singhal, U., Ramamoorthi, R., Barron, J., and Ng, R. Fourier features let networks learn high fre-quency functions in low dimensional domains. Advances in neural information processing systems , 33:7537–7547, 2020. Tiwary, P., Bhattacharyya, K., and AP, P. Cycle con-sistent twin energy-based models for image-to-image translation. Medical Image Analysis (MedIA) , 91, 2023. doi: https://doi.org/10.1016/j.media.2023.103031. URL https://www.sciencedirect.com/ science/article/pii/S1361841523002918 .Tiwary, P., Shubham, K., Kashyap, V., and AP, P. Bayesian pseudo-coresets via contrastive divergence. In Confer-ence on Uncertainity in Artificial Intelligence (UAI) , 2024. URL https://arxiv.org/abs/2303.11278 .Tiwary, P., Guha, A., Panda, S., and AP, P. Adapt then unlearn: Exploring parameter space seman-tics for unlearning in generative adversarial net-works. Transactions on Machine Learning Research ,2025. URL https://openreview.net/forum? id=jAHEBivObO&t=1739258832039 .Upchurch, P., Gardner, J., Pleiss, G., Pless, R., Snavely, N., Bala, K., and Weinberger, K. Deep feature interpolation for image content changes. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pp. 7064–7073, 2017. Vapnik, V. N. An overview of statistical learning theory. 
+
+IEEE transactions on neural networks , 10(5):988–999, 1999. Wang, J., Lan, C., Liu, C., Ouyang, Y., Qin, T., Lu, W., Chen, Y., Zeng, W., and Philip, S. Y. Generalizing to unseen domains: A survey on domain generalization. 
+
+IEEE transactions on knowledge and data engineering ,35(8):8052–8072, 2022. Wang, S., Yu, L., Li, K., Yang, X., Fu, C.-W., and Heng, P.-A. Dofe: Domain-oriented feature embedding for gen-eralizable fundus image segmentation on unseen datasets. 
+
+IEEE Transactions on Medical Imaging , 39(12):4237– 4248, 2020. Xiao, Z., Zhen, X., Liao, S., and Snoek, C. G. M. Energy-based test sample adaptation for domain generalization. In The Eleventh International Conference on Learning Representations , 2023. URL https://openreview. net/forum?id=3dnrKbeVatv .Xu, Z., Liu, D., Yang, J., Raffel, C., and Niethammer, M. Robust and generalizable visual representation learning via random convolutions. In International Conference on Learning Representations , 2021. URL https:// openreview.net/forum?id=BVSM0x3EDK6 .Yuan, Y., Xu, B., Hou, L., Sun, F., Shen, H., and Cheng, X. Tea: Test-time energy adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 23901–23911, 2024. 13 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Zhang, H. mixup: Beyond empirical risk minimization. 
+
+arXiv preprint arXiv:1710.09412 , 2017. Zhang, L., Deng, Z., Kawaguchi, K., Ghorbani, A., and Zou, J. How does mixup help with robustness and generaliza-tion? arXiv preprint arXiv:2010.04819 , 2020a. Zhang, L., Wang, X., Yang, D., Sanford, T., Harmon, S., Turkbey, B., Wood, B. J., Roth, H., Myronenko, A., Xu, D., et al. Generalizing deep learning for medical image segmentation to unseen domains via deep stacked trans-formation. IEEE transactions on medical imaging , 39(7): 2531–2540, 2020b. Zhang, X., Cui, P., Xu, R., Zhou, L., He, Y., and Shen, Z. Deep stable learning for out-of-distribution general-ization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 5372– 5382, 2021. Zhang, Y., Li, M., Li, R., Jia, K., and Zhang, L. Exact fea-ture distribution matching for arbitrary style transfer and domain generalization. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pp. 8035–8045, 2022. Zhang, Z., Yin, F. S., Liu, J., Wong, W. K., Tan, N. M., Lee, B. H., Cheng, J., and Wong, T. Y. Origa-light: An online retinal fundus image database for glaucoma analysis and research. In 2010 Annual international conference of the IEEE engineering in medicine and biology , pp. 3065– 3068. IEEE, 2010. Zhao, Y. and Chen, C. Unpaired image-to-image transla-tion via latent energy transport. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 16418–16427, 2021. Zhou, K., Yang, Y., Hospedales, T., and Xiang, T. Deep domain-adversarial image generation for domain general-isation. In Proceedings of the AAAI conference on artifi-cial intelligence , volume 34, pp. 13025–13032, 2020a. Zhou, K., Yang, Y., Hospedales, T., and Xiang, T. Learning to generate novel domains for domain generalization. In 
+
+Computer Vision–ECCV 2020: 16th European Confer-ence, Glasgow, UK, August 23–28, 2020, Proceedings, Part XVI 16 , pp. 561–578. Springer, 2020b. Zhou, K., Yang, Y., Hospedales, T., and Xiang, T. Deep domain-adversarial image generation for domain general-isation. In Proceedings of the AAAI conference on artifi-cial intelligence , volume 34, pp. 13025–13032, 2020c. Zhou, K., Yang, Y., Qiao, Y., and Xiang, T. Domain gener-alization with mixstyle. In ICLR , 2021. Zhou, K., Liu, Z., Qiao, Y., Xiang, T., and Loy, C. C. Do-main generalization: A survey. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(4):4396– 4415, 2022a. Zhou, K., Loy, C. C., and Liu, Z. Semi-supervised domain generalization with stochastic stylematch. International Journal of Computer Vision , 131(9):2377–2387, 2023. Zhou, Z., Siddiquee, M. M. R., Tajbakhsh, N., and Liang, J. Unet++: Redesigning skip connections to exploit multi-scale features in image segmentation. IEEE transactions on medical imaging , 39(6):1856–1867, 2019. Zhou, Z., Qi, L., and Shi, Y. Generalizable medical image segmentation via random amplitude mixup and domain specific image restoration. In ECCV , 2022b. Zunino, A., Bargal, S. A., Volpi, R., Sameki, M., Zhang, J., Sclaroff, S., Murino, V., and Saenko, K. Explainable deep classification models for domain generalization. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 3233–3242, 2021. 14 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+## A. Proof of Theoretical Results 
+
+Theorem A.1. Consider a loss function of the form 
+
+ℓ(θ, (x, y)) = h(fθ (x)) − y(fθ (x)) where h(·) and fθ (·)
+
+are twice differentiable for all θ ∈ Θ. Then given a dataset 
+
+D = {xi, yi}ki=1 , the augmented empirical risk as denoted in Eq. 6 can be written as: 
+
+Laug (θ, D) = Lstd (θ, D) + 
+
+> 3
+
+X
+
+> i=1
+
+Ri(θ, D) (11) 
+
+where, 
+
+R1(θ, D) = − 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+β2(h′(fθ (xi)) − yi)∇fθ (xi)T ∇ log p(xi)
+
+R2(θ, D) = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+β2h′′ (fθ (xi)) Tr( ∇fθ (xi)∇fθ (xi)T )
+
+R3(θ, D) = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+β2(h′(fθ (xi)) − yi) Tr( ∇2fθ (xi)) 
+
+Proof. By definition, we have: 
+
+Laug (θ, D) = 1
+
+k
+
+X
+
+> i
+
+E  
+
+> ε∼N (0 ,I )
+
+[ℓ(θ, ˜zi)] (12) Consider one term of the above summation: 
+
+ℓ(θ, ˜zi) = h(fθ (˜ xi(β))) − yi(fθ (˜ xi(β))) ≜ ψi(β) (13) 
+
+= ψi(0) + βψ ′ 
+
+> i
+
+(0) + β2
+
+2 ψ′′  
+
+> i
+
+(0) + β2φ(β) (14) where, we have used Taylor expansion to approximate ψi(·)
+
+around β = 0 and lim  
+
+> β→0
+
+φ(β) = 0 . We will evaluate each of the above terms below. Recall that ˜xi(β) = xi − β2 
+
+> 2
+
+∇x log p(xi) + βε , hence, 
+
+˜xi(0) = xi. Using this, we have: 
+
+ψi(0) = h(fθ (xi)) − yi(fθ (xi)) = ℓ(θ, zi) (15) Now, 
+
+ψ′ 
+
+> i
+
+(β) = h′
+
+(fθ (˜ xi)) 
+
+ ∂f θ (˜ xi)
+
+∂ ˜xi
+
+T ∂ ˜xi
+
+∂β 
+
+− yi
+
+ ∂f θ (˜ xi)
+
+∂ ˜xi
+
+T ∂ ˜xi
+
+∂β (16) 
+
+= h′
+
+(fθ (˜ xi)) − yi
+
+∇fθ (˜ xi)T ε − β∇ log p(xi) (17) 
+
+= h′
+
+(fθ (˜ xi)) − yi
+
+∇fθ (˜ xi)T rε(β) (18) where, rε(β) ≜ ε − β∇ log p(xi) = ∂ ˜xi/∂β . Hence, we have: 
+
+ψ′ 
+
+> i
+
+(0) = ( h′
+
+(fθ (xi)) − yi)∇fθ (xi)T ε (19)  
+
+> =⇒
+
+E 
+
+> ε
+
+[ψ′ 
+
+> i
+
+(0)] = ( h′
+
+(fθ (xi)) − yi)∇fθ (xi)T E 
+
+> ε
+
+[ε] = 0 
+
+(20) Next, for the second derivative, we differentiate the above expression: 
+
+ψ′′  
+
+> i
+
+(β) = h′′ 
+
+(fθ (˜ xi))  ∇fθ (˜ xi)T rε(β)2
+
++ h′
+
+(fθ (˜ xi)) − yi
+
+h
+
+εT ∇2fθ (˜ xi)rε(β)
+
+i
+
+− h′
+
+(fθ (˜ xi)) − yi
+
+h
+
+β∇ log p(xi)T ∇2fθ (˜ xi)rε(β)+ ∇ log p(xi)T ∇fθ (˜ xi)
+
+i
+
+(21) 
+
+= h′′ 
+
+(fθ (˜ xi)) rε(β)T  ∇fθ (˜ xi)∇fθ (˜ xi)T  rε(β)+ h′
+
+(fθ (˜ xi)) − yi
+
+rε(β)T  ∇2fθ (˜ xi) rε(β)
+
+− h′
+
+(fθ (˜ xi)) − yi
+
+∇fθ (˜ xi)T ∇ log p(xi)
+
+(22) Substituting β = 0 in the above gives: 
+
+ψ′′  
+
+> i
+
+(0) = h′′ 
+
+(fθ (xi)) εT  ∇fθ (xi)∇fθ (xi)T  ε
+
++ h′
+
+(fθ (xi)) − yi
+
+εT  ∇2fθ (xi) ε
+
+− h′
+
+(fθ (xi)) − yi
+
+∇fθ (xi)T ∇ log p(xi) (23) Taking expectation w.r.t ε:
+
+E 
+
+> ε
+
+[ψ′′  
+
+> i
+
+(0)] = h′′ 
+
+(fθ (xi)) Tr( ∇fθ (xi)∇fθ (xi)T )+ ( h′
+
+(fθ (xi)) − yi) Tr( ∇2fθ (xi)) 
+
+− (h′
+
+(fθ (xi)) − yi)∇fθ (xi)T ∇ log p(xi)
+
+(24) Now, combining results from Eq. 15, 20, 24 into Eq. 14 and Eq. 6: 
+
+Laug (θ, D) = 1
+
+k
+
+X
+
+> i
+
+n
+
+ℓ(θ, zi)
+
+− β2
+
+2 (h′
+
+(fθ (xi)) − yi)∇fθ (xi)T ∇ log p(xi)+ β2
+
+2 h′′ 
+
+(fθ (xi)) Tr( ∇fθ (xi)∇fθ (xi)T )+ β2
+
+2 (h′
+
+(fθ (xi)) − yi) Tr( ∇2fθ (xi)) 
+
+o
+
+(25) 
+
+=⇒ L aug (θ, D) = Lstd (θ, D) + 
+
+> 3
+
+X
+
+> i=1
+
+Ri(θ, D)
+
+(26) 
+
+Corollary A.2. For a GLM, if A(·) is twice differentiable, then the regularization terms obtained via second-order approximation is given by: 
+
+β2
+
+2n
+
+> k
+
+X
+
+> i=1
+
+ A′′ (θT xi)θT θ − A′(θT xi)θT s(xi) (27) 
+
+where, s(xi) = ∇ log p(xi) is the Stein’s score function. 
+
+1LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Proof. Using the result of Theorem 4.1 with h(·) = A(·)
+
+and fθ (x) = θT x, we get: 
+
+ℓ(θ, ˜zi) = ℓ(θ, zi) − β2
+
+2 A′
+
+(θT xi)θT ∇ log p(xi)+ β2
+
+2 A′′ 
+
+(θT xi)θT θ (28) where we use the fact that for GLMs, ∇2fθ (·) = 0 and 
+
+Tr( θθ T ) = θT θ. This completes the proof. 
+
+Theorem A.3. Assume that the distribution of xi is ρ-retentive, and let Σx = E[xx T ] have bounded singular values. Further assume that the norm of the parameters and Ex[∥∇ log p(x)∥2] are bounded. Then the empirical Rademacher complexity of Wγ satisfies: 
+
+Rad (Wγ , D) ≤ C
+
+r rank (Σ x)
+
+k (29) 
+
+where, C =
+
+ γρ
+
+1/2
+
+∨
+
+ γρσ 
+
+1/4
+
+(30) 
+
+here, σ denotes the lowest singular values of Σx.Proof. The function class under consideration is: 
+
+Wγ ≜
+
+n
+
+x → θT x : θT E
+
+> x
+
+h
+
+A′′ 
+
+(θT x)θ − A′
+
+(θT x)s(x)
+
+i
+
+≤ γ
+
+o
+
+The above constraint can be written as: 
+
+γ ≥ E 
+
+> x
+
+[A′′ 
+
+(θT x)] θT θ − E 
+
+> x
+
+[A′
+
+(θT x)θT s(x)] (31) 
+
+≥ E 
+
+> x
+
+[A′′ 
+
+(θT x)] θT θ − qE 
+
+> x
+
+(A′ (θT x)) 2qE 
+
+> x
+
+(θT s(x)) 2
+
+(32) 
+
+≥ E 
+
+> x
+
+[A′′ 
+
+(θT x)] θT θ − qE 
+
+> x
+
+(A′ (θT x)) 2q∥θ∥2 E 
+
+> x
+
+[∥s(x)∥2]
+
+(33) 
+
+≥ E 
+
+> x
+
+[A′′ 
+
+(θT x)] θT θ − κ1∥θ∥qE 
+
+> x
+
+(A′ (θT x)) 2 (34) 
+
+≥ E 
+
+> x
+
+[A′′ 
+
+(θT x)] θT θ − κ1
+
+κ2
+
+∥θ∥2qE 
+
+> x
+
+(A′ (θT x)) 2 (35) 
+
+≥ ∥ θ∥2
+
+
+
+E 
+
+> x
+
+[A′′ 
+
+(θT x)] − κ1
+
+κ2
+
+qE 
+
+> x
+
+(A′ (θT x)) 2
+
+
+
+(36) where, Ex[∥s(x)∥2] ≤ κ1 and ∥θ∥2 ≥ κ2. From ρ-retentiveness, we have: 
+
+ρ min {1, E 
+
+> x
+
+(θT x)2} ≤ E
+
+> x
+
+
+
+A′′ 
+
+(θT x) − κ1
+
+κ2
+
+A′
+
+(θT x)
+
+
+
+(37) 
+
+ρ min {1, θ T Σxθ} ≤ E
+
+> x
+
+h
+
+A′′ 
+
+(θT x)
+
+i
+
+− κ1
+
+κ2
+
+qE 
+
+> x
+
+[A′ (θT x)2]
+
+(38) Combining this with constraint in Eq. 36, we get: 
+
+∥θ∥2 ≤ γρ min {1, θ T Σxθ} ≤ max 
+
+ γρ , γρθ T Σxθ
+
+
+
+(39) 
+
+=⇒ ∥ θ∥2 ≤ γρ ∨
+
+r γρσ (40) where σ is the lowest singular value of Σx. Now, the empir-ical Rademacher complexity is given by: 
+
+Rad (Wγ , D) = E
+
+> ξ
+
+"
+
+sup 
+
+> Wγ
+
+1
+
+k
+
+X
+
+> i
+
+ξiθT xi
+
+#
+
+(41) 
+
+≤ E
+
+> ξ
+
+ sup   
+
+> ∥θ∥2≤γρ∨
+
+√ γρσ 
+
+1
+
+k
+
+X
+
+> i
+
+ξiθT xi
+
+ (42) 
+
+≤ 1
+
+k
+
+ γρ
+
+1/2
+
+∨
+
+ γρσ 
+
+1/4
+
+E
+
+> ξ
+
+"
+
+∥ X
+
+> i=1
+
+ξixi∥
+
+#
+
+(43) 
+
+≤ 1
+
+k C
+
+s
+
+E 
+
+> ξ
+
+∥ X
+
+> i
+
+ξixi∥2 (44) 
+
+≤ 1
+
+k C
+
+sX
+
+> i
+
+xTi xi (45) Taking expectation over dataset distribution completes the proof: 
+
+Rad (Wγ , D) = E
+
+> D
+
+[Rad (Wγ , D)] ≤ Ck
+
+sX
+
+> i
+
+E[xTi xi]
+
+(46) 
+
+≤ Ck
+
+sX
+
+> i
+
+E[Tr( xixTi )] (47) 
+
+≤ Ck
+
+sX
+
+> i
+
+Tr(Σ x) (48) 
+
+≤ C
+
+r rank (Σ x)
+
+k (49) 
+
+Lemma A.4 (Bartlett & Mendelson (2002)) . For any B-uniformly bounded and L-Lipchitz function ζ, for all ϕ ∈ Φ,with probability atleast 1 − δ:
+
+E[ζ(ϕ(x))] ≤ 1
+
+k
+
+X
+
+> i
+
+ζ(ϕ(xi)) + 2 LRad (Φ , D) + B
+
+r log(1 /δ )2k
+
+(50) 2LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Corollary A.5. If A(·) is LA-Lipchitz continuous, X , Y, Θ
+
+are all bounded, then there exists constant L, B > 0 such that for all θ satisfying the constraint in Wγ , we have: 
+
+L ≤ L std + 2 LL A C
+
+r rank (Σ x)
+
+k
+
+!
+
++ B
+
+r log(1 /δ )2k
+
+(51) 
+
+with probability atleast 1 − δ.Proof. The results follow directly from Lemma A.4 and result of Theorem 4.3. 
+
+## B. Implementation Details 
+
+This section outlines the implementation specifics of LangDAug. The code and relevant resources are avail-able at https://github.com/backpropagator/ LangDAug .
+
+Energy-based Models : LangDAug leverages trained Energy-Based Models (EBMs) to generate augmented sam-ples, as described in the main text. Following the approach in (Zhao & Chen, 2021), we train EBMs in the latent space of a VQ-VAE 2 model 3. The energy model is implemented using the discriminator architecture of StyleGAN2 4.First, the VQ-VAE 2 model is trained on all source do-mains. Subsequently, EBMs are trained in the latent space of this VQ-VAE 2 model to enable domain traversal using Langevin dynamics. The VQ-VAE 2 configuration includes a codebook dimension of 32 and a codebook size of 256. Similar to (Zhao & Chen, 2021), we train the VQ-VAE us-ing only the reconstruction loss, omitting the second-stage PixelCNN training. The EBMs are optimized using the Adam optimizer with a learning rate of 0.001 . During do-main traversal, the Langevin step size ( β in Eq. 4) is set to β = 1 , and the number of Langevin steps ( K) is set to 
+
+K = 40 .
+
+LangDAug : For n source domains, we train 2 n
+
+> 2
+
+ EBMs to model domain pairs in both directions 5. To generate Langevin samples, as outlined in Section 3.3, we execute Langevin Dynamics (LD) and store intermediate samples as per Eq. 4. Instead of retaining all K = 40 intermedi-ate samples, we store a subset of these samples for two reasons: (a) to manage storage and computational over-head, and (b) to reduce the correlation between MCMC       
+
+> 3Implementation taken from https://github.com/ rosinality/vq-vae-2-pytorch
+> 4Implementation taken from https://github.com/ rosinality/stylegan2-pytorch
+> 5As mentioned in limitations, this can be problematic if the number of source domains is too large. In that case, shared archi-tectures can be explored with conditioning on desired domains
+
+samples. Specifically, we store 13 samples for fundus seg-mentation (uniformly at iterations k = 3 , 6, . . . , 39 )6 and 5 samples for 2D MRI prostate segmentation (at iterations 
+
+k = 5 , 10 , . . . , 40 ). These samples are precomputed for each EBM to save computational time in downstream seg-mentation network training. We provide a pseudo-code in Algorithm 1. 
+
+Segmentation Network : For downstream segmentation, we employ a ResNet34-based network (He et al., 2016) 7. It comprises of a ResNet34 encoder and ASPP-based decoder. The network is trained using a combination of cross-entropy and DICE loss, with the AdamW optimizer. The learning rate (lr) is selected from {1 × 10 −4, 1 × 10 −6}, and the batch size (bs) is chosen from {8, 32 , 64 }. The running average parameters are set to β1 = 0 .9 and β2 = 0 .99 .Empirically, we observed that (lr = 1 × 10 −4, bs = 8) yields optimal performance for fundus segmentation, whereas (lr = 1 × 10 −6, bs = 32 /64 ) works best for 2D MRI prostate segmentation. 
+
+Baselines : For all the baselines, we use the same ResNet34-based segmentation network. The DomainBed methods (Fish, Fishr, and Hutchinson) are primarily used in classi-fication tasks. For segmentation, we re-implemented these methods to ensure compatibility with the retinal fundus and prostate datasets, utilizing the ResNet-34 backbone. These adaptations were closely aligned with the original imple-mentations provided in DomainBed 8. In addition to the default implementation, we re-scaled the losses for better stability and training of network. We use the publicly available codebase for RandConv 9,MixStyle 10 , FedDG 11 , RAM 12 and TriD 13 . For MixStyle, we add additional layers after the first two ResNet blocks of segmentation model to transfer the instance level fea-ture statistics between source domains. Further, for RAM and FedDG, instead of UNet encoder-decoder, we use the ResNet34 blocks and ASPP decoder for training.        
+
+> 6For RFS dataset, we use an L-channel replacement strategy to maintain the position of optical disc and optical cup while running LD. Specifically, after each LD step, we replace the L
+> channel of the updated sample with Lchannel of original sample. This ensures that the position of OC and OD are preserved and segmentation masks remain valid.
+> 7Implementation taken from https://github.com/ kazuto1011/deeplab-pytorch/tree/master/ libs/models
+> 8https://github.com/facebookresearch/ DomainBed/tree/main
+> 9https://github.com/wildphoton/RandConv
+> 10 https://github.com/KaiyangZhou/ mixstyle-release
+> 11 https://github.com/liuquande/FedDG-ELCFS
+> 12 https://github.com/zzzqzhou/RAM-DSIR/ tree/main
+> 13 https://github.com/Chen-Ziyang/TriD
+
+3LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Datasets : The datasets can be found publicly. The Retinal Fundus Dataset can be found at: 
+
+https://drive.google.com/file/d/ 1p33nsWQaiZMAgsruDoJLyatoq5XAH-TH/view ,2D MRI Prostate Dataset can be found at: 
+
+https://liuquande.github.io/SAML/ . We have used the same convention as earlier works (Liu et al., 2021a; Zhou et al., 2022b; Chen et al., 2023) for naming the datasets. 
+
+## C. Additional Results 
+
+C.1. Ablation Studies on EBM Hyperparameters 
+
+We analyze the impact of various Energy-Based Model (EBM) hyperparameters on cross-domain generalization for the Retinal Fundus Segmentation task. The results are summarized below: • Langevin Steps ( K): First row of Figure 5 shows the performance across different numbers of Langevin steps used during EBM sampling. LangDAug main-tains stable performance at higher values of K.• Step Size ( β): Second row of Figure 5 illustrates the effect of varying the step size in Langevin dynamics. Lower values of β lead to more stable and reliable performance. • EBM Complexity ( #conv blocks ): We vary the number of convolutional blocks in the EBM to control model complexity. As shown in the third row of Fig-ure 5, performance remains consistent, suggesting that even lightweight EBMs are sufficient. • Number of Augmented Samples (#samples/chain ): Fourth row of Figure 5examines the number of intermediate samples stored per Langevin chain. Too few samples fail to capture vicinal distributions, while too many introduce high auto-correlation between langevin samples leading to biased learning. A moderate, well-spaced selection of samples yields the best results. 
+
+C.2. Computational Cost Analysis 
+
+We acknowledge the increased computational cost of Lang-DAug in our limitations. In Table 5, we provide a detailed comparison of training time and peak memory usage across methods on the Retinal Fundus Segmentation (RFS) task. All experiments were conducted on a single NVIDIA A6000 GPU with 48GB memory, and results are averaged across domains. Although LangDAug increases training time, it remains comparable to methods like RAM (2.75 hrs) and is notably 
+
+Algorithm 1 Langevin Data Augmentation Input : Source domains {D i}ni=1 , Langevin step size β,Number of Langevin steps K.
+
+Output : Augmentation datasets {D kij }n,n,K i=1 ,j =1 ,k =1 . 
+
+> 1:
+
+Initialize parameters {θij }ni,j =1 , where i̸ = j. 
+
+> 2:
+
+Energy-Based Model (EBM) Training % Loop over all domain pairs  
+
+> 3:
+
+for i ∈ { 1, . . . , n }; j ∈ { 1, . . . , n }; i̸ = j do  
+
+> 4:
+
+repeat  
+
+> 5:
+
+Sample x ∼ D j , x0 ∼ D i.
+
+% Perform Langevin Dynamics  
+
+> 6:
+
+for k = 1 , . . . , K do  
+
+> 7:
+
+Sample ϵ ∼ N (0 , I ). 
+
+> 8:
+
+xk = xk−1 − β2 
+
+> 2
+
+∇xk−1 Eθij (xk−1) + βϵ . 
+
+> 9:
+
+end for  
+
+> 10:
+
+˜x ← xK .
+
+% Compute gradient  
+
+> 11:
+
+∇θij L = ∇θij Eθij (x) − ∇ θij Eθij (˜ x). 
+
+> 12:
+
+θij ← θij − λ∇θij L. 
+
+> 13:
+
+until convergence  
+
+> 14:
+
+end for  
+
+> 15:
+
+Generation of Langevin Samples % Storage for augmented datasets  
+
+> 16:
+
+Initialize empty sets {D kij }n,n,K i=1 ,j =1 ,k =1 .
+
+% Loop over all domain pairs  
+
+> 17:
+
+for i ∈ { 1, . . . , n }; j ∈ { 1, . . . , n }; i̸ = j do  
+
+> 17:
+
+% Loop through samples in source domain i 
+
+> 18:
+
+for xi ∈ D i do  
+
+> 19:
+
+x0 ← xi.
+
+% Perform Langevin steps  
+
+> 20:
+
+for k = 1 , . . . , K do  
+
+> 21:
+
+Sample ϵ ∼ N (0 , I ). 
+
+> 22:
+
+xk = xk−1 − β2 
+
+> 2
+
+∇xk−1 Eθij (xk−1) + βϵ .
+
+% Store augmented sample  
+
+> 23:
+
+(Dkij ).append (xk). 
+
+> 24:
+
+end for  
+
+> 25:
+
+end for  
+
+> 26:
+
+end for 
+
+% Return all augmented datasets  
+
+> 27:
+
+return {D kij }n,n,K i=1 ,j =1 ,k =1 .more efficient than FedDG (4.60 hrs), while providing supe-rior performance. Additionally, the average Energy-Based Model (EBM) train-ing time is approximately 0.357 hours per source-target domain pair. The inference cost of running a Langevin 4LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+20 40 60 80 
+
+70 
+
+80 
+
+90 
+
+> Score (%)
+
+Domain A 
+
+20 40 60 80 
+
+70 
+
+80 
+
+90 
+
+Domain B 
+
+20 40 60 80 
+
+70 
+
+80 
+
+90 
+
+Domain C 
+
+20 40 60 80 
+
+70 
+
+80 
+
+90 
+
+Domain D 
+
+K (Langevin steps) 
+
+10 −1 10 0 10 1
+
+70 
+
+80 
+
+90 
+
+> Score (%)
+
+10 −1 10 0 10 1
+
+70 
+
+80 
+
+90 
+
+10 −1 10 0 10 1
+
+70 
+
+80 
+
+90 
+
+10 −1 10 0 10 1
+
+70 
+
+80 
+
+90 
+
+β (Step size) 
+
+1 4 7
+
+70 
+
+80 
+
+90 
+
+> Score (%)
+
+1 4 7
+
+70 
+
+80 
+
+90 
+
+1 4 7
+
+70 
+
+80 
+
+90 
+
+1 4 7
+
+70 
+
+80 
+
+90 
+
+#conv blocks 
+
+2 13 40 
+
+70 
+
+80 
+
+90 
+
+> Score (%)
+
+2 13 40 
+
+70 
+
+80 
+
+90 
+
+2 13 40 
+
+70 
+
+80 
+
+90 
+
+2 13 40 
+
+70 
+
+80 
+
+90 
+
+#samples/chain 
+
+mIoU mDSC 
+
+Figure 5: Ablation analysis across four domains. The first row shows the effect of varying the number of Langevin steps ( k); the second row shows the effect of varying the step size ( β); the third row depicts the impact of changing the number of convolutional blocks; and the fourth row presents the effect of varying the number of Langevin samples per chain. Metrics reported are mIoU and mDSC. 5LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+Table 5: Training time (in GPU hours) and peak memory usage (in GB) for all methods. “+Ours” refers to integration of LangDAug into the baseline.                         
+
+> Metric ERM Ours FedDG FedDG+Ours RAM RAM+Ours TriD TriD+Ours
+> GPU hrs 1.51 3.14 4.60 6.13 2.75 3.77 5.53 7.49 Memory (GB) 10.36 19.41 16.77 23.16 12.58 20.24 24.87 30.11
+
+Dynamics (LD) chain is minimal, taking roughly 2 seconds. Apart from this, the proposed method also requires addi-tional storage requirements to store the Langevin samples. Particularly, for n data points, and a saving frequency of f ,the additional data points will equal nK/f .As with many domain augmentation (DA) methods that rely on synthetic sample generation, increased training cost is an inherent trade-off. Potential directions for optimization include selective sampling strategies (e.g., coresets) and architectural sharing for EBMs to enable conditioning across domains. 
+
+## D. Inter-Domain Transversal Visualizations 
+
+We present visual examples of the inter-domain transver-sal process over K = 40 Langevin dynamics steps. The transversal sequences for the retinal fundus dataset are de-picted in Figures 6 to 9, while those for the prostate dataset are shown in Figures 10 to 15. In each figure, rows corre-spond to distinct samples starting from the source domain, with each row capturing the intermediate Langevin samples, while columns represent the specific steps in the Langevin Dynamics process at which the transversal are recorded. 6LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain A → Domain B (b) Ex. 2: Domain A → Domain B 
+
+(c) Ex. 1: Domain A → Domain C (d) Ex. 2: Domain A → Domain C 
+
+(e) Ex. 1: Domain A → Domain D (f) Ex. 2: Domain A → Domain D 
+
+Figure 6: Examples of translation from Domain A to Domains B, C and D using the proposed method on the retinal fundus dataset. 7LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain B → Domain A (b) Ex. 2: Domain B → Domain A 
+
+(c) Ex. 1: Domain B → Domain C (d) Ex. 2: Domain B → Domain C 
+
+(e) Ex. 1: Domain B → Domain D (f) Ex. 2: Domain B → Domain D 
+
+Figure 7: Examples of translation from Domain B to Domains A, C and D using the proposed method on the retinal fundus dataset. 8LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain C → Domain A (b) Ex. 2: Domain C → Domain A 
+
+(c) Ex. 1: Domain C → Domain B (d) Ex. 2: Domain C → Domain B 
+
+(e) Ex. 1: Domain C → Domain D (f) Ex. 2: Domain C → Domain D 
+
+Figure 8: Examples of translation from Domain C to Domains A, B and D using the proposed method on the retinal fundus dataset. 9LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain D → Domain A (b) Ex. 2: Domain D → Domain A 
+
+(c) Ex. 1: Domain D → Domain B (d) Ex. 2: Domain D → Domain B 
+
+(e) Ex. 1: Domain D → Domain C (f) Ex. 2: Domain D → Domain C 
+
+Figure 9: Examples of translation from Domain D to Domains A, B and C using the proposed method on the retinal fundus dataset. 10 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain A → Domain B (b) Ex. 2: Domain A → Domain B 
+
+(c) Ex. 1: Domain A → Domain C (d) Ex. 2: Domain A → Domain C 
+
+(e) Ex. 1: Domain A → Domain D (f) Ex. 2: Domain A → Domain D 
+
+Figure 10: Examples of translation from Domain A to Domains B, C and D using the proposed method on the prostate dataset. 11 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(g) Ex. 1: Domain A → Domain E (h) Ex. 2: Domain A → Domain E 
+
+(i) Ex. 1: Domain A → Domain F (j) Ex. 2: Domain A → Domain F 
+
+Figure 10: Examples of translation from Domain A to Domains E and F using the proposed method on the prostate dataset. 12 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain B → Domain A (b) Ex. 2: Domain B → Domain A 
+
+(c) Ex. 1: Domain B → Domain C (d) Ex. 2: Domain B → Domain C 
+
+(e) Ex. 1: Domain B → Domain D (f) Ex. 2: Domain B → Domain D 
+
+Figure 11: Examples of translation from Domain B to Domains A, C and D using the proposed method on the prostate dataset. 13 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(g) Ex. 1: Domain B → Domain E (h) Ex. 2: Domain B → Domain E 
+
+(i) Ex. 1: Domain B → Domain F (j) Ex. 2: Domain B → Domain F 
+
+Figure 11: Examples of translation from Domain B to Domains E and F using the proposed method on the prostate dataset. 14 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain C → Domain A (b) Ex. 2: Domain C → Domain A 
+
+(c) Ex. 1: Domain C → Domain B (d) Ex. 2: Domain C → Domain B 
+
+(e) Ex. 1: Domain C → Domain D (f) Ex. 2: Domain C → Domain D 
+
+Figure 12: Examples of translation from Domain C to Domains A, B, and D using the proposed method on the prostate dataset. 15 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(g) Ex. 1: Domain C → Domain E (h) Ex. 2: Domain C → Domain E 
+
+(i) Ex. 1: Domain C → Domain F (j) Ex. 2: Domain C → Domain F 
+
+Figure 12: Examples of translation from Domain C to Domains E and F using the proposed method on the prostate dataset. 16 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain D → Domain A (b) Ex. 2: Domain D → Domain A 
+
+(c) Ex. 1: Domain D → Domain B (d) Ex. 2: Domain D → Domain B 
+
+(e) Ex. 1: Domain D → Domain C (f) Ex. 2: Domain D → Domain C 
+
+Figure 13: Examples of translation from Domain D to Domains A, B and C using the proposed method on the prostate dataset. 17 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(g) Ex. 1: Domain D → Domain E (h) Ex. 2: Domain D → Domain E 
+
+(i) Ex. 1: Domain D → Domain F (j) Ex. 2: Domain D → Domain F 
+
+Figure 13: Examples of translation from Domain D to Domains E and F using the proposed method on the prostate dataset. 18 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain E → Domain A (b) Ex. 2: Domain E → Domain A 
+
+(c) Ex. 1: Domain E → Domain B (d) Ex. 2: Domain E → Domain B 
+
+(e) Ex. 1: Domain E → Domain C (f) Ex. 2: Domain E → Domain C 
+
+Figure 14: Examples of translation from Domain E to Domains A, B and C using the proposed method on the prostate dataset. 19 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(g) Ex. 1: Domain E → Domain D (h) Ex. 2: Domain E → Domain D 
+
+(i) Ex. 1: Domain E → Domain F (j) Ex. 2: Domain E → Domain F 
+
+Figure 14: Examples of translation from Domain E to Domains D and F using the proposed method on the prostate dataset. 20 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(a) Ex. 1: Domain F → Domain A (b) Ex. 2: Domain F → Domain A 
+
+(c) Ex. 1: Domain F → Domain B (d) Ex. 2: Domain F → Domain B 
+
+(e) Ex. 1: Domain F → Domain C (f) Ex. 2: Domain F → Domain C 
+
+Figure 15: Examples of translation from Domain F to Domains A, B and C using the proposed method on the prostate dataset. 21 LangDAug: Langevin Data Augmentation for Multi-Source Domain Generalization in Medical Image Segmentation 
+
+(g) Ex. 1: Domain F → Domain D (h) Ex. 2: Domain F → Domain D 
+
+(i) Ex. 1: Domain F → Domain E (j) Ex. 2: Domain F → Domain E 
+
+Figure 15: Examples of translation from Domain F to Domains D and E using the proposed method on the prostate dataset. 22

@@ -1,0 +1,687 @@
+Title: L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation
+
+URL Source: https://openreview.net/pdf?id=2veJwf07RN
+
+Number of Pages: 20
+
+Markdown Content:
+# L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+Weihan Li 1 2 Linyun Zhou 1 2 Jian Yang 1 2 Shengxuming Zhang 1 2 Xiangtong Du 3 Xiuming Zhang* 4
+
+Jing Zhang 4 Chaoqing Xu* 5 Mingli Song 1 2 6 Zunlei Feng* 1 2 6 
+
+# Abstract 
+
+Pathology image segmentation plays a pivotal role in artificial digital pathology diagnosis and treat-ment. Existing approaches to pathology image segmentation are hindered by labor-intensive an-notation processes and limited accuracy in tail-class identification, primarily due to the long-tail distribution inherent in gigapixel pathology im-ages. In this work, we introduce the Laplace Dif-fusion Model, referred to as L-Diffusion, an inno-vative framework tailored for efficient pathology image segmentation. L-Diffusion utilizes multi-ple Laplace distributions, as opposed to Gaussian distributions, to model distinct components—a methodology supported by theoretical analysis that significantly enhances the decomposition of features within the feature space. A sequence of feature maps is initially generated through a series of diffusion steps. Following this, con-trastive learning is employed to refine the pixel-wise vectors derived from the feature map se-quence. By utilizing these highly discrimina-tive pixel-wise vectors, the segmentation mod-ule achieves a harmonious balance of precision and robustness with remarkable efficiency. Ex-tensive experimental evaluations demonstrate that L-Diffusion attains improvements of up to 7.16% ,
+
+26 .74% , 16 .52% , and 3.55% on tissue segmen-tation datasets, and 20 .09% , 10 .67% , 14 .42% ,and 10 .41% on cell segmentation datasets, as quantified by DICE, MPA, mIoU, and FwIoU metrics. The source codes are available at https://github.com/Lweihan/LDiffusion.            
+
+> 1State Key Laboratory of Blockchain and Data Security, Zhe-jiang University 2School of Software Technology, Zhejiang Uni-versity 3School of Medical Imaging, Xuzhou Medical Univer-sity 4The First Affiliated Hospital, College of Medicine, Zhe-jiang University 5School of Computer and Computing Science, Hangzhou City University 6Hangzhou High-Tech Zone (Bin-jiang) Institute of Blockchain and Data Security. Correspon-dence to: Zunlei Feng <zunleifeng@zju.edu.cn >, Xiuming Zhang
+> <xm zhang@zju.edu.cn >.
+> Proceedings of the 42 th International Conference on Machine Learning , PMLR 267, 2025. Copyright 2025 by the author(s).
+> Figure 1. A comparative analysis of latent feature distributions be-tween standard diffusion (a) and L-Diffusion (b). The latent feature distributions for individual components across various diffusion steps are denoted by violin plots in green, yellow, and cyan color.
+
+# 1. Introduction 
+
+Pathology images encompass a wealth of multi-level tis-sue and cellular features, regarded as the “gold standard” for cancer diagnosis. Pathologists meticulously examine and analyze the intricate relationships between diverse tu-mors and the characteristics of their components, including global lesions, tissue proportions and distributions, as well as cellular morphology (McGenity et al., 2024). Beyond the tumor itself, the tumor microenvironment com-prises a complex array of elements, such as surrounding blood vessels, tissues, and cells, all of which play pivotal roles in tumorigenesis, progression, metastasis, and treat-ment response. Consequently, numerous researchers have directed their efforts toward the segmentation of multi-level features within pathology images, aiming to enhance tumor diagnosis and microenvironment analysis. This, in turn, facilitates a deeper understanding of the mechanisms under-lying tumorigenesis, progression, and metastasis (Zhao et al., 2021; Ye et al., 2023; Hosseini et al., 2024). Consequently, researchers have devised advanced pathology image segmentation techniques to streamline the analysis of such intricate images. Prominent segmentation models, L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+including U-Net (Ronneberger et al., 2015), DeepLab (L.-C. Chen et al., 2017) and Transformer (Atabansi et al., 2023), have demonstrated exceptional performance across a spec-trum of medical image classification tasks. Prior studies have also successfully integrated those deep learning mod-els into pathology tissue segmentation (Ye et al., 2023) and cell segmentation (Hayakawa et al., 2021). Pathology images exhibit three distinct characteristics: gi-gapixel resolution, a broad spectrum of scales, and a long-tail distribution. The annotation of gigapixel pathology images demands considerable time and effort from patholo-gists (Davri et al., 2022; Mahmood et al., 2023). Addition-ally, diverse pathological features often manifest at varying scales within the same image, necessitating models capable of capturing multi-scale information (Tarekegn et al., 2024). Furthermore, the imbalance in tissue type distributions com-plicates the extraction of features from tail categories (Ding et al., 2022), thereby intensifying the challenges of model training. In summary, current pathology image segmenta-tion tasks grapple with labor-intensive annotation processes or limited accuracy in identifying tail samples. Motivated by the diffusion model’s exceptional ability to model latent distributions, we introduce the Laplace Diffu-sion Model, referred to as L-Diffusion, for efficient pathol-ogy image segmentation in this work. In lieu of the standard Gaussian distribution, we employ multiple Laplace distri-butions to model distinct components. Theoretical analysis demonstrates that the Laplace distribution is advantageous for broadening distribution disparities. For the input original image, L-Diffusion initially trans-forms it into a sequence of intermediate reconstructed fea-ture maps through T diffusion steps. Each reconstructed feature map is subsequently converted into a grayscale im-age, thereby generating a new sequence of feature maps. Along the diffusion step axis, each pixel corresponds to a vector v ∈ R1×T , referred to as the pixel latent vector. Fol-lowing this, contrastive learning is employed to accentuate the distributional disparities among pixel latent vectors of different components. As depicted in Fig. 1, the Laplace diffusion model, enhanced by contrastive learning, effectively highlights the distribu-tional divergences between distinct components while main-taining intra-component similarity as the diffusion steps progress. The highly differentiated pixel latent vectors, which exhibit distinct evolutionary patterns, enable the seg-mentation model to achieve both precision and robustness with remarkable efficiency. It is noteworthy that each image comprises W × H pixel latent vectors. The abundance and diversity of pixel latent vectors in a limited number of images suffice to capture the distributional characteristics of different components, thereby reducing the dependency on annotated data. The pronounced differentiation in component distributions fur-ther mitigates the model’s learning challenges, particularly for tail components. Thus, our primary contribution lies in the introduction of the first Laplace diffusion model, offering a novel perspective on leveraging component distributions across diffusion steps for efficient pathology image segmentation. The devised pixel latent vector contrastive learning mechanism enhances the differentiation of component distributions, significantly improving segmentation performance, especially for tail components. A detailed theoretical analysis is provided to substantiate the practicality of the proposed L-Diffusion. Ex-tensive experiments demonstrate that L-Diffusion achieves superior accuracy and robustness on par with existing works across multiple benchmarks. 
+
+# 2. Preliminaries 
+
+DDPM (Ho et al., 2020) consists of two processes: the forward diffusion process, which progressively adds noise to the data to transform the complex data distribution into a standard Gaussian distribution, and the counter diffusion process, which employs a parameterized θ neural network to iteratively reconstruct the data from the noise. We assume that a data x0 satisfies the data distribution q(·), expressed as x0 ∼ q(x0), then the forward and backward processes can be expressed as follows: 
+
+q(xt|xt−1) = N (xt; p1 − βtxt−1, β tI), (1) 
+
+pθ (xt−1|xt) = N (xt−1; μθ (xt, t ), σ θ (xt, t )) , (2) where pθ (xt−1|xt) represents the new generated data distri-bution at t-th diffusion, β represents the noise intensity, μθ
+
+and σθ are the mean and variance used by the neural net-work to predict the distribution. Although we cannot obtain the inverted data distribution q(xt−1|xt), we can obtain the conditional probability distribution q(xt−1|xt, x 0) for given 
+
+x0 and xt according to Bayes’ Theorem (3) as follows: 
+
+q(xt−1|xt, x 0) = q(xt|xt−1, x 0) q(xt−1|x0)
+
+q(xt|x0) , (3) 
+
+˜βt = 1 − ¯αt−1
+
+1 − ¯αt
+
+· βt,
+
+˜μt(xt, x 0) = 
+
+√αt(1 − ¯αt−1)1 − ¯αt
+
+xt +
+
+√ ¯αt−1βt
+
+1 − ¯αt
+
+x0, (4) where αt = 1 − βt, ¯αt = Qti=1 αi. From the above Eqn. (3) , we extract the coefficients related to the unknown vari-able xt−1 and transform them into the standard format of the probability density function of gaussian distribution. The de-tailed derivation can be referred to Appendix (A) . Therefore, We can go further and get the Eqn. (4), L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation  
+
+> Figure 2. The comparison between pixel value distribution of various components modeled using Gaussian and Laplace distributions. For each diffusion step, the reconstructed image and its corresponding pixel value distribution are provided. The components modeled by Laplace distributions exhibit greater distinguishability compared to those modeled by Gaussian distributions.
+
+Moreover, xt can be derived from x0 and αt. Let zθ (xt, t )
+
+be the noise predicted by neural network at the t-th step noise reduction. Then we can then transform Eqn. (5) into x0 denoted by xt and zθ (xt, t ) and substitute it into Eqn. (4) . We can then derive the mean of the predictive distribution consisting of xt and t, expressed in Eqn. (6) ,and then calculate the generated data distribution as follows: 
+
+xt = √¯αtx0 + √1 − ¯αt · zθ (xt, t ), (5) 
+
+μθ (xt, t ) = 1
+
+√αt
+
+(xt − βt
+
+√1 − ¯αt
+
+zθ (xt, t )) . (6) 
+
+# 3. Laplace Distribution Differentiation 
+
+The essence of differentiated representation of data distri-butions in diffusion model can be broadly categorized into two scenarios. Firstly, when two categories of data possess markedly distinct features (such as color, shape, or spatial position) the disparity in the means of their distributions should be substantial enough to minimize the overlap be-tween the distributions. Secondly, in cases where no clear distinguishing features exist between two categories, the gra-dient of the distributions should be sufficiently pronounced to amplify the impact of perturbations on the probabili-ties, thereby enhancing the separation of the data. A more detailed exposition of the influence of data distribution dif-ferentiation in diffusion model is provided in Appendix (A) .
+
+3.1. Laplace Distribution is More Differentiated 
+
+To differentiate the data distributions of distinct regions within the image, it is essential to select a new distribution capable of amplifying the disparities between data distri-butions of various categories across the entire slide, while preserving the intrinsic distribution characteristics within each component. Through extensive experimentation, we have determined that the Laplace distribution fulfills these requirements. To substantiate that this distribution is more suitable for pathology image classification than the Gaussian distribution (Gauss & Waterhouse, 2018), we will analyze it from two perspectives: theoretical derivation and qualitative comparison. Our focus lies on the gradient of the Gaus-sian distribution ∇pN (x) and the gradient of the Laplace distribution ∇pL(x), whose equations are as follows: 
+
+∇pN (x) = ddx ( 1
+
+√2πσ 2 exp (− x2
+
+2σ2 )) = − xσ2 pN (x),
+
+∇pL(x) = ddx ( 1
+
+√2b exp (− |x|
+
+b )) = − sign (x)
+
+b pL(x)
+
+,L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+where b denotes scale parameter of Laplace distribution. As evidenced by the preceding equation, the gradient of the Gaussian distribution exhibits proportionality to x, whereas the gradient of the Laplace distribution is proportional to sign (x). When x ≈ 0, ∇pN (x) demonstrates a smooth progression, with the gradient intensifying as x diverges from the origin. In contrast, ∇pL(x) undergoes abrupt changes, particularly as the noise value x approaches zero, rendering the Laplace distribution markedly more sensitive to its response to noise. As x extends further from the origin, the Gaussian distribution exhibits a gradual decay in its tail, with ∇pN (x) diminishing in a relatively subdued manner. Conversely, the tail of the Laplace distribution decays more swiftly, and ∇pL(x) diminishes even more precipitously in the presence of substantial noise. Moreover, akin to the Gaussian distribution, which perturbs the original data by augmenting its variance, the introduction of Laplacian noise preserves the morphological structure of the original data. It merely alters the concentration of the noise distribution, signifying an enhanced sensitivity to extreme values. Furthermore, to visually demonstrate the superiority of the Laplace distribution, we applied both Gaussian and Laplace distributions to the inverse diffusion process of the same im-age over 10 steps, observing the variations in pixel intensity across different regions. In the context of a melanocytoma histopathology patch, 10 sampling maps and their corre-sponding pixel distributions are illustrated in Fig. 2. For the pixel distribution maps, the X-axis represents the sample number (starting from 0), the Y-axis denotes the pixel count of the image, and the Z-axis indicates the range of gray values. The gray points signify the background, the pur-ple points represent tumor cells, and the blue points denote apoptotic cells. It is evident that the pixel distribution under the Gaussian model appears more uniform. In contrast, the Laplace distribution facilitates a clearer separation of pixels belonging to distinct categories. 
+
+# 4. L-Diffusion for Efficient Pathology Image Segmentation 
+
+For the original image x0, comprising N distinct compo-nents, we model it using N independent Laplace distribu-tions, denoted as q0(x0), q 1(x0), . . . , q N (x0). During the diffusion process, the mean squared error (MSE) loss for the t-th step is expressed as follows: 
+
+LM SE = Ex0,ϵ,t 
+
+∥ϵ − ϵθ (xt, t )∥2 ,
+
+where ϵ represents the added Laplace noise, and ϵθ (xt, t )
+
+denotes the predicted noise derived from the intermediate reconstructed feature map xt using model parameters θ. For clarity in presenting the methodology, we omit the detailed derivation of the multiple-component Laplace distribution modeling, which can be found in Appendix (A). Through T diffusion steps, we obtain a sequence of inter-mediate reconstructed feature maps [r1, r 2, . . . , r t, . . . , r T ],where rt ∈ RW ×H×3, and W and H represent the width and height of x0, respectively. Each reconstructed feature map rt is subsequently transformed into a grayscale im-age ˆrt = RGB2Gray (rt), forming a sequence of feature maps [ˆ r1, ˆr2, . . . , ˆrt, . . . , ˆrT ], with ˆrt ∈ RW ×H×1. Along the diffusion step axis, each pixel corresponds to a vector 
+
+v ∈ R1×T , referred to as the pixel latent vector. 
+
+Pixel Latent Vector Contrastive Learning . To en-hance the distributional similarity among positive pairs Positive (vnk , v nk′ ) and the distributional disparities among negative pairs Negative (vnk , v n′ 
+
+> i
+
+), contrastive learning is em-ployed. The contrastive learning loss function Lk,k ′ 
+
+> CRT
+
+is defined as follows: 
+
+Lk,k ′ 
+
+> CRT
+
+= − log Positive (vnk , v nk′ )
+
+Positive (vnk , v nk′ ) + Negative (vnk , v n′ 
+
+> i
+
+) ,
+
+Negative (vnk , v n′ 
+
+> i
+
+) = 
+
+> N
+
+X
+
+> n′=1
+> Kn′
+
+X
+
+> i=1
+
+exp( sim (vnk , v n′ 
+
+> i
+
+)/τ ),
+
+Positive (vnk , v nk′ ) = exp( sim (vnk , v nk′ )/τ ), n̸ = n′,
+
+where N represents the number of components, and Kn′
+
+denotes the sampling number of vector samples for the n′-th component. By combining the MSE loss LM SE and the contrastive learning loss Lk,k ′ 
+
+> CRT
+
+, the distributions of various components in the intermediate feature maps become highly differen-tiated, as illustrated in Fig. 1. This differentiation signifi-cantly reduces the identification difficulty for the subsequent segmentation module. It is important to note that the con-trastive learning loss Lk,k ′ 
+
+> CRT
+
+is applicable only to a subset of pathology images with available annotations. 
+
+Sequence Feature Enhanced Segmentation . Utilizing the enhanced feature maps [ˆ r′
+
+> 1
+
+, ˆr′
+
+> 2
+
+, . . . , ˆr′
+
+> t
+
+, . . . , ˆr′ 
+
+> T
+
+] refined through contrastive learning, the segmentation network 
+
+Fseg () generates the prediction results y′ as follows: 
+
+y′ = Fseg ([ˆ r′
+
+> 1
+
+, ˆr′
+
+> 2
+
+, . . . , ˆr′
+
+> t
+
+, . . . , ˆr′ 
+
+> T
+
+]) .
+
+The DICE loss between the predicted map y′ and the ground truth y is employed to train the segmentation network, de-fined as: 
+
+LDice (y′, y ) = 1 − 2y′ · yy′ + y .
+
+Through the two-stage training framework combining L-Diffusion and the segmentation network, the pathology im-age is effectively segmented into its distinct components. L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation      
+
+> Table 1. Quantitative tissue segmentation performance (%) comparison. Bold and underling indicate the best and second-best performance.
+
+MODEL CRCD PUMA BCSS 
+
+DICE MPA MIOU FWIOU DICE MPA MIOU FWIOU DICE MPA MIOU FWIOU
+
+FAST FCN 45.23 44.68 46.11 76.20 48.77 45.09 50.72 67.60 45.41 51.53 46.78 71.96 U-N ET ++ 73.02 51.12 66.18 79.11 78.07 53.46 66.51 82.26 76.04 53.31 61.23 74.91 SWIN -UN ET 70.08 52.22 63.27 84.11 69.46 52.39 55.40 80.42 66.24 52.85 61.54 84.32 SAMUS 63.94 62.45 55.82 77.93 61.24 61.29 53.92 82.91 62.68 59.26 53.34 79.58 SAM ED 70.63 50.38 58.38 78.08 62.56 57.39 64.48 70.74 67.51 51.71 56.48 75.79 SAMP ATH 77.54 66.70 63.65 86.28 84.95 57.79 66.30 83.92 78.10 62.83 67.44 87.12 UN-SAM 75.69 66.30 62.71 83.57 80.49 56.63 65.19 85.73 80.89 65.80 70.44 85.38 DEEP LABV 3 73.12 58.49 49.18 82.26 73.36 53.00 53.51 81.43 67.75 52.76 57.83 87.62 DEEP LABV 3+ 77.04 58.14 52.80 81.88 80.85 58.41 48.01 88.55 86.31 56.53 50.19 84.30 DENSE ASPP 76.18 67.39 60.50 77.71 76.24 60.02 59.33 72.77 70.88 64.53 54.68 81.35 BONUS 75.22 71.69 64.59 80.30 72.13 60.64 68.77 83.14 75.07 70.19 60.31 86.73 L-D IFFUSION 82.38 80.19 80.17 86.47 92.11 88.03 81.62 91.77 89.24 82.33 83.49 91.17 
+
+Improvement +4.84 +12.80 +16.52 +0.19 +7.16 +26.74 +15.11 +3.22 +2.93 +17.80 +16.05 +3.55  
+
+> Table 2. Quantitative evaluation of cellular segmentation performance (%). Metric calculations are only performed on foreground cells.
+
+MODEL CRCD PUMA PAN NUKE 
+
+DICE MPA MIOU FWIOU DICE MPA MIOU FWIOU DICE MPA MIOU FWIOU
+
+FAST FCN 43.04 60.25 32.86 73.41 39.03 62.87 31.28 74.15 44.51 68.73 30.58 66.52 U-N ET ++ 73.73 82.17 30.06 65.93 74.02 75.34 34.68 75.17 36.88 81.96 25.89 71.09 SWIN -UN ET 46.70 27.70 31.54 86.12 40.05 29.89 30.94 80.47 47.08 32.94 75.76 79.71 SAMUS 34.53 75.50 37.72 75.34 32.26 77.10 37.52 72.04 30.11 70.17 37.27 68.66 SAM ED 70.85 61.21 34.93 69.66 66.88 64.57 31.93 73.02 72.60 61.33 26.59 67.95 SAMP ATH 79.02 87.97 82.03 81.23 81.62 80.79 74.50 80.68 72.33 82.79 38.08 80.46 UN-SAM 78.53 85.27 81.79 80.36 79.57 74.99 68.81 79.12 70.48 80.77 75.42 84.57 DEEP LABV 3 54.65 52.12 52.54 84.93 56.19 55.55 45.07 81.83 53.98 60.82 52.45 82.93 DEEP LABV 3+ 63.43 59.01 71.66 79.38 65.99 55.92 75.00 82.59 71.46 55.17 72.41 87.30 DENSE ASPP 37.35 48.09 51.09 84.41 38.90 52.33 51.47 81.66 81.00 54.95 45.46 77.54 BONUS 75.33 68.67 60.42 79.84 78.44 75.49 64.53 82.14 80.33 60.58 69.22 85.97 L-D IFFUSION 96.11 94.94 92.62 95.34 88.57 90.38 86.19 83.13 94.78 93.46 90.18 92.18 
+
+Improvement +20.09 +6.97 +10.59 +10.41 +6.95 +9.59 +11.19 +0.54 +13.78 +10.67 +14.42 +4.88 
+
+# 5. Experiment 
+
+Datasets and Evaluation Metrics . We employ six dis-tinct tissue and cellular datasets to validate the multi-scale segmentation capabilities of L-Diffusion. These datasets encompass: a colorectal cancer histopathology dataset provided by the Guangdong Provincial People’s Hospi-tal (referred to as CRCD) (Ye et al., 2023), a melanoma histopathology dataset from the PUMA challenge (referred to as PUMA) (Schuiveling et al., 2024), a publicly ac-cessible dataset specifically curated for tissue segmenta-tion tasks in breast cancer pathology (referred to as BCSS) (Amgad et al., 2019), and a publicly available dataset ded-icated to multi-class cellular segmentation (referred to as PanNuke) (Gamper et al., 2020). Furthermore, comprehen-sive details regarding these datasets are provided in Table 7 of Appendix (B) . The evaluation metrics comprise MPA, DICE, mIoU, and FWIoU, which collectively evaluate seg-mentation performance from the perspectives of pixel-wise accuracy, segmentation area, boundary precision, and class-specific analysis. It’s noticed that the performance on cell only considering the cells, the reason of which is that back-ground has large proportation of whole slide image will disturb the cells segmentation performance measurement. 
+
+Models and Parameters . L-Diffusion comprises a VAE encoder, a Laplace Scheduler, a U-Net noise prediction mod-ule, a DAE decoder, and a contrastive learning module. The image is initially encoded into the latent space by the VAE, after which it is passed to the Laplace Scheduler along with L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation                                 
+
+> Figure 3. Qualitative comparison of tissue (upper row) and cellular (lower row) segmentation performance.
+> Table 3. The ablation study on annotation ratio.
+> Annotation Ratio 10% 20% 30% 50% 70% 100% DICE 19.95 59.59 83.51 86.19 91.62 92.11 MPA 20.00 55.12 82.93 85.73 87.95 88.03 mIoU 19.91 54.96 79.86 80.02 80.54 81.62 FwIoU 33.06 71.54 89.46 89.67 90.31 91.77
+
+the time step t to generate noise. This noisy representa-tion is then processed by the U-Net to predict the noise at step t, which is subsequently subtracted from the noisy im-age to yield the latent space sampling. The resulting latent representation is fed into the DAE to decode it back to its original dimensions. Kn′ is set to 100 . We adopt the Con-vNeXT (Z. Liu et al., 2022) as the segmentation network. To Train Diffusion Model, we configure the batch size to 1,employ the Adam optimizer with a learning rate of 1×10 −5,and typically set the number of sampling steps to 5 ∼ 15 ,contingent upon the available GPU. In the contrastive learn-ing module, the temperature τ ranges from 0.05 ∼ 0.1 to ensure effective sharpening of the distribution without gradi-ent explosion. In addition, to train ConvNeXT, we configure the batch size to 32 , employ the Adam optimizer with a learning rate of 1 × 10 −3.
+
+5.1. Comparison with SOTA Methods 
+
+In order to comprehensively verify the performance of the proposed model, we compared it with a variety of existing mainstream models including FastFCN (H. Wu et al., 2019), U-Net++ (Zhou et al., 2018), Swin-UNet (Cao et al., 2022), SAMUS (X. Lin et al., 2023), SAMed (K. Zhang & Liu, 2023), SAMPath (J. Zhang et al., 2023), DeepLabv3 (L.-C. Chen, 2017), DeepLabv3+ (L.-C. Chen et al., 2018), DenseASPP (Yang et al., 2018), UN-SAM (Z. Chen et al., 2024) and BONUS (Y. Lin et al., 2024). 
+
+Quantitative Comparison . The quantitative results for tis-sue and cellular segmentation are detailed in Table 1&2. L-Diffusion demonstrates a significant enhancement on both tissue and cell segmentation datasets. These substantial                         
+
+> Table 4. Qualitative ablation study results.
+> Contrastive Learning? Data Distribution
+> Average Score on Tissue
+> DICE MPA mIoU FwIoU
+> éGaussian 15.33 14.17 13.31 23.26
+> ✓Gaussian 17.41 21.61 16.91 29.76
+> éLaplace 26.02 26.81 21.41 34.26
+> ✓Laplace 85.75 83.52 81.76 89.74
+
+gains effectively validate the efficacy of leveraging compo-nent latent distributions for pathology image segmentation. 
+
+Qualitative Comparison . Fig. 3 presents the qualitative vi-sualization, illustrating that L-Diffusion attains exceptional boundary segmentation accuracy in the tissue samples de-picted in the upper row. For cellular samples, L-Diffusion not only achieves precise boundary segmentation but also ex-cels in accurately identifying tail-class cells, as highlighted by the yellow and cyan annotations. Additional visualiza-tion results are provided in Appendix (D) -(F). 
+
+Performance for Distinct Components . The radar chart illustrates the quantitative assessment of segmentation per-formance across various methodologies for distinct tissue and cellular categories. As depicted in Fig. 4, it is evident that L-Diffusion outperforms all existing methods across every tissue and cellular category, particularly excelling in the segmentation of components with lower proportions. This underscores L-Diffusion’s proficiency in addressing long-tail distribution challenges within pathology images. 
+
+5.2. Performance Across Varied Annotation Ratios 
+
+To validate the efficiency of L-Diffusion under limited an-notations, we conduct an ablation study using varying anno-tation ratios on the PUMA tissue segmentation dataset. As illustrated in Table 3, it is evident that L-Diffusion achieves comparable performance even with only 30% of annotated samples. However, the segmentation module necessitates a sufficient number of annotated samples, thereby increasing the annotation demands of L-Diffusion. In future work, we aim to explore the minimal annotation data requirements. L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation  
+
+> Figure 4. A quantitative evaluation of segmentation performance across diverse methodologies for distinct tissue and cellular categories. Each axis of the radar chart represents a specific component category along with its corresponding proportion.
+
+5.3. Ablation Study 
+
+In this section, we conduct an extensive series of ablation studies on the critical components of L-Diffusion, including the Laplace distribution and pixel latent vector contrastive learning. Table 4 presents the average performance metrics across three tissue datasets, revealing that the integration of the Laplace distribution with contrastive learning serves as the cornerstone of L-Diffusion for pathology image segmen-tation. Fig. 5 illustrates that the latent feature distribution under the “contrastive learning + Laplace distribution” con-figuration exhibits more pronounced distinctions between different tissue types. As the diffusion steps progress, the data distribution within the same tissue type becomes in-creasingly cohesive, further validating the efficacy of com-bining contrastive learning with the Laplace distribution. 
+
+5.4. Generalization on Other Large-scale Image 
+
+To evaluate the generalization prowess of L-Diffusion across other large-scale image datasets, we compare its segmentation performance with several state-of-the-art (SOTA) remote sensing image segmentation methods on the Massachusetts-Building dataset (Mnih, 2013). The compet-ing methods encompass U-Net (Ronneberger et al., 2015), Uniformer (K. Li et al., 2023), UANet (J. Li et al., 2024), and GLGF-Net (Fu et al., 2024). For a fair comparison, we employ widely recognized metrics in the remote sensing im-age segmentation domain, including IoU, F1, and Precision (Pre.). As illustrated in Table 6, L-Diffusion exhibits su-perior performance in remote sensing image segmentation, rivaling existing methodologies. Segmentation visualization results, detailed in Appendix (G) , further demonstrate that L-Diffusion achieves comparable segmentation accuracy, particularly for tail-class objects such as buildings. These experiments highlight the robust generalization and seg-mentation capabilities of L-Diffusion on large-scale images, especially for tail-class categories. 
+
+5.5. Comparison with Different Distributions 
+
+We investigate the influence of different noise distributions on the average performance of diffusion models on three tis-sue segmentation datasets, focusing on three representative types: Cauchy (Lian et al., 2025), Student’s t (X.-F. Wang et al., 2024), and Laplace. As shown in Table 5, the Laplace distribution achieves the best overall performance. In con-L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation  
+
+> Figure 5. A comparative analysis of latent feature distributions under various configurations. The latent feature distributions for individual components across multiple diffusion steps are represented by violin plots, distinguished by green, yellow, and cyan colors.
+
+trast, the Cauchy distribution yields a significantly lower DICE score and FwIoU score. This can be attributed to its undefined expectation and variance, which severely hin-ders the stability of gradient-based optimization. Student’s t distribution demonstrates promising segmentation accuracy, but suffers from a prohibitively high computational cost, likely due to its more complex gradient behavior. Overall, the Laplace distribution maintains a strong balance between segmentation accuracy and computational efficiency.                                    
+
+> Table 5. Comparison of different noise distributions on segmenta-tion performance.
+> Distribution DICE (%) FwIoU (%) Runtime (s) Cauchy 16.25 20.33 7325 Student’s t83.17 86.50 20440 Laplace 85.75 89.80 8882
+> Table 6. Generalization on remote sensing image dataset.
+> Metric U-Net Uniformer UANet GLGF-Net L-Diffusion IoU 68.48 73.80 76.41 75.33 80.30 F1 81.47 84.92 86.63 85.93 88.98 Pre. 80.09 87.60 87.94 85.03 96.52
+
+# 6. Related Work 
+
+Pathology Image Segmentation plays a pivotal role in the diagnosis and treatment of cancer, while also foster-ing a deeper comprehension of the mechanisms underlying tumorigenesis, progression, and metastasis. Numerous stud-ies have utilized various segmentation models, such as U-Net (Ronneberger et al., 2015), DeepLab (L.-C. Chen et al., 2017) and Transformer (Atabansi et al., 2023), along with their variants, for pathology image segmentation (Y. Wu et al., 2022). Based on their segmentation objectives, these studies can be broadly classified into two categories: cell segmentation (Ciresan et al., 2012; D. Liu et al., 2019; Hayakawa et al., 2021; Feng et al., 2021; Mahbod et al., 2024) and tissue segmentation (Salvi et al., 2021; Musulin et al., 2021; Ye et al., 2023). However, gigapixel pathology images exhibit multi-scale features and long-tail compo-nents, which result in significant annotation labor costs and limited accuracy in identifying tail-class samples. 
+
+Contrastive Learning , a pivotal approach in self-supervised learning, has achieved remarkable advancements in the field of computer vision in recent years. Researchers have extended the application of contrastive learning to diverse domains, including natural language processing (NLP), graph learning, and multi-modal learning (Le-Khac et al., 2020; Hu et al., 2024). Recently, several studies have integrated contrastive learning into diffusion models (Tian et al., 2024; Dalva & Yanardag, 2024; Xiao et al., 2024), utilizing it to amplify the representational distance between different classes. In this paper, we apply contrastive learning to enhance the distinction between pixel latent vectors of different components modeled using Laplace distributions. 
+
+Diffusion in Medical Image Analysis. Wu et al. (J. Wu, Fu, et al., 2024; J. Wu, Ji, et al., 2024) introduced MedSegDiff, a diffusion model-based approach for medical image seg-mentation. Webber et al. (Webber & Reader, 2024) utilized diffusion models for medical image reconstruction, enabling the production of high-quality images even in low-dose or rapid imaging scenarios. Kazerouni et al. (Kazerouni et al., 2023) given a comprehensive survey of diffusion models in medical imaging. Additionally, several researchers (Oh & Jeong, 2023; He et al., 2024; Xu et al., 2024) have extended the application of diffusion models to pathology image gen-eration tasks, leveraging their exceptional capability for high-quality image synthesis. 
+
+Diffusion in Segmentation. Amit et al. (Amit et al., 2021) pioneered the integration of diffusion models into segmen-tation tasks, proposing the SegDiff model and exploring the application of diffusion models to address image seg-mentation challenges. Bogensperger et al. (Bogensperger L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+et al., 2023) introduced an innovative image segmentation approach by merging score-based models with diffusion models. Wang et al. (M. Wang et al., 2023) developed SegRefiner, which employs a discrete diffusion process to iteratively refine segmentation results. Xie et al. (Xie et al., 2024) utilized diffusion models to generate synthetic labeled data for segmentation tasks. To the best of our knowledge, no existing method has leveraged component distributions across diffusion steps for segmentation as we have accomplished. 
+
+Distribution Exploration Recent studies have explored how different noise distributions affect diffusion model per-formance. Hang et al. (Hang et al., 2024) show that the Laplace distribution, with its sharp peak and heavy tails, improves robustness to outliers. Alexia et al. (Jolicoeur-Martineau et al., 2023) further compare Gaussian, T, and Uniform distributions, finding that smoother distributions lead to better image generation. However, these works mainly focus on generation quality. In contrast, this paper is the first to explore how sharp distributions can reshape the latent space for segmentation tasks. We provide a detailed theoretical analysis and show that distribution-aware design benefits segmentation performance in diffusion models. 
+
+# 7. Conclusion 
+
+In this paper, we introduce L-Diffusion, an innovative frame-work that employs Laplace distributions and contrastive learning to advance pathology image segmentation. By modeling distinct components using Laplace distributions, L-Diffusion amplifies distributional divergences, facilitat-ing precise and robust segmentation. The proposed pixel latent vector contrastive learning mechanism diminishes the dependency on annotated data and alleviates the learning challenges associated with tail components. Rigorous theo-retical analysis and comprehensive experimental evaluations substantiate the practicality and superiority of L-Diffusion, positioning it as a state-of-the-art solution for pathology image segmentation. The Laplace Diffusion Model offers a groundbreaking perspective on harnessing component distri-butions across diffusion steps to achieve efficient pathology image segmentation. It provides an effective tool to aid tumor diagnosis and microenvironment analysis, fostering a deeper understanding of tumorigenesis and progression. In future work, we aim to explore the application of Laplace Diffusion in an unsupervised manner to assist pathology im-age component analysis and extend its capabilities to other large-scale image segmentation tasks. 
+
+# Ethical and Clinical Statements 
+
+This study explores the use of L-Diffusion for academic research in tumor diagnosis and microenvironment analy-sis. While our method demonstrates strong technical poten-tial, we acknowledge broader ethical considerations beyond dataset access. These include the possibility of algorithmic bias affecting diagnostic outcomes across different patient groups, challenges in model interpretability for clinical prac-titioners, and concerns related to patient data privacy during inference and deployment. The current version of L-Diffusion is intended solely for academic investigation and is not deployed in clinical set-tings. Any future application in real-world scenarios should be guided by clinical validation, domain-specific oversight, and compliance with relevant medical and regulatory stan-dards. We advocate for continued research into the safe, fair, and transparent use of AI systems in healthcare. 
+
+# Impact Statement 
+
+Regarding the dataset, all utilized pathology datasets are publicly available and have undergone ethical review and approval. Concerning the algorithm, L-Diffusion delivers precise and robust pathology image segmentation with ex-ceptional efficiency. Its capacity to effectively decompose pathology images simplifies the analytical workflow, pro-viding a potent tool for advancing tumor diagnosis and microenvironment analysis. This progress cultivates a more profound comprehension of the mechanisms driving tumori-genesis and progression. 
+
+# Acknowledgements 
+
+This work is supported by National Natural Science Foun-dation of China (62376248), the Huadong Medicine Joint Fund of the Zhejiang Provincial Natural Science Founda-tion of China (LHDMZ25H160002), the Zhejiang Province Health Major Science and Technology Program of National Health Commission Scientific Research Fund (No. WKJ-ZJ-2426) and Information Technology Center, ZheJiang University. 
+
+# References 
+
+Amgad, M., Elfandy, H., Hussein, H., Atteya, L. A., Else-baie, M. A., Abo Elnasr, L. S., . . . others (2019). Struc-tured crowdsourcing enables convolutional segmentation of histology images. Bioinformatics , 35 (18), 3461–3467. Amit, T., Shaharbany, T., Nachmani, E., & Wolf, L. (2021). Segdiff: Image segmentation with diffusion probabilistic models. arXiv preprint arXiv:2112.00390 .Atabansi, C. C., Nie, J., Liu, H., Song, Q., Yan, L., & Zhou, X. (2023). A survey of transformer applications for histopathological image analysis: New developments and L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+future directions. BioMedical Engineering OnLine , 22 (1), 96. Bogensperger, L., Narnhofer, D., Ilic, F., & Pock, T. (2023). Score-based generative models for medical image seg-mentation using signed distance functions. In Dagm german conference on pattern recognition (pp. 3–17). Cao, H., Wang, Y., Chen, J., Jiang, D., Zhang, X., Tian, Q., & Wang, M. (2022). Swin-unet: Unet-like pure transformer for medical image segmentation. In European conference on computer vision (pp. 205–218). Chen, L.-C. (2017). Rethinking atrous convolution for semantic image segmentation. arXiv preprint arXiv:1706.05587 .Chen, L.-C., Papandreou, G., Kokkinos, I., Murphy, K., & Yuille, A. L. (2017). Deeplab: Semantic image segmen-tation with deep convolutional nets, atrous convolution, and fully connected crfs. IEEE transactions on pattern analysis and machine intelligence , 40 (4), 834–848. Chen, L.-C., Zhu, Y., Papandreou, G., Schroff, F., & Adam, H. (2018). Encoder-decoder with atrous separable convo-lution for semantic image segmentation. In Proceedings of the european conference on computer vision (eccv) (pp. 801–818). Chen, Z., Xu, Q., Liu, X., & Yuan, Y. (2024). Un-sam: Uni-versal prompt-free segmentation for generalized nuclei images. arXiv preprint arXiv:2402.16663 .Ciresan, D., Giusti, A., Gambardella, L., & Schmidhuber, J. (2012). Deep neural networks segment neuronal mem-branes in electron microscopy images. Advances in neu-ral information processing systems , 25 .Dalva, Y., & Yanardag, P. (2024). Noiseclr: A contrastive learning approach for unsupervised discovery of inter-pretable directions in diffusion models. In Proceedings of the ieee/cvf conference on computer vision and pattern recognition (pp. 24209–24218). Davri, A., Birbas, E., Kanavos, T., Ntritsos, G., Giannakeas, N., Tzallas, A. T., & Batistatou, A. (2022). Deep learning on histopathological images for colorectal cancer diagno-sis: a systematic review. Diagnostics , 12 (4), 837. Ding, W., Li, L., Zhuang, X., & Huang, L. (2022). Cross-modality multi-atlas segmentation via deep registration and label fusion. IEEE Journal of Biomedical and Health Informatics , 26 (7), 3104–3115. Feng, Z., Wang, Z., Wang, X., Mao, Y., Li, T., Lei, J., . . . Song, M. (2021). Mutual-complementing framework for nuclei detection and segmentation in pathology image. , 4036–4045. Fu, W., Xie, K., & Fang, L. (2024). Complementarity-aware local-global feature fusion network for building extraction in remote sensing images. IEEE Transactions on Geoscience and Remote Sensing .Gamper, J., Koohbanani, N. A., Benes, K., Graham, S., Jahanifar, M., Khurram, S. A., . . . Rajpoot, N. (2020). Pannuke dataset extension, insights and baselines. arXiv preprint arXiv:2003.10778 .Gauss, C. F., & Waterhouse, W. C. (2018). Disquisitiones arithmeticae . Springer. Hang, T., Gu, S., Geng, X., & Guo, B. (2024). Improved noise schedule for diffusion training. arXiv preprint arXiv:2407.03297 .Hayakawa, T., Prasath, V. S., Kawanaka, H., Aronow, B. J., & Tsuruoka, S. (2021). Computational nuclei segmenta-tion methods in digital pathology: a survey. Archives of Computational Methods in Engineering , 28 , 1–13. He, Y., Liu, Z., Qi, M., Ding, S., Zhang, P., Song, F., . . . others (2024). Pst-diff: achieving high-consistency stain transfer by diffusion models with pathological and struc-tural constraints. IEEE Transactions on Medical Imag-ing .Ho, J., Jain, A., & Abbeel, P. (2020). Denoising diffusion probabilistic models. Advances in neural information processing systems , 33 , 6840–6851. Hosseini, M. S., Bejnordi, B. E., Trinh, V. Q.-H., Chan, L., Hasan, D., Li, X., . . . others (2024). Computational pathology: a survey review and the way forward. Journal of Pathology Informatics , 100357. Hu, H., Wang, X., Zhang, Y., Chen, Q., & Guan, Q. (2024). A comprehensive survey on contrastive learning. Neuro-computing , 128645. Jolicoeur-Martineau, A., Fatras, K., Li, K., & Kachman, T. (2023). Diffusion models with location-scale noise. arXiv preprint arXiv:2304.05907 .Kazerouni, A., Aghdam, E. K., Heidari, M., Azad, R., Fayyaz, M., Hacihaliloglu, I., & Merhof, D. (2023). Diffusion models in medical imaging: A comprehensive survey. Medical Image Analysis , 88 , 102846. Le-Khac, P. H., Healy, G., & Smeaton, A. F. (2020). Con-trastive representation learning: A framework and review. 
+
+Ieee Access , 8, 193907–193934. Li, J., He, W., Cao, W., Zhang, L., & Zhang, H. (2024). Uanet: An uncertainty-aware network for building extrac-tion from remote sensing images. IEEE Transactions on Geoscience and Remote Sensing , 62 , 1-13. L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+Li, K., Wang, Y., Zhang, J., Gao, P., Song, G., Liu, Y., . . . Qiao, Y. (2023). Uniformer: Unifying convolution and self-attention for visual recognition. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45 (10), 12581–12600. Lian, Q., Qi, Y., & Wang, Y. (2025). Cauchy diffusion: A heavy-tailed denoising diffusion probabilistic model for speech synthesis. In Proceedings of the aaai conference on artificial intelligence (Vol. 39, pp. 24549–24557). Lin, X., Xiang, Y., Zhang, L., Yang, X., Yan, Z., & Yu, L. (2023). Samus: Adapting segment anything model for clinically-friendly and generalizable ultrasound image segmentation. arXiv preprint arXiv:2309.06824 .Lin, Y., Wang, Z., Zhang, D., Cheng, K.-T., & Chen, H. (2024). Bonus: Boundary mining for nuclei segmentation with partial point labels. IEEE Transactions on Medical Imaging .Liu, D., Zhang, D., Song, Y., Zhang, C., Zhang, F., O’Donnell, L., & Cai, W. (2019). Nuclei segmentation via a deep panoptic model with semantic feature fusion. In Ijcai (pp. 861–868). Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., & Xie, S. (2022). A convnet for the 2020s. In Proceedings of the ieee/cvf conference on computer vision and pattern recognition (pp. 11976–11986). Mahbod, A., Polak, C., Feldmann, K., Khan, R., Gelles, K., Dorffner, G., . . . Ellinger, I. (2024). Nuinsseg: A fully annotated dataset for nuclei instance segmentation in h&e-stained histological images. Scientific Data , 11 (1), 295. Mahmood, T., Rehman, A., Saba, T., Nadeem, L., & Ba-haj, S. A. O. (2023). Recent advancements and future prospects in active deep learning for medical image seg-mentation and classification. IEEE Access .McGenity, C., Clarke, E. L., Jennings, C., Matthews, G., Cartlidge, C., Freduah-Agyemang, H., . . . Treanor, D. (2024). Artificial intelligence in digital pathology: a systematic review and meta-analysis of diagnostic test accuracy. npj Digital Medicine , 7(1), 114. Mnih, V. (2013). Machine learning for aerial image la-beling (Unpublished doctoral dissertation). University of Toronto. Musulin, J., ˇStifani ´c, D., Zulijani, A., ´Cabov, T., Dekani ´c, A., & Car, Z. (2021). An enhanced histopathology anal-ysis: An ai-based system for multiclass grading of oral squamous cell carcinoma and segmenting of epithelial and stromal tissue. Cancers , 13 (8), 1784. Oh, H.-J., & Jeong, W.-K. (2023). Diffmix: Diffusion model-based data synthesis for nuclei segmentation and classification in imbalanced pathology image datasets. In 
+
+International conference on medical image computing and computer-assisted intervention (pp. 337–345). Ronneberger, O., Fischer, P., & Brox, T. (2015). U-net: Con-volutional networks for biomedical image segmentation. , 234–241. Salvi, M., Bosco, M., Molinaro, L., Gambella, A., Pa-potti, M., Acharya, U. R., & Molinari, F. (2021). Ahybrid deep learning approach for gland segmentation in prostate histopathological images. Artificial Intelligence in Medicine , 115 , 102076. Schuiveling, M., Liu, H., Eek, D., Breimer, G. E., Suijker-buijk, K. P., Blokx, W. A., & Veta, M. (2024). A novel dataset for nuclei and tissue segmentation in melanoma with baseline nuclei segmentation and tissue segmenta-tion benchmarks. medRxiv , 2024–10. Tarekegn, A. N., Ullah, M., & Cheikh, F. A. (2024). Deep learning for multi-label learning: A comprehensive sur-vey. arXiv preprint arXiv:2401.16549 .Tian, J., Lei, J., Zhang, J., Xie, W., & Li, Y. (2024). Swimd-iff: Scene-wide matching contrastive learning with diffu-sion constraint for remote sensing image. IEEE Transac-tions on Geoscience and Remote Sensing .Van der Maaten, L., & Hinton, G. (2008). Visualizing data using t-sne. Journal of machine learning research , 9(11). Wang, M., Ding, H., Liew, J. H., Liu, J., Zhao, Y., & Wei, Y. (2023). Segrefiner: Towards model-agnostic segmen-tation refinement with discrete diffusion process. arXiv preprint arXiv:2312.12425 .Wang, X.-F., Tang, J.-Y., Sun, J., Dorje, S., Sun, T.-Q., Peng, B., . . . Wang, D.-B. (2024). Prot-diff: A modularized and efficient strategy for de novo generation of antimicrobial peptide sequences by integrating protein language and diffusion models. Advanced Science , 11 (43), 2406305. Webber, G., & Reader, A. J. (2024). Diffusion models for medical image reconstruction. BJR— Artificial Intelli-gence , 1(1), ubae013. Wu, H., Zhang, J., Huang, K., Liang, K., & Yu, Y. (2019). Fastfcn: Rethinking dilated convolution in the backbone for semantic segmentation. arXiv preprint arXiv:1903.11816 .Wu, J., Fu, R., Fang, H., Zhang, Y., Yang, Y., Xiong, H., . . . Xu, Y. (2024). Medsegdiff: Medical image segmentation with diffusion probabilistic model. In Medical imaging with deep learning (pp. 1623–1639). L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+Wu, J., Ji, W., Fu, H., Xu, M., Jin, Y., & Xu, Y. (2024). Medsegdiff-v2: Diffusion-based medical image segmen-tation with transformer. In Proceedings of the aaai confer-ence on artificial intelligence (Vol. 38, pp. 6030–6038). Wu, Y., Cheng, M., Huang, S., Pei, Z., Zuo, Y., Liu, J., . . . others (2022). Recent advances of deep learning for com-putational histopathology: principles and applications. 
+
+Cancers , 14 (5), 1199. Xiao, C., Han, Y., Yang, W., Hou, Y., Shi, F., & Chetty, K. (2024). Diffusion model-based contrastive learning for human activity recognition. IEEE Internet of Things Journal .Xie, J., Li, W., Li, X., Liu, Z., Ong, Y. S., & Loy, C. C. (2024). Mosaicfusion: Diffusion models as data aug-menters for large vocabulary instance segmentation. In-ternational Journal of Computer Vision , 1–20. Xu, X., Kapse, S., & Prasanna, P. (2024). Histo-diffusion: A diffusion super-resolution method for digital pathology with comprehensive quality assessment. arXiv preprint arXiv:2408.15218 .Yang, M., Yu, K., Zhang, C., Li, Z., & Yang, K. (2018). Denseaspp for semantic segmentation in street scenes. In 
+
+Proceedings of the ieee conference on computer vision and pattern recognition (pp. 3684–3692). Ye, H., Ye, Y., Wang, Y., Tong, T., Yao, S., Xu, Y., . . . others (2023). Automated assessment of necrosis tumor ratio in colorectal cancer using an artificial intelligence-based digital pathology analysis. Medicine Advances , 1(1), 30– 43. Zhang, J., Ma, K., Kapse, S., Saltz, J., Vakalopoulou, M., Prasanna, P., & Samaras, D. (2023). Sam-path: A seg-ment anything model for semantic segmentation in digital pathology. In International conference on medical im-age computing and computer-assisted intervention (pp. 161–170). Zhang, K., & Liu, D. (2023). Customized segment anything model for medical image segmentation. arXiv preprint arXiv:2304.13785 .Zhao, L., Xu, X., Hou, R., Zhao, W., Zhong, H., Teng, H., . . . Zhao, J. (2021). Lung cancer subtype classification using histopathological images based on weakly supervised multi-instance learning. Physics in Medicine & Biology ,
+
+66 (23), 235013. Zhou, Z., Rahman Siddiquee, M. M., Tajbakhsh, N., & Liang, J. (2018). Unet++: A nested u-net architecture for medical image segmentation. In Deep learning in medical image analysis and multimodal learning for clinical de-cision support: 4th international workshop, dlmia 2018, and 8th international workshop, ml-cds 2018, held in conjunction with miccai 2018, granada, spain, september 20, 2018, proceedings 4 (pp. 3–11). L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+# A. Mathematical Derivations 
+
+This section provides the important mathematical derivations mentioned in Section 4 . As we assume, the data distribution satisfied by the original image x0 can be expressed as the following formula (7): 
+
+q(x0|μ, b ) = 
+
+> N
+
+X
+
+> n=1
+
+qn(x0|μn, b n), q (x1: T |x0) = 
+
+> T
+
+Y
+
+> t=1
+
+q(xt|xt−1) (7) In the above formula, N, μ i and bi are the number of categories and the data distribution center and scale parameters of each category, and t and T represent the current time step and the total step number respectively. In order to propagate the gradient backwards, we need to make the z sampled by Laplace noise differentiable through a heavy parameter operation. It is possible to set an independent variable ϵ, when the sampling noise z satisfies z = μθ + bθ ⊙ ϵ, it is observed that the equation still maintains randomness as a whole, and satisfies the Laplace distribution with the mean μθ
+
+and scale parameter bθ . The subsequent inference stages μθ and bθ can be derived from U-Net with parameter θ, and the randomness is transferred to ϵ, making the gradient derivable. 
+
+xt =
+
+> N
+
+X
+
+> n=1
+
+(√α(n,t )xt−1 + p1 − α(n,t )z1),
+
+=
+
+> N
+
+X
+
+> n=1
+
+ √α(n,t )(√α(n,t −1) xt−2 + p1 − α(n,t −1) z2) + p1 − α(n,t )z1
+
+ ,
+
+=
+
+> N
+
+X
+
+> n=1
+
+√α(n,t )α(n,t −1) xt−2 + ( 
+
+q
+
+α(n,t )(1 − α(n,t −1) z2 + p1 − α(n,t )z1)
+
+
+
+. (8) The above formula is xt−1 plus noise z1 to obtain a mathematical representation of xt, where α(n,t ) represents the noise level coefficient of class n at t time steps, equivalent to 1 − β(n, t ) and satisfies ¯α(n,t ) = QTt=1 α(n,t ). Since Laplace distribution and Gaussian distribution have the same additivity, the formula (9) can be derived as follows: 
+
+q
+
+α(n,t )(1 − α(n,t −1) z2 + p1 − α(n,t )z1 =
+
+q
+
+α(n,t )(1 − α(n,t −1) ) + 1 − α(n,t ) ¯z2,
+
+= p1 − α(n,t )α(n,t −1) ¯z2. (9) Substituting formula (9) into formula (8) gives the formula (10) as follows: 
+
+xt =
+
+> N
+
+X
+
+> n=1
+
+ √α(n,t )α(n,t −1) xt−2 + p1 − α(n,t )α(n,t −1) ¯z2
+
+ ,
+
+=
+
+> N
+
+X
+
+> n=1
+
+ √α(n,t )α(n,t −1) (√α(n,t −2) xt−3 + p1 − α(n,t −2) z3) + p1 − α(n,t )α(n,t −1) ¯z2
+
+ ,
+
+= ..., 
+
+=
+
+> N
+
+X
+
+> n=1
+
+vuut tY
+
+> j=1
+
+α(n,j )x0 +
+
+vuut1 −
+
+> t
+
+Y
+
+> j=1
+
+α(n,j ) ¯zt
+
+ ,
+
+=
+
+> N
+
+X
+
+> n=1
+
+(p¯α(n,t )x0 + p1 − ¯α(n,t ) ¯zt). (10) Equation (11) can be obtained by substituting the above equation into Laplace distribution, and the noise adding process can be obtained after transformation as follows: 
+
+q(xt|xt−1) = 
+
+> N
+
+X
+
+> n=1
+
+Ln(xt; p¯α(n,t )xt−1, 1 − ¯α(n,t )I),
+
+=
+
+> N
+
+X
+
+> n=1
+
+Ln(xt;
+
+q
+
+1 − ¯β(n,t )xt−1, ¯β(n,t )I). (11) L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+Figure 6. Illustration of Laplace and Gaussian distributions. The purple curve represents the Laplace distribution with means of −1 and 1,respectively, and a scale parameter of 0.25 , while the pink curve depicts the Gaussian distribution with means of −1 and 1 and a variance of 0.5.
+
+In the process of reverse diffusion, we still refer to formulas (3) . Therefore, backward diffusion can be expressed as the formula (12): 
+
+pθ (x0: T ) = p(xT )
+
+> T
+
+Y
+
+> t=1
+
+pθ (xt−1|xt), p θ (xt−1|xt) = 
+
+> N
+
+X
+
+> i=1
+
+Li(xt−1; μθ (xt, t ), b θ (xt, t )) . (12) The formula for conditional probability P (A|B) with marginal probabilities P (A) and P (B) can be expressed as P (A|B) = 
+
+P (A ∩ B)
+
+P (B) . And then P (A ∩ B) = P (A|B) · P (B) = P (B|A) · P (A). Therefore, we take the “perturbation” sampled data ˜xt−1 as A, the complete Laplace noise and the original data xt as B to obtain the formula (13): 
+
+q(˜ xt−1|xt) = q(xt|˜xt−1) · q(˜ xt−1)
+
+q(xt)
+
+q(˜ xt−1|xt, x 0) = q(xt|˜xt−1, x 0) · q(˜ xt−1|x0)
+
+q(xt|x0) (13) Because the conditional probability in formula (13) satisfies formula (12), formula (14) can be derived as follows: 
+
+q(˜ xt−1|xt, x 0) = q(xt|˜xt−1, x 0) · q(˜ xt−1|x0)
+
+q(xt|x0) ,
+
+⇒ − 
+
+> N
+
+X
+
+> n=1
+
+|xt − √α(n,t ) ˜xt−1|
+
+pβ(n,t )
+
++ |˜xt−1 − p¯α(n,t −1) x0|
+
+p1 − ¯α(n,t −1) 
+
+− |xt − p¯α(n,t )x0|
+
+p1 − ¯α(n,t )
+
+!
+
+. (14) Before, we derived a formula (8) . As a result, know xt = PNn=1 (√α(n,t )xt−1 + p1 − α(n,t )z1). And because 
+
+p1 − α(n,t )z1 is always non-negative, so it is not difficult to draw xt − √α(n,t ) ˜xt−1 ≥ 0. Similarly, we can also draw ˜xt−1 − p¯α(n,t −1) x0 ≥ 0 and xt − p¯α(n,t )x0 ≥ 0. Substitute the formula (14) to get formula (15) as follows: 
+
+q(˜ xt−1|xt, x 0) ⇒ − 
+
+> N
+
+X
+
+> n=1
+
+|xt − √α(n,t ) ˜xt−1|
+
+pβ(n,t )
+
++ |˜xt−1 − p¯α(n,t −1) x0|
+
+p1 − ¯α(n,t −1) 
+
+− |xt − p¯α(n,t )x0|
+
+p1 − ¯α(n,t )
+
+!
+
+,
+
+= −
+
+> N
+
+X
+
+> n=1
+
+xt − √α(n,t ) ˜xt−1
+
+pβ(n,t )
+
++ ˜xt−1 − p¯α(n,t −1) x0
+
+p1 − ¯α(n,t −1) 
+
+− xt − p¯α(n,t )x0
+
+p1 − ¯α(n,t )
+
+!
+
+,
+
+= −
+
+> N
+
+X
+
+> n=1
+
+( −
+
+r α(n,t )
+
+β(n,t )
+
++ 1
+
+p1 − αn,t −1
+
+)˜ xt−1 + C(xt, x 0)
+
+ . (15) L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+The red box refers to the scale parameter of the Laplace distribution, while the blue box refers to the mean value of the Laplace distribution. The data distribution for category n can be obtained after transformation. In addition, since the above random variable ϵ(i,θ )(x(i,t )) satisfies the Laplace distribution, it can be found by comparing Fig. 6. Laplace probability change range ∆y much larger than Gaussian distribution probability change range ∆y′. Observing the red pentagrams representing intersection points of different means in the Laplace distribution and the blue pentagrams for the Gaussian distribution, it is evident that the red pentagrams occur with lower probability. The confusion region, highlighted as the shaded area, is smaller for the Laplace distribution. This indicates that, during contrastive learning, the difference between positive and negative samples is greater, making it more suitable for training. Furthermore, the yellow pentagrams representing the intersection points of both distributions reveal that the Laplace distribution exhibits steeper gradients, signifying a greater impact of randomness. 
+
+# B. Dataset and Details 
+
+In this paper, we adopt four dataset including colorectal cancer pathological image dataset CRCD (Ye et al., 2023), melanoma pathological image dataset PUMA (Schuiveling et al., 2024), breast cancer pathology image dataset BCSS (Amgad et al., 2019) and multi-class cellular segmentation dataset PanNuke (Gamper et al., 2020). Detailed sample number and category number information about these four datasets is presented in Table 7. 
+
+Table 7. Dataset details. ‘#image’ stands for number of images, ‘#tissue’ denotes the annotation number of tissues, ‘#cell’ represents annotated cells, ‘#category’ represents category number. 
+
+Dataset #image #tissue / #category #cell / #category CRCD (Ye et al., 2023) 1764 800 / 9 964 / 3 PUMA (Schuiveling et al., 2024) 151 151 / 6 151 / 10 BCSS (Amgad et al., 2019) 151 151 / 22 -PanNuke (Gamper et al., 2020) 481 - 481 / 19 
+
+Table 8. Component Abbreviation Description.                                                                                           
+
+> Abbreviation Full Name Abbreviation Full Name Abbreviation Full Name
+> ADI adipose GLA glandular secretions NSM normal stroma ADR adrenal HED head&neck OTH others ANG angioinvasion HIT histiocyte OUT outside roi APO apoptosis IMM immune OVA ovarian BAC background INF lymphocytic infiltrate PAN pancreatic BID bile duct KID kidney PLA plasma BLA bladder LIV liver PRO prostate BLD blood LUN lung SKI skin adnexa BRE breast LYM lymphocyte aggregates STO stomach CER cervix MEL melanophage STR stroma COL cloon MET metaplasia SUB submucosa or serosa DCI dcis MUC mucus TES testis END endothelium MUS muscle THY thyroid EPI epidermis NEC necrosis TUM tumor epithelium ESO esophagus NER nerve UND undetermined EXC exclude NEU neutrophil UTR uterus FAT fat NOR normal gland VES vessel L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation
+
+# C. Pixel Latent Vector Separation Process Visualization 
+
+To more intuitively observe the separation process of pixel latent vectors, we visualized the distribution of pixel latent vectors for each tissue in the PUMA dataset during the training of the diffusion model with contrastive learning. For clarity in visualization, we sampled 50 pixels and adjusted the display quantity of each category based on its proportion relative to the total number of pixels. The separation process of pixel latent vectors is illustrated in Fig. 7. It is evident that as training progresses, pixel latent vectors of different tissues become distinctly separated, while those of the same tissue cluster more closely together.      
+
+> Figure 7. Visualization of the pixel latent vector separation process during diffusion model training with contrastive learning. The training spans a total of 100 epochs. After every 5epochs, the learned pixel latent vectors are reduced to a three-dimensional space using T-SNE(Van der Maaten & Hinton, 2008). Each tissue type is represented by a distinct color.
+
+L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+# D. More Tissue Segmentation Visual Results 
+
+Figure 8. More qualitative comparison of tissue segmentation performance. Several leading high-performance methods are selected for visual comparison. L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+# E. More Cell Segmentation Visual Results 
+
+Figure 9. More qualitative comparison of cellular segmentation performance. Several leading high-performance methods are selected for visual comparison. L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+# F. Segmentation Visualization Results on Whole Slide Images 
+
+Figure 10. The segmentation visualization results of L-Diffusion on pathology whole slide images. L-Diffusion: Laplace Diffusion for Efficient Pathology Image Segmentation 
+
+# G. Segmentation Visualization Results on Remote Sensing Images 
+
+Figure 11. The segmentation visualization results of L-Diffusion on remote sensing images.

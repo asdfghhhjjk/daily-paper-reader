@@ -1,0 +1,640 @@
+Title: FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks
+
+URL Source: https://openreview.net/pdf?id=KYiynifZUk
+
+Number of Pages: 17
+
+Markdown Content:
+# FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Quansong He * 1 Xiangde Min * 2 Kaishen Wang 3 Tao He 1
+
+# Abstract 
+
+Medical image segmentation is a critical task in computer vision, with UNet serving as a mile-stone architecture. The typical component of UNet family is the skip connection, however, their skip connections face two significant limitations: (1) they lack effective interaction between fea-tures at different scales, and (2) they rely on sim-ple concatenation or addition operations, which constrain efficient information integration. While recent improvements to UNet have focused on enhancing encoder and decoder capabilities, these limitations remain overlooked. To overcome these challenges, we propose a novel multi-scale feature fusion method that reimagines the UNet decod-ing process as solving an initial value problem (IVP), treating skip connections as discrete nodes. By leveraging principles from the linear multistep method, we propose an adaptive ordinary differ-ential equation method to enable effective multi-scale feature fusion. Our approach is independent of the encoder and decoder architectures, mak-ing it adaptable to various U-Net-like networks. Experiments on ACDC, KiTS2023, MSD brain tu-mor, and ISIC2017/2018 skin lesion segmentation datasets demonstrate improved feature utilization, reduced network parameters, and maintained high performance. The code is available at https: //github.com/nayutayuki/FuseUNet .
+
+# 1. Introduction 
+
+Medical image segmentation is a crucial branch of computer vision, and with the development of deep learning, many excellent segmentation methods have emerged. UNet (Ron-        
+
+> *Equal contribution 1College of Computer Science, Sichuan University, Chengdu, China 2Tongji Hospital Tongji Medical Col-lege, Huazhong University of Science and Technology, Wuhan, China 3Department of Computer Science, University of Mary-land, College Park, America. Correspondence to: Tao He
+> <tao he@scu.edu.cn >.
+> Proceedings of the 42 nd International Conference on Machine Learning , Vancouver, Canada. PMLR 267, 2025. Copyright 2025 by the author(s).
+
+neberger et al., 2015) is a milestone network architecture in this field, characterized by its symmetric encoder-decoder convolutional network structure and the skip connections for integrating features from different scales. The emergence of UNet laid the foundation for segmentation networks, influencing the design of many existing architec-tures. For simplicity, we refer to these networks as “U-Nets”. Recently popular U-Nets improvement strategies have pri-marily focused on enhancing the information processing capabilities of the encoder and decoder, such as UNETR (Hatamizadeh et al., 2021), Swin-UNet (Cao et al., 2022), and their variants like Swin-UNETR (Tang et al., 2022), MetaUNETR (Lyu et al., 2024) which incorporate Trans-former (Vaswani, 2017); VM-UNet (Ruan & Xiang, 2024), UltraLight VM-Unet (Wu et al., 2024), and LKM-UNet (Wang et al., 2024a) which incorporate Mamba (Gu & Dao, 2023); and Rolling-UNet (Liu et al., 2024), DHMF-MLP (Cheng & Wang, 2023), which improve multi-layer percep-trons (MLP). However, the skip connections in U-Nets are limited to feature fusion within the same scale, lacking in-teraction across different scales, which is a clear limitation. Additionally, the feature fusion strategy in U-Nets relies solely on simple addition or concatenation, which makes it difficult to effectively integrate feature information. Unfortunately, there has been little research on skip con-nections in recent years. The most recent notable studies addressing this issue are UNet++ (Zhou et al., 2020) and UNet3+ (Huang et al., 2020). UNet++ introduced many intermediate nodes and dense skip connections, using fea-ture summation to integrate features from different scales. UNet3+ built on UNet++ by proposing a full-scale skip connection, where each decoder processes all scales of skip connections. Their experimental results demonstrate the benefits of adding multi-scale information interaction in the UNet structure. In fact, the idea behind U-Nets is quite analogous to the numerical solution of ordinary differential equation (ODE). In U-Nets, the decoder simulates func-tional relationships based on multiple known encoder out-put feature nodes to obtain the corresponding results. This process is similar to computing approximate values of a function at discrete points in ODE. However, the aforemen-tioned networks still follow UNet’s approach for feature fusion, which relies on simple concatenation or addition. This straightforward method is analogous to the explicit 1FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Euler method (Euler, 1845) in mathematics, which has only first-order accuracy and fails to fully utilize the available fea-ture information. To better leverage known information for feature fusion, we propose using the linear multistep method (Bashforth & Adams, 1883; Moulton, 1928), a widely used mathematical tool, in this paper. In recent years, various discretization methods (He et al., 2024; Wang et al., 2024c; Niu et al., 2024; He et al., 2023) involving neural memory ordinary differential equations (nmODEs) (Yi, 2023) has been developed, showing some potential of the linear multistep method in image segmenta-tion tasks. These methods started by designing the decoder, enabling information interaction between adjacent stages, which helps in feature fusion. However, the discrete meth-ods they use have at most second-order accuracy, rely only on information between adjacent stages, and lack the capa-bility for multi-scale information interaction. According to the mathematical principles of the linear mul-tistep method, we propose a novel multi-scale feature fusion method for skip connections: treating the feature informa-tion of skip connections at various scales as a sequence and viewing the decoding process of U-Nets as an initial value problem (IVP). We introduce the nmODEs and adapt them to this problem by designing an adaptive high-order dis-cretization method that discretizes the process. This method processes the sequence of skip connections using discrete nmODEs and ultimately generates the segmentation map. This method is relied on skip connections and is not limited to the types of encoders and decoders, making it theoreti-cally applicable to a wide range of U-Net variants. To demonstrate the effectiveness and generalizability of the proposed method, we applied it to three mainstream U-Nets based on convolution, Transformer, and Mamba architec-tures. Experiments on 3D tasks (ACDC, KiTS2023, MSD brain tumor) as well as 2D tasks (ISIC2017 and ISIC2018 skin lesion segmentation tasks), show that the proposed method significantly improves the utilization efficiency of the information extracted by encoders, while drastically reducing network parameters and maintaining network per-formance. 
+
+# 2. Related Work 
+
+2.1. UNet and U-Nets 
+
+UNet (Ronneberger et al., 2015), as the foundation of all U-Nets, features a symmetric encoder-decoder structure with skip connections that facilitate information flow between them. Based on its structural characteristics, improvements to UNet generally follow two main directions: optimizing the connection strategy within the network architecture or introducing more efficient modules in the encoders and decoders. In the first direction, previous studies primarily focused on increasing connection density. ResUNet (Xiao et al., 2018) and DenseUNet (Cai et al., 2020) achieved this by incorpo-rating residual and dense connections within the encoder and decoder. UNet++ (Zhou et al., 2020) introduced numer-ous intermediate nodes and adopted dense skip connections, while UNet3+ (Huang et al., 2020) further enhanced UNet++ by designing more comprehensive full-scale skip connec-tions. In recent years, research in this area has received less attention due to the rise of advanced modules such as Transformer (Vaswani, 2017), shifting the focus towards the second direction. A representative approach in the second direction is the intro-duction of attention mechanisms. For instance, TransUNet (Chen et al., 2024) and UNETR (Hatamizadeh et al., 2021) designed encoder architectures based on Transformer, while retaining convolutional decoders. Swin-UNet (Cao et al., 2022), on the other hand, used a pure Transformer approach, and Swin-UNETR (Tang et al., 2022) built on UNETR by in-troducing a sliding attention mechanism. MetaUNETR (Lyu et al., 2024) proposed the TriCruci module in an attempt to create a unified segmentation framework. Additionally, the Mamba (Gu & Dao, 2023) architecture gained attention due to its lower complexity compared to Transformer. LKM-UNet (Wang et al., 2024a) demonstrated the feasibility and effectiveness of using large Mamba kernels to achieve a large receptive field, and UltraLight VM-Unet (Wu et al., 2024) introduced a new Parallel Vision Mamba layer on top of VM-UNet (Ruan & Xiang, 2024), significantly re-ducing the number of parameters and computational load in skin lesion segmentation tasks. Furthermore, research on MLP (Liu et al., 2024; Cheng & Wang, 2023) and other mechanisms in segmentation models has been observed, al-though these are not the mainstream methods. However, all these networks share a common limitation: the lack of information interaction across different scales in their skip connections. 
+
+2.2. Neural Ordinary Differential Equations 
+
+Ordinary differential equation (ODE) systems, a key class of dynamical systems, have been widely studied in mathemat-ics and physics. Neural ODEs (NODEs) (Chen et al., 2018) offered a mathematical framework to interpret ResNet, trans-forming it from a black box into a comprehensible model by viewing neural networks as ODE representations. However, NODEs face limitations, as models using data as initial values can only learn features within the same topological space (Dupont et al., 2019). Furthermore, attrac-tors in dynamical systems are linked to memory capacity (Poucet & Save, 2005; Wills et al., 2005), but conventional NODEs cannot fully exploit this capacity. To address these limitations, nmODEs (Yi, 2023) extended NODEs by en-2FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+hancing nonlinear expression through implicit mapping and nonlinear activation functions. Unlike traditional NODEs, nmODEs treat inputs as external parameters, not initial val-ues. They separate the neuron’s function into learning and memory components: learning happens in the learning part, while the memory part maps inputs to global attractors, link-ing input space to memory space. nmODEs have been successfully applied to various seg-mentation tasks. For example, BiFNN (Niu et al., 2024) employed bidirectional skip connections and a nonpara-metric backward path based on nmODEs, which improved image recognition performance over models such as ResNet and Vision Transformer. nmPLS-Net (Dong et al., 2023) utilized the nonlinear representation and memory capabili-ties of nmODEs for edge-based decoding, achieving precise lung lobe segmentation. Incorporating nmODEs into UNet through simple discretization has also shown promising results in diabetic kidney (Wang et al., 2024b) and skin cancer lesion segmentation (He et al., 2024; 2023; Wang et al., 2024c). Furthermore, nmODEs have improved the robustness of medical image segmentation (Hu et al., 2023), demonstrating their versatility and effectiveness across di-verse medical segmentation challenges. 
+
+# 3. Methods 
+
+3.1. High-order Discrete Methods 
+
+The traditional structure of U-Nets, as shown in Fig. 1, clearly indicates that the skip connections only communi-cate information within the same stage. Consider a U-Net with L stages, for example, in the classic UNet, L = 5 .The skip connection at the same stage of the encoder is denoted as Xi, and the output of the decoder is denoted as 
+
+Yi. The abstracted mathematical model can be expressed as: Yi = f (Xi, Y i−1). In this formulation, only the result from the previous step Yi−1 and the features from the cur-rent step Xi are used. This single-step computation method is simple and intuitive, but it fails to leverage information from previous stages of Xi and the results obtained before 
+
+Yi−1, and the accuracy of this method is limited. To fully utilize the information from the skip connections and im-prove accuracy, a natural next step is to adopt a multistep approach. This would allow the network to incorporate information from both the past and current steps, provid-ing more comprehensive feature integration and ultimately enhancing performance. The linear multistep method is a classical numerical method that uses information from the current time step and several previous time steps to predict the solution at the next time step. This method aligns perfectly with the idea of fully uti-lizing the skip connection information Xi and the computed values Yi from U-Nets. The theorem of linear multistep 𝑌 ଵ
+
+𝑋 ଶ 𝑌 ଶ
+
+𝑌 ଵ = 𝑋 ଵ
+
+𝑋 ௅ 𝑌 ௅
+
+Figure 1. The traditional architecture of U-Nets, the skip connec-tions only communicate information at the same scale. 
+
+method is given as follow: 
+
+Theorem 3.1. Linear Multistep Method (Bashforth & Adams, 1883; Moulton, 1928). Given the derivative ˙y(t) = 
+
+F (t, y (t)) , y (t0) = y0, choose a value δ for the size of every step along t-axis and set tn+i = tn + i · δ, the result is ap-proximations for the value of y(ti) ≈ yi, multistep methods use information from the previous s steps to calculate the next value: 
+
+> s
+
+X
+
+> j=0
+
+aj yn+j = δ
+
+> s
+
+X
+
+> j=0
+
+bj F (tn+j , y n+j ), (1) 
+
+with as = 1 . The coefficients a0, . . . , a s−1 and b0, . . . , b s
+
+determine the method. 
+
+In Theorem 3.1, if bs = 0 , then the method is called “ex-plicit”, since the formula can directly compute yn+s. If 
+
+bs̸ = 0 then the method is called “implicit”, since the value of yn+s depends on the value of F (tn+s, y n+s), and the equation must be solved for yn+s.
+
+Table 1. Linear multistep method.                                                                                 
+
+> Explicit: Adams-Bashforth (AB) Method step order equation 11yn+1 =yn+δ·Fn
+> 22yn+2 =yn+1 +δ
+> 2·(3 Fn+1 −Fn)
+> 33yn+3 =yn+2 +δ
+> 12 ·(23 Fn+2 −16 Fn+1 + 5 Fn)
+> 44yn+4 =yn+3 +δ
+> 24 ·(55 Fn+3 −59 Fn+2 + 37 Fn+1 −9Fn)
+> Implicit: Adams-Moulton (AM) Method step order equation 12yn+1 =yn+δ
+> 2·(Fn+Fn+1 )
+> 23yn+2 =yn+1 +δ
+> 12 ·(5 Fn+2 + 8 Fn+1 −Fn)
+> 34yn+3 =yn+2 +δ
+> 24 ·(9 Fn+3 + 19 Fn+2 −5Fn+1 +Fn)
+
+Increasing the number of steps (i.e., incorporating more previous time points) raises the order of the linear multistep method, thereby improving its theoretical accuracy. How-ever, it may also reduce stability, cause error accumulation, and increase dependence on initial values. Therefore, the highest order typically used for the linear multistep method is 4. For simplicity, we write F (tn, y n) as Fn, the specific coefficients for the linear multistep method are shown in 3FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Table 1. Besides, the explicit method is denoted as AB i
+
+and the implicit method as AM i in section 3.2, where i
+
+corresponds to the step number in Table 1. When the number of steps is the same, implicit methods consistently achieve higher accuracy than explicit methods. Consequently, we strive to use implicit methods whenever possible. However, implicit methods require the derivative values at the current node, which are unknown at the current step. The predictor-corrector method provides a mathemati-cal solution to this problem. The corresponding theorem is presented as follows: 
+
+Theorem 3.2. Predictor-Corrector Method (Heun, 1900; Gragg & Stetter, 1964). Consider the differential equation 
+
+˙y(t) = F (t, y (t)) , y (t0) = y0, and denote the step size by δ.First, starting from the current value yi, calculate an initial guess value yi+1 via an explicit method. Next, improve the initial guess using corresponding implicit method. For example use 1 step methods: 
+
+yn+1 = yn + δ · F (tn, y n)
+
+yn+1 = yn + δ
+
+2 · (F (tn, y n) + F (tn+1 , y n+1 )) , (2) 
+
+where yn ≈ y(tn). yn+1 is the predicted median, yn+1 is the final result corrected for yn+1 .
+
+Thus, more accurate solutions can be obtained using implicit methods. 
+
+3.2. Adaptive Discrete Method for U-Nets 
+
+The linear multistep method is a mathematical tool used to solve initial value problem (IVP) in ordinary differen-tial equation (ODE). To relate the architecture of U-Nets with ODE, existing methods typically introduce differential equations starting from the decoder. Following this idea, we define the differential relationship between the skip con-nections X and the corresponding stages Y as F , but we focus on fusing multi-scale information starting from the skip connections. The function F will be explained in detail in section 3.3. In this section, we first describe the proposed discrete method and the overall framework applied in an L-stage U-Net ,as shown in Fig. 2 (a). First, we map the data from each stage of the U-Net to the elements of the linear multistep method: we treat the pro-cess where the decoder reconstructs the features extracted by the encoder into predicted labels as solving an IVP. Xi
+
+represents a series of discrete nodes, and Yi represents the corresponding solution at each node, 1 ≤ i ≤ L. Yf inal 
+
+is the solution to the IVP. The bottom stage represents the start of the IVP, where we initialize Y1 = 0 , representing an empty memory stream. As the IVP progresses, we gradu-ally fill in information on the empty memory stream, first mapping the coarse high-level features to the feature map, and then filling in the finer low-level details. 
+
+Algorithm 1 Adaptive discrete method for U-Nets 
+
+NOTE: F1: i represents the sequence {F1, F 2, . . . , F i},indicating all values from F1 to Fi.
+
+Input: feature map X, memory statement Y and total stage L
+
+for i = 1 to L − 1 do if i < 4 then Predictor: Yi+1 = AB i(Yi, F 1: i)
+
+Corrector: Yi+1 = AM i(Yi+1 , F 1: i+1 )
+
+else Predictor: Yi+1 = AB 4(Yi, F i−3: i)
+
+Corrector: Yi+1 = AM 3(Yi+1 , F i−2: i+1 )
+
+end if end for if L < 5 then 
+
+Yf inal = AB L(YL, F 1: L)
+
+else 
+
+Yf inal = AB 4(YL, F L−3: L)
+
+end if Return Yf inal 
+
+Then, we can apply the mathematical ideas of the linear multistep method to process features at multiple scales. To ensure effective interaction between features at different scales, it is crucial to incorporate as much information from previous stages as possible and employ high-accuracy im-plicit methods when deriving the output of a given decoder stage. When the current stage number is greater than 4 and not the last stage, a 4-step implicit method can be straight-forwardly chosen for prediction-correction. However, the linear multistep method need to calculates the values of 
+
+Yl, l < i for the previous steps using a single-step method first, and then substitutes the calculated derivatives into the formula. The single-step method at the initialization step is still limited to the same scale, which does not align with our goal of multi-scale feature interaction. Therefore, we need to modify the initialization step of the linear multistep method. Our approach is to repeatedly apply the lower-step linear multistep method during the startup phase of the high-step method. Specifically, when calculating yi+1 ,we use the i-step implicit method. For i > 4, the 4-step implicit method is applied until the L-th stage, where the final computation is performed using an explicit method. This algorithm is outlined in Algorithm 1 , and the detailed computational process is provided in Appendix A. Finally, we apply a convolution layer to map Yf inal to the segmentation map. 
+
+3.3. Differential Equations Adapted for U-Nets 
+
+nmODEs divided neuron into two parts: learning neuron and memory neuron. The input data is passed to the learning 4FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 𝑿 𝑳 ି 𝟏 
+
+𝑿 𝑳 
+
+𝒀 𝟏 
+
+> conv
+
+𝒀 𝟐 
+
+𝒀 𝑳 ି 𝟏 
+
+𝒀 𝑳 𝒀 𝒇𝒊𝒏𝒂𝒍 
+
+> P-C
+> P-C
+> P-C
+> C
+
+encoders 𝑿 𝟐 
+
+𝑿 𝟏 
+
+nmODEs block 
+
+𝑋 ଵ~௟
+
+𝑌 ଵ:௟
+
+𝐹 ଵ:௟
+
+Predictor: AB 
+
+𝑌 ௟ାଵ 
+
+nmODEs block 
+
+𝑋 ௟ାଵ 
+
+Corrector: AM 
+
+𝑌 ௟
+
+𝐹 ଵ:௟ାଵ 
+
+𝑌 ௟
+
+𝑌 ௟ାଵ 
+
+nmODEs block 
+
+𝑌 ଵ:௅
+
+𝐹 ଵ:௅
+
+Calculator: AB 
+
+𝑌 ௙௜௡௔௟ 
+
+𝑌 ௅ 
+
+> P-C
+
+Predictor-Corrector  
+
+> C
+
+Calculator 
+
+(b) (c) 
+
+(a) 
+
+𝑿 𝒍 
+
+> Conv/
+> Transformer/
+> Mamba
+> -1
+> 1×conv
+> interpolation
+
+g-func 
+
+f-func 
+
+𝑭 𝒍 
+
+g(𝑿 𝒍 )
+
+𝒀 𝒍 
+
+(d)           
+
+> Figure 2. (a) The architecture of an L-stage U-Net incorporating discrete nmODEs. Here, P-Crepresents the Predictor-Corrector module, with its internal structure detailed in (b). Cdenotes the calculator used in the final step, which exclusively employs explicit methods, and its internal structure is illustrated in (c). The number of channels in Yis set to twice the number of target classes, while all other dimensions remain consistent with the original input. The internal structure of the nmODEs block is shown in (d), where the function f
+> executes the corresponding operations based on the specific network architecture, such as convolution, Transformer, or Mamba.
+
+neuron to extract features, while the memory carrier records the extracted information in the memory neuron. This de-sign has three advantages. nmODEs inherently avoids the features learned from being isomorphic to the input data space. Additionally, we have identified two other advan-tages that are particularly relevant to this work: First, the separation of learning and memory neurons in nmODEs allows it to retain a continuous memory flow while still maintaining the ability to process external inputs. Therefore, features extracted by the encoders from different scales can be fed into the learning neuron of nmODEs as a sequence of nodes, and the memory carrier is updated with the numerical solutions corresponding to each node. Second, the memory carrier ultimately outputs the target data but does not participate in the feature extraction process. As a result, it does not need to retain much information other than the final output. This reduces the required number of channels significantly compared to the decoder of traditional U-Nets, thus greatly reducing computational costs. The equation for nmODEs is given as follows: 
+
+˙Yt = −Yt + f (Yt + g(Xt)) , (3) where Xt represents the external input at time t, Yt repre-sents the memory flow carried by the memory neuron at time t, with the initial condition Y0 = 0 representing an empty memory flow, f (·) is a non-linear mapping that com-bines the existing memory and the new external input to update the memory flow using a differential equation numer-ical solver, g(·) is the function that processes the external input Xt at each time step. When applying nmODEs to the discrete U-Nets, the following equation holds: 
+
+˙Yi = −Yi + f (Yi + g(Xi)) . (4) In U-Nets, the Xi and Yi in Eq. (4) correspond to those in Section 3.2. The function g(·) uses convolution and interpo-lation to align the channels and shape of Xi and Yi, while the choice of f (·) depends on the network to which this equation is applied. By substituting Eq. (3) into the linear multistep method proposed in Algorithm 1 , we can obtain the approximate solution for each stage. Following this process, we designed three modules: Predictor-Corrector, Calculator, and the nmODEs block, as shown in Fig. 2 (b), (c), and (d), respectively. 5FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks                          
+
+> Table 2. Overview of Used Datasets.
+> Dataset Region Data Type Number of Samples Target Classes
+> ACDC (Bernard et al., 2018) Heart 3D MRI 100 3 (1-MYO, 2-RV,3-LV) KiTS23 (Heller et al., 2023) Kidney 3D CT 559 3 (1-Kidney, 2-Cyst, 3-Tumor) MSD (Antonelli et al., 2022) Brain 3D MRI 484 3 (1-WT, 2-ET, 3-TC) ISIC2017 (Codella et al., 2018a) Skin 2D Dermoscopy 2000 1 (Lesion skin area) ISIC2018 (Codella et al., 2018b) Skin 2D Dermoscopy 2594 1 (Lesion skin area)
+
+# 4. Experiments 
+
+The currently popular U-Nets are primarily based on three architectures: convolution, Transformer, and Mamba. To evaluate the effectiveness and generalizability of the pro-posed method, we select a representative backbone network from each of these architectures and perform experiments on the datasets used in their respective original studies. All ex-periments were conducted on a single RTX 4090. Except for the learning rate, all experimental settings were consistent with those of the backbone networks used for comparison. Due to the significant reduction in the number of parameters, the learning rate was set to 2 or 3 times that of the backbone network’s setting. The detailed hyperparameter settings are provided in Appendix B. 
+
+4.1. Datasets and Backbone Networks 
+
+Table 2 presents the details of the datasets used in this paper. In the table, LV denotes the left ventricle, RV represents the right ventricle, MYO corresponds to the myocardium, EC indicates the enhancing tumor, TC refers to the tumor core, and WT denotes the whole tumor. 
+
+nn-UNet. For CNN-based U-Nets, nn-UNet (Fabian et al., 2021; Isensee et al., 2024) remains the backbone due to its superior applicability, outperforming nearly all other U-Nets across reliable datasets. UNETR. In Transformer-based U-Nets, UNETR (Hatamizadeh et al., 2021), from the MONAI framework, is a key foundation for research and a suitable backbone for our study. UltraLight VM-UNet. Mamba’s efficiency and linear complexity reduce costs over Transformers. UltraLight VM-UNet (Wu et al., 2024) leverages this, achieving strong performance with a lightweight design. We use it to assess our method’s potential for further downsizing. 
+
+4.2. Main Results 3D Tasks. All 3D tasks report Dice scores (%) using five-fold cross-validation, following the protocol of the backbone network. The performance data for the compared networks are sourced from (Hatamizadeh et al., 2021; Isensee et al., 2024; Perera et al., 2024). Table 3 presents the performance of the proposed method on 3D tasks. The gray-shaded rows in the table indicate FuseUNet and its corresponding backbone network. When using the convolutional nn-UNet as the backbone, FuseUNet achieves a 54.9% reduction in the number of parameters and a 34.3% reduction in GFLOPs, while maintaining the performance of nn-UNet. Although its performance on the ACDC dataset is slightly lower, it surpasses nn-UNet on the larger KiTS dataset. Detailed performance data on each fold is provided in Appendix D. When using the Transformer-based UNETR as the backbone network, FuseUNet achieves a 13.6% reduction in the num-ber of parameters and a 50% reduction in GFLOPs, while surpassing UNETR’s performance by 1.5%. The smaller reduction in parameters compared to nn-UNet is due to UNETR’s parameters being primarily concentrated in the encoder’s attention module, with the decoder contributing a smaller proportion. Since FuseUNet’s multi-scale feature interaction method is designed around skip connections and does not modify the encoder, the reduction in the number of parameters is relatively modest. Fig. 3 illustrates the visual segmentation results of Fuse-UNet, where (a), (b), and (c) correspond to the ACDC, KiTS, and MSD brain tumor datasets, respectively. In Figure 3 (a), nn-UNet frequently makes errors in identifying the right ventricle (RV), sometimes misclassifying unrelated tissues as the RV or missing portions of it entirely. FuseUNet signif-icantly mitigates these issues. Fig. 3(b) shows that nn-UNet occasionally fails to fully recognize the kidneys and often confuses kidney tumors with cysts. This is particularly evi-dent in the third row, where nn-UNet incorrectly classifies most cysts as tumors, even in the absence of tumor tissue. FuseUNet greatly improves upon this. In Fig. 3(c), UNETR exhibits challenges such as incomplete tumor recognition and missing enhanced tumor regions, both of which are notably addressed by FuseUNet. 
+
+2D Tasks. For 2D tasks, we report Dice, sensitivity, speci-ficity, and accuracy as percentages, following the protocol of the backbone network. The performance data for the com-pared networks are sourced from (Wu et al., 2024). Table 4 shows the performance of the proposed method on 2D tasks, using the lightweight UltraLight VM-UNet with a Mamba architecture as the backbone network. While FuseUNet reduces the number of parameters by 29.8%, its GFLOPs have increased by 0.075, with performance comparable to that of UltraLight VM-UNet. This increase in GFLOPs is 6FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Table 3. The performance comparison between FuseUNet, the backbone networks, and SOTA on 3D tasks. 
+
+Dataset Model Params(M) GFLOPs Dice1 Dice2 Dice3 Dice avg ACDC CoTr (Xie et al., 2021) 41.9 668.1 89.06 88.56 94.06 90.56 Swin-UNETR (Tang et al., 2022) 62.8 384.2 89.56 89.98 94.33 91.29 U-Mamba (Ma et al., 2024) 173.5 1255 89.71 89.70 94.25 91.22 STU-Net-L (Huang et al., 2023) 440.3 3810 90.02 89.59 94.32 91.31 nn-UNet (Isensee et al., 2024) 31.2 402.6 90.11 89.96 94.55 91.54 FuseUNet (Ours) 14.0 264.9 90.18 90.05 94.49 91.57 
+
+KiTS nnFormer (Zhou et al., 2022) 150.1 425.8 92.27 69.78 65.53 75.86 Swin-UNETR (Tang et al., 2022) 62.8 384.2 94.48 76.80 72.53 81.27 U-Mamba (Ma et al., 2024) 173.5 1255 96.08 82.84 79.77 86.23 
+
+STU-Net-L (Huang et al., 2023) 440.3 3810 96.11 82.35 79.09 85.85 nn-UNet (Isensee et al., 2024) 31.2 402.6 96.03 82.65 79.44 86.04 FuseUNet (Ours) 14.0 264.9 96.47 83.06 79.04 86.19 MSD UNet (Ronneberger et al., 2015) 13.4 31.1 76.6 56.1 66.5 66.4 UNet3+ (Huang et al., 2020) 12.0 - 62.2 41.4 47.8 50.5 TransUNet (Chen et al., 2024) 116.5 - 70.6 54.2 68.4 64.4 Swin-UNETR (Tang et al., 2022) 62.8 384.2 70.0 52.6 70.6 64.4 UNETR (Hatamizadeh et al., 2021) 103.7 40.3 78.9 58.5 76.1 71.1 FuseUNet (Ours) 89.2 20.1 79.5 60.1 78.2 72.6 IMG GT nn-UNet Fuse-UNet   
+
+> LV Myo RV
+
+(a) Visualization on the ACDC IMG GT nn-UNet Fuse-UNet    
+
+> Kidney Tumor Cyst
+
+(b) Visualization on the KiTS IMG GT UNETR Fuse-UNet    
+
+> WT TC ET
+
+(c) Visualization on the MSD 
+
+Figure 3. The visual comparison of segmentation results between FuseUNet and the backbone networks on 3D tasks. 
+
+attributed to the interpolations used by FuseUNet to align the shapes of skip connection Xi and the corresponding Yi.This issue is less noticeable when the backbone network has a larger GFLOPs, but it becomes more pronounced in lightweight networks. However, overall, it only leads to a minor increase in GFLOPs at the decimal level. Fig. 4 illustrates the visual segmentation results of Fuse-UNet, where (a) and (b) correspond to the ISIC2017 and ISIC2018 datasets, respectively. FuseUNet addresses the false negative and false positive issues frequently observed in UltraLight VM-UNet. Moreover, it captures lesion bound-ary details that are significantly closer to the ground truth. This subsection presents only a few visualization results, with additional results provided in Appendix E. 
+
+4.3. Ablation Experiments The impact of the number of feature fusion steps. This experiment was conducted on the first fold of all 3D datasets and the full set of 2D datasets. Figure 5 illustrates the per-formance (Dice) when different maximum orders of the linear multistep method are used. Since the baseline varies across datasets, we have normalized the data. As the order increases, more skip connections participate in feature infor-mation interaction. The results indicate a strong correlation between the network’s performance and the highest order of the applied feature interaction method. 
+
+The impact of memory capacity. This experiment was conducted on the first fold of the KiTS dataset. Table 5 shows the impact of channel count in Y on performance, where N is the number of target classes. Setting Y to 2N
+
+7FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Table 4. The performance comparison between FuseUNet, the backbone networks and SOTA on 2D tasks.                                                                                     
+
+> Model Params (M) GFLOPs ISIC2017 ISIC2018 Dice SE SP ACC Dice SE SP ACC UNet (Ronneberger et al., 2015) 13.4 31.12 89.89 87.93 98.12 96.13 88.51 87.35 97.44 95.47 TransFuse (Zhang et al., 2021) 26.16 11.5 79.21 87.14 97.98 96.17 89.27 91.28 95.74 94.66 MALUNet (Ruan et al., 2022) 0.177 0.085 88.96 88.24 97.62 95.83 89.31 88.90 97.25 95.48 EGE-UNet (Ruan et al., 2023) 0.053 0.072 90.73 89.31 98.16 96.42 88.19 90.09 96.38 95.10 VM-UNet (Ruan & Xiang, 2024) 27.427 4.112 90.70 88.37 98.42 96.45 88.91 88.09 97.43 95.54 UltraLight VM-UNet (Wu et al., 2024) 0.049 0.060 90.64 88.85 98.38 96.63 89.40 86.80 96.38 95.10 FuseUNet (Ours) 0.036 0.095 90.69 89.59 98.20 96.62 89.77 89.10 97.41 95.62 IMG GT UltraLight
+> VM-UNet Fuse-UNet
+
+(a) ISIC2017 IMG GT UltraLight   
+
+> VM-UNet Fuse-UNet
+
+(b) ISIC2018 
+
+Figure 4. The visual comparison of segmentation results between FuseUNet and the backbone networks on 2D tasks. 
+
+significantly outperforms N , suggesting that some redun-dancy in memory flow is beneficial. However, 3N reduces performance, and 4N offers only a slight gain, indicating excessive redundancy is unnecessary. As the linear multi-step method requires storing multiple intermediate states, memory consumption increases with channel count. Using more than 4N is inefficient, making 2N the optimal balance of performance and cost. Thus, all subsequent experiments adopt 2N for Y .
+
+Table 5. The impact of memory capacity. 
+
+Channels GFLOPs VRAM(G) Epoch(s) Dice N 264 5.2 125 85.86 2N 265 5.9 128 86.74 3N 266 7.1 135 86.63 4N 267 8.7 147 86.88 
+
+# 5. Conclusion 
+
+This paper reinterprets skip connections in U-Nets from a numerical computation perspective for the first time. We propose a multi-scale feature fusion method that integrates the linear multistep method, predictor-corrector method, and nmODEs, dynamically selecting the optimal discretization order for efficient cross-scale fusion. As a skip connection 1 2 3 4
+
+> Order
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Normalized Performance (0-1)
+> Impact of Order on Performance (Normalized)
+> KiTS
+> ACDC
+> MSD-B
+> ISIC2017
+> ISIC2018
+
+Figure 5. The impact of the number of feature fusion steps on network performance. 
+
+strategy, it is encoder-decoder agnostic and theoretically applicable to any U-Nets. Experiments validate its effec-tiveness across convolution-, Transformer-, and Mamba-based U-Nets, reducing computational costs while preserv-ing backbone performance. Visualizations further highlight improved edge recognition and feature distinction. Our work moves beyond empirical network design, and reveals the underlying connection between skip connections and numerical integration methods. This demonstrates that clas-sical numerical computation theory can provide an inter-pretable mathematical foundation for network structures, offering a new perspective on the cross-layer information propagation mechanism in U-Nets. However, the method’s reliance on the linear multistep principle introduces a limita-tion: the need to store multiple historical solutions, leading to high memory consumption, particularly in large-scale problems with numerous target categories. Addressing this challenge remains a key area for future research. 
+
+# Acknowledgements 
+
+This work was supported by the National Natural Sci-ence Foundation of China under Grant 62206189, and the China Postdoctoral Science Foundation under Grant 2023M732427. 8FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+# Impact Statement 
+
+This paper proposes a novel perspective for viewing U-Nets and a new method for handling skip connections, which can be widely applied to U-Nets. We hope that this research can contribute to the advancement of medical image segmenta-tion. We do not think this work has any harmful impact. 
+
+# References 
+
+Antonelli, M., Reinke, A., Bakas, S., Farahani, K., Kopp-Schneider, A., Landman, B., Litjens, G., Menze, B., Ron-neberger, O., Summers, R., Ginneken, B., Bilello, M., Bilic, P., Christ, P., Do, R., Gollub, M., Heckers, S., Huis-man, H., Jarnagin, W., and Cardoso, M. J. The medical segmentation decathlon. Nature Communications , 13: 4128, 07 2022. Bashforth, F. and Adams, J. C. An attempt to test the theo-ries of capillary action by comparing the theoretical and measured forms of drops of fluid . University Press, 1883. Bernard, O., Lalande, A., Zotti, C., Cervenansky, F., Yang, X., Heng, P.-A., Cetin, I., Lekadir, K., Camara, O., Ballester, M. A. G., et al. Deep learning techniques for automatic mri cardiac multi-structures segmentation and diagnosis: is the problem solved? IEEE transactions on medical imaging , 37(11):2514–2525, 2018. Cai, S., Tian, Y., Lui, H., Zeng, H., Wu, Y., and Chen, G. Dense-unet: a novel multiphoton in vivo cellular image segmentation model based on a convolutional neural net-work. Quantitative imaging in medicine and surgery , 10 6:1275–1285, 2020. Cao, Hu, Wang, Y., Chen, J., Jiang, D., Zhang, X., Tian, Q., and Wang, M. Swin-unet: Unet-like pure transformer for medical image segmentation. In European conference on computer vision , pp. 205–218, 2022. Chen, J., Mei, J., Li, X., Lu, Y., Yu, Q., Wei, Q., Luo, X., Xie, Y., Adeli, E., Wang, Y., et al. Transunet: Rethinking the u-net architecture design for medical image segmen-tation through the lens of transformers. Medical Image Analysis , pp. 103280, 2024. Chen, R. T., Rubanova, Y., Bettencourt, J., and Duvenaud, D. K. Neural ordinary differential equations. Advances in neural information processing systems , 31, 2018. Cheng, Z. and Wang, L. Dynamic hierarchical multi-scale fusion network with axial MLP for medical image seg-mentation. Nature-Scientific Reports , 13(1):6342, April 2023. Codella, N. C. F., Gutman, D., Celebi, M. E., Helba, B., Marchetti, M. A., Dusza, S. W., Kalloo, A., Liopyris, K., Mishra, N., Kittler, H., and Halpern, A. Skin lesion anal-ysis toward melanoma detection: A challenge at the 2017 international symposium on biomedical imaging (isbi), hosted by the international skin imaging collaboration (isic). In 2018 IEEE 15th International Symposium on Biomedical Imaging (ISBI 2018) , pp. 168–172, 2018a. Codella, N. C. F., Gutman, D., Celebi, M. E., Helba, B., Marchetti, M. A., Dusza, S. W., Kalloo, A., Liopyris, K., Mishra, N., Kittler, H., and Halpern, A. Skin lesion anal-ysis toward melanoma detection: A challenge at the 2017 international symposium on biomedical imaging (isbi), hosted by the international skin imaging collaboration (isic). In 2018 IEEE 15th International Symposium on Biomedical Imaging (ISBI 2018) , pp. 168–172, 2018b. Dong, P., Niu, H., Yi, Z., and Xu, X. nmpls-net: Segmenting pulmonary lobes using nmode. Mathematics , 11(22), 2023. ISSN 2227-7390. Dupont, E., Doucet, A., and Teh, Y. W. Augmented neural odes. Advances in neural information processing systems ,32, 2019. Euler, L. Institutionum calculi integralis , volume 4. impen-sis Academiae imperialis scientiarum, 1845. Fabian, I., Jaeger, P. F., Kohl, S. A. A., Petersen, J., and Maier-Hein, K. H. nnu-net: a self-configuring method for deep learning-based biomedical image segmentation. 
+
+Nature Methods , 18(2):203–211, Feb 2021. ISSN 1548-7105. Gragg, W. B. and Stetter, H. J. Generalized multistep predictor-corrector methods. J. ACM , 11(2):188–209, April 1964. ISSN 0004-5411. Gu, A. and Dao, T. Mamba: Linear-time sequence modeling with selective state spaces. ArXiv , abs/2312.00752, 2023. Hatamizadeh, A., Yang, D., Roth, H. R., and Xu, D. Un-etr: Transformers for 3d medical image segmentation. 
+
+2022 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , pp. 1748–1758, 2021. He, Q., He, T., and Yi, Z. Medical image segmentation using discretized nmode. In 2023 International Annual Conference on Complex Systems and Intelligent Science (CSIS-IAC) , pp. 497–503, 2023. He, Q., Yao, X., Wu, J., Yi, Z., and He, T. A lightweight u-like network utilizing neural memory ordinary differ-ential equations for slimming the decoder. In Larson, K. (ed.), Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence, IJCAI-24 , pp. 821–829, 8 2024. 9FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Heller, N., Isensee, F., Trofimova, D., Tejpaul, R., Zhao, Z., Chen, H., Wang, L., Golts, A., Khapun, D., Shats, D., Shoshan, Y., Gilboa-Solomon, F., George, Y., Yang, X., Zhang, J., Zhang, J., Xia, Y., Wu, M., Liu, Z., Walczak, E., McSweeney, S., Vasdev, R., Hornung, C., Solaiman, R., Schoephoerster, J., Abernathy, B., Wu, D., Abdulkadir, S., Byun, B., Spriggs, J., Struyk, G., Austin, A., Simpson, B., Hagstrom, M., Virnig, S., French, J., Venkatesh, N., Chan, S., Moore, K., Jacobsen, A., Austin, S., Austin, M., Regmi, S., Papanikolopoulos, N., and Weight, C. The kits21 challenge: Automatic segmentation of kidneys, renal tumors, and renal cysts in corticomedullary-phase ct, 2023. Heun, K. Neue methoden zur approximativen integra-tion der differentialgleichungen einer unabh ¨angigen ver¨ anderlichen. Z. Math. Phys , 45:23–38, 1900. Hu, J., Yu, C., Yi, Z., and Zhang, H. Enhancing robustness of medical image segmentation model with neural mem-ory ordinary differential equation. International Journal of Neural Systems , 33(12):2350060, 2023. Huang, H., Lin, L., Tong, R., Hu, H., Zhang, Q., Iwamoto, Y., Han, X., Chen, Y.-W., and Wu, J. Unet 3+: A full-scale connected unet for medical image segmentation. In 
+
+ICASSP 2020 - 2020 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pp. 1055–1059, 2020. Huang, Z., Wang, H., Deng, Z., Ye, J., Su, Y., Sun, H., He, J., Gu, Y., Gu, L., Zhang, S., and Qiao, Y. Stu-net: Scalable and transferable medical image segmentation models empowered by large-scale supervised pre-training, 2023. Isensee, F., Wald, T., Ulrich, C., Baumgartner, M., Roy, S., Maier-Hein, K., and Jaeger, P. F. nnu-net revisited: A call for rigorous validation in 3d medical image segmentation. In International Conference on Medical Image Comput-ing and Computer-Assisted Intervention , pp. 488–498, 2024. Liu, Y., Zhu, H., Liu, M., Yu, H., Chen, Z., and Gao, J. Rolling-unet: Revitalizing mlp’s ability to efficiently extract long-distance dependencies for medical image segmentation. Proceedings of the AAAI Conference on Artificial Intelligence , 38(4):3819–3827, Mar. 2024. Lyu, P., Zhang, J., Zhang, L., Liu, W., Wang, C., and Zhu, J. MetaUNETR: Rethinking Token Mixer Encoding for Efficient Multi-Organ Segmentation . In proceedings of Medical Image Computing and Computer Assisted Inter-vention – MICCAI 2024 , volume LNCS 15009, October 2024. Ma, J., Li, F., and Wang, B. U-mamba: Enhancing long-range dependency for biomedical image segmentation. 
+
+arXiv preprint arXiv:2401.04722 , 2024. Moulton, F. R. New methods in exterior ballistics. The American Mathematical Monthly , 35(5):246–250, 1928. ISSN 00029890, 19300972. Niu, H., Yi, Z., and He, T. A bidirectional feedforward neural network architecture using the discretized neural memory ordinary differential equation. International Journal of Neural Systems , 34(04):2450015, 2024. Perera, S., Navard, P., and Yilmaz, A. Segformer3d: an effi-cient transformer for 3d medical image segmentation. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 4981–4988, 2024. Poucet, B. and Save, E. Attractors in memory. Science , 308 (5723):799–800, 2005. Ronneberger, O., Fischer, P., and Brox, T. U-net: Con-volutional networks for biomedical image segmentation. In International Conference on Medical Image Comput-ing and Computer-Assisted Intervention (MICCAI) , pp. 234–241, 2015. Ruan, J. and Xiang, S. Vm-unet: Vision mamba unet for medical image segmentation. ArXiv , abs/2402.02491, 2024. Ruan, J., Xiang, S., Xie, M., Liu, T., and Fu, Y. Malunet: A multi-attention and light-weight unet for skin lesion segmentation. In 2022 IEEE International Conference on Bioinformatics and Biomedicine (BIBM) , pp. 1150–1156, 2022. Ruan, J., Xie, M., Gao, J., Liu, T., and Fu, Y. Ege-unet: an ef-ficient group enhanced unet for skin lesion segmentation. In International conference on medical image computing and computer-assisted intervention , pp. 481–490, 2023. Tang, Y., Yang, D., Li, W., Roth, H. R., Landman, B. A., Xu, D., Nath, V., and Hatamizadeh, A. Self-supervised pre-training of swin transformers for 3d medical image analysis. 2022 IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition (CVPR) , pp. 20698–20708, 2022. Vaswani, A. Attention is all you need. Advances in Neural Information Processing Systems , 2017. Wang, J., Chen, J., Chen, D. Z., and Wu, J. LKM-UNet: Large Kernel Vision Mamba UNet for Medical Image Segmentation . In proceedings of Medical Image Comput-ing and Computer Assisted Intervention – MICCAI 2024 ,volume LNCS 15008, October 2024a. 10 FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Wang, S., Chen, Y., and Yi, Z. nmode-unet: A novel network for semantic segmentation of medical images. Applied Sciences , 14(1), 2024b. ISSN 2076-3417. Wang, Z., Gu, J., Zhou, W., He, Q., Zhao, T., Guo, J., Lu, L., He, T., and Bu, J. Neural memory state space models for medical image segmentation. International Journal of Neural Systems , 35(01):2450068, 2024c. Wills, T. J., Lever, C., Cacucci, F., Burgess, N., and O’Keefe, J. Attractor dynamics in the hippocampal representation of the local environment. Science , 308(5723):873–876, 2005. Wu, R., Liu, Y., Liang, P., and Chang, Q. Ultralight vm-unet: Parallel vision mamba significantly reduces parameters for skin lesion segmentation. ArXiv , abs/2403.20035, 2024. Xiao, X., Lian, S., Luo, Z., and Li, S. Weighted res-unet for high-quality retina vessel segmentation. 2018 9th International Conference on Information Technology in Medicine and Education (ITME) , pp. 327–331, 2018. Xie, Y., Zhang, J., Shen, C., and Xia, Y. Cotr: Effi-ciently bridging cnn and transformer for 3d medical im-age segmentation. In Medical Image Computing and Computer Assisted Intervention – MICCAI 2021 , pp. 171– 180, Cham, 2021. ISBN 978-3-030-87199-4. Yi, Z. nmode: neural memory ordinary differential equation. 
+
+Artificial Intelligence Review , pp. 1–36, 2023. Zhang, Y., Liu, H., and Hu, Q. Transfuse: Fusing transform-ers and cnns for medical image segmentation. In Medical Image Computing and Computer Assisted Intervention– MICCAI 2021: 24th International Conference, Stras-bourg, France, September 27–October 1, 2021, Proceed-ings, Part I 24 , pp. 14–24, 2021. Zhou, H.-Y., Guo, J., Zhang, Y., Yu, L., Wang, L., and Yu, Y. nnformer: Interleaved transformer for volumetric segmentation, 2022. Zhou, Z., Siddiquee, M. M. R., Tajbakhsh, N., and Liang, J. Unet++: Redesigning skip connections to exploit multi-scale features in image segmentation. IEEE Transactions on Medical Imaging , 39(6):1856–1867, 2020. 11 FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+# Appendix A. The detailed process of updating the memory flow Y. 
+
+The first time we update the memory stream, i.e., derive Y2, we use a one-step implicit approach. 
+
+Theorem A.1. one-step Adams–Moulton method (Moulton, 1928). Given the derivative ˙Yt = Ft, let t = tn, and choose a step size δ along the t-axis such that tn+1 = tn + δ. The approximation of Ytn+1 at the next integration point is given by: 
+
+Ytn+1 = Ytn + δ
+
+2 · (Ftn + Ftn+1 ). (5) For a U-Net with L stages, let Xl and Yl be Xtn and Xtn at different time, respectively, 1 ≤ l ≤ L, and set δ = 1 /L .Taking Xtn = X1 and Ytn = Y1, based on Theorem A.1, we have: 
+
+Y2 = Y1 + δ
+
+2 · (F1 + F2). (6) In the process of calculating Y2, the term F2 = F (X2, Y 2) is unknown. Therefore, we first need to predict the value of Y2,substitute it into F to compute F2, and then correct the value of Y2. According to the description in Section 3.3, second paragraph, the known values at this stage are X2, X1, Y1, and F1. When predicting Y2, we can only use a one-step explicit method. 
+
+Theorem A.2. one-step Adams–Bashforth method (Bashforth & Adams, 1883). Given the derivative ˙Yt = Ft, let t = tn,and choose a step size δ along the t-axis such that tn+1 = tn + δ. The approximation of Ytn+1 at the next integration point is given by: 
+
+Ytn+1 = Ytn + δ · Ftn . (7) According to Theorem 3.2 and Theorem A.2, we can obtain the predicted value of Y2,i.e., Y2 and calculate F2.
+
+Y2 = Y1 + δ · F1
+
+F2 = F (X2, Y 2). (8) At this point, we have obtained all the information necessary to compute Y2. In this process, we obtain Y2 and F2. The next step is to compute Y3 and F3 using the two-step implicit method. 
+
+Theorem A.3. two-step Adams–Moulton method (Moulton, 1928). Given the derivative ˙Yt = Ft, let t = tn, and choose a step size δ along the t-axis such that tn+1 = tn + δ, tn+2 = tn + 2 δ. The approximation of Ytn+2 is given by: 
+
+Ytn+2 = Ytn+1 + δ
+
+12 · (5 Ftn+2 + 8 Ftn+1 − Ftn ). (9) In the U-Net specified before Eq. 6, according to Theorem A.3, we have: 
+
+Y3 = Y2 + δ
+
+12 · (5 F3 + 8 F2 − F1). (10) Similarly, F3 is unknown, the known values at this stage are X3, X2, X1, Y2, Y1, and F2, F1. Now we can use a two-step explicit method to predict Y3.
+
+Theorem A.4. two-step Adams–Bashforth method (Bashforth & Adams, 1883). Given the derivative ˙Yt = Ft, let t = tn,and choose a step size δ along the t-axis such that tn+1 = tn + δ, tn+2 = tn + 2 δ. The approximation of Ytn+2 is given by: 
+
+Ytn+2 = Ytn+1 + δ
+
+2 · (3 Ftn+1 − Ftn ). (11) According to Theorem 3.2 and Theorem A.4, we can get Y3 and F3.12 FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Y3 = Y2 + δ
+
+2 · (3 F2 − F1)
+
+F3 = F (X3, Y 3).
+
+(12) Then we finish the calculation of Eq. 10, next step is to compute Y4 and F4 using the three-step implicit method. 
+
+Theorem A.5. three-step Adams–Moulton method (Moulton, 1928). Given the derivative ˙Yt = Ft, let t = tn, and choose a step size δ along the t-axis such that tn+1 = tn + δ, tn+2 = tn + 2 δ, tn+3 = tn + 3 δ. The approximation of Ytn+3 is given by: 
+
+Ytn+3 = Ytn+2 + δ
+
+24 · (9 Ftn+3 + 19 Ftn+2 − 5Ftn+1 + Ftn ). (13) In the U-Net specified before Eq. 6, according to Theorem A.5, we have: 
+
+Y4 = Y3 + δ
+
+24 · (9 F4 + 19 F3 − 5F2 + F1). (14) 
+
+F4 is unknown, the known values at this stage are X1 : X4,Y1 : Y3and F1 : F3. Now we can use a three-step explicit method to predict Y4.
+
+Theorem A.6. three-step Adams–Bashforth method (Bashforth & Adams, 1883). Given the derivative ˙Yt = Ft, let t = tn,and choose a step size δ along the t-axis such that tn+1 = tn + δ, tn+2 = tn + 2 δ, tn+3 = tn + 3 δ. The approximation of 
+
+Ytn+3 is given by: 
+
+Ytn+3 = Ytn+2 + δ
+
+12 · (23 Ftn+2 − 16 Ftn+1 + 5 Ftn ). (15) According to Theorem 3.2 and Theorem A.6, we can get Y4 and F4 as follows: 
+
+Y4 = Y3 + δ
+
+12 · (23 F3 − 16 F2 + 5 F1)
+
+F4 = F (X4, Y 4).
+
+(16) Finally, the computation of Eq. 14 is completed. When 4 < t n+3 ≤ L, we still use Eq. 13 to calculate Ytn+3 . For example, 
+
+Y5 = Y4 + δ 
+
+> 24
+
+· (9 F5 + 19 F4 − 5F3 + F2). However, at this stage, we have more known information. When predicting Y5,we can apply a four-step explicit method, unlike the prediction of Y4, where only a three-step explicit method can be used. 
+
+Theorem A.7. four-step Adams–Bashforth method (Bashforth & Adams, 1883). Given the derivative ˙Yt = Ft, let t = tn,and choose a step size δ along the t-axis such that tn+1 = tn + δ, tn+2 = tn + 2 δ, tn+3 = tn + 3 δ, tn+4 = tn + 4 δ. The approximation of Ytn+4 is given by: 
+
+Ytn+4 = Ytn+3 + δ
+
+24 · (55 Ftn+3 − 59 Ftn+2 + 37 Ftn+1 − 9Ftn ). (17) According to Theorem 3.2 and Theorem A.7, we can get Y5 and F5 as follows: 
+
+Y5 = Y4 + δ
+
+24 · (55 F4 − 59 F3 + 37 F2 − 9F1)
+
+F5 = F (X5, Y 5).
+
+(18) In the subsequent computations, we perform calculations based on Theorem A.5 and A.7. When the computation reaches the topmost stage, the known information includes X1 : XL,Y1 : YLand F1 : FL. At this point, calculating Yf inal cannot apply the implicit method because XL+1 does not exist for the calculation. Therefore, we switch to a four-step explicit method. Then we have: 
+
+Yf inal = YL + δ
+
+24 · (55 FL − 59 FL−1 + 37 FL−2 − 9FL−3). (19) Finally, we apply a convolution layer with a kernel size of 1 to map Yf inal to the prediction map. 13 FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+Table 6. Workflow and Results. Take a network with 6 stages as an example for demonstration. P, C, Cal, F stand for Predictor, Corrector, Calculator, nmODEs block, respectively. Fi = −Yi + f (Yi + g(Xi)) .
+
+Source Workflow Result 
+
+X1, Y 1
+
+P: Y2 = Y1 + δ · F1 Y2
+
+C: Y2 = Y1 + δ 
+
+> 2
+
+· (F1 + F2)
+
+X1:2 , Y 1:2 
+
+P: Y3 = Y2 + δ 
+
+> 2
+
+· (3 F2 − F1) Y3
+
+C: Y3 = Y2 + δ 
+
+> 12
+
+· (5 F3 + 8 F2 − F1)
+
+X1:3 , Y 1:3 
+
+P: Y4 = Y3 + δ 
+
+> 12
+
+· (23 F3 − 16 F2 + 5 F1) Y4
+
+C: Y4 = Y3 + δ 
+
+> 24
+
+· (9 F4 + 19 F3 − 5F2 + F1)
+
+X1:4 , Y 1:4 
+
+P: Y5 = Y4 + δ 
+
+> 24
+
+· (55 F4 − 59 F3 + 37 F2 − 9F1) Y5
+
+C: Y5 = Y4 + δ 
+
+> 24
+
+· (9 F5 + 19 F4 − 5F3 + F2)
+
+X2:5 , Y 2:5 Cal: Y6 = Y5 + δ 
+
+> 24
+
+· (55 F5 − 59 F4 + 37 F3 − 9F2) Y6
+
+# B. Experimental hyperparameters 
+
+Table 7. Initial Learning Rate Settings 
+
+ACDC KiTS MSD ISIC2017 ISIC2018 Backbone 1e-2 3e-4 1e-4 1e-3 1e-3 FuseUNet 3e-2 1e-3 2e-4 3e-3 3e-3 
+
+# C. Computational Cost Analysis 
+
+Table 8. Computational Cost Analysis for FuseUNet-Ori Decoder and Skip Connection 
+
+FuseUNet - Ori Decoder Skip Connection Params L · 4N 2 · 12 − P1 
+
+> i=L
+
+3C2 
+
+> i
+
+· k2 P1 
+
+> i=L
+
+2N ∗ Ci · 12 − 0
+
+Flops 2L · 4N 2 · 12 · Ho · Wo − P1 
+
+> i=L
+
+6C2 
+
+> i
+
+· k2 · Hi · Wi 2 P1 
+
+> i=L
+
+2N ∗ Ci · 12 · Ho · Wo + 7 Ho · Wo · 2N − 0
+
+Taking the L-stage convolutional architecture as an example. In the table, N and the superscript ‘o’ represent the number of target classes and the original, respectively.The reduction in parameters and computation is tied to the number of channels in each stage. Flops increase mainly due to interpolation in skip connections, especially when the original network has fewer channels. 
+
+Table 9. Detailed comparison of the computational cost data. 
+
+VRAM (G) / Epoch (s) nn-UNet UNETR UltraLight VM-UNet 
+
+Backbone 7.33/144 9.4/115 0.87/21 FuseUNet 5.91/128 7.8/105 1.27/22 14 FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+# D. Detailed performance 
+
+Table 10. Detailed performance data for each fold on 3D tasks 
+
+Dataset Fold Dice1 Dice2 Dice3 Dice avg ACDC 1 90.37 90.46 94.60 91.81 1-Myo 2 91.21 89.40 94.49 91.70 2-RV 3 89.32 90.11 94.56 90.33 3-LV 4 91.58 90.28 94.32 92.06 5 88.41 90.02 94.52 90.98 KiTS23 1 97.28 83.94 79.51 86.91 1-Kidney 2 95.49 80.86 79.67 85.34 2-Cyst 3 97.15 82.83 77.69 85.89 3-Tumor 4 96.89 87.11 82.82 88.94 5 95.55 84.58 75.48 83.87 MSD 1 77.92 60.81 76.53 71.75 1-WT 2 79.72 61.12 79.42 73.42 2-ET 3 81.40 60.53 78.23 73.40 3-TC 4 77.92 59.47 79.72 72.37 5 80.56 58.68 76.79 72.01 
+
+Table 11. Model Performance Across Datasets of Fig. 5. 
+
+Order KiTS ACDC MSD ISIC2017 ISIC2018 
+
+1 84.8 91.75 71.22 89.25 88.63 2 85.2 91.84 71.49 89.65 89.06 3 85.7 91.85 71.56 90.15 89.35 4 86.7 92.05 71.75 90.69 89.78 
+
+Table 12. Statistical Analysis for FuseUNet - Backbone                    
+
+> FuseUNet - Backbone Mean of Differ-ences Standard Devia-tion of Differences Standard Error of the Mean 95% Confi-dence Interval t-statistic Degrees of Freedom p-value
+> ACDC 0.03 3.39 0.14 (-0.24, 0.31) 0.25 603 0.80 KiTS 0.15 10.18 0.27 (-0.38, 0.67) 0.55 1470 0.58
+
+The data in Table 12 indicate that the performance of FuseUNet on the ACDC and KiTS datasets shows no statistically significant difference compared to nn-UNet. 15 FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks 
+
+# E. Additional Visualization Results GT nn-UNet Fuse-UNet 
+
+LV Myo RV 
+
+Figure 6. Visualization on the ACDC GT nn-UNet Fuse-UNet 
+
+Kidney Tumor Cyst 
+
+Figure 7. Visualization on the KiTS WT TC ET 
+
+> GT UNETR Fuse-UNet
+
+Figure 8. Visualization on the MSD 
+
+16 FuseUNet: A Multi-Scale Feature Fusion Method for U-like Networks IMG GT 
+
+> UltraLight
+> VM-UNet
+> Fuse-UNet
+
+(a) ISIC2017 IMG GT 
+
+> UltraLight
+> VM-UNet
+> Fuse-UNet
+
+(b) ISIC2018 
+
+Figure 9. Visualization on 2D tasks 
+
+17
