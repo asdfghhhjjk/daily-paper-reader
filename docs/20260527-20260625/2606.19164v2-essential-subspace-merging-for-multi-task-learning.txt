@@ -1,0 +1,2996 @@
+Title: Essential Subspace Merging for Multi-Task Learning
+
+URL Source: https://arxiv.org/pdf/2606.19164v2
+
+Published Time: Tue, 23 Jun 2026 01:41:03 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# Essential Subspace Merging for Multi-Task Learning 
+
+Longhua Li, Lei Qi, Xin Geng, Senior Member, IEEE , Qi Tian, Fellow, IEEE 
+
+Abstract —Model merging aims to enable multi-task learning by integrating the capabilities of multiple models fine-tuned from the same pre-trained checkpoint into a single model. Its core challenge is inter-task interference among task-specific parameter updates. In this paper, we analyze the output shifts induced by task updates and observe that their energy is concentrated in a small number of principal directions. We call the subspace spanned by these directions the essential subspace. In contrast, most remaining directions carry little task-relevant energy, but their accumulation across multiple task updates can cause severe interference during merging. Motivated by this observation, we propose Essential Subspace Decomposition (ESD), which decom-poses each task update according to the principal components of its activation shift. Based on ESD, we introduce Essential Subspace Merging (ESM), a training-free static merging method that orthogonalizes and fuses essential components into one compact multi-task model. We further extend ESM to ESM++, a training-free dynamic merging method that decomposes task-specific residuals into low-rank experts and selects the most relevant expert through prototype-based routing during forward inference. Extensive experiments across multiple task sets and model scales demonstrate that ESM and ESM++ effectively preserves task knowledge while reducing inter-task interference. Code is available at https://github.com/kiddo127/ESM. 
+
+Index Terms —Model merging, mixture of experts, essential subspace decomposition, multi-task learning. 
+
+I. I NTRODUCTION 
+
+# IN recent years, the pre-training–fine-tuning paradigm has produced large numbers of task-specialized models adapted from the same pre-trained checkpoint. Model merging [2]–[5] aims to integrate the capabilities of these fine-tuned models into a single model without additional training, thereby pro-viding a training-free route to multi-task learning. The central difficulty lies in composing multiple task-specific parameter updates without letting them interfere with one another. Inter-task interference arises because each fine-tuned model encodes its task knowledge as an update relative to the shared pre-trained model, and these updates may contain directions that are useful for one task but harmful or irrelevant for others. Simple averaging methods such as Model Soup [2] directly mix all update directions, so useful task knowledge 
+
+Longhua Li, Lei Qi and Xin Geng are with the School of Computer Science and Engineering, Southeast University, and Key Laboratory of New Generation Artificial Intelligence Technology and Its Interdisciplinary Appli-cations (Southeast University), Ministry of Education, China, 211189 (e-mail: lhli@seu.edu.cn; qilei@seu.edu.cn; xgeng@seu.edu.cn). Qi Tian is with Huawei Inc., Shenzhen 518129, China (e-mail: tian.qi1@huawei.com). Corresponding authors: Lei Qi and Xin Geng. This is an extended version of the paper presented at CVPR 2026 [1]. 80      
+
+> 85
+> 90
+> 95
+> 100
+> Energy Retention (%)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+
+Interference Energy Ratio (%) 
+
+> 20
+> 40
+> 60
+> 80
+> 100
+> Test Accuracy (%)  No Interference: 91.3%
+
+(b)           
+
+> Cars
+> Food101
+> SUN397
+> Flowers102
+> RESISC45
+> Avg. (20 Tasks)
+> 0.1% tail energy injected,
+> 19.2% accuracy drop!
+> 012345678910
+
+Retained Rank Ratio (%) 
+
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> Test Accuracy (%)  Expert: 91.3%
+
+(a) 
+
+> Avg. Performance
+> Energy Retention
+
+Fig. 1. (a) Fine-tuned task updates are highly low-rank: retaining a small fraction of ranks preserves nearly all energy and approaches expert per-formance. The dual-axis plot uses red/left axis for task performance and blue/right axis for retained energy. (b) The x-axis denotes the energy fraction of low-energy tail components injected from the other 19 task updates into a target task, and the curves report the resulting change in target-task performance. Although each tail component carries little energy (e.g., only 
+
+0.1% ), these components are largely useless for their own tasks but can accumulate across multiple tasks and substantially degrade other tasks. 
+
+can be diluted by noisy or conflicting components. To mitigate this issue, subsequent studies analyze task vectors, defined as the parameter differences between fine-tuned and pre-trained models [3], [6]–[8]. More recent methods further apply Singular Value Decomposition (SVD) to task vectors to identify low-rank structures and remove redundant parameter-space components [9]–[12]. However, SVD orders update directions by parameter-space energy rather than by their functional effect on the data distribution. Although it truncates the smallest singular values, it may still discard directions that induce large output changes on frequently occurring inputs, leading to significant functional errors when input tokens align with truncated singular vectors, as quantified in Equation 4. This limitation suggests that model merging should decompose task updates according to their effect on output activations rather than parameter-space energy alone. Motivated by this perspective, we revisit the low-rank phenomenon through the output activation shifts caused by task updates. Given a task update matrix, we perform Principal Component Analysis (PCA) on its induced output shifts and observe that the energy is highly concentrated in only a few principal directions, as shown in Fig. 1(a). We refer to the subspace spanned by these dominant directions as the 
+
+essential subspace , since it captures the functional directions most responsible for the task behavior. Conversely, most remaining directions contain very little activation-shift energy and contribute little to the task itself. Nevertheless, these low-energy directions are not harmless in model merging: when 
+
+0000–0000/00$00.00 © 2021 IEEE  
+
+> arXiv:2606.19164v2 [cs.LG] 20 Jun 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2
+
+accumulated across many task updates, they can introduce substantial cross-task interference and degrade all tasks simul-taneously, as illustrated in Fig. 1(b). In this paper, we build on our preliminary work, Essential Subspace Merging (ESM) [1], which explored activation shift-aware model merging for ViT architectures. ESM introduces a static training-free merging paradigm based on the principle that effective merging should separate the essential directions carrying task knowledge from the non-essential directions that mainly accumulate interference, and should compose task updates primarily through the former without retraining or learning additional parameters. To this end, ESM uses Essential Subspace Decomposition (ESD). ESD performs PCA on the output activation shifts induced by a task update and uses the principal directions as an essential basis. Each task matrix is then projected into this basis, and only the dominant components are retained. Because ESD directly ranks direc-tions by functional activation-shift energy, its truncation error depends only on the discarded eigenvalues, making it better aligned with preserving task behavior under a rank budget. By discarding the low-energy non-essential directions, ESD prevents weak residual components from accumulating across tasks and becoming a major source of interference. We further extend ESM to ESM++, a dynamic training-free merging framework that goes beyond static ViT model fusion. Starting from the statically merged ESM model, ESM++ constructs task-specific dynamic merging parameters for each task: it decomposes the residual difference between each fine-tuned expert and the ESM base model with ESD, stores the resulting low-rank components as task-specific experts, and dynamically selects the most relevant experts during forward inference through prototype-based routing. This extension preserves the compact shared representation learned by ESM while recovering task-specific specialization through adaptive composition. Moreover, we broaden the scope of essential subspace merging from ViT architectures to a wider range of settings, including vision models, discriminative language models, and generative language models. Our main contributions are summarized as follows:  
+
+> •
+
+We reveal that task-update-induced output shifts con-centrate in a few essential directions, while low-energy residual directions accumulate and cause inter-task in-terference. Based on this insight, we propose Essential Subspace Decomposition (ESD), an output shift-aware decomposition with optimal truncation error for preserv-ing functional behavior.  
+
+> •
+
+We propose ESM, a static training-free merging method that decomposes task updates with ESD, removes non-essential directions, and orthogonalizes the retained es-sential components into a compact multi-task model.  
+
+> •
+
+We extend ESM to ESM++, a dynamic training-free merging method that preserves task-specific residual knowledge as low-rank experts and composes them at inference time using prototype-based routing.  
+
+> •
+
+We conduct extensive experiments on vision models, discriminative and generative language models across multiple task sets and model scales, demonstrating state-of-the-art performance in multi-task model merging. II. R ELATED WORK 
+
+A. Model Merging 
+
+Model merging aims to combine multiple task-specific models into a unified multi-task model without retraining. Since models obtained from different training processes re-side in distinct loss basins, directly performing linear fusion leads to significant performance degradation. To alleviate this issue, some studies employ training-time alignment [13] and post-training alignment [14]–[16] methods. To ensure merging stability, recent studies typically merge models that are fine-tuned from the same pre-trained checkpoint. Model Soup [2] averages fine-tuned weights to improve generalization, while Task Arithmetic [3] introduces task vectors, defined as the parameter differences between fine-tuned and pre-trained models, to enable vector-based knowledge composition. However, direct averaging of task vectors often causes severe task interference due to conflicting updates. To address this, TIES-Merging [6] trims redundant parameters before averaging salient ones, AdaMerging [17] learns adaptive task-wise coefficients, and DARE [18] resets redundant updates while rescaling the rest. Information-weighted methods such as Fisher Merging [7] and RegMean [8] use Fisher information or input similarity for weighted averaging. Other works refine merging through parameter- or layer-wise strategies [19]–[21], or leverage implicit or modular representations to enhance flexibility [22]–[24]. To further preserve and leverage the task-specific knowledge of each fine-tuned model, several studies [24]–[26] upscale these models into a MoE model. Recent advances move beyond raw parameter space to the spectral domain. TSV-M [10] perform Singular Value Decomposition (SVD) on task matrices and merge along the top singular directions that capture dominant functional subspaces. Iso-CTS [11] constructs an isotropic common sub-space through singular value normalization followed by task-specific refinements, achieving state-of-the-art performance. However, singular values reflect only the parameter energy rather than their functional impact. To overcome this limi-tation, we propose Essential Subspace Decomposition (ESD), which decomposes each task matrix within a subspace derived from its effect on output activations. We prove that ESD achieves lower truncation error than SVD and better preserves task-specific features during merging. Under this common decomposition, we develop two complementary composition paradigms: ESM for static merging and ESM++ for dynamic routing with per-layer expert selection. 
+
+B. Model Weight Low-Rank Decomposition 
+
+Decomposing model weights has been extensively studied in various areas [27]–[29]. One of the most popular approaches is based on the low-rank assumption of weight matrices. The LoRA family of methods [30]–[32] assumes that fine-tuning updates are inherently low-rank and learns compact matrices to parameterize these updates. Other methods use SVD-based decompositions for parameter-efficient fine-tuning [33], [34] or model compression [27], [35]–[37]. More recently, low-rank decompositions have been applied to model merging [9]–[11], JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3
+
+combining task updates in reduced subspaces to mitigate inter-task interference. In contrast, our proposed Essential Subspace Decomposition (ESD) constructs the decomposition space not from the weight updates themselves but from the activation shifts induced by these updates. By capturing task-specific principal directions in the activation space, ESD produces sparse yet expressive task representations, reducing cross-task interference while preserving high task fidelity. III. M ETHODOLOGY 
+
+A. Preliminaries on Model Merging 
+
+Model merging aims to integrate a collection of task-specific models, each fine-tuned from a common pre-trained check-point, into a single unified model without additional retraining. Formally, let W0 denote the weight matrix of the pre-trained model, and Wt be the weight matrix of the expert model fine-tuned on task t, where t = 1 , . . . , T . The fundamental object of interest in model merging is the task update, which captures how fine-tuning shifts the model away from the pre-trained weights. Following Task Arithmetic [3], the task vector for task t is defined as: 
+
+τt = Flatten( Wt − W0). (1) Given the structured nature of models, it is preferable to retain the matrix form of the update rather than flattening it into a vector. The task matrix of layer ℓ is defined as: 
+
+∆W (ℓ) 
+
+> t
+
+= W (ℓ) 
+
+> t
+
+− W (ℓ)0 . (2) Each ∆W (ℓ) 
+
+> t
+
+represents the task-specific parameter update at layer ℓ, preserving the row–column structure essential for spectral analysis and subspace alignment. The goal of model merging is to construct merged weights Wmerge that support all tasks, typically in the form: 
+
+Wmerge = W0 + f (∆ W1, · · · , ∆WT ) , (3) where f (·) is a merging function, which is the main focus of current model merging research [3], [9]–[11]. 
+
+B. Essential Subspace Decomposition 
+
+The motivation of ESM is that task knowledge is typi-cally concentrated in a few functional directions, whereas the numerous remaining weak directions can accumulate across tasks and become a major source of interference. Therefore, before composing task updates, we first decompose each task matrix, retain only the directions that are essential to its functional behavior, and later orthogonalize or route the retained components across tasks. Unlike previous methods [10], [11] that merge models in the truncated singular vector subspace obtained via SVD, we propose to decompose and merge task matrices within a more essential subspace that is aligned with the task’s output feature space. For simplicity, unless otherwise specified, we omit the layer index ℓ and task identifier t in the task matrix and denote it simply as ∆W .
+
+1) Limitations of Direct Task Matrix Decomposition :
+
+Recent model merging methods often directly decompose the task matrix ∆W ∈ Rdout ×din with SVD, keeping only the top-r singular components to retain dominant parameter-space directions and reduce task interference, yielding the truncated approximation d∆W . This strategy is reasonable because it removes many small components that are unlikely to help the current task but may still interfere with other tasks after aggregation. However, the criterion used by SVD is parameter-centric: it minimizes the Frobenius norm reconstruction error of ∆W without considering the input feature distribution. Thus, a direction with small singular value is not guaranteed to be functionally unimportant. For an input x ∼ D, the expected output error after discarding the smallest s − r
+
+singular components is: 
+
+Ex∼D 
+
+h
+
+∥∆W x − d∆W x ∥22
+
+i
+
+=
+
+> s
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+· Ex∼D 
+
+(v⊤ 
+
+> i
+
+x)2 ,
+
+(4) where s denotes the number of non-zero singular values and 
+
+{ui}, {vi} are the left and right singular vectors. The proof of this SVD truncation loss is provided in Appendix A-A. As shown, the error depends not only on the discarded singular values σi, but also on the alignment between the input distribution and the right singular vectors vi. A direction with small σi may be functionally critical if inputs project strongly onto vi. Conversely, retaining parameter-dominant directions that have little activation effect may introduce unnecessary cross-task overlap. By ignoring the input distribution, SVD may both discard functionally essential information and retain directions that mainly contribute to interference. 
+
+2) Output Shift-Aware Decomposition : To address this limitation, we introduce Essential Subspace Decomposition (ESD), which constructs a basis from the principal directions of output shifts induced by the task update matrix ∆W .Instead of asking which parameter directions reconstruct ∆W
+
+most accurately, ESD asks which output directions explain the functional change caused by ∆W on representative inputs. This directly connects decomposition to task behavior. For each task t, we sample a lightweight unlabeled proxy dataset. By performing a forward pass through the task-specific fine-tuned model and recording the layer-wise input features, we obtain the input matrix for each layer. Specifically, given 
+
+n input tokens of dimension din , forming Xproxy ∈ Rn×din , the shift is computed as: 
+
+∆O = Xproxy ∆W ⊤ ∈ Rn×dout , (5) which captures the functional footprint of ∆W on a represen-tative set of inputs. By performing PCA on ∆O, we obtain eigenvectors ei and corresponding eigenvalues λi, sorted by explained variance. These eigenvectors form an orthonormal basis E = [ e1, e2, . . . , edout ] ∈ Rdout ×dout for the output space. The original task matrix ∆W is projected onto E, yielding the coordinate matrix C = E⊤∆W ∈ Rdout ×din , and can be factorized as: 
+
+∆W = EC = E(E⊤∆W ). (6) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4Essential Subspace Decomposition (ESD) 
+
+(ii) PCA on Proxy Output Shift 
+
+Principal directions of output shift 
+
+spans the Essential Subspace 𝑬 "𝒕 
+
+> ℓ
+
+Eigenvalues Eigenvectors 
+
+𝜆 ! ≥ 𝜆 " ≥ ⋯
+
+(i) Proxy Output Shift Induced by Δ𝑊 !
+
+> ℓ
+
+Expert 
+
+𝑡 up to 
+
+Layer 
+
+ℓ − 1
+
+Δ𝑊 !
+
+> ℓ
+
+Output 
+
+Shift 
+
+Δ𝑂 !
+
+> (ℓ)
+
+(iii) Essential Subspace Decomposition 
+
+𝐸 "! 
+
+> ℓ
+
+∈ ℝ%!"# ×', 𝐶 $! 
+
+> ℓ
+
+∈ ℝ'×%$% , 𝑟 = %&'( 
+
+> (
+
+Coordinate Matrix : 𝐶 # 
+
+> ℓ
+
+= 𝐸 &# 
+
+> ℓ$
+
+×Δ𝑊 #
+
+> ℓ
+
+Δ𝑊 # 
+
+> ℓ
+
+𝐶 *#
+
+> ℓ
+
+Merged Weight Matrix Decomposition & Truncation 
+
+Δ𝑊 )
+
+> ℓ
+
+Δ𝑊 *
+
+> ℓ
+
+Δ𝑊 (
+
+> ℓ
+> Essential  Subspace
+> Decomposition (ESD)
+
+Concatenation & Orthogonalization 
+
+𝑬 𝐨𝐫𝐭𝐡𝐨 
+
+> ℓ
+
+𝐸 /01 
+
+> ℓ
+
+𝑪 𝐨𝐫𝐭𝐡𝐨 
+
+> ℓ
+
+𝐶 /01 
+
+> ℓ
+
+𝑾 𝐄𝐒𝐌 
+
+> ℓ
+
+𝑑 #$ 
+
+𝑑 %&' 
+
+𝐸 %&'(%  
+
+> ℓ
+
+: 𝑑 %)' ×𝑑 %)' 
+
+𝐶 %&'(%  
+
+> ℓ
+
+: 𝑑 %)' ×𝑑 *+ 
+
+Orthogonalization 
+
+(Input) 𝑋 → 𝑈 Σ𝑉 ( → 𝑈 𝑉 ( (Output) 
+
+Δ𝑊 234  
+
+> ℓ
+
+= 𝐸 56175  
+
+> ℓ
+
+×𝐶 56175 
+
+> ℓ
+
+𝑊 234  
+
+> ℓ
+
+= 𝑊 8 
+
+> ℓ
+
++ 𝛼 Δ𝑊 234 
+
+> ℓ
+
+𝐸 &#
+
+> ℓ
+
+𝐸 &#
+
+> ℓ
+
+• 𝑊 ! 
+
+> ℓ
+
+: pretrained model 
+
+• 𝛼 : global scaling coefficient 
+
+> Fig. 2. Overview of ESM, the proposed static training-free model merging method. For each task update, Essential Subspace Decomposition (ESD) first extracts output shift-aware basis and coordinates, then truncates them to the task’s essential components. The retained components from all tasks are concatenated and orthogonalized to reduce cross-task interference, producing a single merged weight matrix added to the pre-trained weight with a global scaling coefficient.
+
+We truncate to the top-r principal components to form the essential basis ˆE = [ e1, . . . , e r ] ∈ Rdout ×r . The corresponding coordinate matrix is ˆC = ˆE⊤∆W ∈ Rr×din , leading to the low-rank approximation: 
+
+d∆W = ˆE ˆC = ˆE( ˆE⊤∆W ). (7) Under this decomposition, the expected output truncation error is: 
+
+Ex∼D 
+
+h
+
+∥∆W x − d∆W x ∥22
+
+i
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+λi. (8) The proof is provided in Appendix A-B. 
+
+Comparison. Unlike directly applying SVD to the param-eter update matrix (Equation 4), the ESD truncation error (Equation 8) depends only on the sum of discarded eigen-values. The eigenvalues λi directly measure the variance of activation shifts along each principal direction ei. Removing directions with the smallest eigenvalues therefore discards the least functionally relevant components, regardless of how inputs align with parameter-space singular vectors. This makes ESD truly “essential”: for any given rank budget r, it provides the optimal low-rank approximation in terms of expected func-tional output preservation. Experiments in Section IV confirm that ESD yields substantially higher energy concentration and feature retention than SVD (Fig. 4). 
+
+C. ESM: Static Essential Subspace Merging 
+
+Building upon ESD, ESM composes task matrices into a single merged model by retaining and aligning functionally important components, as illustrated in Fig. 2. This static essential merging process is training-free and follows the principle described above: remove non-essential directions before they accumulate into interference, preserve the principal directions that carry task knowledge, and orthogonalize the retained components to reduce conflict among tasks. The process follows three steps: 1) Decomposition and Truncation. For each task t ∈{1, . . . , T }, we factorize the task matrix ∆Wt into its essential basis Et and coordinate matrix Ct, such that 
+
+∆Wt = EtCt, where Et ∈ Rdout ×dout and Ct ∈ Rdout ×din .Given T tasks, we allocate a rank budget r = ⌊dout /T ⌋
+
+to each one. We then truncate the task-specific factors to their top-r components, resulting in the sparse factors 
+
+ˆEt ∈ Rdout ×r and ˆCt ∈ Rr×din .2) Concatenation. Next, we form the merged basis and coordinate matrices by horizontally and vertically con-catenating the truncated factors across all tasks, respec-tively: 
+
+Ecat = [ ˆE1| ˆE2| . . . | ˆET ] ∈ Rdout ×(r·T ), (9) 
+
+Ccat =
+
+
+
+ˆC1
+
+ˆC2
+
+...
+
+ˆCT
+
+ ∈ R(r·T )×din . (10) 3) Orthogonalization. The concatenated factors Ecat and 
+
+Ccat consist of components from different task sub-spaces, which may not be mutually orthogonal, leading JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5(a) Low -Rank Experts (d) Inference Process              
+
+> 𝛿 𝑊 !
+> ℓ
+> 𝛿 𝑊 #
+> ℓ
+> 𝛿 𝑊 $
+> ℓ
+> Essential  Subspace
+> Decomposition (ESD)
+> 𝐴 $#
+> ℓ𝐵 &#
+> ℓ
+> 𝐴 $$
+> ℓ𝐵 &$
+> ℓ
+> 𝐴 $!
+> ℓ𝐵 &!
+> ℓ
+> Prototype 𝐄 !
+> (:ℓ)Expert Model 𝑡 up to Layer ℓ−1Low -Rank Experts 𝐴 $%
+> ℓ𝐵 &%
+> ℓProxy Data 𝛿 𝑊 !
+> ℓ𝑊 #$%
+> ℓ
+> 𝑊 !
+> ℓ
+
+Compute cosine similarity scores 
+
+with prototypes as rou3ng scores .
+
+> ⭐𝑝 &
+> ℓ
+> 𝑝 '
+> ℓ
+> 𝑝 (
+> ℓ
+> Mean  Pooling
+> Input Hidden
+
+Forward with shared merged model 
+
+and task -specific expert. 
+
+> Selected
+> Low -Rank
+> Expert
+> 𝑊 &'(
+> ℓ
+> 𝐴 &!
+> ℓ
+> Router
+> Input
+> Hidden
+> Output
+> Hidden
+> 𝐵 (!
+> ℓ
+
+(c) Prototype -based Router 
+
+⨀
+
+(b) Prototypes        
+
+> 𝑝 &
+> ℓ∈ℝ)!"
+> 𝑝 '
+> ℓ∈ℝ)!"
+> 𝑝 (
+> ℓ∈ℝ)!"
+> 𝐄 )
+> (:ℓ)
+> 𝐄 )
+> (:ℓ)
+> 𝐄 *
+> (:ℓ)
+> Mean  Pooling
+> Fig. 3. Overview of ESM++, the proposed dynamic training-free model merging method. ESM++ decomposes task-specific residuals into low-rank experts, collects per-task prototypes from proxy activations, and uses prototype-based routing to select the most relevant expert for each layer at inference time. The selected low-rank expert is composed with the shared ESM merged weight, preserving task-specific specialization while retaining shared knowledge.
+
+to interference. To reconstruct the merged matrix with minimized correlation, we orthogonalize these factors. Following TSV-M [10], we compute the SVDs for each concatenated matrix: 
+
+Ecat = UE ΣE V ⊤ 
+
+> E
+
+,Ccat = UC ΣC V ⊤ 
+
+> C
+
+. (11) To ensure that more important parameter directions are preferentially preserved, we apply eigenvalue-based weighting to both the directional vectors of Ecat and the coordinate vectors of Ccat prior to performing SVD. We then retain only the orthogonal components via po-lar normalization (equivalently, solving the Orthogonal Procrustes problem, as shown in Appendix A-C): 
+
+Eortho = UE V ⊤ 
+
+> E
+
+,Cortho = UC V ⊤ 
+
+> C
+
+. (12) The final merged task matrix is constructed as: 
+
+∆WESM = Eortho Cortho . (13) The parameter matrix for the ℓ-th layer of the final merged multi-task model is: 
+
+W (ℓ) 
+
+> ESM
+
+= W (ℓ)0 + α · ∆W (ℓ)
+
+> ESM
+
+, (14) where α is a global scaling coefficient selected on a held-out validation set as in previous model merging works. 
+
+D. ESM++: Dynamic Essential Subspace Merging 
+
+ESM produces a single merged model that captures shared knowledge across tasks. However, the static composition pro-cess inevitably dilutes task-specific expertise: knowledge that is unique to a particular task may be suppressed during orthogonalization and inter-task competition. To address this, we introduce ESM++, which preserves the low-rank essential components of each task as separate experts and composes them dynamically at inference time, as shown in Fig. 3. Crucially, ESM++ remains training-free: it does not learn an additional router, but instead relies on proxy prototypes collected offline. ESM++ is not an orthogonal routing method bolted onto ESM, but rather a complementary composition paradigm within the same essential subspace framework: both paradigms share the identical ESD decomposition princi-ple and differ only in how the decomposed knowledge is composed—statically into one model, or dynamically through per-input expert selection. 
+
+1) Expert Extraction : ESM++ begins with the merged model WESM obtained from ESM, which serves as a shared knowledge foundation. For each task t and each weight matrix at layer ℓ, we compute the residual task matrix, denoted by 
+
+δW t, as the difference between the expert parameter Wt and the ESM merged parameter WESM :
+
+δW t = Wt − WESM . (15) Unlike the original task matrices used in ESM, these residuals isolate the task-specific knowledge that the static merging process failed to retain. We then decompose each residual δW t
+
+using ESD (Section III-B), yielding the essential basis and coordinate matrix, denoted by ˆBt ∈ Rdout ×r and ˆAt ∈ Rr×din ,truncated to a rank budget r. Since residuals are sparser than the original task matrices, r can typically be set much smaller than the rank used in ESM. Each task retains its low-rank expert parameters {( ˆBt, ˆAt)}
+
+across all target layers. At inference time, the ESM++ weight matrix for layer ℓ under expert t is reconstructed as: 
+
+WESM++ ,t = WESM + ˆBt ˆAt, (16) where WESM is the merged weight from ESM. 
+
+2) Prototype Collection : To determine which expert to activate for a given input, we require a lightweight routing mechanism. We collect a prototype vector for each task at each target layer, which characterizes the typical input distribution that the task’s expert expects. Specifically, for each task t, we run a forward pass using its fine-tuned model on the proxy dataset. We register forward hooks at each target layer to capture the input features X ∈JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6
+
+TABLE I AVERAGE ABSOLUTE ACCURACY ON MODEL MERGING BENCHMARKS , WITH NORMALIZED AVERAGE ACCURACY SHOWN AS SUBSCRIPTS IN PARENTHESES . “ Pre-trained ” ( PRE -TRAINED MODEL ) AND “Fine-tuned ” ( FINE -TUNED MODELS ) RESULTS ARE PRESENTED AS THE LOWER AND UPPER BOUNDS , RESPECTIVELY .Method Venue ViT-B/32 ViT-B/16 ViT-L/14 8 tasks 14 tasks 20 tasks 8 tasks 14 tasks 20 tasks 8 tasks 14 tasks 20 tasks 
+
+Pre-trained – 48.3 57.2 56.1 55.3 61.3 59.7 64.7 68.2 65.2 
+
+Fine-tuned – 92.8 90.9 91.3 94.6 92.8 93.2 95.8 94.3 94.7 
+
+Static Merging 
+
+Model Soup [2] ICML 2022 66.3 (72 .1) 64.3 (71 .1) 61.0 (67 .5) 72.2 (76 .6) 69.5 (74 .8) 65.3 (70 .4) 79.6 (83 .2) 76.7 (81 .1) 71.6 (75 .6) 
+
+Task Arithmetic [3] ICLR 2023 70.8 (76 .5) 65.3 (72 .1) 60.5 (66 .8) 75.4 (79 .6) 70.5 (75 .9) 65.8 (70 .8) 84.9 (88 .7) 79.4 (84 .0) 74.0 (78 .1) 
+
+TIES-Merging [6] NeurIPS 2023 75.1 (81 .0) 68.0 (74 .8) 63.4 (69 .9) 79.7 (84 .3) 73.2 (78 .7) 68.2 (73 .3) 86.9 (90 .7) 79.5 (84 .1) 75.7 (79 .8) 
+
+Consensus TA [38] ICML 2024 75.0 (80 .8) 70.4 (77 .4) 65.4 (72 .0) 79.4 (83 .9) 74.4 (79 .9) 69.8 (74 .9) 86.3 (90 .1) 82.2 (86 .9) 79.0 (83 .2) 
+
+FR-Merging [24] ICCV 2025 78.6 (84 .6) 63.7 (69 .7) 50.9 (55 .1) 82.6 (87 .2) 72.0 (77 .2) 58.6 (62 .5) 89.0 (92 .8) 81.0 (85 .5) 71.6 (75 .3) 
+
+TSV-M [10] CVPR 2025 85.9 (92 .3) 80.1 (87 .9) 77.1 (84 .3) 89.0 (93 .9) 84.6 (91 .0) 80.6 (86 .5) 93.0 (97 .0) 89.2 (94 .4) 87.7 (92 .5) 
+
+Iso-C [11] ICML 2025 86.3 (92 .9) 80.3 (88 .1) 75.5 (82 .5) 90.6 (95 .6) 84.8 (91 .1) 79.6 (85 .4) 94.2 (98 .3) 89.3 (94 .5) 87.6 (92 .2) 
+
+Iso-CTS [11] ICML 2025 86.2 (92 .8) 81.7 (89 .7) 78.1 (85 .5) 91.1 (96 .1) 86.4 (92 .8) 82.4 (88 .4) 94.7 (98.8 ) 91.0 (96 .3) 90.1 (94 .9) 
+
+DC-Merge [12] CVPR 2026 87.1 (93 .6) 82.5 (90 .6) 80.6 (88 .2) 90.8 (95 .8) 87.1 (93 .7) 84.6 (90 .8) 94.3 (98 .4) 91.0 (96 .4) 90.5 (95 .4) 
+
+ESM Ours 88.6 (95.4 ) 83.9 (92.4 ) 82.3 (90.1 ) 91.6 (96.7 ) 87.6 (94.4 ) 85.3 (91.6 ) 94.7 (98.8 ) 91.3 (96.8 ) 90.7 (95.7 )
+
+Dynamic Merging 
+
+FREE-Merging [24] ICCV 2025 85.8 (92 .4) 81.7 (89 .7) 79.4 (86 .7) 88.0 (92 .9) 84.9 (91 .2) 82.1 (88 .0) 92.6 (96 .6) 89.7 (94 .9) 88.6 (93 .3) 
+
+E-WEMoE-90% [25] TPAMI 2026 91.7 (98 .8) 85.7 (94 .0) 85.7 (93 .7) 93.2 (98 .5) 88.5 (95 .3) 88.5 (94 .9) 94.8 (98 .9) 91.6 (97 .0) 92.4 (97 .5) 
+
+WEMoE [25] TPAMI 2026 91.9 (99.0 ) 85.3 (93 .4) 85.4 (93 .3) 93.3 (98.6 ) 87.9 (94 .7) 88.1 (94 .5) 94.8 (99 .0) 91.2 (96 .7) 92.0 (96 .9) 
+
+SMILE [26] TPAMI 2026 91.5 (98 .4) 86.5 (94 .6) 86.6 (94 .8) 93.2 (98 .5) 89.0 (95 .3) 89.1 (95 .6) 95.3 (99 .4) 91.3 (96 .2) 92.3 (97 .0) 
+
+ESM++ ( r = 8 ) Ours 91.3 (98 .4) 87.3 (96 .1) 86.4 (94 .5) 93.0 (98 .2) 89.9 (96 .9) 88.5 (95 .0) 95.4 (99 .6) 92.7 (98 .3) 92.6 (97 .6) 
+
+ESM++ ( r = 32 ) Ours 91.8 (99.0 ) 88.0 (96.8 ) 87.2 (95.5 ) 93.3 (98.6 ) 90.5 (97.5 ) 89.5 (96.0 ) 95.6 (99.8 ) 93.2 (98.8 ) 93.1 (98.2 )
+
+Rn×din . The prototype vector pt ∈ Rdin for task t at that layer is obtained by mean-pooling over all tokens and proxy samples: 
+
+pt = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+Xi. (17) This collection is performed once, offline, for all tasks and layers. The storage overhead is negligible: for each target layer, we store T vectors of dimension din .
+
+3) Per-Layer Routing at Inference : At inference time, routing is performed independently at each target layer. Given the input activations of a sample X ∈ Rn×din at layer ℓ, we first mean-pool the token sequence to obtain a global representation 
+
+¯x ∈ Rdin . The routing score for task t is the cosine similarity between ¯x and the prototype pt:
+
+st = ¯x⊤pt
+
+∥¯x∥2 · ∥ pt∥2
+
+. (18) We select the expert with the highest score, t∗ = arg max t st,reconstruct the ESM++ weight matrix as WESM++ = WESM +ˆBt∗ ˆAt∗ , and execute the layer forward pass. This procedure is repeated independently at each target layer, enabling fine-grained, layer-wise composition of task-specific knowledge. IV. E XPERIMENTS 
+
+A. Experimental Setup 
+
+Vision model merging. Following [38], we evaluate multi-task merging on benchmarks of 8, 14, and 20 vision tasks. The 8-task benchmark includes Cars [39], DTD [40], EuroSAT [41], GTSRB [42], MNIST [43], RESISC45 [44], SUN397 [45], and SVHN [46]. The 14-task benchmark further adds CIFAR100 [47], STL10 [48], Flowers102 [49], OxfordIIITPet [50], PCAM [51], and FER2013 [52]. The 20-task benchmark additionally includes EMNIST [53], CIFAR10 [47], Food101 [54], FashionMNIST [55], RenderedSST2 [56], and KMNIST [57]. We use CLIP [58] models with ViT-B/32, ViT-B/16, and ViT-L/14 visual encoders as pre-trained base models, and adopt the task-specific fine-tuned checkpoints provided by the TALL-masks [38]. We report both absolute and normalized accuracy following standard evaluation practices [38]. 
+
+Discriminative language model merging. For discrim-inative language tasks, we evaluate on the 8-task GLUE benchmark [59] using RoBERTa-Base [60] as the pre-trained base model. The benchmark covers diverse natural language understanding tasks, allowing us to assess whether the pro-posed merging strategy transfers beyond vision models. 
+
+Generative language model merging. For generative lan-guage tasks, we follow MergeBench [61] and evaluate on instruction-following, mathematics, multilingual understand-ing, coding, and safety tasks. We use Llama-3.2-3B [62] as the pre-trained base model. 
+
+B. Main Results 
+
+Vision model merging. As presented in Table I, we com-pare the proposed ESM framework against a comprehensive suite of static and routing-based model merging methods, with the pre-trained base model and the average single-task fine-tuned performance serving as lower and upper bounds, respectively. For static merging, ESM achieves the best or tied-best performance across all nine settings. For routing-based merging, ESM++ further improves the merged model by preserving task-specific residual expertise: ESM++ ( r = 32 )obtains the best results on seven out of nine settings. The advantage of ESM++ is especially clear as the number of tasks JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7
+
+TABLE II MULTI -TASK PERFORMANCE WHEN MERGING ROBERT A-B ASE MODELS ON 8-TASK GLUE BENCHMARK .Method CoLA SST-2 MRPC STS-B QQP MNLI QNLI RTE Avg. 
+
+Pre-trained 0.0 49.1 15.8 15.0 41.1 34.2 52.4 53.4 32.6 
+
+Fine-tuned 56.5 94.7 88.0 86.4 89.7 87.0 91.7 66.4 82.6 Model Soup [2] 0.0 (0 .0) 56.1 (59 .2) 75.5 (85 .8) 40.6 (47 .0) 40.7 (45 .4) 41.8 (48 .0) 58.6 (63 .9) 47.3 (71 .2) 45.1 (52 .6) 
+
+Task Arithmetic [3] 6.7 (11 .8) 83.9 (88 .6) 78.4 (89 .1) 27.9 (32 .3) 73.2 (81 .6) 65.8 (75 .7) 78.4 (85 .5) 53.4 (80 .4) 58.5 (68 .1) 
+
+TIES-Merging [6] 17.8 (31 .8) 84.2 (88 .9) 75.9 (86 .2) 9.4 (10 .9) 54.8 (61 .1) 72.2 (83 .0) 78.8 (85 .9) 46.2 (69 .6) 54.9 (64 .7) 
+
+DARE [18] (w/ Task Arithmetic) 0.0 (0 .0) 83.4 (88 .1) 76.2 (86 .6) 26.1 (30 .2) 75.6 (84 .3) 55.7 (64 .0) 72.5 (79 .1) 51.3 (77 .2) 55.1 (63 .7) 
+
+DARE [18] (w/ TIES-Merging) 6.7 (11 .8) 90.4 (95 .5) 75.5 (85 .8) 8.1 (9 .4) 77.9 (86 .8) 72.3 (83 .1) 81.3 (88 .7) 43.6 (65 .6) 57.0 (65 .6) 
+
+CAT-Merging [63] 33.2 (58 .8) 89.3 (94 .3) 68.2 (77 .5) 15.6 (18 .1) 76.1 (84 .8) 72.3 (83 .1) 82.9 (90 .4) 62.8 (94 .6) 62.6 (75 .2) 
+
+LOT-Merging [5] 17.1 (30 .3) 89.7 (94 .7) 78.3 (89 .0) 25.5 (29 .5) 78.8 (87 .8) 73.0 (83 .9) 77.2 (84 .2) 65.4 (98 .5) 63.1 (74 .7) 
+
+TSV-M [10] 25.4 (44 .8) 93.4 (98 .6) 80.4 (91 .4) 43.8 (50 .7) 83.1 (92 .7) 74.6 (85 .8) 84.6 (92 .3) 50.5 (76 .1) 67.0 (79 .0) 
+
+WUDI-Merging [22] 46.2 (81 .8) 93.1 (98 .3) 69.3 (78 .7) 52.3 (60 .5) 83.2 (92 .7) 81.2 (93.3 ) 83.0 (90 .5) 57.4 (86 .4) 70.7 (85 .3) 
+
+ESM (Ours) 42.2 (74 .7) 91.1 (96 .2) 83.9 (95 .3) 74.0 (85 .6) 76.6 (85 .4) 73.3 (84 .3) 85.0 (92 .7) 68.2 (102.7 ) 74.3 (89 .6) 
+
+ESM++ ( r = 32 , Ours) 54.5 (96.4 ) 94.2 (99.4 ) 84.9 (96.4 ) 75.4 (87.3 ) 86.6 (96.5 ) 69.5 (79 .9) 88.0 (96.0 ) 56.7 (85 .3) 76.2 (92.2 )
+
+TABLE III PERFORMANCE COMPARISON ON MERGING FIVE LLAMA -3.2-3B EXPERT MODELS SPECIALIZED IN INSTRUCTION , M ATH , C ODING ,MULTILINGUAL , AND SAFETY .Method Instr. Math Coding Multiling. Safety Avg. 
+
+Pre-trained 10.45 30.25 27.17 40.73 19.87 25.69 
+
+Fine-tuned 53.52 60.27 44.62 41.64 42.23 48.46 Model Soup [2] 13.71 41.93 37.22 42.25 31.21 33.26 Task Arithmetic [3] 30.91 46.02 41.17 42.35 40.16 40.12 TIES-Merging [6] 20.66 48.07 39.05 42.34 33.73 36.77 Consensus TA [38] 33.12 48.07 42.05 42.39 36.87 40.50 L&S [64] 29.11 44.81 33.97 42.16 24.28 34.87 DARE [18] 35.30 50.80 40.62 42.22 40.16 41.82 TSV-M [10] 26.63 54.28 40.79 42.13 38.22 40.41 ESM (Ours) 42.45 52.08 39.35 41.03 45.53 44.09 ESM++ ( r = 64 , Ours) 53.06 58.23 41.07 41.79 42.90 47.41 
+
+grows, indicating its ability to mitigate inter-task interference in more challenging multi-task merging scenarios. 
+
+Discriminative language model merging. Table II reports results on the 8-task GLUE benchmark [59] with RoBERTa-Base [60]. ESM already surpasses prior static merging meth-ods in average performance, achieving 74 .3% absolute accu-racy. ESM++ further raises the average accuracy to 76 .2% ,obtaining the best performance on six out of eight datasets. These results suggest that essential subspace merging has broad effectiveness for discriminative language understanding tasks, while routing is particularly beneficial when different GLUE tasks require heterogeneous linguistic capabilities. 
+
+Generative large language model merging. Following the MergeBench setting [61], Table III evaluates merging five Llama-3.2-3B expert models specialized for instruction fol-lowing, mathematics, coding, multilingual understanding, and safety. Compared with conventional merging baselines, ESM achieves the highest average score among static methods. With dynamic routing, ESM++ further improves the average score to 47 .69% , approaching the fine-tuned expert upper bound of 
+
+48 .46% . The consistent gains across these diverse generative capabilities demonstrate that ESM can merge specialized LLM experts while preserving complementary task knowledge that is often diluted by a single global parameter average. 0 5 10 15 20      
+
+> Component Retention (%)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Energy Retention (%)
+> 8-task
+> 14-task
+> 20-task
+> (a)
+> SVD ESD (Ours)
+> Flowers102
+> RESISC45
+> STL10
+> RenderedSST2
+> KMNIST
+> 88
+> 91
+> 94
+> 97
+> 100
+> CKA Similarity (%)  4.5% 3.9% 3.8%
+> 4.4% 4.0%
+> (b)
+> SVD ESD (Ours)
+
+Fig. 4. Comparison of ESD and SVD on ViT-B/16. (a) Energy retention as a function of the fraction of retained principal components, where ESD retains more energy with fewer components. (b) CKA similarity between the low-rank decomposed model and the fine-tuned expert, showing that ESD better preserves task-specific features after decomposition. 
+
+C. Ablation and Analysis 1) Comparison of ESD and Parameter-Space SVD : Fig. 4 compares ESD with directly applying SVD to task matrices from two complementary perspectives on ViT-B/16. Fig. 4(a) shows the cumulative energy retained as different proportions of components are preserved, defined using squared singular values or eigenvalues, both of which represent the explained variance. Our proposed ESD exhibits a highly concentrated energy distribution, indicating its ability to preserve essential task-specific knowledge with fewer components. Fig. 4(b) further evaluates feature preservation after low-rank decompo-sition using Centered Kernel Alignment (CKA) similarity [65]. We measure the similarity between the low-rank decomposed model and the fine-tuned expert using the class token from the final layer, based on the feature difference relative to the zero-shot pre-trained model. ESD more effectively preserves task-specific features than parameter-space SVD, further con-firming its advantage in retaining critical knowledge. 
+
+2) Ablation of ESM Components : We conduct an ablation study of the three key components in ESM, including the decomposition method, truncation, and orthogonalization, as shown in Table IV. First, replacing direct SVD on parameter updates with the proposed output shift-aware ESD consistently improves performance. Under the same truncation and or-thogonalization setting, ESD outperforms SVD across various benchmarks, confirming that preserving functionally important directions is more effective than retaining parameter-space JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8
+
+TABLE IV ABLATION STUDY OF KEY COMPONENTS IN THE PROPOSED ESM MERGING METHOD .Decomposition Truncation Orthogonalization ViT-B/16 Llama-3.2-3B RoBERTa SVD ESD 8 tasks 14 tasks 20 tasks Instruction Math Coding Multilingual Safety Avg. 
+
+✗ ✓ ✗ ✗ 80.3 74.3 72.9 31.9 48.1 41.0 42.0 39.9 40.6 58.1 
+
+✗ ✓ ✓ ✗ 79.9 73.9 72.6 32.9 47.7 41.3 41.9 39.4 40.6 52.6 
+
+✗ ✓ ✗ ✓ 89.1 83.5 79.4 33.7 52.1 41.1 42.0 40.4 41.8 65.1 
+
+✓ ✗ ✓ ✓ 89.6 85.4 82.1 38.3 51.8 39.2 41.3 45.2 43.2 66.3 
+
+✗ ✓ ✓ ✓ 91.6 87.6 85.3 42.5 52.1 39.4 41.0 45.5 44.1 74.3 1 2 4 8 16 32 64 
+
+> Proxy Dataset Size
+> 88
+> 89
+> 90
+> 91
+> 92
+> 93
+> 94
+> Performance (%)
+> 91.1 ± 0.29
+> 91.6 ± 0.18
+> 91.7 ± 0.12
+> 91.7 ± 0.08
+> 91.7 ± 0.04
+> 91.8 ± 0.01
+> 91.8 ± 0.04
+> 92.5 ± 0.29
+> 92.8 ± 0.17
+> 92.9 ± 0.09
+> 93.1 ± 0.06
+> 93.2 ± 0.06
+> 93.3 ± 0.04
+> 93.3 ± 0.06
+> Data-free SVD weight merging: 89.6
+
+(a) ViT-B/16 (8-task)       
+
+> ESM
+> ESM++
+> 124816 32 64
+> Proxy Dataset Size
+> 62
+> 64
+> 66
+> 68
+> 70
+> 72
+> 74
+> 76
+> 78
+> Performance (%)
+> 69.8 ± 1.33
+> 71.1 ± 0.87
+> 72.6 ± 0.63
+> 73.6 ± 0.30
+> 73.8 ± 0.21
+> 74.3 ± 0.59
+> 73.6 ± 0.14
+> 71.3 ± 1.25
+> 73.8 ± 1.65
+> 75.7 ± 1.67
+> 74.6 ± 1.44
+> 75.8 ± 0.52
+> 76.2 ± 0.23
+> 76.1 ± 0.25
+> Data-free SVD weight merging: 66.3
+
+(b) RoBERTa (GLUE)      
+
+> ESM
+> ESM++
+> 124816 32 64
+> Proxy Dataset Size
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Projection Similarity
+
+(c) ViT-B/16 Subspace Agreement       
+
+> PS (equal)
+> PS (weighted)
+> max (deg)
+> 124816 32 64
+> Proxy Dataset Size
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Projection Similarity
+
+(d) RoBERTa Subspace Agreement  
+
+> PS (equal)
+> PS (weighted)
+> max (deg)
+> 30
+> 40
+> 50
+> 60
+> 70
+> Max. Principal Angle
+> 65
+> 70
+> 75
+> Max. Principal Angle
+
+Fig. 5. Impact of proxy dataset size on merging performance and subspace estimation. Panels (a,b) report average accuracy on ViT-B/16 and RoBERTa, while panels (c,d) compare proxy-estimated subspaces with full-test-set reference subspaces using projection similarity “PS” and maximum principal angle “θmax ”. Among them, the weighted projection similarity “PS (weighted)” is the most relevant indicator because it measures how much high-variance functional information is preserved. Detailed definitions of these subspace metrics are provided in Appendix C-D. 
+
+dominant directions. Second, orthogonalization substantially improves the merged model by reducing interference among task-specific components. Third, although truncation alone slightly decreases performance, it brings clear gains when combined with orthogonalization. This indicates that low-rank truncation is most beneficial as a preparation for orthogonal-ization: it filters out weak and interference-prone directions, allowing the orthogonalized factors to preserve the main task knowledge more effectively. 
+
+3) Impact of Proxy Dataset Size : We perform an ablation study on the size of the proxy dataset, as illustrated in Fig. 5. Panels (a) and (b) report ESM and ESM++ performance as the number of proxy samples varies. In both settings, even a single unlabeled proxy sample is sufficient to outperform the data-free baseline that directly applies SVD to the parameter update matrices, and only a small number of samples is needed for stable merging performance. Panels (c) and (d) further analyze the corresponding proxy-estimated subspaces by comparing them with reference subspaces estimated from the full test set. The eigenvalue-weighted projection similarity “PS (equal)” remains high even with limited proxy samples, suggesting that the dominant, high-variance directions are reliably recovered. In contrast, the maximum principal angle “ θmax ” is more sen-sitive because it reflects worst-case alignment of low-energy tail directions, which are harder to estimate but contribute less to the retained information. Detailed definitions of these subspace metrics are provided in Appendix C-D. 0            
+
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> Routing Accuracy (%)
+> 124816 32 64
+> Number of Proxy Samples
+> 92
+> 94
+> 96
+> 98
+> Normalized Performance (%)
+> 8-task (Performance)
+> 8-task (Route Acc.)
+> 14-task (Performance)
+> 14-task (Route Acc.)
+> 20-task (Performance)
+> 20-task (Route Acc.)
+
+Fig. 6. Effect of proxy set size on ESM++. We report the normalized accuracy and routing accuracy obtained when varying the number of proxy samples. 
+
+Fig. 6 studies the sensitivity of ESM++ to the number of proxy samples used for prototype and residual expert construc-tion. With only one unlabeled proxy sample, ESM++ already preserves more than 90% of the expert-model performance. With a small proxy set, both routing accuracy and performance become stable, suggesting that ESM++ does not require a large proxy dataset for effective routing and expert composition. 
+
+4) Impact of Proxy Dataset Composition : We analyze how the composition of the proxy dataset affects ESM. Table VI reports the average performance with a fixed proxy set size of 32 samples, where ViT models are evaluated on the 8-task benchmark and RoBERTa is evaluated on the GLUE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 90.0 0.2 0.4 0.6 0.8 1.0   
+
+> Singular Value ( √λ) Power
+> 70
+> 75
+> 80
+> 85
+> 90
+> Avg. Performance (%)
+
+(a) ViT-B/32 (8-task)        
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Singular Value ( √λ) Power
+> 75
+> 78
+> 80
+> 82
+> 85
+
+(b) ViT-B/32 (14-task)        
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Singular Value ( √λ) Power
+> 76
+> 78
+> 80
+> 82
+
+(c) ViT-B/32 (20-task)        
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Singular Value ( √λ) Power
+> 68
+> 70
+> 72
+> 74
+
+(d) RoBERTa (GLUE)   
+
+> 10 0
+> 10 1
+> 10 2
+> 10 3
+> 10 0
+> 10 1
+> 10 2
+> 10 0
+> 10 1
+> 10 2
+> 10 0
+> 10 1
+> 10 2
+> 10 3
+> Direction Scale Ratio
+> Average Performance wmax/min wmax/mean
+
+Fig. 7. Effect of the eigenvalue-based weighting power used before orthogonalization. We weight each direction by its singular value, i.e., the square root of the corresponding eigenvalue λ, raised to a power. Here, wmax /min denotes the ratio between the weighting coefficient of the largest direction and that of the smallest direction, while wmax /mean denotes the ratio between the weighting coefficient of the largest direction and the average weighting coefficient over all directions. The gold marker highlights the best setting, where a power of 0.3 achieves the strongest performance. TABLE V PROTOTYPE -BASED AND ORACLE ROUTING RESULTS FOR ESM++, REPORTING ROUTING ACCURACY AND AVERAGE ACCURACY TO SEPARATE ROUTING ERRORS FROM THE PERFORMANCE RETAINED BY THE PRINCIPAL COMPONENTS . N ORMALIZED ACCURACY IS SHOWN IN PARENTHESES .Method Routing Strategy Routing Accuracy ViT-B/32 ViT-B/16 ViT-L/14 8 tasks 14 tasks 20 tasks 8 tasks 14 tasks 20 tasks 8 tasks 14 tasks 20 tasks 
+
+Pre-trained – – 48.3 57.2 56.1 55.3 61.3 59.7 64.7 68.2 65.2 
+
+Fine-tuned – – 92.8 90.9 91.3 94.6 92.8 93.2 95.8 94.3 94.7 ESM – – 88.6 (95 .4) 83.9 (92 .4) 82.3 (90 .1) 91.6 (96 .7) 87.6 (94 .4) 85.3 (91 .6) 94.7 (98 .8) 91.3 (96 .8) 90.7 (95 .7) 
+
+ESM++ ( r = 8 ) Prototype 76.2% 91.3 (98 .4) 87.3 (96 .1) 86.4 (94 .5) 93.0 (98 .2) 89.9 (96 .9) 88.5 (95 .0) 95.4 (99 .6) 92.7 (98 .3) 92.6 (97 .6) 
+
+ESM++ ( r = 8 ) Oracle 100.0% 91.7 (98.8 ) 88.2 (97.0 ) 88.0 (96.2 ) 93.5 (98.7 ) 90.5 (97.4 ) 90.2 (96.8 ) 95.6 (99.7 ) 93.0 (98.5 ) 93.2 (98.3 )
+
+ESM++ ( r = 32 ) Prototype 76.5% 91.8 (99 .0) 88.0 (96 .8) 87.2 (95 .5) 93.3 (98 .6) 90.5 (97 .5) 89.5 (96 .0) 95.6 (99 .8) 93.2 (98 .8) 93.1 (98 .2) 
+
+ESM++ ( r = 32 ) Oracle 100.0% 92.4 (99.5 ) 89.2 (98.0 ) 89.2 (97.5 ) 94.0 (99.3 ) 91.3 (98.3 ) 91.3 (97.9 ) 95.9 (100.0 ) 93.5 (99.1 ) 93.8 (99.0 )
+
+TABLE VI IMPACT OF PROXY DATASET COMPOSITION ON MERGING PERFORMANCE .“Random (ID) ”: RANDOM SAMPLING FROM IN -DISTRIBUTION TASK DATA .“Class Imbalance ”: SAMPLING ONLY A SINGLE CLASS PER TASK . “ Random (OOD) ”: RANDOM SAMPLING FROM OUT -OF -DISTRIBUTION DATA .Decomp. Method Sampling Strategy ViT-B/32 ViT-B/16 ViT-L/14 RoBERTa SVD - 86.6 89.6 93.4 67.0 ESD Random (ID) 88.4 91.8 94.8 74.3 ESD Class Imbalance 88.4 91.8 94.8 72.9 ESD Random (OOD) 88.3 91.8 94.8 74.2 
+
+benchmark. Our default setup uses unlabeled samples ran-domly selected from the corresponding task dataset, denoted as “Random (ID) ”. We also consider two challenging scenarios: sampling only from a single class within each task dataset (“ Class Imbalance ”) and sampling from an out-of-distribution dataset (ImageNet-1k [66] for ViT and WikiText-2 [67] for RoBERTa), denoted as “ Random (OOD) ”. The results show that ESM is robust to proxy composition: ViT models remain stable under both class imbalance and OOD sampling, while RoBERTa shows only mild sensitivity to class imbalance. 
+
+5) Impact of Eigenvalue-Based Weighting Power : Fig. 7 further studies the weighting applied to ESD directions before orthogonalization. Since the singular value of each direction (equivalent to the square root of its corresponding eigenvalue) reflects the variance explained by that output direction, this weighting controls how strongly high-energy output-shift di-rections are emphasized during the subsequent orthogonal-ization step. When the power is too small, all directions are treated nearly uniformly, allowing low-energy directions to obscure the knowledge carried by high-energy directions. Conversely, an overly large power over-amplifies the dominant directions and can suppress complementary task-specific infor-mation. The best performance appears at a moderate power of 
+
+0.3, highlighted in gold , indicating that ESM benefits from softly emphasizing high-energy directions rather than applying either uniform weighting or overly aggressive reweighting. 
+
+6) Prototype-Based and Oracle Routing : We further com-pare two routing strategies for ESM++: prototype-based rout-ing, which selects experts according to their similarity to task prototypes, and oracle routing, which uses the ground-truth task identity. This evaluation isolates the effect of routing ac-curacy from the capacity of the retained principal components. As shown in Table V, even without training an additional router, the prototype-based router achieves an average routing accuracy of about 76% . Oracle routing provides an upper bound for ESM++ and measures how much task-specific performance can be preserved by the low-rank essential com-ponents when routing is perfect. Notably, because our low-rank decomposition is theoretically guaranteed to minimize the expected output truncation error, retaining only a very JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 
+
+TABLE VII EFFECT OF DIFFERENT BASE MODELS FOR ESM++ ON THE 8-TASK GLUE BENCHMARK WITH ROBERT A. W E COMPARE USING THE PRE -TRAINED MODEL AND THE ESM MERGED MODEL AS THE SHARED BASE FOR RESIDUAL EXPERT ROUTING AND COMPOSITION .Method Routing Strategy Base Model Routing Accuracy CoLA SST-2 MRPC STS-B QQP MNLI QNLI RTE Avg. 
+
+Pre-trained – – – 0.0 49.1 15.8 15.0 41.1 34.2 52.4 53.4 32.6 
+
+Fine-tuned – – – 56.5 94.7 88.0 86.4 89.7 87.0 91.7 66.4 82.6 ESM – – – 42.2 (74 .7) 91.1 (96 .2) 83.9 (95 .3) 74.0 (85 .6) 76.6 (85 .4) 73.3 (84 .3) 85.0 (92 .7) 68.2 (102 .7) 74.3 (89 .6) 
+
+ESM++ ( r = 8 )Prototype Pre-trained 71.2% 56.0 (99 .1) 89.3 (94 .3) 82.4 (93 .6) 71.1 (82 .3) 80.9 (90 .2) 47.4 (54 .5) 75.8 (82 .7) 57.0 (85 .8) 70.0 (84 .7) 
+
+ESM-merged 73.3% 57.5 (101.6 ) 93.5 (98.7 ) 85.6 (97.3 ) 74.3 (86.0 ) 87.9 (98.0 ) 61.1 (70.3 ) 85.7 (93.5 ) 59.6 (89.7 ) 75.6 (91.9 )
+
+Oracle Pre-trained 100% 56.0 (99 .1) 93.3 (98 .5) 86.7 (98 .5) 85.3 (98 .7) 82.3 (91 .8) 83.3 (95 .7) 89.2 (97 .3) 65.7 (98.9 ) 80.2 (97 .1) 
+
+ESM-merged 100% 56.2 (99.4 ) 94.5 (99.8 ) 87.9 (99.9 ) 86.3 (99.9 ) 87.5 (97.5 ) 86.8 (99.8 ) 90.5 (98 .7) 65.3 (98 .4) 81.9 (99.2 )
+
+ESM++ ( r = 32 )Prototype Pre-trained 71.1% 56.5 (100.0 ) 89.9 (94 .9) 82.3 (93 .5) 71.5 (82 .8) 84.7 (94 .4) 49.3 (56 .7) 77.2 (84 .2) 58.5 (88.1 ) 71.2 (86 .2) 
+
+ESM-merged 72.6% 54.5 (96 .4) 94.2 (99.4 ) 84.9 (96.4 ) 75.4 (87.3 ) 86.6 (96.5 ) 69.5 (79.9 ) 88.0 (96.0 ) 56.7 (85 .3) 76.2 (92.2 )
+
+Oracle Pre-trained 100% 56.3 (99 .6) 94.3 (99.6 ) 87.3 (99 .2) 86.1 (99 .7) 86.5 (96 .4) 85.8 (98 .6) 90.6 (98 .8) 66.8 (100 .6) 81.7 (98 .9) 
+
+ESM-merged 100% 58.0 (102.7 ) 94.3 (99 .5) 88.6 (100.7 ) 86.5 (100.1 ) 88.3 (98.4 ) 85.9 (98.7 ) 91.0 (99.2 ) 67.5 (101.6 ) 82.5 (100.1 )
+
+TABLE VIII COMPUTATIONAL OVERHEAD OF ROUTING -BASED MERGING METHODS ON THE 8-TASK BENCHMARK . TTA DENOTES TEST -TIME ADAPTATION .Method Training-Free Router w/o TTA Router Params Expert Params (per Task) ViT-B/32 ViT-B/16 ViT-L/14 ViT-B/32 ViT-B/16 ViT-L/14 FREE-Merging [24] ✗ ✓ 11,309,896 11,311,438 11,312,980 0.79M ( ∼0.9%) 0.79M ( ∼0.9%) 2.95M ( ∼0.9%) E-WEMoE-90% [25] ✗ ✗ 596,744 596,744 1,057,800 5.67M ( ∼6.6%) 5.67M ( ∼6.6%) 20.14M ( ∼6.6%) WEMoE [25] ✗ ✗ 7,160,928 7,160,928 25,387,200 56.67M ( ∼65.6%) 56.67M ( ∼65.6%) 201.45M ( ∼65.9%) SMILE [26] ✓ ✓ 10,616,832 10,616,832 28,311,552 21.3M ( ∼24.8%) 21.3M ( ∼24.8%) 56.8M ( ∼18.5%) ESM++ ( r = 8 , Ours) ✓ ✓ 147,456 147,456 393,216 0.66M ( ∼0.8%) 0.66M ( ∼0.8%) 1.67M ( ∼0.5%) 
+
+ESM++ ( r = 32 , Ours) ✓ ✓ 147,456 147,456 393,216 2.65M ( ∼3.1%) 2.65M ( ∼3.1%) 6.68M ( ∼2.2%) 
+
+small rank of r = 8 is already highly effective. This rank is tiny compared with the hidden dimensions of ViT-B ( 768 )and ViT-L/14 ( 1024 ), yet the oracle results show that the retained components preserve more than 98% of the expert-model performance across model scales. 
+
+7) Effect of Base Model for ESM++ : Table VII studies how the choice of base model affects ESM++ routing and com-position. Compared with using the pre-trained model as the shared base, using the ESM merged model consistently yields stronger performance for both prototype-based and oracle routing. These gains show that ESM provides a better shared representation for extracting and routing residual experts, while ESM++ further restores task-specific specialization on top of this merged model. 
+
+8) Computational Overhead : Table VIII compares the computational and parameter overhead of recent routing-based model merging methods on the 8-task benchmark. Unlike methods that require learning an additional router, ESM++ is training-free: it only performs a single forward pass over the proxy data to collect task prototypes, which are then directly used for cosine-similarity routing at inference time. ESM++ also does not rely on test-time adaptation (TTA), so the merged model can be applied to test samples without iterative updating or additional optimization. In terms of parameters, both the router and the residual experts are highly lightweight. The prototype router contains only 147K parameters for ViT-B models and 393K for ViT-L/14, while the r = 8 residual experts require less than 1% of the original model parameters per task. Despite this small overhead, ESM++ achieves state-of-the-art performance, showing that prototype-based routing can preserve task-specific expertise without introducing aheavy router or large expert modules. V. C ONCLUSION 
+
+In this paper, we studied model merging from the per-spective of output activation shifts induced by task-specific updates. We showed that these shifts concentrate in a few principal directions that better reflect functional changes than parameter-space decomposition, while accumulated low-energy directions can lead to merging interference. Motivated by this, we proposed Essential Subspace Decomposition (ESD) to preserve essential update components, and developed ESM for compact static fusion and ESM++ for dynamic low-rank residual routing. Extensive experiments on vision and language benchmarks demonstrate that our framework achieves strong performance and efficiency, providing a principled approach to structured and reliable model merging. 
+
+Limitations and Future Work. Despite its effectiveness, the current method is mainly designed for merging models that share the same architecture and originate from the same base model, where task updates can be directly compared and composed in a common parameter and activation space. Extending this framework to more general scenarios, such as merging models from different sources, training recipes, or architectures, remains an important direction for future work. We hope that the essential-subspace perspective can inspire more universal model fusion methods that operate beyond homogeneous model families. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11 
+
+REFERENCES [1] L. Li, L. Qi, Q. Tian, and X. Geng, “Model merging in the essential subspace,” in CVPR , 2026. [2] M. Wortsman, G. Ilharco, S. Y. Gadre, R. Roelofs, R. Gontijo-Lopes, A. S. Morcos, H. Namkoong, A. Farhadi, Y. Carmon, S. Kornblith 
+
+et al. , “Model soups: averaging weights of multiple fine-tuned models improves accuracy without increasing inference time,” in ICML , 2022. [3] G. Ilharco, M. T. Ribeiro, M. Wortsman, L. Schmidt, H. Hajishirzi, and A. Farhadi, “Editing models with task arithmetic,” in ICLR , 2023. [4] K. Yan, M. Zhang, S. Cui, Q. Zikun, B. Jiang, F. Liu, and C. Zhang, “Calm: Consensus-aware localized merging for multi-task learning,” in 
+
+ICML , 2025. [5] W. Sun, Q. Li, W. Wang, Y. Liu, Y. Geng, and B. Li, “Towards minimizing feature drift in model merging: Layer-wise task vector fusion for adaptive knowledge integration,” in NeurIPS , 2025. [6] P. Yadav, D. Tam, L. Choshen, C. A. Raffel, and M. Bansal, “Ties-merging: Resolving interference when merging models,” in NeurIPS ,2023. [7] M. S. Matena and C. A. Raffel, “Merging models with fisher-weighted averaging,” in NeurIPS , 2022. [8] X. Jin, X. Ren, D. Preotiuc-Pietro, and P. Cheng, “Dataless knowledge fusion by merging weights of language models,” in ICLR , 2023. [9] G. Stoica, P. Ramesh, B. Ecsedi, L. Choshen, and J. Hoffman, “Model merging with svd to tie the knots,” in ICLR , 2025. [10] A. A. Gargiulo, D. Crisostomi, M. S. Bucarelli, S. Scardapane, F. Sil-vestri, and E. Rodola, “Task singular vectors: Reducing task interference in model merging,” in CVPR , 2025. [11] D. Marczak, S. Magistri, S. Cygert, B. Twardowski, A. D. Bagdanov, and J. van de Weijer, “No task left behind: Isotropic model merging with common and task-specific subspaces,” in ICML , 2025. [12] H.-C. Zhang, Z.-H. Zhou, M.-L. Luo, S. Di, M.-L. Zhang, and T. Wei, “Dc-merge: Improving model merging with directional consistency,” in 
+
+CVPR , 2026. [13] Z. Li, Z. Li, J. Lin, T. Shen, J. Xiao, Y. Guo, T. Lin, and C. Wu, “Improving model fusion by training-time neuron alignment with fixed neuron anchors,” TPAMI , 2026. [14] S. P. Singh and M. Jaggi, “Model fusion via optimal transport,” NeurIPS ,vol. 33, pp. 22 045–22 055, 2020. [15] N. Tatro, P.-Y. Chen, P. Das, I. Melnyk, P. Sattigeri, and R. Lai, “Optimizing mode connectivity via neuron alignment,” NeurIPS , vol. 33, pp. 15 300–15 311, 2020. [16] F. A. G. Pe˜ na, H. R. Medeiros, T. Dubail, M. Aminbeidokhti, E. Granger, and M. Pedersoli, “Re-basin via implicit sinkhorn differentiation,” in 
+
+CVPR , 2023, pp. 20 237–20 246. [17] E. Yang, Z. Wang, L. Shen, S. Liu, G. Guo, X. Wang, and D. Tao, “Adamerging: Adaptive model merging for multi-task learning,” in 
+
+ICLR , 2024. [18] L. Yu, B. Yu, H. Yu, F. Huang, and Y. Li, “Language models are super mario: Absorbing abilities from homologous models as a free lunch,” in 
+
+ICML , 2024. [19] G. Du, J. Lee, J. Li, R. Jiang, Y. Guo, S. Yu, H. Liu, S. K. Goh, H.-K. Tang, D. He et al. , “Parameter competition balancing for model merging,” in NeurIPS , 2024. [20] F. Z. Zhang, P. Albert, C. Rodriguez-Opazo, A. van den Hengel, and E. Abbasnejad, “Knowledge composition using task vectors with learned anisotropic scaling,” in NeurIPS , 2024. [21] K. Wang, N. Dimitriadis, A. Favero, G. Ortiz-Jimenez, F. Fleuret, and P. Frossard, “Lines: Post-training layer scaling prevents forgetting and enhances model merging,” in ICLR , 2025. [22] R. Cheng, F. Xiong, Y. Wei, W. Zhu, and C. Yuan, “Whoever started the interference should end it: Guiding data-free model merging via task vectors,” in ICML , 2025. [23] C. Huang, P. Ye, T. Chen, T. He, X. Yue, and W. Ouyang, “Emr-merging: Tuning-free high-performance model merging,” in NeurIPS , 2024. [24] S. Zheng and H. Wang, “Free-merging: Fourier transform for efficient model merging,” in ICCV , 2025. [25] L. Shen, A. Tang, E. Yang, G. Guo, Y. Luo, L. Zhang, X. Cao, B. Du, and D. Tao, “Efficient and effective weight-ensembling mixture of experts for multi-task model merging,” TPAMI , 2026. [26] A. Tang, L. Shen, Y. Luo, S. Xie, H. Hu, L. Zhang, B. Du, and D. Tao, “Zero-shot sparse mixture of low-rank experts construction from pre-trained foundation models,” TPAMI , 2026. [27] X. Wang, Y. Zheng, Z. Wan, and M. Zhang, “Svd-llm: Truncation-aware singular value decomposition for large language model compression,” in 
+
+ICLR , 2025. [28] L. Li, L. Qi, and X. Geng, “Stratified knowledge-density super-network for scalable vision transformers,” in AAAI , vol. 40, no. 27, 2026, pp. 22 985–22 993. [29] L. Li, L. Qi, Q. Tian, and X. Geng, “Energy-structured low-rank adaptation for continual learning,” arXiv preprint arXiv:2605.27482 ,2026. [30] E. J. Hu, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, W. Chen 
+
+et al. , “Lora: Low-rank adaptation of large language models,” in ICLR ,2022. [31] T. Dettmers, A. Pagnoni, A. Holtzman, and L. Zettlemoyer, “Qlora: Efficient finetuning of quantized llms,” in NeurIPS , 2023. [32] N. Ding, Y. Qin, G. Yang, F. Wei, Z. Yang, Y. Su, S. Hu, Y. Chen, C.-M. Chan, W. Chen et al. , “Parameter-efficient fine-tuning of large-scale pre-trained language models,” NMI , 2023. [33] Y. Sun, Q. Chen, X. He, J. Wang, H. Feng, J. Han, E. Ding, J. Cheng, Z. Li, and J. Wang, “Singular value fine-tuning: Few-shot segmentation requires few-parameters fine-tuning,” in NeurIPS , 2022. [34] L. Han, Y. Li, H. Zhang, P. Milanfar, D. Metaxas, and F. Yang, “Svdiff: Compact parameter space for diffusion fine-tuning,” in ICCV , 2023. [35] Y. Li, Y. Yu, Q. Zhang, C. Liang, P. He, W. Chen, and T. Zhao, “Losparse: Structured compression of large language models based on low-rank and sparse approximation,” in ICML , 2023. [36] R. Saha, V. Srivastava, and M. Pilanci, “Matrix compression via ran-domized low rank and low precision factorization,” in NeurIPS , 2023. [37] X. Wang, S. Alam, Z. Wan, H. Shen, and M. Zhang, “Svd-llm v2: Opti-mizing singular value truncation for large language model compression,” in NAACL , 2025. [38] K. Wang, N. Dimitriadis, G. Ortiz-Jimenez, F. Fleuret, and P. Frossard, “Localizing task information for improved model merging and compres-sion,” in ICML , 2024. [39] J. Krause, M. Stark, J. Deng, and L. Fei-Fei, “3d object representations for fine-grained categorization,” in ICCV workshops , 2013. [40] M. Cimpoi, S. Maji, I. Kokkinos, S. Mohamed, and A. Vedaldi, “Describing textures in the wild,” in CVPR , 2014. [41] P. Helber, B. Bischke, A. Dengel, and D. Borth, “Eurosat: A novel dataset and deep learning benchmark for land use and land cover classification,” JSTARS , 2019. [42] J. Stallkamp, M. Schlipsing, J. Salmen, and C. Igel, “The german traffic sign recognition benchmark: a multi-class classification competition,” in 
+
+IJCNN , 2011. [43] Y. LeCun, L. Bottou, Y. Bengio, and P. Haffner, “Gradient-based learning applied to document recognition,” Proceedings of the IEEE , 2002. [44] G. Cheng, J. Han, and X. Lu, “Remote sensing image scene classifica-tion: Benchmark and state of the art,” Proceedings of the IEEE , 2017. [45] J. Xiao, K. A. Ehinger, J. Hays, A. Torralba, and A. Oliva, “Sun database: Exploring a large collection of scene categories,” IJCV , 2016. [46] Y. Netzer, T. Wang, A. Coates, A. Bissacco, B. Wu, A. Y. Ng et al. ,“Reading digits in natural images with unsupervised feature learning,” in NeurIPS workshops , 2011. [47] A. Krizhevsky, G. Hinton et al. , “Learning multiple layers of features from tiny images,” Toronto, ON, Canada, Tech. Rep., 2009. [48] A. Coates, A. Ng, and H. Lee, “An analysis of single-layer networks in unsupervised feature learning,” in AISTATS , 2011. [49] M.-E. Nilsback and A. Zisserman, “Automated flower classification over a large number of classes,” in ICVGIP , 2008. [50] O. M. Parkhi, A. Vedaldi, A. Zisserman, and C. Jawahar, “Cats and dogs,” in CVPR , 2012. [51] B. S. Veeling, J. Linmans, J. Winkens, T. Cohen, and M. Welling, “Rotation equivariant cnns for digital pathology,” in MICCAI , 2018. [52] I. J. Goodfellow, D. Erhan, P. L. Carrier, A. Courville, M. Mirza, B. Hamner, W. Cukierski, Y. Tang, D. Thaler, D.-H. Lee et al. , “Chal-lenges in representation learning: A report on three machine learning contests,” in ICONIP , 2013. [53] G. Cohen, S. Afshar, J. Tapson, and A. Van Schaik, “Emnist: Extending mnist to handwritten letters,” in IJCNN , 2017. [54] L. Bossard, M. Guillaumin, and L. Van Gool, “Food-101–mining dis-criminative components with random forests,” in ECCV , 2014. [55] H. Xiao, K. Rasul, and R. Vollgraf, “Fashion-mnist: a novel image dataset for benchmarking machine learning algorithms,” arXiv preprint arXiv:1708.07747 , 2017. [56] R. Socher, A. Perelygin, J. Wu, J. Chuang, C. D. Manning, A. Y. Ng, and C. Potts, “Recursive deep models for semantic compositionality over a sentiment treebank,” in EMNLP , 2013. [57] T. Clanuwat, M. Bober-Irizar, A. Kitamoto, A. Lamb, K. Yamamoto, and D. Ha, “Deep learning for classical japanese literature,” arXiv preprint arXiv:1812.01718 , 2018. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12 
+
+[58] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervision,” in ICML , 2021. [59] A. Wang, A. Singh, J. Michael, F. Hill, O. Levy, and S. Bowman, “Glue: A multi-task benchmark and analysis platform for natural language understanding,” in EMNLP workshop , 2018, pp. 353–355. [60] Y. Liu, M. Ott, N. Goyal, J. Du, M. Joshi, D. Chen, O. Levy, M. Lewis, L. Zettlemoyer, and V. Stoyanov, “Roberta: A robustly optimized bert pretraining approach,” arXiv preprint arXiv:1907.11692 , 2019. [61] Y. He, S. Zeng, Y. Hu, R. Yang, T. Zhang, and H. Zhao, “Mergebench: A benchmark for merging domain-specialized llms,” NeurIPS , vol. 38, 2026. [62] A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan et al. , “The llama 3 herd of models,” arXiv preprint arXiv:2407.21783 , 2024. [63] W. Sun, Q. Li, Y. Geng, and B. Li, “Cat merging: A training-free approach for resolving conflicts in model merging,” in ICML . PMLR, 2025, pp. 57 523–57 543. [64] Y. He, Y. Hu, Y. Lin, T. Zhang, and H. Zhao, “Localize-and-stitch: Efficient model merging via sparse task arithmetic,” TMLR , 2024. [65] S. Kornblith, M. Norouzi, H. Lee, and G. Hinton, “Similarity of neural network representations revisited,” in ICML , 2019. [66] O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh, S. Ma, Z. Huang, A. Karpathy, A. Khosla, M. Bernstein et al. , “Imagenet large scale visual recognition challenge,” IJCV , 2015. [67] S. Merity, C. Xiong, J. Bradbury, and R. Socher, “Pointer sentinel mixture models,” arXiv preprint arXiv:1609.07843 , 2016. [68] J. Zhou, T. Lu, S. Mishra, S. Brahma, S. Basu, Y. Luan, D. Zhou, and L. Hou, “Instruction-following evaluation for large language models,” 
+
+arXiv preprint arXiv:2311.07911 , 2023. [69] K. Cobbe, V. Kosaraju, M. Bavarian, M. Chen, H. Jun, L. Kaiser, M. Plappert, J. Tworek, J. Hilton, R. Nakano et al. , “Training verifiers to solve math word problems,” arXiv preprint arXiv:2110.14168 , 2021. [70] V. Lai, C. Nguyen, N. Ngo, T. Nguy˜ en, F. Dernoncourt, R. Rossi, and T. Nguyen, “Okapi: Instruction-tuned large language models in multiple languages with reinforcement learning from human feedback,” in EMNLP , 2023, pp. 318–327. [71] M. Chen, J. Tworek, H. Jun, Q. Yuan, H. P. D. O. Pinto, J. Kaplan, H. Edwards, Y. Burda, N. Joseph, G. Brockman et al. , “Evaluating large language models trained on code,” arXiv preprint arXiv:2107.03374 ,2021. [72] J. Austin, A. Odena, M. Nye, M. Bosma, H. Michalewski, D. Dohan, E. Jiang, C. Cai, M. Terry, Q. Le et al. , “Program synthesis with large language models,” arXiv preprint arXiv:2108.07732 , 2021. [73] S. Han, K. Rao, A. Ettinger, L. Jiang, B. Y. Lin, N. Lambert, Y. Choi, and N. Dziri, “Wildguard: Open one-stop moderation tools for safety risks, jailbreaks, and refusals of llms,” NeurIPS , vol. 37, pp. 8093–8131, 2024. [74] M. Mazeika, L. Phan, X. Yin, A. Zou, Z. Wang, N. Mu, E. Sakhaee, N. Li, S. Basart, B. Li et al. , “Harmbench: A standardized evaluation framework for automated red teaming and robust refusal,” arXiv preprint arXiv:2402.04249 , 2024. [75] X. Shen, Z. Chen, M. Backes, Y. Shen, and Y. Zhang, “” do anything now”: Characterizing and evaluating in-the-wild jailbreak prompts on large language models,” in ACM CCS , 2024, pp. 1671–1685. [76] P. R¨ ottger, H. Kirk, B. Vidgen, G. Attanasio, F. Bianchi, and D. Hovy, “Xstest: A test suite for identifying exaggerated safety behaviours in large language models,” in NAACL , 2024, pp. 5377–5400. 
+
+Longhua Li received the B.S. degree in Artificial Intelligence from Shandong University in 2023. He is currently pursuing a Ph.D. degree in Artificial Intelligence at Southeast University. His research interests include machine learning and computer vision. 
+
+Lei Qi received the Ph.D. degree from the De-partment of Computer Science and Technology of Nanjing University in 2020. He is currently an asso-ciate professor in the School of Computer Science and Engineering of Southeast University, China. His research interests include some ML methods, such as domain adaptation, semi-supervised learning, un-supervised learning and meta-learning. For applica-tions, he mainly focuses on person re-identification, semantic segmentation and object detection. 
+
+Xin Geng (Senior Member, IEEE) is currently a professor and the dean of School of Computer Science and Engineering at Southeast University, China. He received the B.Sc. (2001) and M.Sc. (2004) degrees in computer science from Nanjing University, China, and the Ph.D. (2008) degree in computer science from Deakin University, Australia. His research interests include machine learning, pattern recognition, and computer vision. He has published over 70 refereed papers in these areas, including those published in prestigious journals and top international conferences. He has been an Associate Editor of IEEE T-MM, FCS and MFC, a Steering Committee Member of PRICAI, a Program Committee Chair for conferences such as PRICAI’18, VALSE’13, etc., an Area Chair for conferences such as CVPR, ACMMM, PRCV, CCPR, and a Senior Program Committee Member for conferences such as IJCAI, AAAI, ECAI, etc. He is a Distinguished Fellow of IETI. 
+
+Qi Tian (Fellow, IEEE) received the PhD degree in ECE from the University of Illinois at Urbana Champaign (UIUC), in 2002. He is currently the chief scientist in Artificial Intelligence with Huawei Cloud & AI. He was the chief scientist in computer vision with Huawei Noah’s Ark Laboratory from 2018–2020. Before he joined Huawei, he was a full professor with the Department of Computer Science, The University of Texas at San Antonio (UTSA) (2002–2019). He was listed in the Top 10 of the 2016 Most Influential Scholars in Multimedia by Aminer.org. He is an Academician of International Eurasian Academy of Sci-ences (IEAS) Fellow, 2021. He received 2017 UTSA President Distinguished Award for Research Achievement, 2016 UTSA Innovation Award in the first category, 2014 Research Achievement Awards from College of Science, UTSA, and 2010 Google Faculty Research Award. He has served as founding member of ICMR, (2009–2014), ACM MM (2009–2012), and international steering committee member for ACM MIR (2006–2010), ACM ICIMCS 2013, ICME 2006 and 2009, PCM 2012, and IEEE International Symposium on Multimedia 2011, chair for ACM Multimedia 2015. He is the associate editor of IEEE Transactions on Multimedia, IEEE Transactions on Circuits and Systems for Video Technology, ACM Transactions on Multimedia Computing, Communications, and Applications, MMSJ, and Journal of Machine Vision and Applications. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+SUPPLEMENTARY MATERIAL 
+
+APPENDIX APROOFS 
+
+This section provides the derivations of the expected output error after truncation for both the standard SVD and the proposed Essential Subspace Decomposition (ESD), as well as the connection between polar normalization and the Orthogonal Procrustes solution. 
+
+A. Proof for SVD Truncation Error 
+
+Proposition 1. Given a task matrix ∆W ∈ Rdout ×din with singular value decomposition ∆W = U ΣV ⊤ = Psi=1 σiuiv⊤ 
+
+> i
+
+,where s = rank(∆ W ). Let d∆W = Pri=1 σiuiv⊤ 
+
+> i
+
+be its top-r truncated approximation. For an input x drawn from a distribution D, the expected squared L2 error on the output activation is 
+
+Ex∼D 
+
+h
+
+∥∆W x − d∆W x ∥22
+
+i
+
+=
+
+> s
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+· Ex∼D 
+
+(v⊤ 
+
+> i
+
+x)2 .
+
+Proof. The error matrix resulting from the truncation is the sum of the discarded components: 
+
+∆W − d∆W =
+
+> s
+
+X
+
+> i=r+1
+
+σiuiv⊤ 
+
+> i
+
+. (19) The error on the output activation for a given input x is: 
+
+(∆ W − d∆W )x =
+
+> s
+
+X
+
+> i=r+1
+
+σiuiv⊤
+
+> i
+
+!
+
+x =
+
+> s
+
+X
+
+> i=r+1
+
+σiui(v⊤ 
+
+> i
+
+x). (20) Since v⊤ 
+
+> i
+
+x is a scalar, we can rewrite this as a linear combination of the orthonormal vectors ui. The squared L2 norm of this error vector is: 
+
+∥(∆ W − d∆W )x∥22 =
+
+> s
+
+X
+
+> i=r+1
+
+(σiv⊤ 
+
+> i
+
+x)ui
+
+> 22
+
+. (21) Because the left singular vectors {ui} form an orthonormal set, the squared norm of their weighted sum is the sum of the squares of the weights: 
+
+∥(∆ W − d∆W )x∥22 =
+
+> s
+
+X
+
+> i=r+1
+
+(σiv⊤ 
+
+> i
+
+x)2 =
+
+> s
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+(v⊤ 
+
+> i
+
+x)2. (22) By taking the expectation over the input distribution D and applying the linearity of expectation, we arrive at the final expression: 
+
+Ex∼D 
+
+h
+
+∥∆W x − d∆W x ∥22
+
+i
+
+=
+
+> s
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+· Ex∼D 
+
+(v⊤ 
+
+> i
+
+x)2 . (23) This completes the proof. 
+
+B. Proof for ESD Truncation Error 
+
+Proposition 2. Given a task matrix ∆W ∈ Rdout ×din and the activation shift y = ∆ W x , let My = Ex∼D [yy ⊤] be the uncentered second-moment matrix of output shifts. Let {ei}dout  
+
+> i=1
+
+be the eigenvectors of My , with eigenvalues λ1 ≥ · · · ≥ 
+
+λdout ≥ 0. Let ˆE = [ e1, . . . , e r ] and d∆W = ˆE ˆC = ˆE( ˆE⊤∆W ) be the ESD reconstruction. Then 
+
+Ex∼D 
+
+h
+
+∥∆W x − d∆W x ∥22
+
+i
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+λi.
+
+For empirical ESD, the same identity holds with D replaced by the empirical proxy distribution; equivalently, {ei} are the right singular vectors of ∆O = Xproxy ∆W ⊤, and λi are the corresponding squared singular values up to the empirical normalization constant. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2
+
+Proof. The error on the output activation for an input x is: 
+
+∆W x − d∆W x = ∆ W x − ˆE ˆE⊤∆W x = ( I − ˆE ˆE⊤)∆ W x. (24) The matrix (I − ˆE ˆE⊤) is the projection matrix onto the subspace spanned by the discarded directions {er+1 , . . . , e dout }. Let 
+
+y = ∆ W x be the activation shift for input x. The error vector can be expressed as the projection of y onto this orthogonal subspace: 
+
+(I − ˆE ˆE⊤)y =
+
+> dout
+
+X
+
+> i=r+1
+
+(e⊤ 
+
+> i
+
+y)ei. (25) Since {ei} form an orthonormal basis, the squared L2 norm is the sum of the squares of the projection coefficients: 
+
+∥∆W x − d∆W x ∥22 =
+
+> dout
+
+X
+
+> i=r+1
+
+(e⊤ 
+
+> i
+
+y)ei
+
+> 22
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+(e⊤ 
+
+> i
+
+y)2.
+
+(26) Taking the expectation over D gives 
+
+Ex∼D 
+
+h
+
+∥∆W x − d∆W x ∥22
+
+i
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+Ex∼D 
+
+(e⊤ 
+
+> i
+
+y)2
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+e⊤ 
+
+> i
+
+Ex∼D [yy ⊤]ei.
+
+(27) By the definition of My , each retained or discarded direction satisfies 
+
+My ei = λiei, (28) and hence 
+
+e⊤ 
+
+> i
+
+My ei = λi. (29) Substituting this identity into the expected error yields 
+
+Ex∼D 
+
+h
+
+∥∆W x − d∆W x ∥22
+
+i
+
+=
+
+> dout
+
+X
+
+> i=r+1
+
+λi. (30) Empirically, if ∆O = U ΣV ⊤ is the SVD of the uncentered activation-shift matrix, then the columns of V are exactly the eigenvectors of ∆O⊤∆O, i.e., the uncentered second-moment directions of output shifts. This completes the proof. 
+
+C. Equivalence of Polar Normalization and Orthogonal Procrustes 
+
+Proposition 3. Let X = U ΣV ⊤ be the compact SVD of a matrix X. The polar factor U V ⊤ can be obtained from the column Gram matrix as X(( X⊤X)†)1/2, where † denotes the Moore–Penrose inverse. When X has full column rank, this reduces to X(X⊤X)−1/2 = U V ⊤. This polar factor is the Orthogonal Procrustes projection of X; in the full-rank rectangular case, it is the closest matrix with the corresponding orthonormal-column or orthonormal-row constraint. Proof. Let X = U ΣV ⊤ be the compact SVD, where the diagonal entries of Σ are positive. Then 
+
+X⊤X = V Σ2V ⊤. (31) Using the Moore–Penrose inverse square root gives 
+
+(( X⊤X)†)1/2 = V Σ−1V ⊤. (32) Substituting this into the whitening transformation yields 
+
+X(( X⊤X)†)1/2 = ( U ΣV ⊤)( V Σ−1V ⊤)= U V ⊤. (33) The matrix U V ⊤ is the polar factor of X and gives the Frobenius-norm Orthogonal Procrustes projection, with the usual non-uniqueness only in rank-deficient null-space directions. This completes the proof. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3
+
+Algorithm 1 ESM 
+
+Require: Task matrices {∆W (ℓ) 
+
+> t
+
+}Tt=1 for all layers ℓ ∈ L , pre-trained weights {W (ℓ)0 }ℓ∈L , validation set Dval 
+
+Ensure: ESM merged model parameters {W (ℓ)
+
+> ESM
+
+}ℓ∈L  
+
+> 1:
+
+for each task t = 1 to T and each layer ℓ ∈ L do  
+
+> 2:
+
+Essential Subspace Decomposition  
+
+> 3:
+
+Obtain the essential basis E(ℓ) 
+
+> t
+
+following ESD in Section III-B (Eq. 5)  
+
+> 4:
+
+Project the task matrix onto this basis: C(ℓ) 
+
+> t
+
+← (E(ℓ) 
+
+> t
+
+)⊤∆W (ℓ) 
+
+> t
+
+(Eq. 6)  
+
+> 5:
+
+Set r ← ⌊ dout /T ⌋ and retain ˆE(ℓ) 
+
+> t
+
+← E(ℓ) 
+
+> t
+
+[: , 1 : r], ˆC(ℓ) 
+
+> t
+
+← C(ℓ) 
+
+> t
+
+[1 : r, :] (Eq. 7)  
+
+> 6:
+
+end for  
+
+> 7:
+
+for each layer ℓ ∈ L do  
+
+> 8:
+
+Concatenation  
+
+> 9:
+
+Stack retained bases: E(ℓ) 
+
+> cat
+
+← [ ˆE(ℓ)1 , ˆE(ℓ)2 , . . . , ˆE(ℓ) 
+
+> T
+
+] (Eq. 9)  
+
+> 10:
+
+Stack retained coordinates: C(ℓ) 
+
+> cat
+
+← [ ˆC(ℓ)1 ; ˆC(ℓ)2 ; . . . ; ˆC(ℓ) 
+
+> T
+
+] (Eq. 10)  
+
+> 11:
+
+Orthogonalization and Reconstruction  
+
+> 12:
+
+Compute SVDs of E(ℓ) 
+
+> cat
+
+and C(ℓ) 
+
+> cat
+
+(Eq. 11)  
+
+> 13:
+
+Obtain orthogonal factors E(ℓ) 
+
+> ortho
+
+← U (ℓ) 
+
+> E
+
+(V (ℓ) 
+
+> E
+
+)⊤, C(ℓ) 
+
+> ortho
+
+← U (ℓ) 
+
+> C
+
+(V (ℓ) 
+
+> C
+
+)⊤ (Eq. 12)  
+
+> 14:
+
+Reconstruct the ESM merged update ∆W (ℓ) 
+
+> ESM
+
+← E(ℓ)
+
+> ortho
+
+C(ℓ) 
+
+> ortho
+
+(Eq. 13)  
+
+> 15:
+
+end for  
+
+> 16:
+
+Select the global coefficient α∗ using Dval  
+
+> 17:
+
+for each layer ℓ ∈ L do  
+
+> 18:
+
+Update ESM weights: W (ℓ) 
+
+> ESM
+
+← W (ℓ)0 + α∗∆W (ℓ) 
+
+> ESM
+
+(Eq. 14)  
+
+> 19:
+
+end for  
+
+> 20: 21:
+
+return {W (ℓ)
+
+> ESM
+
+}ℓ∈L 
+
+APPENDIX BMETHOD DETAILS 
+
+A. Methodology Pseudocode 
+
+Algorithm 1 summarizes ESM, the static merging variant of our framework. The colored blocks highlight its three main stages: essential subspace decomposition , cross-task concatenation , and orthogonalization/reconstruction . ESM first decomposes each task matrix within its essential subspace and truncates the retained components, then concatenates the task-specific factors and orthogonalizes them to reconstruct a single merged update. Algorithm 2 presents ESM++, the dynamic routing variant. Its stages mirror the same color scheme: low-rank expert extraction , prototype collection , and prototype-based routing and forward . ESM++ first extracts task-specific residual experts with ESD, then builds task prototypes from proxy features, and finally selects the most relevant expert for each layer during inference. 
+
+B. Merging Non-Matrix Parameters 
+
+While most parameters in the transformer architecture are 2D matrices merged using our proposed ESM within the Essential Subspace, the network also includes other parameter types. For non-matrix parameters such as bias vectors, layer normalization parameters, and the convolutional stem, we follow the standard practice in [10] and apply simple averaging. 
+
+C. Target Layers for ESM 
+
+We primarily apply ESM to the linear layers in transformer blocks, including the query, key, value, and output projections in the attention module, as well as the up- and down-projection layers in the MLP. Based on the eigenvalue distribution of the output shifts across these layers, we select the query, key, value, and MLP up-projection layers as the target layers for ESM merging and ESM++ routing in ViT-based vision models. The remaining layers are merged by simply averaging the corresponding parameters across all fine-tuned models. For language models, we apply ESM to all linear layers in the transformer blocks. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4
+
+Algorithm 2 ESM++ 
+
+Require: ESM merged weights {W (ℓ)
+
+> ESM
+
+}ℓ∈L , task-specific weights {W (ℓ) 
+
+> t
+
+}Tt=1 , proxy dataset Dproxy , test input x
+
+Ensure: Output prediction y
+
+1: for each task t = 1 to T and each layer ℓ ∈ L do 
+
+2: Low-Rank Expert Extraction 
+
+3: Compute residual update δW (ℓ) 
+
+> t
+
+← W (ℓ) 
+
+> t
+
+− W (ℓ) 
+
+> ESM
+
+(Eq. 15) 
+
+4: Apply ESD to δW (ℓ) 
+
+> t
+
+and retain low-rank expert factors ( ˆB(ℓ) 
+
+> t
+
+, ˆA(ℓ) 
+
+> t
+
+) following Section III-D 
+
+5: end for 
+
+6: for each task t = 1 to T and each layer ℓ ∈ L do 
+
+7: Prototype Collection 
+
+8: Run the fine-tuned model on Dproxy and collect layer input features X(ℓ)
+
+> t
+
+9: Build task prototype p(ℓ) 
+
+> t
+
+← 1
+
+> n
+
+Pni=1 X(ℓ) 
+
+> t,i
+
+by mean pooling (Eq. 17) 
+
+10: end for 
+
+11: Initialize activations with input x
+
+12: for each layer ℓ ∈ L during inference do 
+
+13: Prototype-Based Routing and Forward 
+
+14: Mean-pool current layer input features to obtain ¯x(ℓ)
+
+15: Compute routing score s(ℓ) 
+
+> t
+
+← (¯ x(ℓ))⊤p(ℓ) 
+
+> t
+> ∥¯x(ℓ)∥2∥p(ℓ)
+> t∥2
+
+for each task t (Eq. 18) 
+
+16: Select t∗ ← arg max t s(ℓ) 
+
+> t
+
+and compose W (ℓ) 
+
+> ESM++
+
+← W (ℓ) 
+
+> ESM
+
++ ˆB(ℓ) 
+
+> t∗
+
+ˆA(ℓ) 
+
+> t∗
+
+(Eq. 16) 
+
+17: Perform the layer forward pass using W (ℓ)
+
+> ESM++
+
+18: end for 
+
+19: 20: return prediction y
+
+TABLE IX DATASETS USED FOR GENERATIVE LANGUAGE MODEL EVALUATION , FOLLOWING MERGE BENCH [61]. 
+
+Category Dataset Metric # Data 
+
+Instruction-following IFEval [68] Prompt-Level Loose Accuracy, Inst-Level Loose Accuracy 541 Mathematics GSM8K [69] Exact-Match, (Flexible-Extract, 8-shot CoT) 1320 Multilingual understanding M MMLU [70] Accuracy 60K M ARC [70] Normalized Accuracy 10.34K M Hellaswag [70] Normalized Accuracy 37.35K Coding Humaneval+ [71] Pass@1 164 MBPP+ [72] Pass@1 378 Safety WildGuardTest [73] RTA (Refuse To Answer) 1730 HarmBench [74] RTA (Refuse To Answer) 410 DoAnythingNow [75] RTA (Refuse To Answer) 15.14K XSTest [76] Accuracy 450 
+
+APPENDIX CEXPERIMENT DETAILS 
+
+A. Generative Language Model Evaluation Datasets 
+
+Following MergeBench [61], we evaluate generative language model merging across instruction-following, mathematics, multilingual understanding, coding, and safety abilities. The evaluation datasets and metrics are summarized in Table IX. 
+
+B. Details on Polarized Scaling 
+
+For ViT model merging, we incorporate Polarized Scaling as an additional norm-based rescaling step before composing task updates. This section provides a more detailed explanation and analysis of this strategy, including the empirical motivation, the scaling mechanism, and the contribution of its different levels. 
+
+1) Empirical Evidence: Pairwise Task Interaction.: We further analyze the pairwise influence between task matrices. As shown in Fig. 8(a), each column represents how the performance of two tasks changes when the task update of the column task JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5
+
+TABLE X FINE -GRAINED ABLATION STUDY OF THE THREE LEVELS IN POLARIZED SCALING . R ESULTS ARE REPORTED IN TERMS OF AVERAGE ABSOLUTE ACCURACY , WITH NORMALIZED AVERAGE ACCURACY SHOWN AS SUBSCRIPTS IN PARENTHESES .Polarized Scaling ViT-B/32 ViT-B/16 ViT-L/14 Inter-Layer Inter-Task Inter-Dimension 8 tasks 14 tasks 20 tasks 8 tasks 14 tasks 20 tasks 8 tasks 14 tasks 20 tasks 
+
+✗ ✗ ✗ 87.1 (93 .7) 81.8 (89 .8) 79.8 (87 .3) 91.2 (96 .3) 86.4 (93 .0) 83.6 (89 .6) 94.5 (98 .6) 90.8 (96 .1) 89.7 (94 .5) 
+
+✓ ✗ ✗ 88.4 (95 .2) 83.6 (91 .9) 81.7 (89 .3) 91.7 (86.8 ) 87.6 (94 .3) 85.1 (91 .3) 94.6 (98 .7) 91.3 (96 .7) 90.4 (95 .3) 
+
+✗ ✓ ✗ 87.3 (94 .0) 82.3 (90 .4) 80.4 (88 .0) 91.5 (96 .6) 87.0 (93 .6) 84.2 (90 .4) 94.7 (98 .8) 90.9 (96 .3) 90.0 (95 .0) 
+
+✗ ✗ ✓ 87.5 (94 .2) 82.0 (90 .1) 79.7 (87 .1) 91.2 (96 .3) 86.5 (90 .1) 83.6 (89 .7) 94.4 (98 .5) 90.7 (96 .0) 89.5 (94 .3) 
+
+✓ ✓ ✓ 88.6 (95.4 ) 83.9 (92.4 ) 82.3 (90.1 ) 91.6 (96 .7) 87.6 (94.4 ) 85.3 (91.6 ) 94.7 (98.8 ) 91.3 (96.8 ) 90.7 (95.7 )68   
+
+> 70
+> 72
+> 74
+> 76
+> 78
+> Cars
+> Fine-tuning accuracy
+> Fine-tuning accuracy
+> 71
+> 72
+> 73
+> 74
+> FER2013  Fine-tuning accuracy
+> Fine-tuning accuracy
+> 76
+> 78
+> 80
+> 82
+> 84
+> Food101  Fine-tuning accuracy
+> Fine-tuning accuracy
+> 50 60 70
+
+Cars  
+
+> 64
+> 66
+> 68
+> 70
+> 72
+> 74
+> 76
+> SUN397
+> 40 60
+
+FER2013     
+
+> 65 70 75 80 85
+
+Food101     
+
+> 55 60 65 70 75
+
+SUN397 
+
+> Fine-tuning accuracy
+> Fine-tuning accuracy
+
+Higher-Norm-First Lower-Norm-First 
+
+(a) Task Interaction. × Norm 
+
+𝔼 Norm  
+
+> !
+> Norm
+> 𝔼 Norm
+
+Weight Blocks   
+
+> Norm  signal amplification
+> noise suppression
+
+Weight Blocks 
+
+(b) Polarized Scaling. Layer 2
+
+𝐸 "! 
+
+> "
+
+𝐸 "" 
+
+> "
+
+𝐶 $!
+
+> "
+
+𝐶 $"    
+
+> "
+> Inter -
+> Dimension
+> 𝑑 !𝑑 "𝑑 #𝑑 $
+> Layer 1
+
+𝐸 "! 
+
+> !
+
+𝐸 "" 
+
+> !
+
+𝐶 $!
+
+> !
+
+𝐶 $" 
+
+> !
+> Inter -Task
+> 𝑡 !
+> 𝑡 "
+> Layer 𝐿
+
+𝐸 "! 
+
+> #
+
+𝐸 "" 
+
+> #
+
+𝐶 $!
+
+> #
+
+𝐶 $"
+
+> #
+
+Inter -Layer  
+
+> ①②
+> ③
+
+(c) Scaling Hierarchy. 
+
+Fig. 8. Illustration of task invasion and Polarized Scaling. (a) Pairwise task invasion between fine-tuned ViT models under different norm-based loading orders. (b) Polarized Scaling enlarges high-norm updates and shrinks low-norm updates. (c) The scaling is applied across tasks, dimensions, and layers. 
+
+is added to the fine-tuned model of the row task. We compare two layer-wise loading orders: adding large-norm updates first and adding small-norm updates first. The results show that descending norm order yields a better average performance than ascending norm order. This indicates that large-norm updates are more task-critical: although they may perturb the invaded task, they substantially improve the source task. In contrast, low-norm updates can still harm the invaded task while providing limited benefit to the source task. This highlights the importance of suppressing less critical or noisy updates while emphasizing the most essential ones in model merging. 
+
+2) Polarized Scaling Method: Motivated by this observation, we apply Polarized Scaling to increase the contrast among parameter updates before merging. Specifically, updates with larger norms are further amplified because they are more likely to correspond to task-critical directions or consensus knowledge accumulated across tasks, whereas smaller-norm updates are suppressed since they are more likely to be redundant or noisy. This polarization strengthens useful signals and prevents important updates from being submerged by numerous weak components. In practice, we apply this scaling at three complementary levels: across tasks, across dimensions, and across layers. More details of Polarized Scaling can be found in [1]. To further examine the contribution of each scaling level, Table X independently ablates inter-layer, inter-task, and inter-dimension scaling. The results show that each level brings consistent gains over the variant without Polarized Scaling, indicating that useful norm-based signals exist at different granularities. Combining all three levels achieves the best overall performance, suggesting that they capture complementary structures in task updates. 
+
+3) Ablation Study on the Exponent of the Scaling Factor: The default configuration of our method employs a power of 
+
+2 in the polarized scaling coefficient, i.e., ( norm 
+
+E[norm ] )2. The rationale for this choice is to amplify significant parameters while suppressing redundant ones. To validate the sensitivity of our approach to this hyperparameter, we conducted an ablation study. As shown in Fig. 9, the results indicate that model merging is robust across a range of exponents. The value of 2 was chosen as the default because it achieves optimal performance. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 61.0 1.5 2.0 2.5 3.0 
+
+Polarized Scaling Power 
+
+82 
+
+84 
+
+86 
+
+88         
+
+> Avg. Top-1 Accuracy (%)  88.1 88.5 88.6 88.7 88.4
+> 83.1
+> 83.7 83.9 83.7
+> 82.5
+> 81.4
+> 82.0 82.3 82.1
+> 81.1
+
+(a) ViT-B/32 
+
+8 tasks 
+
+14 tasks 
+
+20 tasks 
+
+1.0 1.5 2.0 2.5 3.0 
+
+Polarized Scaling Power 
+
+82 
+
+84 
+
+86 
+
+88 
+
+90 
+
+92          
+
+> Avg. Top-1 Accuracy (%)  91.5 91.6 91.6 91.3 90.7
+> 87.4 87.7 87.6 87.0
+> 85.2
+> 84.8 85.2 85.3
+> 84.6
+> 82.2
+
+(b) ViT-B/16 
+
+8 tasks 
+
+14 tasks 
+
+20 tasks 
+
+Fig. 9. Performance of Polarized Scaling under different powers of the scaling factor. TABLE XI DETAILED ABLATION STUDY OF THE POLARIZED SCALING . T HE SYMBOL γ DENOTES THE SCALING FACTOR AT THREE DIFFERENT LEVELS . T HE FOLLOWING VARIANTS ARE COMPARED : ( I) “ Reverse ”: TAKING THE RECIPROCAL OF THE SCALING FACTORS ; ( II ) “ Noise −− ”: RETAINING ONLY FACTORS < 1 TO SUPPRESS NOISY PARAMETERS ; ( III ) “ Signal ++ ”: RETAINING ONLY FACTORS > 1 TO ENHANCE IMPORTANT PARAMETERS .Method Scaling ViT-B/32 8 tasks 14 tasks 20 tasks 
+
+w/o Scaling - 87.1 (93.7) 81.8 (89.8) 79.8 (87.3) 
+
+Reverse Polarized Scaling 1/γ 82.9 (89.2) 76.3 (83.7) 72.6 (79.4) 
+
+Noise −− min( γ, 1) 87.8 (94.5) 83.2 (91.4) 81.3 (89.0) 
+
+Signal ++ max( γ, 1) 88.1 (95.0) 83.0 (91.2) 81.0 (88.7) Polarized Scaling γ 88.6 (95.4 ) 83.9 (92.4 ) 82.3 (90.1 )
+
+4) Detailed Ablation Study of Polarized Scaling.: We perform a detailed ablation of the Polarized Scaling in Table XI. We compare three alternatives: (i) “ Reverse ”, which applies the reciprocal of the scaling factors; (ii) “ Noise −− ”, which retains only factors < 1 to suppress noisy parameters; and (iii) “ Signal ++ ”, which retains only factors > 1 to enhance important parameters. Experimental results show that, compared with “ w/o Scaling ” (i.e., without scaling), the “ Reverse ” operation significantly degrades performance because important parameters are overwhelmed by redundant ones. Both “ Noise −− ” and “Signal ++ ” improve over “ None ” by raising the signal-to-noise ratio of important parameters. The full Polarized Scaling method, which combines both suppression and amplification, achieves the best performance. 
+
+C. Calculation of Energy Retention 
+
+Fig. 4(a) shows the cumulative energy retained when preserving different proportions of components. For the SVD-based method, energy retention is calculated as the ratio of the sum of squares of the retained singular values to the sum of squares of all singular values. For our ESD method, it is defined as the ratio of the sum of the retained eigenvalues to the sum of all eigenvalues. This is because the square of a singular value and an eigenvalue both correspond to the explained variance. 
+
+D. Subspace Similarity Metrics for Proxy Size Analysis 
+
+We evaluate how well a subspace estimated from a limited proxy set matches a reference subspace estimated from the full test set. Let the reference subspace be Utest with orthonormal basis Utest ∈ Rd×r and eigenvalues λ1 ≥ λ2 ≥ · · · ≥ λr > 0.Let the proxy-estimated subspace be Us with orthonormal basis Us ∈ Rd×r . We define C = U ⊤ 
+
+> s
+
+Utest , whose singular values 
+
+σ1 ≥ · · · ≥ σr satisfy σi = cos θi, where θi are the principal angles between the two subspaces. 
+
+a) Equal-weight projection similarity.: This metric averages the squared cosines of all principal angles: 
+
+PS eq = 1
+
+r
+
+> r
+
+X
+
+> i=1
+
+σ2 
+
+> i
+
+= ∥U ⊤ 
+
+> s
+
+Utest ∥2
+
+> F
+
+r . (34) It treats all retained directions equally and measures the average overlap between the proxy and reference subspaces. 
+
+b) Eigenvalue-weighted projection similarity.: Since different principal directions contribute different amounts of func-tional variance, we also compute an eigenvalue-weighted score: 
+
+PS w =
+
+Pri=1 λi∥U ⊤ 
+
+> s
+
+ui∥22
+
+Pri=1 λi
+
+, (35) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 70.5/T                              
+
+> 0.75/T
+> 1/T
+> 1.25/T
+> 1.5/T
+> 1.75/T
+> 2/T
+> Component Retention Ratio
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> 95
+> 100
+> Accuracy (%)
+> (a) ViT-B/32 (8-task)
+> Cars
+> DTD
+> EuroSAT
+> GTSRB
+> MNIST
+> RESISC45
+> SVHN
+> SUN397
+> Average
+> 0.5/T
+> 0.75/T
+> 1/T
+> 1.25/T
+> 1.5/T
+> 1.75/T
+> 2/T
+> Component Retention Ratio
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> Performance (%)
+> (b) RoBERTa (GLUE)
+> CoLA
+> SST-2
+> MRPC
+> STS-B
+> QQP
+> MNLI
+> QNLI
+> RTE
+> Average
+> Fig. 10. Ablation study on the impact of component retention ratio on merged model performance. Tdenotes the number of tasks. TABLE XII GLOBAL SCALING COEFFICIENT αSELECTED ON THE VALIDATION SET FOR EACH BENCHMARK SETTING .
+> ViT-B/32 ViT-B/16 ViT-L/14 RoBERTa Llama-3.2-3B
+> 8-task 14-task 20-task 8-task 14-task 20-task 8-task 14-task 20-task GLUE MergeBench
+> 0.76 0.57 0.61 0.84 0.70 0.65 0.82 0.68 0.63 2.80 2.00
+
+where ui is the i-th column of Utest . This metric measures the fraction of test-set subspace information preserved by the proxy subspace, with larger weights assigned to high-variance directions. It is therefore the most informative metric for our analysis: even if some low-energy tail directions are imperfectly aligned, the proxy subspace can still preserve the dominant functional information needed for model merging. 
+
+c) Maximum principal angle.: We further report the worst-case subspace misalignment: 
+
+θmax = arccos( σr ). (36) This metric is conservative because it is determined by the least aligned direction. It is useful for diagnosing unstable tail directions, but it is less directly tied to information preservation than PS w, since the worst-aligned direction may correspond to a low-eigenvalue component. 
+
+E. Ablation Study on Rank Budget r for ESM 
+
+In our method and experiments, the default setting uses r = ⌊dout /T ⌋ as the rank budget for low-rank decomposition of each task matrix, where T denotes the number of tasks and dout represents the original output dimension. We conduct an ablation study on the selection of rank r, as shown in Fig. 10. The results demonstrate that the merged model exhibits robustness to the choice of rank r, maintaining comparable performance across a wide range of values ( ⌊0.5 · dout /T ⌋ ∼ ⌊ 2.0 · dout /T ⌋). This stability arises because our decomposition concentrates the task-relevant energy into a small number of dominant rank components. Moreover, the eigenvalue-based weighting and subsequent orthogonalization substantially reduce interference from low-energy directions, making the merged representation less sensitive to moderate changes in the retained rank budget. 
+
+F. Selection of Global Scaling Coefficient α
+
+We report the global scaling coefficient α selected on the validation set, as shown in Table XII. Based on the empirical ranges used in previous model merging studies [10], [11], we set the search interval for α between 0.0 and 5.0 and perform ternary search to determine the optimal value. The results show that the optimal α decreases as the number of tasks increases, likely because merging more tasks amplifies the norm of the combined updates. 
+
+G. Effect of the Number of Routed Experts 
+
+Fig. 11 analyzes the effect of the number of selected experts in ESM++ ( r = 8 ). The results show that routing to a single expert achieves the best performance. As more experts are selected, the additional task-specific residuals can introduce JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 81 2 3 4 5
+
+Number of Experts ( K)
+
+> 92.5
+> 93.0
+> 93.5
+> 94.0
+
+(a) ViT-B/16 (8-Task)     
+
+> 12345
+
+Number of Experts ( K)
+
+> 89
+> 90
+> 91
+> 92
+
+(b) ViT-B/16 (14-Task)     
+
+> 12345
+
+Number of Experts ( K)
+
+> 86
+> 88
+> 90
+> 92
+
+(c) ViT-B/16 (20-Task) 
+
+> 96.5
+> 97.0
+> 97.5
+> 98.0
+> 93
+> 94
+> 95
+> 96
+> 97
+> 88
+> 90
+> 92
+> 94
+
+Avg. Top-1 (%) Avg. Normalized Top-1 (%) 
+
+Fig. 11. Effect of the number of selected experts in ESM++ ( r = 8 ). Routing to a single expert yields the best multi-task performance, while selecting more experts introduces stronger cross-task interference among residual experts. This demonstrates that the proposed training-free routing mechanism can achieve efficient and high-performance inference by selecting only one expert. TABLE XIII PROTOTYPE -BASED AND ORACLE ROUTING RESULTS FOR ESM++ ON THE 8-TASK GLUE BENCHMARK WITH ROBERT A. T HE TABLE REPORTS ROUTING ACCURACY AND TASK PERFORMANCE TO DISENTANGLE ERRORS FROM PROTOTYPE -BASED ROUTING AND THE PERFORMANCE PRESERVED BY THE RETAINED PRINCIPAL COMPONENTS . N ORMALIZED ACCURACY RELATIVE TO THE FINE -TUNED EXPERTS IS SHOWN IN PARENTHESES .Method Routing Strategy Routing Accuracy CoLA SST-2 MRPC STS-B QQP MNLI QNLI RTE Avg. 
+
+Pre-trained – – 0.0 49.1 15.8 15.0 41.1 34.2 52.4 53.4 32.6 
+
+Fine-tuned – – 56.5 94.7 88.0 86.4 89.7 87.0 91.7 66.4 82.6 ESM – – 40.3 (71 .3) 89.5 (94 .4) 83.6 (95 .0) 74.0 (85 .7) 73.4 (81 .9) 72.5 (83 .4) 84.0 (91 .6) 65.0 (97 .8) 72.8 (87 .6) 
+
+ESM++ ( r = 8 ) Prototype 73.3% 57.5 (101.6 ) 93.5 (98 .7) 85.6 (97 .3) 74.3 (86 .0) 87.9 (98.0 ) 61.1 (70 .3) 85.7 (93 .5) 59.6 (89 .7) 75.6 (91 .9) 
+
+ESM++ ( r = 8 ) Oracle 100% 56.2 (99 .4) 94.5 (99.8 ) 87.9 (99.9 ) 86.3 (99.9 ) 87.5 (97 .5) 86.8 (99.8 ) 90.5 (98 .7) 65.3 (98.4 ) 81.9 (99.2 )
+
+ESM++ ( r = 32 ) Prototype 72.6% 54.5 (96 .4) 94.2 (99 .4) 84.9 (96 .4) 75.4 (87 .3) 86.6 (96 .5) 69.5 (79 .9) 88.0 (96 .0) 56.7 (85 .3) 76.2 (92 .2) 
+
+ESM++ ( r = 32 ) Oracle 100% 58.0 (102.7 ) 94.3 (99.5 ) 88.6 (100.7 ) 86.5 (100.1 ) 88.3 (98.4 ) 85.9 (98.7 ) 91.0 (99.2 ) 67.5 (101.6 ) 82.5 (100.1 )
+
+interference among tasks, which degrades the overall multi-task performance. This observation indicates that our training-free routing strategy does not require combining multiple experts to obtain strong results; selecting only one expert is sufficient for efficient and high-performance inference. 
+
+H. Prototype-Based and Oracle Routing on GLUE 
+
+Table XIII compares prototype-based routing with oracle routing for ESM++ on the GLUE benchmark. The prototype router achieves routing accuracies of 73 .3% for r = 8 and 72 .6% for r = 32 , showing that the proposed training-free router can recover useful task identities from proxy prototypes without learning an additional routing network. The oracle setting uses the ground-truth task identity and therefore provides an upper bound that isolates the quality of the retained low-rank residual experts. Under oracle routing, ESM++ reaches 81 .9% average accuracy with r = 8 and 82 .5% with r = 32 , corresponding to 
+
+99 .2% and 100 .1% normalized accuracy, respectively. These results indicate that the ESD residual experts preserve nearly all task-specific knowledge even at a very small rank, while the gap between prototype and oracle routing mainly reflects routing errors rather than insufficient expert capacity. 
+
+I. Per-Layer Routing Accuracy and Task Performance 
+
+Fig. 13 provides a layer-wise analysis of the routing behavior of ESM++ ( r = 32 ). The routing accuracy generally increases as the layer depth grows, which is consistent with prior observations that semantic information becomes progressively clearer in deeper representations. The figure also compares this routing behavior with the normalized performance of each task. Notably, even for the task with the lowest routing accuracy, ESM++ still achieves more than 90% normalized performance. This suggests that prototype-based routing can effectively select either the correct task expert or a semantically similar expert, thereby providing useful residual specialization and improving the merged model’s performance. 
+
+J. Comparison of Low-Rank Expert Construction Methods 
+
+Fig. 12 compares two ways to construct low-rank residual experts for ESM++: direct SVD on parameter updates and the proposed ESD. Across different ranks, ESD consistently achieves higher normalized accuracy under both prototype-based routing and oracle routing. This confirms that output-shift-aware ESD preserves more useful task-specific expert knowledge than parameter-space SVD. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 91 2 4 8 16 32 64 
+
+Rank 
+
+97 
+
+98 
+
+99  
+
+> Normalized Accuracy (%)
+> 97.2
+> 97.3
+> 97.7
+> 98.0
+> 98.1
+> 98.3
+> 98.6
+> 97.6
+> 97.9
+> 98.1
+> 98.4
+> 98.7
+> 99.0 99.1
+
+(a) Prototype-Based Routing 
+
+SVD Expert 
+
+ESD Expert (Ours) 
+
+1 2 4 8 16 32 64 
+
+Rank 
+
+97 
+
+98 
+
+99 
+
+100 
+
+> Normalized Accuracy (%)
+> 97.6
+> 97.8
+> 98.3
+> 98.6
+> 98.9
+> 99.3
+> 99.5
+> 97.8
+> 98.3
+> 98.6
+> 98.9
+> 99.3
+> 99.5
+> 99.7
+
+(b) Oracle Routing 
+
+SVD Expert 
+
+ESD Expert (Ours) 
+
+Fig. 12. Comparison of low-rank expert construction methods in ESM++. We compare experts obtained by directly applying SVD to parameter update matrices with those obtained by the proposed ESD. Panels (a) and (b) report normalized accuracy under prototype-based routing and oracle routing, respectively, where the x-axis denotes the retained rank and the y-axis denotes normalized accuracy. 0 1 2 3 4 5 6 7 8 9 10 11 
+
+Block Index 
+
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+> Routing Accuracy (%)
+
+(a) 
+
+Mean 
+
+Worst (GTSRB) 
+
+Cars 
+
+DTD 
+
+EuroSAT 
+
+... (+4)            
+
+> GTSRB
+> 012345678910 11
+
+Block Index 
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+
+(b) 
+
+Mean 
+
+Worst (GTSRB) 
+
+CIFAR100 
+
+Cars 
+
+DTD 
+
+... (+10)            
+
+> GTSRB
+> 012345678910 11
+
+Block Index 
+
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100
+
+(c) 
+
+Mean 
+
+Worst (CIFAR10) 
+
+CIFAR100 
+
+Cars 
+
+DTD 
+
+... (+16) CIFAR10 
+
+> 100
+
+Normalized Top-1 Accuracy (%) 
+
+GTSRB 
+
+> SUN397
+> RESISC45
+> MNIST
+> SVHN
+> Cars
+> DTD
+> EuroSAT
+
+(d) 
+
+Mean: 98.6% 96.06%  
+
+> 95 100
+
+Normalized Top-1 Accuracy (%) 
+
+> GTSRB
+> FER2013
+> SUN397
+> CIFAR100
+> RESISC45
+> Cars
+> DTD
+> Flowers102
+> SVHN
+> MNIST
+> PCAM
+> EuroSAT
+> OxfordIIITPet
+> STL10
+
+(e) 
+
+Mean: 97.5% 91.29%     
+
+> 80 85 90 95 100
+
+Normalized Top-1 Accuracy (%) 
+
+> KMNIST
+> GTSRB
+> FER2013
+> CIFAR100
+> SUN397
+> Cars
+> FashionMNIST
+> DTD
+> RESISC45
+> Flowers102
+> SVHN
+> Food101
+> MNIST
+> CIFAR10
+> EMNIST
+> EuroSAT
+> PCAM
+> OxfordIIITPet
+> RenderedSST2
+> STL10
+
+(f) 
+
+Mean: 96.0% 
+
+> 98.99%
+
+ViT-B/16 (8-Task) ViT-B/16 (14-Task) ViT-B/16 (20-Task) 
+
+Fig. 13. Per-layer routing accuracy and task-level normalized performance of ESM++ ( r = 32 ). The first row reports routing accuracy at each layer and highlights the task with the lowest routing accuracy. The second row reports the normalized performance of each task, with the task corresponding to the lowest routing accuracy highlighted to examine whether routing errors limit task performance. 
+
+K. Performance on Individual Tasks 
+
+Fig. 14 provides the detailed per-task results of CLIP model merging across different backbones, complementing the average performance reported in the main text. The results show how ESM and ESM++ perform on each individual task. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 Cars 
+
+> DTD
+> EuroSAT
+> GTSRB
+
+MNIST 
+
+> RESISC45
+> SUN397
+> SVHN
+
+Benchmark: 8-task 
+
+79.3% 
+
+75.3% 
+
+96.4% 
+
+94.5% 
+
+98.8% 
+
+94.3% 96.5% 
+
+92.8% 
+
+99.3% 
+
+98.8% 
+
+93.9% 
+
+91.3% 
+
+74.4% 
+
+71.3% 
+
+96.7% 
+
+90.0% 
+
+CIFAR100 
+
+Cars 
+
+> DTD
+> EuroSAT
+> FER2013
+> Flowers102
+
+GTSRB 
+
+MNIST 
+
+OxfordIIITPet 
+
+> PCAM
+> RESISC45
+> STL10
+> SUN397
+
+SVHN 
+
+Benchmark: 14-task 
+
+84.4% 
+
+79.8% 
+
+77.5% 
+
+72.0% 
+
+93.3% 
+
+89.0% 
+
+97.5% 
+
+90.4% 
+
+68.0% 
+
+67.5% 
+
+87.3% 
+
+82.1% 87.4% 
+
+85.0% 
+
+98.4% 
+
+97.8% 
+
+92.3% 91.0% 
+
+85.4% 
+
+81.4% 
+
+93.3% 
+
+89.3% 
+
+98.6% 
+
+98.1% 
+
+73.8% 
+
+71.5% 
+
+94.9% 
+
+79.8% 
+
+ESM ESM++ 
+
+CIFAR10 
+
+CIFAR100 
+
+> Cars
+> DTD
+> EMNIST
+> EuroSAT
+> FER2013
+> FashionMNIST
+> Flowers102
+
+Food101 
+
+GTSRB 
+
+KMNIST 
+
+> MNIST
+> OxfordIIITPet
+> PCAM
+> RESISC45
+> RenderedSST2
+> STL10
+> SUN397
+
+SVHN 
+
+Benchmark: 20-task 
+
+96.5% 
+
+95.6% 
+
+83.2% 
+
+76.8% 
+
+72.3% 
+
+60.4% 
+
+91.7% 
+
+85.1% 
+
+99.4% 
+
+98.0% 
+
+97.2% 
+
+87.3% 
+
+68.2% 
+
+66.7% 
+
+90.7% 
+
+87.7% 
+
+86.0% 
+
+78.5% 87.0% 
+
+83.4% 
+
+84.7% 80.3% 
+
+83.4% 
+
+70.7% 
+
+99.2% 
+
+97.6% 
+
+91.8% 
+
+88.9% 84.5% 
+
+82.3% 
+
+92.3% 
+
+87.0% 
+
+74.4% 
+
+72.1% 
+
+98.4% 
+
+97.5% 
+
+72.7% 
+
+69.3% 
+
+93.5% 
+
+77.3% 
+
+(a) ViT-B/32 Cars 
+
+> DTD
+> EuroSAT
+> GTSRB
+
+MNIST 
+
+> RESISC45
+> SUN397
+> SVHN
+
+Benchmark: 8-task 
+
+87.1% 
+
+84.7% 
+
+97.8% 
+
+96.2% 
+
+99.0% 
+
+97.7% 
+
+95.1% 
+
+94.9% 
+
+99.2% 
+
+99.0% 
+
+95.2% 
+
+94.0% 
+
+76.0% 
+
+72.7% 
+
+97.2% 
+
+93.1% 
+
+CIFAR100 
+
+Cars 
+
+> DTD
+> EuroSAT
+> FER2013
+> Flowers102
+
+GTSRB 
+
+MNIST 
+
+OxfordIIITPet 
+
+> PCAM
+> RESISC45
+> STL10
+> SUN397
+
+SVHN 
+
+Benchmark: 14-task 
+
+86.7% 
+
+82.2% 
+
+85.6% 
+
+82.2% 
+
+96.4% 
+
+93.0% 
+
+98.3% 
+
+96.0% 
+
+70.9% 
+
+70.1% 
+
+92.2% 
+
+86.2% 90.4% 
+
+90.1% 
+
+99.1% 
+
+98.8% 
+
+94.3% 93.7% 
+
+88.5% 
+
+83.1% 
+
+94.5% 
+
+92.6% 
+
+98.9% 
+
+97.9% 
+
+75.3% 
+
+71.9% 
+
+96.6% 
+
+88.7% 
+
+ESM ESM++ 
+
+CIFAR10 
+
+CIFAR100 
+
+> Cars
+> DTD
+> EMNIST
+> EuroSAT
+> FER2013
+> FashionMNIST
+> Flowers102
+
+Food101 
+
+GTSRB 
+
+KMNIST 
+
+> MNIST
+> OxfordIIITPet
+> PCAM
+> RESISC45
+> RenderedSST2
+> STL10
+> SUN397
+
+SVHN 
+
+Benchmark: 20-task 
+
+97.5% 
+
+96.7% 
+
+85.2% 
+
+79.6% 
+
+83.4% 
+
+74.2% 
+
+94.6% 
+
+89.1% 
+
+99.5% 
+
+98.8% 
+
+98.3% 
+
+94.5% 
+
+68.9% 
+
+68.6% 
+
+91.7% 
+
+88.9% 90.5% 
+
+81.9% 91.4% 
+
+88.8% 
+
+86.5% 
+
+85.2% 
+
+78.2% 
+
+61.8% 
+
+99.4% 98.5% 
+
+94.6% 
+
+93.3% 
+
+89.1% 
+
+82.1% 
+
+93.4% 
+
+90.6% 
+
+79.3% 
+
+78.5% 
+
+98.9% 
+
+98.1% 
+
+74.6% 
+
+71.1% 95.7% 
+
+84.8% 
+
+(b) ViT-B/16 Cars 
+
+> DTD
+> EuroSAT
+> GTSRB
+
+MNIST 
+
+> RESISC45
+> SUN397
+> SVHN
+
+Benchmark: 8-task 
+
+93.0% 
+
+92.0% 
+
+98.2% 
+
+97.9% 
+
+99.6% 
+
+99.3% 
+
+98.3% 
+
+97.1% 
+
+99.6% 
+
+99.5% 
+
+96.4% 96.1% 
+
+81.7% 
+
+80.5% 
+
+97.9% 
+
+95.4% 
+
+CIFAR100 
+
+Cars 
+
+> DTD
+> EuroSAT
+> FER2013
+> Flowers102
+
+GTSRB 
+
+MNIST 
+
+OxfordIIITPet 
+
+> PCAM
+> RESISC45
+> STL10
+> SUN397
+
+SVHN 
+
+Benchmark: 14-task 
+
+91.3% 
+
+88.8% 
+
+92.4% 
+
+90.7% 
+
+97.6% 
+
+97.0% 
+
+99.5% 
+
+98.6% 
+
+74.9% 
+
+73.4% 
+
+96.6% 
+
+88.1% 96.5% 
+
+95.2% 
+
+99.5% 
+
+99.5% 
+
+96.1% 95.9% 
+
+86.6% 
+
+83.8% 
+
+96.0% 
+
+95.2% 
+
+99.6% 
+
+99.5% 
+
+80.7% 
+
+78.7% 
+
+97.6% 
+
+93.8% 
+
+ESM ESM++ 
+
+CIFAR10 
+
+CIFAR100 
+
+> Cars
+> DTD
+> EMNIST
+> EuroSAT
+> FER2013
+> FashionMNIST
+> Flowers102
+
+Food101 
+
+GTSRB 
+
+KMNIST 
+
+> MNIST
+> OxfordIIITPet
+> PCAM
+> RESISC45
+> RenderedSST2
+> STL10
+> SUN397
+
+SVHN 
+
+Benchmark: 20-task 
+
+99.0% 
+
+98.7% 
+
+90.2% 
+
+87.5% 
+
+91.5% 
+
+87.9% 
+
+96.6% 
+
+94.1% 
+
+99.7% 
+
+99.5% 
+
+99.4% 
+
+97.6% 
+
+72.0% 
+
+70.4% 
+
+94.0% 
+
+91.6% 
+
+96.4% 
+
+88.0% 95.2% 
+
+94.4% 
+
+94.9% 92.9% 
+
+93.0% 85.4% 
+
+99.7% 99.5% 
+
+96.3% 
+
+95.6% 87.3% 
+
+84.9% 
+
+95.7% 
+
+94.8% 
+
+84.1% 
+
+83.7% 
+
+99.7% 
+
+99.6% 
+
+80.0% 
+
+78.2% 96.9% 
+
+89.8% 
+
+(c) ViT-L/14 
+
+Fig. 14. Per-task CLIP merging performance of ESM and ESM++ ( r = 32 ) across three backbones.

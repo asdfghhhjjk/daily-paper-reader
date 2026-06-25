@@ -6,92 +6,76 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-25 ~ 2026-06-23
-- 运行时间：2026-06-23 10:58:16 UTC
+- 最新运行日期：2026-05-27 ~ 2026-06-25
+- 运行时间：2026-06-25 08:17:22 UTC
 - 运行状态：成功
-- 本次总论文数：24
-- 精读区：13
-- 速读区：11
+- 本次总论文数：18
+- 精读区：10
+- 速读区：8
 
 ### 今日简报（AI）
-本日报共收录24篇论文，精读13篇，聚焦细胞分割与肿瘤微环境等方向。最值得关注的是《SegTME-UNI2》（10/10）提出的基础模型框架与《One Click per Cell Type Suffices》（9/10）的无训练组交互分割方法。建议优先精读这两篇，了解其开源实现并尝试在自有病理数据上验证。
-- 详情：[/20260525-20260623/README](/20260525-20260623/README)
+今日聚焦病理AI前沿：精读18篇论文中，基础模型SegTME-UNI2和参数高效ViT分别拿下10分与9分，揭示通用细胞分割与多任务学习新范式。  
+最值得关注：LLM正从组织微环境表征渗入疤痕临床分析，且上下文多示例学习、可学习Token稀疏化让十亿像素WSI推理更高效。  
+建议读者紧随“基础模型+LLM+高效推理”三角趋势，重点实验SegTME-UNI2和子空间解耦策略在自家病理数据上的迁移效果。
+- 详情：[/20260527-20260625/README](/20260527-20260625/README)
 
 ### 精读区论文标签
-1. [SegTME-UNI2: A Foundation Model-Based Framework for Generalisable Multiclass Cell Segmentation and LLM-Driven Tumour Microenvironment Characterisation in Histopathology](/20260525-20260623/2606.17702v2-segtme-uni2-a-foundation-model-based-framework-for-generalisable-multiclass-cell-segmentation-and-llm-driven-tumour-microenvironment-characterisation-in-histopathology)  
+1. [SegTME-UNI2: A Foundation Model-Based Framework for Generalisable Multiclass Cell Segmentation and LLM-Driven Tumour Microenvironment Characterisation in Histopathology](/20260527-20260625/2606.17702v2-segtme-uni2-a-foundation-model-based-framework-for-generalisable-multiclass-cell-segmentation-and-llm-driven-tumour-microenvironment-characterisation-in-histopathology)  
    标签：评分：10.0/10、query:cellseg
-   evidence：联合多类细胞分割和核实例分割框架
-2. [One Click per Cell Type Suffices: Training-free Group Interaction for Cell Instance Segmentation](/20260525-20260623/2605.29429v1-one-click-per-cell-type-suffices-training-free-group-interaction-for-cell-instance-segmentation)  
+   evidence：双头解码器统一框架，同时进行六类语义分割和基于分水岭的核实例分离，联合预测细胞类别标签和边界
+2. [Parameter-Efficient Subspace Decoupling ViT for Mitigating Multi-Task Negative Transfer in Histological Scoring](/20260527-20260625/2605.29852v1-parameter-efficient-subspace-decoupling-vit-for-mitigating-multi-task-negative-transfer-in-histological-scoring)  
+   标签：评分：9.0/10、query:profile
+   evidence：使用子空间解耦ViT对形态学特征进行多任务组织学评分
+3. [Symb-xMIL: Symbolic Explanations for Multiple Instance Learning in Digital Pathology](/20260527-20260625/2606.06224v1-symb-xmil-symbolic-explanations-for-multiple-instance-learning-in-digital-pathology)  
+   标签：评分：9.0/10、query:wsi-mil
+   evidence：数字病理学中多实例学习的符号解释
+4. [Symb-xMIL: Symbolic Explanations for Multiple Instance Learning in Digital Pathology](/20260527-20260625/2606.06224v2-symb-xmil-symbolic-explanations-for-multiple-instance-learning-in-digital-pathology)  
+   标签：评分：9.0/10、query:wsi-mil
+   evidence：通过符号规则量化MIL证据组合方式，实现图块重要性估计和判别区域识别
+5. [Stain-Aware Wavelet Regularization for Instant Adversarial Purification in Histopathology](/20260527-20260625/2606.08745v1-stain-aware-wavelet-regularization-for-instant-adversarial-purification-in-histopathology)  
+   标签：评分：9.0/10、query:pathology-ai
+   evidence：用于计算病理学管道中组织病理学图像的对抗性净化框架
+6. [Predicting Immune Biomarkers with MultiModal Mixture-of-Expert Pathology Foundation Models Empowers Precision Oncology](/20260527-20260625/2606.18123v2-predicting-immune-biomarkers-with-multimodal-mixture-of-expert-pathology-foundation-models-empowers-precision-oncology)  
+   标签：评分：9.0/10、query:pathfeat
+   evidence：整合病理基础模型，从H&E图像中提取图像块级表示，用于像素级和切片级免疫生物标志物预测
+7. [Performance and Interpretability of Convolutional, Transformer, and Hybrid Deep Learning Models in Colorectal Histology Classification](/20260527-20260625/2606.23744v1-performance-and-interpretability-of-convolutional-transformer-and-hybrid-deep-learning-models-in-colorectal-histology-classification)  
+   标签：评分：9.0/10、query:pathology-ai
+   evidence：对结直肠组织学分类中CNN、Transformer和混合模型的比较评估
+8. [A Leakage-Aware Comparative Benchmark of Machine Learning, Deep Learning, and Transformer Models for Reliable Leukemia Detection](/20260527-20260625/2606.24944v1-a-leakage-aware-comparative-benchmark-of-machine-learning-deep-learning-and-transformer-models-for-reliable-leukemia-detection)  
    标签：评分：9.0/10、query:cellseg
-   evidence：无训练群组交互的细胞实例分割，每类型单次点击
-3. [CodeCytos: AI-assisted spatial molecular imaging analysis via code-augmented agent action space](/20260525-20260623/2606.00472v1-codecytos-ai-assisted-spatial-molecular-imaging-analysis-via-code-augmented-agent-action-space)  
-   标签：评分：9.0/10、query:pathology-ai
-   evidence：用于空间分子成像细胞分析的智能AI框架
-4. [Agentic-J: An AI Agent for Biological Microscopy Image Analysis](/20260525-20260623/2606.02080v1-agentic-j-an-ai-agent-for-biological-microscopy-image-analysis)  
-   标签：评分：9.0/10、query:pathology-ai
-   evidence：用于显微镜图像分析的多智能体AI助手，一个用于病理学的智能AI框架
-5. [CP-Agent: Context-Aware Multimodal Reasoning for Cellular Morphological Profiling under Chemical Perturbations](/20260525-20260623/2606.03435v1-cp-agent-context-aware-multimodal-reasoning-for-cellular-morphological-profiling-under-chemical-perturbations)  
-   标签：评分：9.0/10、query:pathology-ai
-   evidence：CP-Agent：面向细胞形态剖析的上下文感知多模态推理代理
-6. [Symb-xMIL: Symbolic Explanations for Multiple Instance Learning in Digital Pathology](/20260525-20260623/2606.06224v1-symb-xmil-symbolic-explanations-for-multiple-instance-learning-in-digital-pathology)  
+   evidence：对从外周血涂片显微镜图像中分类急性淋巴细胞白血病的机器学习与深度学习模型进行基准测试
+9. [C2RM-Seg: Causal Counterfactual Reasoning with Structural-Semantic Priors for Weakly Supervised Histopathological Tissue Segmentation](/20260527-20260625/2606.25508v1-c2rm-seg-causal-counterfactual-reasoning-with-structural-semantic-priors-for-weakly-supervised-histopathological-tissue-segmentation)  
    标签：评分：9.0/10、query:wsi-mil
-   evidence：多实例学习，符号解释，数字病理学
-7. [Symb-xMIL: Symbolic Explanations for Multiple Instance Learning in Digital Pathology](/20260525-20260623/2606.06224v2-symb-xmil-symbolic-explanations-for-multiple-instance-learning-in-digital-pathology)  
-   标签：评分：9.0/10、query:wsi-mil
-   evidence：数字病理学中MIL的符号解释框架
-8. [LRMIL: Efficient Low-Resolution Multiple Instance Learning via High-Resolution Knowledge Distillation for Whole Slide Image Classification](/20260525-20260623/2606.06864v1-lrmil-efficient-low-resolution-multiple-instance-learning-via-high-resolution-knowledge-distillation-for-whole-slide-image-classification)  
-   标签：评分：9.0/10、query:wsi-mil
-   evidence：用于全切片图像分类的多实例学习，结合知识蒸馏
-9. [AMN: An Adaptive Multi-Scale Fusion Network with Boundary and Uncertainty Modeling for Nuclei Segmentation](/20260525-20260623/2606.07633v1-amn-an-adaptive-multi-scale-fusion-network-with-boundary-and-uncertainty-modeling-for-nuclei-segmentation)  
-   标签：评分：9.0/10、query:cellseg
-   evidence：用于组织病理学细胞核分割和亚型分类的双编码器框架
-10. [A Multi-modal Agentic Co-pilot for Evidence Grounded Computational Pathology](/20260525-20260623/2606.08093v1-a-multi-modal-agentic-co-pilot-for-evidence-grounded-computational-pathology)  
-   标签：评分：9.0/10、query:pathology-ai
-   evidence：面向证据基础病理学的多模态智能体协作系统
-11. [Patient-Level Diagnosis of Acute Myeloid Leukemia via Deep Learning Analysis of Bone Marrow Smear](/20260525-20260623/2606.10735v1-patient-level-diagnosis-of-acute-myeloid-leukemia-via-deep-learning-analysis-of-bone-marrow-smear)  
-   标签：评分：9.0/10、query:pathology-ai
-   evidence：对骨髓涂片图像进行细胞级分析，使用16类注释辅助AML诊断
-12. [Enhancing Pathological VLMs with Cross-scale Reasoning](/20260525-20260623/2606.17412v1-enhancing-pathological-vlms-with-cross-scale-reasoning)  
-   标签：评分：9.0/10、query:pathology-ai
-   evidence：病理VLM跨尺度推理，细胞形态学分析
-13. [Rethinking the Adaptation of Vision Foundation Models for Efficient Cell Segmentation](/20260525-20260623/2606.21913v1-rethinking-the-adaptation-of-vision-foundation-models-for-efficient-cell-segmentation)  
-   标签：评分：9.0/10、query:pathology-ai
-   evidence：不重新训练编码器的高效细胞分割框架
+   evidence：通过因果类激活图优化的弱监督组织病理学组织分割，识别判别区域
+10. [AutoMedBench: Towards Medical AutoResearch with Agentic AI Models](/20260527-20260625/2606.01961v1-automedbench-towards-medical-autoresearch-with-agentic-ai-models)  
+   标签：评分：8.0/10、query:pathology-ai
+   evidence：面向医学自主AI智能体的基准测试，包含分割等长期任务，能够评估自主特征发现能力
 
 ### 速读区论文标签
-1. [MoSAIC: Multi-Resolution Spatial Regression Analysis of Cellular Colocalizations in Cancer Imaging](/20260525-20260623/2605.30287v1-mosaic-multi-resolution-spatial-regression-analysis-of-cellular-colocalizations-in-cancer-imaging)  
-   标签：评分：8.0/10、query:profile
-   evidence：肿瘤微环境中细胞共定位的多分辨率空间分析
-2. [Spatial Transcriptomics-Guided Alignment Enhances Molecular Profiling in Pathology Foundation Model](/20260525-20260623/2606.03644v1-spatial-transcriptomics-guided-alignment-enhances-molecular-profiling-in-pathology-foundation-model)  
+1. [When LLMs Analyze Scars: From Images to Clinically-Meaningful Features](/20260527-20260625/2606.18063v1-when-llms-analyze-scars-from-images-to-clinically-meaningful-features)  
    标签：评分：8.0/10、query:pathology-ai
-   evidence：利用全切片图像进行分子谱分析的病理基础模型
-3. [DaX: Learning General Pathology Representations Across Scales](/20260525-20260623/2606.06983v1-dax-learning-general-pathology-representations-across-scales)  
-   标签：评分：8.0/10、query:pathology-ai
-   evidence：跨尺度全切片病理通用表示基础模型
-4. [Querying Counterfactuals on Tissue Graphs with Supervised Disentanglement](/20260525-20260623/2606.08493v1-querying-counterfactuals-on-tissue-graphs-with-supervised-disentanglement)  
-   标签：评分：8.0/10、query:pathology-ai
-   evidence：细胞级空间分析，组织图反事实推理，监督解缠
-5. [Benchmarking Pathology Foundation Models for Spatial Domain Understanding](/20260525-20260623/2605.25764v1-benchmarking-pathology-foundation-models-for-spatial-domain-understanding)  
-   标签：评分：7.0/10、query:pathology-ai
-   evidence：病理基础模型在全切片图像上空间理解基准
-6. [MORI-Seg: Learning Morphological Geometry for Instance Segmentation without Instance Annotations](/20260525-20260623/2605.28261v1-mori-seg-learning-morphological-geometry-for-instance-segmentation-without-instance-annotations)  
-   标签：评分：7.0/10、query:cellseg
-   evidence：无需实例标注的实例分割，形态学几何
-7. [Simple Token-Efficient Vision-Language Model for Case-level Pathology Synoptic Report Generation](/20260525-20260623/2605.30716v1-simple-token-efficient-vision-language-model-for-case-level-pathology-synoptic-report-generation)  
-   标签：评分：7.0/10、query:pathology-ai
-   evidence：用于全切片病理报告生成的标记高效视觉语言模型
-8. [Deep Learning for Generating Computational PIN-4 Immunohistochemistry Staining from Prostate Biopsy H&E Images](/20260525-20260623/2606.01871v1-deep-learning-for-generating-computational-pin-4-immunohistochemistry-staining-from-prostate-biopsy-he-images)  
-   标签：评分：7.0/10、query:pathology-ai
-   evidence：从H&E全切片图像生成IHC染色的数字病理图像分析
-9. [Experiments in Agentic AI for Science](/20260525-20260623/2605.26305v2-experiments-in-agentic-ai-for-science)  
+   evidence：利用LLM作为知识驱动的特征工程器从疤痕图像中提取临床有意义特征
+2. [In-Context Multiple Instance Learning](/20260527-20260625/2606.06458v1-in-context-multiple-instance-learning)  
+   标签：评分：7.0/10、query:wsi-mil
+   evidence：上下文MIL袋级分类，适用于计算病理学
+3. [Learnable Token Sparsification for Efficient Gigapixel Whole Slide Image Reasoning](/20260527-20260625/2606.08641v1-learnable-token-sparsification-for-efficient-gigapixel-whole-slide-image-reasoning)  
+   标签：评分：7.0/10、query:wsi-mil
+   evidence：可学习标记稀疏化用于千兆像素全切片图像，学习选择重要视觉标记，类似判别性图块选择
+4. [DANTE: A Reference-Guided Unsupervised Pipeline for Extended-Transient Anomaly Characterization in LIGO O4a](/20260527-20260625/2606.25702v1-dante-a-reference-guided-unsupervised-pipeline-for-extended-transient-anomaly-characterization-in-ligo-o4a)  
+   标签：评分：7.0/10、query:wsi-mil
+   evidence：使用多实例学习(MIL) top-k池化进行频谱图异常表征，展示了图块重要性估计
+5. [Multimodal Brain Tumour Classification Using Feature Fusion](/20260527-20260625/2606.11107v1-multimodal-brain-tumour-classification-using-feature-fusion)  
+   标签：评分：6.0/10、query:pathfeat
+   evidence：融合CNN图像特征与手工放射组学特征的多模态脑肿瘤分类
+6. [Essential Subspace Merging for Multi-Task Learning](/20260527-20260625/2606.19164v2-essential-subspace-merging-for-multi-task-learning)  
+   标签：评分：6.0/10、query:cellseg
+   evidence：通过本质子空间分解实现多任务模型合并
+7. [Robust Image-Driven Phenotyping of Ovarian Tumor Cells using Optimized Dynamic Features in Hyperbolic Channels](/20260527-20260625/2606.20703v1-robust-image-driven-phenotyping-of-ovarian-tumor-cells-using-optimized-dynamic-features-in-hyperbolic-channels)  
    标签：评分：6.0/10、query:pathology-ai
-   evidence：用于科学的智能AI框架，可潜在应用于病理学
-10. [GC-MoE: Genomics-Guided Cell-Type-Specific Mixture of Experts for Histology-Based Single-Cell Spatial Transcriptomics](/20260525-20260623/2606.02424v1-gc-moe-genomics-guided-cell-type-specific-mixture-of-experts-for-histology-based-single-cell-spatial-transcriptomics)  
-   标签：评分：6.0/10、query:pathology-ai
-   evidence：从组织学图像预测单细胞基因表达，涉及细胞级分析
-11. [Pathway-Structured Privileged Distillation for Deployable Computational Pathology](/20260525-20260623/2606.02877v1-pathway-structured-privileged-distillation-for-deployable-computational-pathology)  
-   标签：评分：6.0/10、query:pathology-ai
-   evidence：全切片图像，计算病理学，特权蒸馏
+   evidence：基于图像的细胞力学表型分析，提取形态动力学与运动学特征
+8. [Contrastive and Adaptive Multi-modal Masked Autoencoder for Spatial Transcriptomics](/20260527-20260625/2606.21156v1-contrastive-and-adaptive-multi-modal-masked-autoencoder-for-spatial-transcriptomics)  
+   标签：评分：6.0/10、query:pathfeat
+   evidence：利用掩码自编码器从H&E组织学图像中预测基因表达，实现图块级表征学习
 
 
 <div class="dpr-home-promo-card">
