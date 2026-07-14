@@ -1,0 +1,615 @@
+Title: Continual Model Merging with Test-Time Adaptation for Whole-Slide Image Analysis
+
+URL Source: https://arxiv.org/pdf/2607.04755v1
+
+Published Time: Tue, 07 Jul 2026 02:47:53 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+## Continual Model Merging with Test-Time Adaptation for Whole-Slide Image Analysis 
+
+Duc-Thanh Le 1,2, Doanh C. Bui 1,2, Maï K. Nguyen 3, Khang Nguyen 1,2
+
+> 1
+
+University of Information Technology 
+
+> 2
+
+Viet Nam National University Ho Chi Minh City 
+
+> 3
+
+ETIS (UMR 8051), CY Cergy Paris University, ENSEA, CNRS, France 
+
+Abstract. Model merging offers a practical alternative to conventional continual learning by integrating independently fine-tuned models with-out retaining previous training data. Recent state-of-the-art model merg-ing methods employ test-time adaptation (TTA-guided merging) to ad-dress distribution shifts by adjusting merging-related variables using un-labeled target data. However, these methods have primarily been studied in multi-task or single-target settings, and their behavior under sequen-tial continual learning remains insufficiently understood. We present a benchmark study that maps this family of methods to rehearsal-free continual Whole Slide Image classification and evaluates them against traditional continual-learning approaches. Experiments on six TCGA cancer-subtyping cohorts cover CLASS-IL and TASK-IL scenarios, in-domain and out-of-domain evaluation, and different task orders. The re-sults show that adapting model merging at test time can provide strong task-specific performance and improve retention of previously acquired knowledge without storing historical WSIs. Nevertheless, performance re-mains sensitive to task order and to the interaction between adaptation on the current distribution and accumulated knowledge. This benchmark identifies model merging with test-time adaptation as a promising direc-tion for continual computational pathology and motivates future meth-ods that balance adaptation to domain shift with explicit preservation of historical knowledge. 
+
+Keywords: lifelong learning · whole slide image analysis · pathology vision-language foundation model · test-time adaptation 
+
+1 Introduction 
+
+Cancer classification from Whole Slide Images (WSIs) must accommodate con-tinuously emerging cohorts and diagnostic tasks, while the gigapixel scale of WSIs and institutional data restrictions make centralised retraining and long-term storage of previous patient data impractical [1], [2]. This motivates contin-ual learning methods that incorporate new knowledge without revisiting histor-ical slides, patches, or feature bags. Sequential fine-tuning is susceptible to catastrophic forgetting, whereas rehearsal-based methods require storing previous samples [3], [4]. Model merging offers an  
+
+> arXiv:2607.04755v1 [cs.CV] 6 Jul 2026 2Le et al.
+
+exemplar-free alternative by consolidating independently fine-tuned task models directly in parameter space [5], [6]. MergeSlide [7] demonstrates the effectiveness of continual model merging for WSI classification. However, its merging rule is fixed once a new task model is incorporated and is not explicitly adapted to the incoming test distribution, potentially limiting its flexibility under distribution shift. Test-time adaptive merging provides a natural extension to this static paradigm. AdaMerging [8] adapts task-wise or layer-wise merging coefficients, AdaRank [9] learns masks over singular components of task vectors, and Hi-Vec [10] adapts hi-erarchical prediction layers and propagates target-specific updates through task-vector-based weight merging. Despite their different formulations, these methods follow a common pattern of adapting merging-related variables from unlabeled test samples before constructing the final inference weights. Crucially, they were originally developed for multi-task merging or standard test-time adaptation rather than continual learning. When only the current task distribution is avail-able, such adaptation may bias the merged model toward recent data, interfere with previously accumulated knowledge, and introduce repeated update to merge to inference overhead. In this work, we systematically transfer AdaMerging, AdaRank, and Hi-Vec to continual WSI classification over six TCGA cancer-subtyping cohorts. We compare them with exemplar-free continual learning baselines including EWC [11] and LwF [12], and DER++ [4] as a rehearsal-based reference. Our study examines whether test-time adaptive merging improves current-task adap-tation without increasing catastrophic forgetting, and whether repeatedly updat-ing and reconstructing merging variables provides sufficient gains to justify its computational cost. 
+
+2 Methodology 
+
+2.1 Preliminaries 
+
+Problem formulation. Given a sequential stream {D t}Tt=1 of T cancer-subtyping tasks, where each Dt contains WSIs from ct subtypes, the goal is to fine-tune a slide aggregator fA on each Dt and incrementally merge the resulting weights into a unified model ˜θ1: t = M(θ0, θ 1, . . . , θ t), where θ0 is the shared pre-trained back-bone. The task vector encoding task-specific knowledge is defined as τt = θt −θ0.
+
+Two constraints are strictly enforced: (i) no access to D1: t−1 after task t − 1 com-pletes, and (ii) no exemplar memory. We evaluate under CLASS-IL (task identity unknown at inference) and TASK-IL (task identity provided). 
+
+WSI processing. Inspired by MergeSlide [7], each WSI Xi ∈ D t is first pre-processed via the CLAM pipeline [1], which segments tissue regions using Otsu thresholding and tiles them into patches. Each patch xi,j is then passed through the frozen vision encoder of TITAN [13], a state-of-the-art pathology VLM, to extract a patch embedding vi,j ∈ Rdvis . We obtain a bag of patch embeddings Bi =ZeroSlide 3Continual learning on WSIs 
+
+> 𝐷 1
+> 𝑡𝑟𝑎𝑖𝑛
+> 𝐷 2
+> 𝑡𝑟𝑎𝑖𝑛
+> 𝐷 3
+> 𝑡𝑟𝑎𝑖𝑛
+> 𝐷 𝑡
+> 𝑡𝑟𝑎𝑖𝑛
+> …
+> …
+> 𝜃 𝐼𝑛𝑖𝑡
+> 𝑇𝐼𝑇𝐴𝑁
+> …
+> 𝜃 1
+> …
+> …
+> ෨𝜃 1:2
+> …
+> 𝑆 1
+> 𝑆 1:2
+> …
+> ෨𝜃 1:3
+> …
+> 𝑆 1:3
+> …
+> ෨𝜃 1:𝑡
+> …
+
+ℒ𝑡 
+
+> … 𝑆 1:t−1
+
+Regularization – based 
+
+ℒ3
+
+ℒ2
+
+ℒ1
+
+Rehearsal – based 
+
+> 𝐷 1
+> 𝑡𝑟𝑎𝑖𝑛
+> 𝐷 2
+> 𝑡𝑟𝑎𝑖𝑛
+> 𝐷 3
+> 𝑡𝑟𝑎𝑖𝑛
+> 𝐷 𝑡
+> 𝑡𝑟𝑎𝑖𝑛
+> …
+
+ℒ1
+
+> 𝜃 1
+> …
+> ෨𝜃 1:2
+> …
+> ෨𝜃 1:3
+> …
+> ෨𝜃 1:𝑡
+> …
+> …
+> ℳ
+> ℳ
+> ℳ
+
+ℒ2
+
+ℒ3
+
+ℒ𝑡 
+
+…
+
+> ℳ
+> 𝜃 𝐼𝑛𝑖𝑡
+> 𝑇𝐼𝑇𝐴𝑁
+> …
+
+# …
+
+𝐷 1
+
+> 𝑡𝑟𝑎𝑖𝑛
+
+𝜃 Init 
+
+𝜃 1
+
+> …
+
+𝐷 2
+
+> 𝑡𝑟𝑎𝑖𝑛
+
+𝜃 2
+
+> …
+
+𝜃 Init 
+
+𝐷 3
+
+> 𝑡𝑟𝑎𝑖𝑛
+
+𝜃 3
+
+> …
+
+𝜃 Init 
+
+𝐷 𝑡 
+
+> 𝑡𝑟𝑎𝑖𝑛
+
+𝜃 𝑡 
+
+> …
+
+𝜃 Init 
+
+ℒ1 ℒ2 ℒ3 ℒ𝑡 
+
+# …
+
+> …
+
+ℛ1
+
+> …
+
+ℛ2
+
+> …
+
+ℛ3
+
+> …
+
+ℛ𝑡 … 𝜃 Init 
+
+𝑋 𝑖 
+
+෨𝜃 1:𝑡 
+
+𝑍 𝑖  𝑝 (𝑦 |𝑋 𝑖 )
+
+ℒ𝑇𝑇𝐴 
+
+𝜆 /B/𝜙 ∗
+
+Merge Variables 
+
+ሚ𝜃 1:𝑡 
+
+𝑓𝑖𝑛𝑎𝑙  𝑍 𝑖  ො𝑦 𝑖 
+
+𝑋 𝑖 
+
+Final Inference 
+
+TTA -Guided 
+
+Merging 
+
+Random Initialization 
+
+Backbone 
+
+TITAN backbone 
+
+Knowledge 
+
+Snapshot 
+
+ℳ Replay Buffer 
+
+with  ℳ WSIs 
+
+Trainable 
+
+> …
+
+Task Representation 
+
+Backward 
+
+Fig. 1: Comparison of traditional continual learning and TTA-guided model merging for WSIs. 
+
+{vi,j }|B i|
+
+j=1 . Following MergeSlide, K patches are randomly sampled using an in-dex set Ii satisfying |I i| = K, forming B′
+
+i = {vi,j | j ∈ I i} ⊂ B i. The sampled bag is then passed through the MLP-free slide aggregator fA(·; θt) to obtain the slide-level embedding zi = fA(B′
+
+i; θt). No patch, slide, or feature bag from previous tasks is retained. 
+
+2.2 Continual Model Merging with Test-Time Adaptation 
+
+As illustrated in Fig. 1, each task is first fine-tuned independently from the same initialization θ0, producing a task-specific model θk. Each method then converts this model into a method-dependent task representation Rk: AdaMerging [8] uses task vectors, AdaRank [9] uses their singular-component decomposition, and Hi-Vec [10] uses hierarchical prediction layers with task-vector-based updates. At continual step t, the available representations R1: t are combined with method-4 Le et al. 
+
+specific merge variables, namely coefficients λt, binary masks Bt, or a selected hierarchical layer ϕ∗ 
+
+> t
+
+, to construct the current model ˜θ1: t = M(θ0, R1: t; ξt) . The current unlabeled test stream X test  
+
+> t
+
+is then used to optimize ξt through the TTA objective, after which the model is reconstructed or updated for final inference. Since the original methods are not continual, we adapt them to a rehearsal-free sequential protocol in which no previous WSIs, patches, or feature bags are retained. 
+
+AdaMerging. AdaMerging learns task-wise coefficients λk,t , or layer-wise coef-ficients λ(ℓ)
+
+> k,t
+
+, by minimizing prediction entropy on the current test stream. The task-wise merged model is 
+
+˜θ1: t(λt) = θ0 +
+
+> t
+
+X
+
+> k=1
+
+λk,t τk, τk = θk − θ0. (1) For layer-wise merging, ˜θ(ℓ)1: t = θ(ℓ)0 +Ptk=1 λ(ℓ)
+
+> k,t
+
+τ (ℓ) 
+
+> k
+
+. The coefficients are optimized as λ∗ 
+
+> t
+
+= arg min λt EX∼X test  
+
+> t
+
+[H(pA(· | X; ˜θ1: t(λt)))] .
+
+AdaRank. AdaRank replaces fixed top-k SVD truncation with binary masks that select useful singular components. For task k and layer ℓ, let τ (ℓ) 
+
+> k
+
+= U (ℓ) 
+
+> k
+
+Σ(ℓ) 
+
+> k
+
+V (ℓ)⊤
+
+> k
+
+and B(ℓ) 
+
+> k,t
+
+∈ { 0, 1}1×mℓ . The merged layer is 
+
+˜θ(ℓ)1: t (B(ℓ) 
+
+> t
+
+) = θ(ℓ)0 + λ(ℓ)
+
+> tt
+
+X
+
+> k=1
+
+U (ℓ)
+
+> k
+
+
+
+diag( B(ℓ) 
+
+> k,t
+
+) ⊙ Σ(ℓ)
+
+> k
+
+
+
+V (ℓ)⊤ 
+
+> k
+
+. (2) The masks are optimized by entropy minimization on X test  
+
+> t
+
+, using the Straight-Through Estimator to retain binary values in the forward pass while enabling gradient-based optimization. 
+
+Hi-Vec. Hi-Vec replaces a single classification head with hierarchical linear lay-ers Φ = {ϕ1, . . . , ϕ R} of increasing dimensionality. For each test batch, dynamic layer selection chooses ϕ∗ 
+
+> t
+
+= arg min ϕ∈Φ ∥∇ Wϕ LTTA ,t ∥2. Hierarchical agreement is measured by I(pϕ∗ 
+
+> t
+
+; pϕ) = H(pϕ∗ 
+
+> t
+
+) − H(pϕ∗ 
+
+> t
+
+| pϕ); adaptation is suppressed when the average agreement is below δOOD . Finally, target information is shared with layers satisfying cos( vϕ∗ 
+
+> t,t
+
+, vϕ,t ) > δ sim , where vϕ,t = vec( Wϕ,t ), through 
+
+Wϕ,t [ϕ∗ 
+
+> t
+
+] ← Wϕ∗  
+
+> t,t
+
++ αW ϕ,t [ϕ∗ 
+
+> t
+
+].
+
+Test-Time Adaptation Objective. Despite their distinct architectural mech-anisms, AdaMerging, AdaRank, and Hi-Vec share a common surrogate objective for unsupervised test-time adaptation: Shannon entropy minimization over the unlabeled test stream. Given a WSI X ∈ X test  
+
+> t
+
+and the predictive distribution 
+
+pA(y = c | X; θ) over C classes, the TTA objective at continual step t is defined as 
+
+LTTA ,t (θ) = EX∼X test 
+
+> t
+
+"
+
+−
+
+> C
+
+X
+
+> c=1
+
+pA(y = c | X; θ) log pA(y = c | X; θ)
+
+#
+
+. (3) ZeroSlide 5
+
+Although the objective is shared, each method applies LTTA ,t to a different set of adaptation variables: 
+
+– AdaMerging optimizes the task-wise or layer-wise merging coefficients by computing ∇λt LTTA ,t .
+
+– AdaRank backpropagates LTTA ,t through the continuous proxy variables associated with the binary masks Bt, using the Straight-Through Estimator to select singular components. 
+
+– Hi-Vec first uses the layer-wise gradient norm ∥∇ Wϕ LTTA ,t ∥2 for dynamic layer selection, and then minimizes LTTA ,t with respect to the selected layer 
+
+ϕ∗ 
+
+> t
+
+and the shared encoder parameters. 
+
+3 Experiment 
+
+Datasets. We evaluate on six cancer subtyping cohorts sourced from the Ge-nomic Data Commons (GDC) portal of The Cancer Genome Atlas (TCGA) 1:TCGA-BRCA (breast), TCGA-RCC (kidney), TCGA-NSCLC (lung), TCGA-ESCA (esophagus), TCGA-TGCT (testis), and TCGA-CESC (cervix uteri). Each cohort is partitioned into 10 folds; 10-fold cross-validation is applied uni-formly across all methods. Dataset statistics are summarized in Tab. 1 Table 1: Dataset statistics for the six TCGA cohorts. The cohorts span two groups by data availability: common cohorts (BRCA, RCC, NSCLC) with abun-dant WSIs, and rare cohorts (ESCA, TGCT, CESC) with limited slide counts and pronounced class imbalance, posing distinct challenges for both per-task fine-tuning and TTA-guided merging coefficient optimization.                                         
+
+> Task Dataset Subtype #WSIs Ratio
+> 1TCGA-BRCA (B) invasive ductal carcinoma (IDC) 726 4.9 invasive lobular carcinoma (ILC) 149 12TCGA-RCC (R) clear cell renal cell carcinoma (CC) 498 4.2 papillary renal cell carcinoma (P) 289 2.4 chromophobe renal cell carcinoma (ChRCC) 118 13TCGA-NSCLC (N) squamous cell carcinoma (SCC) 845 7.8 adenocarcinoma (A) 109 14TCGA-ESCA (E) squamous cell carcinoma (SCC) 114 1.3 adenocarcinoma (A) 86 15TCGA-TGCT (T) seminoma (S) 66 2.3 mixed germ cell tumor (MGCT) 29 16TCGA-CESC (C) squamous cell carcinoma (SCC) 270 5.5 adenocarcinoma (A) 49 1
+> 1
+
+https://portal.gdc.cancer.gov/ 6 Le et al. 
+
+Implementation Details. WSIs are partitioned into non-overlapping 256 ×256 
+
+patches at 10 × magnification, and 768-dimensional patch embeddings are ex-tracted using the frozen TITAN vision encoder. All methods share the same TITAN-initialized Transformer slide aggregator fA and task-specific linear heads. CLASS-IL inference is performed over the concatenated outputs of all task heads, whereas TASK-IL uses only the head associated with the given task. Following MergeSlide [7], the continual-learning and TTA-guided merging methods repre-sent each slide using K randomly sampled patch embeddings under a common sampling protocol. In contrast, naive fine-tuning and fully supervised training use all available patch embeddings during both training and inference. Models are trained for Ne = 10 epochs per task using AdamW [14]. DER++ is evaluated with replay buffers of 10 and 30 WSIs. All experiments are conducted on a single NVIDIA A100-SXM4 GPU with 80 GB of memory. 
+
+Evaluation Metrics. We report bACC for CLASS-IL, where task identity is unavailable, and masked bACC for TASK-IL, where the task label is provided. Both use mean per-class recall to account for class imbalance. We further report Macro F1, which assigns equal importance to all cancer subtypes, and Weighted F1, which weights each class according to its prevalence. These complementary metrics assess minority-class recognition and overall performance under the ob-served class distribution. Final mean accuracy (Mean ACC), forgetting (FGT), and backward transfer (BWT) are also reported. CLASS-IL bACC remains the primary metric because it represents the more challenging deployment setting. 
+
+In/Out-of-Domain Evaluation. We evaluate all methods under in-domain (IND) and out-of-domain (OOD) protocols. IND permits site overlap between training and test sets, whereas OOD restricts test slides to institutions unseen during training [15]. The OOD setting therefore assesses whether TTA-guided merging can adapt to site-induced distribution shifts using only unlabeled target data. 
+
+Main Results. As shown in Tabs. 2, TTA-guided merging is particularly ef-fective in TASK-IL. Hi-Vec exceeds the fully supervised reference by 3.77% on IND and 7.31% on OOD, while AdaRank provides a −1.99% gain on IND. In CLASS-IL, AdaMerging and Hi-Vec outperform the strongest continual-learning baseline in bACC by 7.51% and 7.82% on IND, and by 5.63% and 5.95% on OOD, respectively. Although DER++ with 30 replay WSIs attains higher Mean ACC, AdaMerging and Hi-Vec preserve previous tasks more effectively: relative to DER++, they reduce FGT by approximately 24 .2% –24 .6% and improve BWT by 24 .1% –25 .0% on IND, with corresponding gains of about 19% under OOD shift. AdaRank remains competitive in TASK-IL but exhibits greater forgetting and stronger task dependence in CLASS-IL. 
+
+Sensitivity to Task Order. Under the reversed sequence, Hi-Vec and AdaRank retain strong TASK-IL performance, exceeding the fully supervised reference by 
+
+3.97% and 3.34% , respectively (Tab. 3). In CLASS-IL, AdaMerging and Hi-Vec ZeroSlide 7
+
+Table 2: Comparison of TTA-guided merging and conventional con-tinual learning methods under the IND and OOD settings on six TCGA datasets with the task sequence B →R→N→E→T→C. Results are reported as mean ± standard deviation in %. Within each setting, bold and underlined values denote the best and second-best results, respectively. 
+
+Setting Method Buffer bACC ↑ Masked bACC ↑ Mean ACC ↑ FGT ↓ BWT ↑
+
+(CLASS-IL) (TASK-IL) (CLASS-IL) IND 
+
+Naive Finetuning – 67 .1044 ( ±3.2976) 90 .5364 ( ±2.0347) 89 .1803 ( ±1.2534) 32 .1120 ( ±4.2359) −31 .6681 ( ±4.3679) 
+
+Fully Supervised – 85 .0110 ( ±2.3417) 90 .8313 ( ±1.8376) – – –LwF [12] – 65 .1804 ( ±4.4238) 90 .5335 ( ±1.8113) 88 .7447 ( ±1.7930) 33 .1937 ( ±5.7010) −33 .1457 ( ±5.6773) 
+
+EWC [11] – 64 .4093 ( ±2.4041) 88 .9731 ( ±2.1901) 87 .5168 ( ±1.4701) 34 .7054 ( ±2.6241) −34 .4042 ( ±2.7596) 
+
+DER++ [4] 10 WSIs 69 .2483 ( ±4.4018) 89 .6904 ( ±2.2743) 89 .9486 ( ±1.6597) 27 .7758 ( ±4.9862) −27 .2555 ( ±5.0663) 
+
+DER++ [4] 30 WSIs 70 .8106 ( ±3.7026) 90 .0952 ( ±2.3719) 90 .6375 ( ±1.5345) 26 .8298 ( ±4.7636) −26 .4299 ( ±4.6563) 
+
+AdaMerging [8] – 78 .3230 ( ±2.0489) 89 .8991 ( ±1.8120) 86 .9496 ( ±1.8086) 2.2073 ( ±0.7298) −1.4375 ( ±0.9317) 
+
+AdaRank [9] – 67 .1714 ( ±3.0644) 92 .8223 ( ±2.3648) 86 .6967 ( ±1.6308) 22 .1014 ( ±3.7348) −21 .8679 ( ±3.7708) 
+
+Hi-Vec [10] – 78 .6298 ( ±2.1341) 94 .6061 ( ±0.7345) 87 .4145 ( ±1.8542) 2.6654 ( ±0.9230) −2.3088 ( ±1.1964) 
+
+OOD 
+
+Naive Finetuning – 62 .9423 ( ±4.7075) 86 .2913 ( ±3.1959) 88 .8731 ( ±2.1782) 32 .6840 ( ±6.6490) −32 .3411 ( ±6.8363) 
+
+Fully Supervised – 79 .3905 ( ±5.0927) 86 .8297 ( ±3.2221) – – –LwF [12] – 63 .4133 ( ±5.8392) 86 .8093 ( ±2.6748) 87 .5284 ( ±2.5118) 31 .5872 ( ±7.9211) −31 .5276 ( ±7.9176) 
+
+EWC [11] – 60 .8898 ( ±4.0825) 84 .8140 ( ±3.1537) 87 .4747 ( ±2.0428) 34 .2521 ( ±5.4305) −34 .0708 ( ±5.5881) 
+
+DER++ [4] 10 WSIs 65 .7675 ( ±5.8657) 87 .1824 ( ±3.2936) 90 .0000 ( ±1.6328) 30 .2324 ( ±7.6581) −29 .8480 ( ±7.7467) 
+
+DER++ [4] 30 WSIs 71 .2885 ( ±4.0662) 88 .1483 ( ±3.1624) 90 .5644 ( ±1.3354) 21 .6273 ( ±3.3084) −21 .2918 ( ±3.1684) 
+
+AdaMerging [8] – 76 .9206 ( ±1.4339) 88 .5119 ( ±1.6805) 88 .6469 ( ±0.5660) 2.2404 ( ±0.7536) −1.9990 ( ±0.8746) 
+
+AdaRank [9] – 67 .9055 ( ±5.6059) 86 .7569 ( ±3.6485) 87 .1590 ( ±1.4127) 16 .2504 ( ±3.9810) −15 .8924 ( ±4.3479) 
+
+Hi-Vec [10] – 77 .2384 ( ±1.5898) 94 .1407 ( ±0.8933) 88 .9163 ( ±0.6548) 2.6285 ( ±0.6480) −2.2167 ( ±0.9649) 
+
+outperform DER++ with 10 replay WSIs in bACC by approximately 4.8% while requiring no exemplar storage. They also reduce FGT by 7.3% –7.6% and improve BWT by 7.6% –7.8% relative to this rehearsal baseline. DER++ with 30 WSIs re-mains stronger in final accuracy and forgetting. Compared with the original task order, the higher FGT of AdaMerging and Hi-Vec indicates sensitivity to task sequence, although both continue to preserve prior knowledge more effectively than naive fine-tuning, LwF, EWC, and limited replay. 1 2 3 4 5 6    
+
+> Number of Tasks
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Accuracy (CLASS-IL)
+> TCGA-BRCA (first task)
+> AdaMerging
+> AdaRank
+> Hi-Vec
+> LwF
+> EWC
+> DER++ (B=30)
+> 23456
+> Number of Tasks
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> TCGA-RCC (second task)
+
+(a) Performance drop under the IND set-ting. 1 2 3 4 5 6    
+
+> Number of Tasks
+> 0.75 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> Accuracy (CLASS-IL)
+> TCGA-BRCA (first task)
+> AdaMerging
+> AdaRank
+> Hi-Vec
+> LwF
+> EWC
+> DER++ (B=30)
+> 23456
+> Number of Tasks
+> 0.75 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> TCGA-RCC (second task)
+
+(b) Performance drop under the OOD set-ting. 
+
+Fig. 2: Performance degradation of all methods under the (a) in-distribution (IND) and (b) out-of-distribution (OOD) evaluation settings. 
+
+Performance retention . We further compare the performance degradation of different methods on TCGA-BRCA and TCGA-RCC as additional tasks are incrementally introduced, as shown in Fig. 2. The performance trajectories fur-ther support the effectiveness of TTA-guided merging for preserving previously 8 Le et al. 
+
+Table 3: Comparison of TTA-guided merging methods mapped to the continual learning setting against conventional continual learning methods on a benchmark of six TCGA datasets in the IND setting under the reversed task sequence E →T→C→B→R→N. All results are re-ported as mean ± standard deviation in %. Bold denotes the best result, while underlined denotes the second-best result. 
+
+Method Buffer bACC ↑ Masked bACC ↑ Mean ACC ↑ FGT ↓ #BWT ↑
+
+(CLASS-IL) (TASK-IL) (CLASS-IL) 
+
+Naive Finetuning – 61 .9742 ( ±4.1518) 90 .5923 ( ±1.6786) 61 .5699 ( ±2.2538) 41 .3195 ( ±5.7577) −41 .1791 ( ±5.8597) 
+
+Fully Supervised – 85 .0261 ( ±3.4855) 90 .2535 ( ±2.4831) – – –LwF [12] – 55 .5284 ( ±4.1972) 90 .3635 ( ±1.8555) 61 .7891 ( ±1.4478) 48 .6558 ( ±4.1489) −48 .4978 ( ±4.2601) 
+
+EWC [11] – 60 .4054 ( ±4.9796) 90 .6885 ( ±1.3657) 61 .3409 ( ±2.0593) 42 .4943 ( ±6.5684) −42 .3889 ( ±6.6177) 
+
+DER++ [4] 10 WSIs 73 .8973 ( ±5.7857) 90 .6087 ( ±1.5475) 80 .0842 ( ±2.9199) 21 .9437 ( ±8.1397) −21 .7424 ( ±8.1899) 
+
+DER++ [4] 30 WSIs 80 .3150 ( ±4.8132) 91 .1414 ( ±1.3826) 86 .3063 ( ±1.8397) 11 .8343 ( ±5.6468) −11 .5218 ( ±5.8428) 
+
+AdaMerging [8] – 78 .6677 ( ±2.5413) 90 .0052 ( ±2.1859) 75 .1242 ( ±0.9795) 14 .3921 ( ±0.7467) −13 .9168 ( ±0.9786) 
+
+AdaRank [9] – 65 .8651 ( ±2.8355) 93 .5975 ( ±1.7599) 74 .3150 ( ±1.3113) 26 .7375 ( ±3.6149) −26 .2774 ( ±3.6550) 
+
+Hi-Vec [10] – 78 .6292 ( ±1.8153) 94 .2190 ( ±1.1353) 75 .1268 ( ±1.0787) 14 .6877 ( ±0.9015) −14 .1682 ( ±1.0023) 
+
+acquired knowledge. For the earliest task, TCGA-BRCA, AdaMerging and Hi-Vec maintain nearly flat accuracy curves under both IND and OOD evaluation, with only a small reduction after five additional tasks are incorporated. Their retention is comparable to DER++ with a 30-WSI replay buffer, while clearly exceeding LwF, EWC, and AdaRank, which exhibit substantially larger degra-dation on the same task. A similarly stable trend is observed on TCGA-RCC, although the relative ranking varies across methods. In particular, AdaRank preserves RCC well but degrades markedly on BRCA, indicating greater task-dependent sensitivity. 
+
+Robustness to Class Imbalance. As shown in Tab. 4, Macro F1 and Weighted F1 provide complementary views of performance on highly imbalanced cancer-subtyping cohorts, with the former emphasizing minority-class recognition and the latter reflecting the observed class distribution. Across the evaluated settings, the TTA-guided merging methods generally outperform the regularization-based continual-learning baselines and remain competitive with replay-based DER++. AdaMerging and Hi-Vec are particularly consistent, achieving strong Macro F1 while maintaining Weighted F1 at a similar level; DER++ with a 30-WSI buffer Table 4: CLASS-IL F1 performance across domain settings and task orders. Results are reported as mean ± standard deviation in %. Buffer size denotes the number of stored WSIs. The best and second-best results within each setting are shown in bold and underlined, respectively.                                                                           
+
+> Method Buffer IND: B →R→N→E→T→CIND: E →T→C→B→R→NOOD: B →R→N→E→T→CMacro F1 ↑Weighted F1 ↑Macro F1 ↑Weighted F1 ↑Macro F1 ↑Weighted F1 ↑
+> Naive Finetuning 065 .3453 ( ±3.6051) 70 .9762 ( ±2.6980) 58 .6971 ( ±4.5078) 53 .5409 ( ±4.7451) 59 .6386 ( ±5.8910) 80 .9950 ( ±5.2650)
+> Fully Supervised 085 .3864 ( ±2.1435) 87 .9087 ( ±1.5202) 85 .1684 ( ±3.1539) 86 .9111 ( ±2.6209) 77 .0707 ( ±4.0406) 88 .4054 ( ±2.1422)
+> LwF [12] 063 .7732 ( ±4.8689) 69 .3601 ( ±4.0187) 51 .0719 ( ±4.0343) 46 .0991 ( ±2.8564) 59 .2777 ( ±6.2418) 78 .6101 ( ±4.5714)
+> EWC [11] 062 .1551 ( ±3.0931) 68 .6135 ( ±1.9022) 57 .7269 ( ±5.7170) 52 .6368 ( ±4.9695) 57 .1155 ( ±4.9927) 79 .1614 ( ±4.4218)
+> DER++ [4] 10 67 .9337 ( ±5.1597) 73 .1176 ( ±3.2798) 73 .5335 ( ±6.8056) 74 .9349 ( ±8.1890) 62 .5181 ( ±7.1758) 82 .8260 ( ±5.8393)
+> DER++ [4] 30 69 .7959 ( ±4.4529) 74 .2296 ( ±2.8412) 80 .9389 ( ±5.2564) 84 .2264 ( ±4.2574) 69 .6086 ( ±3.7791) 85 .4789 ( ±3.8914)
+> AdaMerging [8] 072 .2490 ( ±1.9463) 71 .6450 ( ±1.4975) 72 .6805 ( ±2.4349) 72 .2672 ( ±1.5983) 69 .2330 ( ±2.3672) 82 .6715 ( ±1.2637)
+> AdaRank [9] 066 .3656 ( ±3.4847) 69 .2786 ( ±3.0901) 65 .0004 ( ±2.9488) 68 .0237 ( ±2.5309) 63 .3955 ( ±3.9783) 77 .7542 ( ±3.3980)
+> Hi-Vec [10] 072 .6111 ( ±2.1860) 71 .8841 ( ±1.5477) 72 .5704 ( ±1.8272) 71 .9460 ( ±1.3651) 69 .4768 ( ±2.5831) 82 .7992 ( ±1.5840) ZeroSlide 9
+
+remains the strongest competitor in several settings. The comparatively small gap between Macro and Weighted F1 further suggests that TTA-guided merging is less dominated by majority classes and provides a more balanced treatment of common and rare cancer subtypes. 
+
+4 Discussion 
+
+Mapping TTA-guided merging methods to a continual stream exposes a pro-nounced stability–plasticity trade-off because adaptation is driven only by the current unlabeled test distribution. In AdaMerging [8], entropy minimization at step t may shift coefficients associated with earlier task vectors, biasing the merged model toward the most recent task. In AdaRank [9], updating binary masks without access to previous data may suppress singular components that remain important for earlier tasks. Hi-Vec [10] faces a related gating dilemma: a strict agreement threshold may reject genuinely novel target samples, whereas a permissive threshold can allow excessive parameter updates and representation drift. These risks arise from the absence of an explicit constraint that preserves previously acquired subspaces during adaptation. Our results, particularly the increased forgetting under the reversed task order and the stronger task depen-dence of AdaRank, indicate that TTA-guided merging can remain effective but is sensitive to how current-task adaptation interacts with accumulated knowl-edge. This motivates future mechanisms that combine test-time plasticity with explicit protection of historical parameter subspaces. 
+
+5 Conclusion 
+
+This benchmark study examined state-of-the-art model merging methods that use test-time adaptation to address domain shift when transferred to rehearsal-free continual WSI classification. Across six TCGA cohorts, these approaches showed strong task-specific performance and, in several settings, improved knowl-edge retention over traditional continual-learning methods. However, their be-havior remained sensitive to task order and to adaptation driven only by the current test distribution. These findings position model merging with test-time adaptation as a promising direction for continual computational pathology and motivate future methods that improve adaptability while explicitly protecting previously acquired knowledge. 
+
+Disclosure of Interests 
+
+The authors declare that they have no conflict of interest. 10 Le et al. 
+
+References 
+
+[1] M. Y. Lu, D. F. Williamson, T. Y. Chen, R. J. Chen, M. Barbieri, and F. Mahmood, “Data-efficient and weakly supervised computational pathol-ogy on whole-slide images,” Nature biomedical engineering , vol. 5, no. 6, pp. 555–570, 2021. [2] Y. Shen, A. Sowmya, Y. Luo, X. Liang, D. Shen, and J. Ke, “A federated learning system for histopathology image analysis with an orchestral stain-normalization gan,” IEEE Transactions on Medical Imaging , vol. 42, no. 7, pp. 1969–1981, 2022. [3] M. Boschini et al., “Transfer without forgetting,” in European conference on computer vision , Springer, 2022, pp. 692–709. [4] P. Buzzega, M. Boschini, A. Porrello, D. Abati, and S. Calderara, “Dark experience for general continual learning: A strong, simple baseline,” Ad-vances in neural information processing systems , vol. 33, pp. 15 920–15 930, 2020. [5] G. Ilharco et al., “Editing models with task arithmetic,” arXiv preprint arXiv:2212.04089 , 2022. [6] P. Yadav, D. Tam, L. Choshen, C. A. Raffel, and M. Bansal, “Ties-merging: Resolving interference when merging models,” Advances in neural infor-mation processing systems , vol. 36, pp. 7093–7115, 2023. [7] D. C. Bui, B. H. Ngo, H. L. Pham, K. Nguyen, M. K. Nguyen, and Y. Nakashima, “Mergeslide: Continual model merging and task-to-class prompt-aligned inference for lifelong learning on whole slide images,” in 
+
+Proceedings of the IEEE/CVF Winter Conference on Applications of Com-puter Vision , 2026, pp. 4859–4868. [8] E. Yang et al., “Adamerging: Adaptive model merging for multi-task learn-ing,” in International Conference on Learning Representations , vol. 2024, 2024, pp. 22 743–22 763. [9] C. Lee, J. Choi, C. Lee, D. Kim, and S. Hong, “Adarank: Adaptive rank pruning for enhanced model merging,” arXiv preprint arXiv:2503.22178 ,2025. [10] S. Ambekar, M. Hasny, L. A. Daza, D. M. Lang, and J. Schnabel, “Hi-erarchical adaptive networks with task vectors for test-time adaptation,” in Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , 2026, pp. 4661–4672. [11] J. Kirkpatrick et al., “Overcoming catastrophic forgetting in neural net-works,” Proceedings of the national academy of sciences , vol. 114, no. 13, pp. 3521–3526, 2017. [12] Z. Li and D. Hoiem, “Learning without forgetting,” IEEE transactions on pattern analysis and machine intelligence , vol. 40, no. 12, pp. 2935–2947, 2017. [13] T. Ding et al., “A multimodal whole-slide foundation model for pathology,” 
+
+Nature medicine , pp. 1–13, 2025. [14] I. Loshchilov and F. Hutter, “Decoupled weight decay regularization,” 
+
+arXiv preprint arXiv:1711.05101 , 2017. ZeroSlide 11 
+
+[15] S. Cheng et al., “Robust whole slide image analysis for cervical cancer screening using deep learning,” Nature communications , vol. 12, no. 1, p. 5639, 2021.

@@ -1,0 +1,557 @@
+Title: COAST: Context-Aware Differential Learning for Gene Expression Prediction in Spatial Transcriptomics
+
+URL Source: https://arxiv.org/pdf/2607.09166v1
+
+Published Time: Mon, 13 Jul 2026 00:58:00 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+## COAST: Context-Aware Differential Learning for Gene Expression Prediction in Spatial Transcriptomics 
+
+Keunho Byeon 1, Sunhong Park 1, Jeewoo Lim 1, and Jin Tae Kwak 1
+
+School of Electrical Engineering, Korea University, Seoul 02841, Republic of Korea 
+
+{bkh5922,sunhongpapa,jeewoolim,jkwak}@korea.ac.kr 
+
+Abstract. Spatial transcriptomics enables profiling of spatial gene ex-pression but is limited by high cost and low throughput, motivating pre-diction from H&E histopathology images. Existing context-aware meth-ods mainly supervise absolute expression, while relative expression rela-tionships between spots are rarely used explicitly. We propose COAST, a context-aware differential learning framework for spatial gene expres-sion prediction. COAST conditions the local and global context features with type-specific modulation and aggregates the target and context spot tokens using a Transformer encoder to capture both fine-grained local patterns and slide-level structure. It is trained with a joint objec-tive that combines absolute expression regression with signed differential regression between the target and context spots. Experiments on mul-tiple spatial transcriptomics datasets show consistent improvements in correlation- and distribution-based metrics, demonstrating the effective-ness of context-aware differential learning for histology-based spatial gene expression prediction. 
+
+Keywords: Spatial Transcriptomics · Differential Learning · Context-Aware 
+
+1 Introduction 
+
+Spatial transcriptomics (ST) has emerged as a transformative technology that bridges morphological observations with molecular profiling by providing gene expression measurements within their native spatial context. Despite its great potential, current ST platforms, such as 10x Genomics Visium and Slide-seq, are constrained by high experimental costs, limited resolution, and relatively low throughput. These practical barriers severely restrict their widespread adoption in routine clinical workflows. Consequently, there is growing interest in devel-oping and deploying computational approaches capable of inferring spatial gene expression directly from universally available and cost-effective hematoxylin and eosin (H&E) stained histopathology images. Inferring gene expression from his-tology is inherently challenging due to the complex and highly non-linear rela-tionship between tissue morphology and transcriptomic states. Early approaches framed this as an independent patch-level regression problem, focusing on local arXiv:2607.09166v1 [cs.LG] 10 Jul 2026 2 K. Byeon et al. 
+
+feature representations extracted from individual image patches and regressing expression values at each spot in isolation. However, gene expression is funda-mentally shaped by spatial context. Morphologically similar regions can exhibit distinct expression levels depending on their specific microenvironment, struc-tural compartment, and global tissue composition. To address this, recent meth-ods introduced neighbor aggregation, graph-based propagation, or attention-based mechanisms to incorporate spatial context from adjacent regions. Despite these advancements, two critical limitations persist. First, most ex-isting models are optimized to regress the absolute expression magnitude at each spot, making predictions sensitive to slide-level variability and protocol-dependent shifts. Second, although spatial context is often provided as input, models are rarely supervised to explicitly preserve relative spatial relationships. In biological tissues, spatial gradients and relative changes between regions (such as tumor-stroma boundaries) frequently encode more stable and structurally meaningful signals than absolute counts. To address these limitations, we propose COAST , a context-aware dif-ferential learning framework for spatial gene expression prediction from H&E histopathology images. COAST seamlessly integrates heterogeneous contextual information through type-specific contextual feature modulation, enabling adap-tive conditioning of local and global context features. Critically, COAST is op-timized under a joint objective that combines standard absolute expression re-gression with signed differential prediction between a target spot and its contex-tual spots, thereby directly supervising spatial relationships. Experiments across multiple public ST datasets demonstrate consistent improvements over existing baselines. Furthermore, the reconstructed gene expression representations retain clinically meaningful prognostic information in downstream survival prediction, highlighting the practical relevance of context-aware differential learning. 
+
+2 Related Works 
+
+2.1 Histology-based Gene Expression Prediction 
+
+Several studies have investigated predicting spatial gene expression directly from H&E histopathology images. Early approaches like STNet [5] introduced convo-lutional encoders to predict spot-level gene expression from local image patches. Subsequent methods sought to capture broader tissue architecture by integrating spatial positional encoding and Transformers (Hist2ST [21]), constructing spatial graphs over spots for neighborhood-aware prediction (TCGN [19]), and employ-ing retrieval-based transfer modeling with graph neural networks (EGNv2 [20]). More recently, NH2ST [15] introduced a dual-branch architecture with cross-attention and contrastive learning, while PEKA [12] leveraged a single-cell foun-dation model for parameter-efficient knowledge transfer. Although these methods progressively incorporated spatial context, their learning objectives primarily re-main focused on absolute spot-wise expression regression. COAST 3Pre -trained       
+
+> Feature
+> Extractor
+> Encoder Head
+> Absolute
+> Expression
+> −
+> Differential
+> Expression
+> Transformer
+> Encoder
+> Differential Head  Regression Head
+> x3
+> Local Contextual
+> Feature Modulation
+> 𝛾 0𝛽 0
+> Global Contextual
+> Feature Modulation
+> 𝛾 1𝛽 1
+> −
+> −
+> −
+> −
+> −
+> −
+> −
+> ∙+
+> ∙+−
+> Target Local Context
+> Global Context
+> Projection
+
+Fig. 1. Overview of the COAST framework. COAST integrates local and global context spots through contextual feature modulation and Transformer-based aggregation. The architecture jointly optimizes absolute and differential regression. 
+
+2.2 Relative and Differential Learning Objectives 
+
+Relative and differential supervision has become a cornerstone of robust rep-resentation learning. Methods such as Lifted Structured Embedding [11] and Ranked List Loss [18] enforce relational constraints among samples. DIOR-ViT [7] introduced a differential ordinal regression objective that explicitly mod-els ordered relationships between samples to improve structural consistency and robustness. However, explicitly supervising signed expression differences between spatially separated regions remains largely unexplored in histology-based ST. 
+
+2.3 Feature-wise Affine Modulation 
+
+Feature-wise affine modulation has been widely adopted for conditioning inter-mediate representations. Representative methods include AdaIN [6], FiLM [14], and SPADE [13], which apply learned scaling and shifting parameters to adapt features based on external signals. 
+
+3 Methods 
+
+The COAST framework is designed to learn the gene expression patterns at a target spot through explicit interactions with its heterogeneous spatial context (Fig. 1). The framework consists of four major components: (1) a feature extrac-tor, (2) context-specific feature modulation, (3) spatio-relational Transformer, and (4) absolute and differential prediction heads. 
+
+3.1 Feature Extraction and Context Sampling 
+
+Let a whole slide image (WSI) be defined as I = {pi}Ni=1 , where pi is the im-age patch associated with spot i and N is the total number of spots. For a given target spot t, let xt ∈ RD denote its feature vector, extracted using a 4 K. Byeon et al. 
+
+pre-trained feature extractor. To effectively capture both the tissue microenvi-ronment and global structure, we sample a context feature set Ct = {x1, . . . , x K }
+
+containing K spot features from I. This context set consists of two distinct sub-sets: Ct = CL ∪ C G, where CL contains KL local context spot features sampled via k-nearest neighbors, CG comprises KG global context spot features, and 
+
+K = KL + KG. To construct CG during training, we randomly sample spot fea-tures from I to enhance robustness and diversity. During inference, we employ a deterministic stratified grid strategy to ensure reproducible and representative context selection. Finally, each context spot xk ∈ C t is associated with a type indicator ck ∈ { 0, 1}, where 0 and 1 represent local and global types, respectively. 
+
+3.2 Context-Specific Modulation and Spatio-Relational Transformer 
+
+Both target and context spot features are projected into a latent space using a shared encoder head Φhead , which consists of a linear layer followed by a LeakyReLU activation and dropout: 
+
+ht = Φhead (xt), hk = Φhead (xk) (1) where ht, h k ∈ Rd. Although context spot features are sampled from spatially proximal (local) and distant (global) regions, the individual features xk only carry localized visual information, without retaining their spatial context. Ac-cordingly, naively aggregating local and global context with the target spot can conflate heterogeneous signals and weaken type-specific contributions during context integration. To effectively integrate these heterogeneous context sources and resolve this spatial ambiguity, we employ a contextual feature modulation mechanism with two sets of scale ( γ) and shift ( β) parameters: γ0, β 0 ∈ Rd for local context ( ck = 0 ) and γ1, β 1 ∈ Rd for global context ( ck = 1 ). We learn these context-specific scale and shift parameters via embedding layers to modulate the context features: ˜hk = hk ⊙ (1 + γck ) + βck (2) where ⊙ denotes element-wise multiplication. This allows the model to adap-tively condition the latent representations based on their spatial context type. We then form a token sequence by concatenating the target token and the modulated context tokens, [ht; ˜h1, . . . , ˜hK ], and feed it into a standard L-layer Transformer encoder to aggregate heterogeneous context. The Transformer en-coder outputs refined context-aware representations Z = [ zt; z1, . . . , z K ].
+
+3.3 Absolute and Differential Prediction Heads 
+
+We project the refined features Z using a shared projection head Φproj to obtain the final spot representation ft = Φproj (zt) ∈ RD and context representations 
+
+fk = Φproj (zk) ∈ RD . The projection head Φproj includes a sequence of LN, a linear layer, LeakyReLU, and dropout. To capture both absolute and relative ex-pression patterns, we introduce two independent linear prediction heads: (1) Re-gression Head ( ϕreg ): Predicts the absolute gene expression vector ˆyt = ϕreg (ft)COAST 5
+
+Table 1. Comparison of gene expression prediction performance across different mod-els. Best results are shown in bold .Model PCC ↑ MI ↑ AUC 0vNZ ↑ AUC Q50 ↑ NRMSE ↓
+
+STNet 0.0091 ± 0.01 0.0192 ± 0.01 0.4784 ± 0.04 0.5024 ± 0.01 0.1829 ± 0.04 
+
+Hist2ST 0.0516 ± 0.00 0.0788 ± 0.03 0.4933 ± 0.02 0.5000 ± 0.00 0.1528 ± 0.03 
+
+TCGN 0.1920 ± 0.09 0.0628 ± 0.02 0.5571 ± 0.07 0.6066 ± 0.05 0.1961 ± 0.06 
+
+EGNv2 0.2469 ± 0.08 0.0739 ± 0.03 0.6132 ± 0.04 0.6453 ± 0.05 0.1480 ± 0.04 
+
+NH2ST 0.3279 ± 0.07 0.1011 ± 0.02 0.6149 ± 0.07 0.6633 ± 0.03 0.1449 ± 0.04 
+
+PEKA 0.3863 ± 0.08 0.1109 ± 0.03 0.6508 ± 0.04 0.6879 ± 0.03 0.1322 ± 0.02 
+
+COAST 0.4262 ± 0.08 0 .1487 ± 0.03 0 .6567 ± 0.06 0 .7170 ± 0.02 0 .1245 ± 0.02 
+
+and (2) Differential Head ( ϕdif f ): Predicts the expression difference between the target and each context spot from their feature difference, ∆ˆyt,k = ϕdif f (ft −fk),for k = 1 , · · · , K .
+
+3.4 Training Objectives 
+
+The total objective function L is defined as the weighted sum of the absolute regression loss Lreg and the differential regression loss Ldif f :
+
+L = ∥yt − ˆyt∥2
+
+| {z }
+
+> Lreg
+
++wdiff 
+
+1
+
+K
+
+> K
+
+X
+
+> k=1
+
+∥∆y t,k − ∆ˆyt,k ∥2
+
+| {z }
+
+> Ldif f
+
+(3) where ∆y t,k = yt − yk and yt and yk are ground-truth expression vectors for the target and context spots, and wdiff is a hyperparameter. This explicit supervision of relative differences encourages the model to learn stable spatial gradients of gene expression, enhancing robustness against slide-level batch effects. 
+
+4 Experiments 
+
+4.1 Implementation Details 
+
+We employed UNI [2] as a frozen pre-trained feature extractor. COAST used an input hidden dimension D=1024 , Transformer L=3 layers, embedding dimension 
+
+d=512 and H=8 attention heads. We set KL = 18 and KG = 72 (K = 90 total) and set the differential weight to wdiff = 1 .0. The model was optimized with Adam (learning rate 2 × 10 −4, weight decay 1 × 10 −4) for 10 epochs with batch size 1, selecting the best checkpoint on validation PCC. All experiments were conducted on a single NVIDIA H200 GPU using Python 3.12 and PyTorch 2.7. 
+
+4.2 Datasets 
+
+SpaRED [9] provides multiple spatial transcriptomics cohorts collected from di-verse tissues and species. In this study, we used seven SpaRED datasets that 6 K. Byeon et al. 
+
+include predefined test splits and contain 128 target genes: Abalo Human Squa-mous Cell Carcinoma (AHSCC) [1], Erickson Human Prostate Cancer P1 (EH-PCP1) [4], Mirzazadeh Mouse Bone (MMBO) [10], Mirzazadeh Mouse Brain P1 (MMBP1) and P2 (MMBP2) [10], Vicari Mouse Brain (VMB) [16], and Villa-campa Lung Organoid (VLO) [17]. For each spot, we directly used the provided 
+
+224 ×224 H&E patch and the Transcripts Per Million (TPM) normalized, log1p-transformed expression values released in SpaRED. 
+
+4.3 Comparison Results 
+
+We compared COAST with six representative and competitive baseline models, including STNet, Hist2ST, TCGN, EGNv2, NH2ST, and PEKA. For baseline models, we used the official implementations and followed their default hyper-parameter settings. Table 1 summarizes the average performance across seven SpaRED datasets. We report gene-wise averages over G = 128 genes using Pear-son Correlation Coefficient (PCC), Mutual Information (MI) estimated with k-nearest neighbors ( k = 5 ), ROC-AUC 0vNZ for distinguishing zero from non-zero expression, ROC-AUC Q50 for discriminating values above and below the median, and Normalized Root Mean Square Error (NRMSE). COAST achieved the best performance on all five evaluation metrics, obtaining substantial per-formance gains over all baselines: 0.0399 ∼ 0.4171 in PCC, 0.0378 ∼ 0.1295 in MI, 0.0059 ∼ 0.1783 in AUC 0vNZ , 0.0291 ∼ 0.2170 in AUC Q50 , and 0.0077 ∼
+
+0.0716 in NRMSE. We further analyzed per-dataset performance using radar charts and Top-1 frequency rates, measuring how often a method achieves the best result among all competing models (Fig. 2). COAST consistently formed the largest polygons in radar charts and obtained the highest Top-1 frequency, indicating superior and balanced performance across diverse datasets and eval-uation metrics. Qualitative assessment via Leiden clustering on reconstructed expression (Fig. 3) further reveals that COAST captures more coherent spatial domains, reflecting improved structural consistency. 
+
+4.4 Ablation Study 
+
+Table 2 demonstrates ablation experiments using PCC to validate three key components of COAST: (1) context sampling size ( KL and KG), (2) a differ-ential objective weight wdiff , and (3) context-specific modulation. For context sampling, the combination KL=18 and KG=72 yielded the best performance (PCC= 0.4262 ), whereas increasing either KL or KG degraded performance. The ablation of wdiff revealed the critical role of differential learning. Removing the differential objective ( wdiff = 0 ) led to a substantial decrease in PCC by 0.0477 .While optimal performance was achieved at wdiff =1 .0, increasing the weight to 2.0 resulted in a performance drop. Regarding context-specific modulation, jointly applying scaling and shifting ( γ and β) achieved the strongest perfor-mance. Overall, these results suggest that COAST’s gains are not driven by a sin-gle component but arise from complementary design choices. Across these three COAST 7AHSCC 
+
+> EHPCP1
+
+MMBO 
+
+> MMBP1
+> MMBP2
+> VMB
+> VLO
+
+PCC 
+
+> 0.027
+> 0.052
+> 0.258
+> 0.301
+> 0.370
+> 0.488
+> 0.011
+> 0.046
+> 0.144
+> 0.205
+> 0.306
+> 0.382
+> 0.013
+> 0.047
+> 0.079
+> 0.206
+> 0.360
+> 0.459
+> 0.025
+> 0.056
+> 0.107
+> 0.112
+> 0.274
+> 0.288
+> 0.004
+> 0.056
+> 0.224
+> 0.229
+> 0.358
+> 0.413
+> -0.000
+> 0.055
+> 0.293
+> 0.297
+> 0.326
+> 0.440
+> -0.015
+> 0.051
+> 0.201
+> 0.229
+> 0.324
+> 0.398
+> 0.539
+> 0.292
+> 0.477
+> 0.409
+> 0.456
+> 0.441
+> 0.367
+> AHSCC
+> EHPCP1
+
+MMBO 
+
+> MMBP1
+> MMBP2
+> VMB
+> VLO
+
+MI 
+
+> 0.026
+> 0.054
+> 0.066
+> 0.083
+> 0.092
+> 0.143
+> 0.025
+> 0.080
+> 0.089
+> 0.092
+> 0.119
+> 0.141
+> 0.018
+> 0.043
+> 0.082
+> 0.093
+> 0.113
+> 0.134
+> 0.015
+> 0.025
+> 0.053
+> 0.062
+> 0.076
+> 0.102
+> 0.013
+> 0.046
+> 0.049
+> 0.068
+> 0.107
+> 0.110
+> 0.014
+> 0.071
+> 0.087
+> 0.110
+> 0.119
+> 0.152
+> 0.022
+> 0.027
+> 0.055
+> 0.056
+> 0.082
+> 0.111
+> 0.181
+> 0.119
+> 0.180
+> 0.130
+> 0.151
+> 0.181
+> 0.100
+> AHSCC
+> EHPCP1
+
+MMBO 
+
+> MMBP1
+> MMBP2
+> VMB
+> VLO
+
+AUC-0vNZ 0.498 
+
+> 0.499
+> 0.554
+> 0.621
+> 0.625
+> 0.652
+> 0.486
+> 0.508
+> 0.522
+> 0.550
+> 0.637
+> 0.667
+> 0.414
+> 0.453
+> 0.457
+> 0.505
+> 0.582
+> 0.584
+> 0.489
+> 0.508
+> 0.560
+> 0.566
+> 0.669
+> 0.674
+> 0.500
+> 0.504
+> 0.573
+> 0.614
+> 0.670
+> 0.677
+> 0.504
+> 0.505
+> 0.657
+> 0.668
+> 0.683
+> 0.712
+> 0.434
+> 0.497
+> 0.522
+> 0.578
+> 0.629
+> 0.650
+> 0.672
+> 0.555
+> 0.605
+> 0.724
+> 0.704
+> 0.711
+> 0.628
+> AHSCC
+> EHPCP1
+
+MMBO 
+
+> MMBP1
+> MMBP2
+> VMB
+> VLO
+
+AUC-Q50 0.499 
+
+> 0.510
+> 0.611
+> 0.658
+> 0.666
+> 0.707
+> 0.496
+> 0.505
+> 0.630
+> 0.664
+> 0.669
+> 0.688
+> 0.496
+> 0.503
+> 0.540
+> 0.607
+> 0.695
+> 0.695
+> 0.504
+> 0.511
+> 0.555
+> 0.570
+> 0.629
+> 0.647
+> 0.498
+> 0.505
+> 0.606
+> 0.632
+> 0.695
+> 0.701
+> 0.498
+> 0.502
+> 0.653
+> 0.684
+> 0.685
+> 0.730
+> 0.491
+> 0.498
+> 0.605
+> 0.628
+> 0.666
+> 0.706
+> 0.739
+> 0.683
+> 0.725
+> 0.708
+> 0.734
+> 0.735
+> 0.693
+> AHSCC
+> EHPCP1
+
+MMBO 
+
+> MMBP1
+> MMBP2
+> VMB
+> VLO
+
+NRMSE 0.207 
+
+> 0.198
+> 0.153
+> 0.126
+> 0.126
+> 0.121
+> 0.224
+> 0.209
+> 0.207
+> 0.188
+> 0.183
+> 0.156
+> 0.224
+> 0.176
+> 0.161
+> 0.149
+> 0.147
+> 0.125
+> 0.159
+> 0.152
+> 0.150
+> 0.139
+> 0.138
+> 0.122
+> 0.149
+> 0.139
+> 0.126
+> 0.122
+> 0.111
+> 0.107
+> 0.151
+> 0.148
+> 0.119
+> 0.112
+> 0.108
+> 0.102
+> 0.308
+> 0.237
+> 0.208
+> 0.201
+> 0.160
+> 0.153
+> 0.112
+> 0.158
+> 0.116
+> 0.120
+> 0.107
+> 0.105
+> 0.155
+
+PCC 
+
+MI 
+
+AUC-0vNZ 
+
+AUC-Q50 
+
+NRMSE 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Top-1 rate
+
+Top-1 Frequency Across Datasets 
+
+STNet 
+
+Hist2ST 
+
+TCGN 
+
+EGNv2 
+
+NH2ST 
+
+PEKA 
+
+COAST 
+
+Fig. 2. Comparison of per-dataset gene expression prediction performance using radar charts and Top-1 frequency rates. 
+
+Table 2. Ablation study on context sampling, differential objective weight, and con-textual feature modulation strategy. 
+
+KL KG PCC ↑ wdiff PCC ↑ Modulation PCC ↑
+
+18 36 0.4178 ± 0.07 0.0 0.3785 ± 0.09 w/o 0.3999 ± 0.08 
+
+18 108 0.4214 ± 0.07 0.5 0.3762 ± 0.09 γ 0.4128 ± 0.07 
+
+36 72 0.3926 ± 0.13 2.0 0.3914 ± 0.12 β 0.4131 ± 0.07 
+
+18 72 0.4262 ± 0.08 1.0 0.4262 ± 0.08 γ and β 0.4262 ± 0.08 
+
+experiments, most ablation variants remained superior to PEKA (the strongest baseline), further indicating the superiority of COAST. 
+
+4.5 Downstream Task: Overall Survival Prediction on TCGA-LUAD 
+
+To evaluate whether the gene expression representations reconstructed by COAST preserve clinically relevant prognostic signals, we conducted overall survival (OS) prediction on the TCGA-LUAD cohort. Patient-level data splits were used with 5-fold cross-validation. Patch-level image features were extracted using the frozen UNI [2], and gene expression representations were inferred from a model pre-trained on the VLO dataset without fine-tuning. We employed CLAM-SB [8] for slide-level risk prediction and optimized the model using the Cox proportional hazards partial likelihood [3]. We compared three input configurations: (1) image features only (Img-Only), (2) image features combined with PEKA-predicted expression representations (Img+PEKA), and (3) image features combined with COAST-predicted expres-8 K. Byeon et al. AHSCC VMB      
+
+> Thumbnail EGNv2 NH2ST PEKA COAST Ground Truth
+
+Fig. 3. Visualization of Leiden clustering on predicted and ground-truth expression. 
+
+Table 3. Results of overall survival (OS) prediction on TCGA-LUAD. Fold #Patients (#Slides) C-Index ↑
+
+Event Censored Bulk RNA Img-Only Img+PEKA Img+COAST 0 33 (34) 59 (70) 0.5839 0.5019 0.5034 0.5146 1 33 (50) 58 (58) 0.6005 0.7134 0.6990 0.6986 2 32 (34) 59 (63) 0.5423 0.3949 0.4409 0.4978 3 32 (47) 59 (63) 0.6356 0.6635 0.6580 0.6560 4 32 (41) 59 (59) 0.6588 0.6488 0.6508 0.6473 Avg. 162 (206) 294 (313) 0.6042 ± 0.05 0 .5845 ± 0.13 0 .5904 ± 0.11 0 .6029 ± 0.09 
+
+sion representations (Img+COAST). For a biological reference, a bulk RNA base-line was trained using a standard Cox proportional hazards model directly on patient-level bulk transcriptomic profiles without image features. OS prediction performance was quantified using the concordance index (C-index). As shown in Table 3, Img+COAST achieved an average C-index of 0.6029 , comparable to bulk RNA ( 0.6042 ) and outperforming Img-Only ( 0.5845 ) and Img+PEKA (0.5904 ). These results demonstrate that COAST-derived representations cap-ture clinically meaningful prognostic signals from morphology alone. 
+
+5 Conclusion 
+
+In this paper, we present COAST, a context-aware differential learning frame-work for predicting spatial gene expression from H&E-stained histopathology im-ages. By incorporating both local microenvironment and global tissue structure as heterogeneous context spots, COAST effectively overcomes the limitations of existing methods that primarily focused on patch-level regression. Across seven datasets, COAST consistently outperforms representative baselines. Beyond pre-diction accuracy, COAST-derived expression representations preserve clinically meaningful prognostic signals, improving OS prediction on TCGA-LUAD when combined with histology features, comparable to actual bulk RNA sequencing data. These findings suggest that context-aware differential learning is an effec-tive strategy for enhancing histology-based spatial gene expression prediction. COAST 9
+
+Acknowledgments. This work was supported by a grant of the National Research Foundation of Korea (NRF) (No. RS-2025-00558322 and RS-2024-00397293). 
+
+References 
+
+1. Abalo, X., Thrane, K., Ji, A., Mirzazadeh, R., Khavari, P.: Human squamous cell carcinoma, visium. Mendeley Data 10 (2021) 2. Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F., Jaume, G., Song, A.H., Chen, B., Zhang, A., Shao, D., Shaban, M., et al.: Towards a general-purpose foundation model for computational pathology. Nature medicine 30 (3), 850–862 (2024) 3. Cox, D.R.: Regression models and life-tables. Journal of the royal statistical society: Series B (methodological) 34 (2), 187–202 (1972) 4. Erickson, A., He, M., Berglund, E., Marklund, M., Mirzazadeh, R., Schultz, N., Kvastad, L., Andersson, A., Bergenstråhle, L., Bergenstråhle, J., et al.: Spatially resolved clonal copy number alterations in benign and malignant tissue. Nature 
+
+608 (7922), 360–367 (2022) 5. He, B., Bergenstråhle, L., Stenbeck, L., Abid, A., Andersson, A., Borg, Å., Maaskola, J., Lundeberg, J., Zou, J.: Integrating spatial gene expression and breast tumour morphology via deep learning. Nature biomedical engineering 4(8), 827– 834 (2020) 6. Huang, X., Belongie, S.: Arbitrary style transfer in real-time with adaptive instance normalization. In: Proceedings of the IEEE international conference on computer vision. pp. 1501–1510 (2017) 7. Lee, J.C., Byeon, K., Song, B., Kim, K., Kwak, J.T.: Dior-vit: Differential ordinal learning vision transformer for cancer classification in pathology images. Medical Image Analysis 105 , 103708 (2025) 8. Lu, M.Y., Williamson, D.F., Chen, T.Y., Chen, R.J., Barbieri, M., Mahmood, F.: Data-efficient and weakly supervised computational pathology on whole-slide images. Nature biomedical engineering 5(6), 555–570 (2021) 9. Mejia, G., Ruiz, D., Cárdenas, P., Manrique, L., Vega, D., Arbeláez, P.: Enhancing gene expression prediction from histology images with spatial transcriptomics com-pletion. In: International Conference on Medical Image Computing and Computer-Assisted Intervention. pp. 91–101. Springer (2024) 10. Mirzazadeh, R., Andrusivova, Z., Larsson, L., Newton, P.T., Galicia, L.A., Abalo, X.M., Avijgan, M., Kvastad, L., Denadai-Souza, A., Stakenborg, N., et al.: Spatially resolved transcriptomic profiling of degraded and challenging fresh frozen samples. Nature Communications 14 (1), 509 (2023) 11. Oh Song, H., Xiang, Y., Jegelka, S., Savarese, S.: Deep metric learning via lifted structured feature embedding. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 4004–4012 (2016) 12. Pan, S., Chen, J., Secrier, M.: Teaching pathology foundation models to accurately predict gene expression with parameter efficient knowledge transfer. In: Interna-tional Conference on Medical Image Computing and Computer-Assisted Interven-tion. pp. 605–613. Springer (2025) 13. Park, T., Liu, M.Y., Wang, T.C., Zhu, J.Y.: Semantic image synthesis with spatially-adaptive normalization. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 2337–2346 (2019) 14. Perez, E., Strub, F., De Vries, H., Dumoulin, V., Courville, A.: Film: Visual rea-soning with a general conditioning layer. In: Proceedings of the AAAI conference on artificial intelligence. vol. 32 (2018) 10 K. Byeon et al. 15. Qu, M., Wu, Y., Di, D., Gao, Y., Su, T., Song, Y., Fan, L.: Spatially gene expres-sion prediction using dual-scale contrastive learning. In: International Conference on Medical Image Computing and Computer-Assisted Intervention. pp. 574–584. Springer (2025) 16. Vicari, M., Mirzazadeh, R., Nilsson, A., Shariatgorji, R., Bjärterot, P., Larsson, L., Lee, H., Nilsson, M., Foyer, J., Ekvall, M., et al.: Spatial multimodal analysis of transcriptomes and metabolomes in tissues. Nature Biotechnology 42 (7), 1046– 1050 (2024) 17. Villacampa, E.G., Larsson, L., Mirzazadeh, R., Kvastad, L., Andersson, A., Moll-brink, A., Kokaraki, G., Monteil, V., Schultz, N., Appelberg, K.S., et al.: Genome-wide spatial expression profiling in formalin-fixed tissues. Cell Genomics 1(3) (2021) 18. Wang, X., Hua, Y., Kodirov, E., Hu, G., Garnier, R., Robertson, N.M.: Ranked list loss for deep metric learning. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 5207–5216 (2019) 19. Xiao, X., Kong, Y., Li, R., Wang, Z., Lu, H.: Transformer with convolution and graph-node co-embedding: An accurate and interpretable vision backbone for pre-dicting gene expressions from local histopathological image. Medical Image Anal-ysis 91 , 103040 (2024) 20. Yang, Y., Hossain, M.Z., Stone, E., Rahman, S.: Spatial transcriptomics analysis of gene expression prediction using exemplar guided graph neural network. Pattern Recognition 145 , 109966 (2024) 21. Zeng, Y., Wei, Z., Yu, W., Yin, R., Yuan, Y., Li, B., Tang, Z., Lu, Y., Yang, Y.: Spatial transcriptomics prediction from histology jointly through transformer and graph neural networks. Briefings in Bioinformatics 23 (5), bbac297 (2022)
