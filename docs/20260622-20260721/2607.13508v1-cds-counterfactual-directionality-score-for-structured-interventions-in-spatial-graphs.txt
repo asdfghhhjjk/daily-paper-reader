@@ -1,0 +1,1015 @@
+Title: CDS: Counterfactual Directionality Score for Structured Interventions in Spatial Graphs
+
+URL Source: https://arxiv.org/pdf/2607.13508v1
+
+Published Time: Thu, 16 Jul 2026 00:53:24 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# CDS: Counterfactual Directionality Score for Structured Interventions in Spatial Graphs 
+
+Humaira Anzum 
+
+Md Ishtyaq Mahmud Jagan Mohan Reddy Dwarampudi Tania Banerjee Department of Electrical and Computer Engineering University of Houston, Houston, TX, USA 
+
+humaira.snigdha.22@gmail.com, ishtyaqtushar@gmail.com jdwaramp@cougarnet.uh.edu, tbanerjee@uh.edu 
+
+## Abstract 
+
+Quantifying directional influence between node populations is a fundamental prob-lem in graph-based modeling, particularly in spatial biological systems where cell–cell interactions shape functional outcomes. Existing approaches based on attention, attribution, or correlation capture associations but do not provide a prin-cipled framework for evaluating directional effects under controlled perturbations. We introduce a framework for structured counterfactual interventions in graph-based models to estimate directional influence between node types. Our approach trains a Neighbor Influence Model (NIM) to predict node states from local neighbor-hoods and applies constrained interventions that modify neighborhood composition while preserving key spatial and structural properties. We define the Counterfactual Directionality Score (CDS), which measures the change in predicted node state induced by targeted perturbations, and provide a theoretical interpretation of CDS as a finite-difference measure of local intervention sensitivity. To obtain valid un-certainty estimates, we introduce a core-level bootstrap procedure that accounts for dependencies within spatial samples. Experiments on synthetic spatial graphs with known directional structure show that CDS recovers directional influence, remains well calibrated under null conditions, and is robust to confounding signals, while preliminary results on spatial transcriptomics data reveal biologically plausible and consistent interactions across tissue cores. 
+
+## 1 Introduction 
+
+Spatially-resolved single-cell technologies reveal how cells interact within tissues. A central question is directional influence : how does one cell type affect the molecular state of another? Answering this question is key to understanding tumor–immune interactions, stromal remodeling, and signaling in health and disease. Graph neural networks (GNNs) model such data by representing cells as nodes and spatial proximity as edges. While GNNs achieve strong predictive performance, they provide limited tools for quantifying directional effects between cell populations. Existing approaches, such as attention weights, feature attribution, and correlation-based cell–cell interaction analyses, capture associations but often fail to distinguish true directional influence from confounding factors such as shared microenvironmental signals or global expression trends. We introduce a framework for structured counterfactual interventions in graph-based models to estimate directional influence. Our principle is: if a sender population influences a receiver’s state, systematically removing that population should change the receiver’s predicted cellular state. We 
+
+> Preprint. arXiv:2607.13508v1 [cs.LG] 15 Jul 2026
+
+operationalize this idea by training a Neighbor Influence Model (NIM) that predicts a cell’s transcrip-tomic state from its spatial neighborhood. Then we apply counterfactual interventions that modify neighborhood composition while preserving key spatial and structural constraints, including neigh-borhood size, spatial weighting, and tissue context. The resulting Counterfactual Directionality Score (CDS) quantifies the sensitivity of a receiver’s predicted state to targeted perturbations. We further introduce within -type interventions as an empirical baseline to distinguish the effects of cell -type presence from individual cell - state variability. We provide a theoretical interpretation of CDS as a finite-difference measure of local intervention sensitivity under structured neighborhood perturbations. Our structured interventions isolate compositional effects while controlling for structural confounders. To obtain valid uncertainty estimates, we develop a core-level bootstrap procedure that accounts for dependencies within tissue samples. On synthetic spatial graphs with known directional structure, CDS recovers ground truth directional structure, remains well calibrated under null conditions, and is robust to confounding signals. Com-pared to baseline methods, CDS uniquely combines sensitivity to true interactions with robustness to spurious correlations. Preliminary results on spatial transcriptomics datasets show that CDS identifies biologically plausible sender–receiver relationships with consistent behavior across tissue cores. 
+
+Contributions. Our main contributions are: (1) a framework for structured counterfactual interven-tions in spatial graphs that preserves key structural properties; (2) CDS, a model-based measure of directional influence between cell types; (3) a theoretical characterization of CDS as a finite-difference intervention measure under structured perturbations; (4) a core-level bootstrap procedure for sta-tistically principled inference; and (5) empirical validation showing that CDS recovers directional structure, remains well calibrated under null conditions, and is robust to confounding. 
+
+## 2 Related Work 
+
+Our work connects several research areas: interpretability for graph neural networks, attention-based models, computational methods for cell–cell interaction inference, and causal machine learning with counterfactual reasoning. Several methods have been developed to explain predictions of GNNs. GNNExplainer [ 1] identifies compact subgraphs and node features that are most influential for a GNN’s predictions. PGEx-plainer [ 2 ] provides a parameterized approach that efficiently generates explanations for multiple instances. While these methods reveal which graph components are important, they focus on attribu-tion rather than estimating directional effects between node populations. Our CDS explicitly perturbs neighbourhood composition in a structured way to estimate directional influence. Attention mechanisms in GNNs, such as Graph Attention Networks (GATs) [ 3 ], learn adaptive weights over neighbours and have been used to interpret which interactions are “important”. However, attention weights reflect correlations within the observed data distribution and do not provide a counterfactual characterization of directionality. Our work instead uses explicit counterfactual interventions to isolate the effect of a specific cell type’s presence. In computational biology, tools such as CellPhoneDB [ 4] and NicheNet [ 5] infer ligand–receptor interactions from single-cell and spatial transcriptomics data using prior knowledge of molecular interactions. More recent spatial CCI methods [ 6 , 7] incorporate spatial proximity to score interactions. Though these methods are powerful for hypothesis generation, they are primarily correlation-based or rely on curated databases. Our framework is model-agnostic and learns a predictive model of cell state from neighbourhood composition. This enables principled counterfactual estimation without requiring predefined interaction databases. Causal inference provides a formal language for estimating intervention effects [ 8]. In machine learning, counterfactual explanations have been applied to image and tabular data (e.g., [ 9]). For graphs, recent work has proposed counterfactual graph generation for model explanation (e.g., [ 10 ]), but these approaches typically modify graph structure globally or focus on graph-level classification. To our knowledge, our work is the first to combine a learned graph-based surrogate model with spatially constrained, cell-type-specific counterfactual interventions to estimate directional influence between node populations in spatial biological graphs. The core-level bootstrap further provides statistically principled inference that respects the dependence structure of tissue samples. 23 Problem Setup 
+
+We consider a spatially-resolved single-cell dataset represented as a graph G = ( V, E ), where each node i ∈ V corresponds to a cell, and edges (i, j ) ∈ E encode spatial proximity between cells. Each cell is associated with (1) a feature vector xi ∈ Rp representing its transcriptomic state, and (2) a discrete cell-type label τ (i) ∈ T . Let X ∈ R|V |× p denote the matrix of all cell features. 
+
+Spatial neighborhood. For each cell i, we define a local neighborhood N (i) ⊂ V based on spatial proximity. In practice, N (i) may be constructed via k-nearest neighbors in physical space, but our formulation is agnostic to the specific construction as long as it captures local cell–cell interactions. 
+
+Sender and receiver populations. For a pair of cell types (s, r ) ∈ T 2, we define the sender and receiver populations: 
+
+S = {i ∈ V : τ (i) = s}, (1) 
+
+R = {i ∈ V : τ (i) = r}. (2) 
+
+Interaction-driven cell state. We view the observed transcriptomic state of a receiver cell i ∈ R as the result of both intrinsic factors and extrinsic influences from its local neighborhood: 
+
+xi = f  xint  
+
+> i
+
+, {xj : j ∈ N (i)} + ϵi (3) where xint  
+
+> i
+
+denotes intrinsic (cell-autonomous) components and the neighborhood term captures microenvironmental influence. ϵi captures unmodeled variability. 
+
+Problem objective. Our goal is to quantify the directional influence of sender-type cells on receiver-type cells. Formally, for each receiver cell i ∈ R, we define a neighborhood composition variable 
+
+Z(s) 
+
+> i
+
+that summarizes the contribution of sender-type cells in N (i). We are interested in estimating the effect: 
+
+∆(s→r) 
+
+> i
+
+= f  xint  
+
+> i
+
+, Z (s)
+
+> i
+
+ − f  xint  
+
+> i
+
+, 0, (4) which represents the change in the receiver cell state induced by removing sender-type cells from the local neighborhood. 
+
+Scientific question. This formulation allows us to address the central question: Do neighboring sender-type cells influence the transcriptomic program of receiver-type cells, and if so, what is the magnitude and direction of this effect? 
+
+## 4 Neighbor Influence Model 
+
+4.1 Distance-Weighted Neighborhood Aggregation 
+
+We model the influence of a cell’s local microenvironment through a distance-weighted aggregation of its neighbors. For each cell i and neighbor j ∈ N (i), let dij denote their Euclidean distance in tissue space. We define normalized weights: 
+
+wij = exp  −dij /α P  
+
+> j′∈N(i)
+
+exp  −dij ′ /α  , (5) where α > 0 controls the spatial decay of influence. Using these weights, we define the neighborhood representation ai ∈ Rp:
+
+ai = X 
+
+> j∈N(i)
+
+wij xj . (6) 
+
+4.2 Modeling Neighborhood Influence 
+
+We approximate the unknown function f introduced in Section 3 using a graph-based parametric model fθ , referred to as NIM: 
+
+ˆzi = fθ (ai, τ (i)) ∈ Rp. (7) 3The model takes as input the neighborhood representation ai and the receiver cell type τ (i), and predicts the receiver’s transcriptomic state. Learning fθ provides a data-driven estimate of how local neighborhood composition maps to cellular gene expression. 
+
+Architecture. fθ is implemented as a multi-layer feedforward network with residual connections. The input ai is projected into a latent space, processed by L residual blocks, and modulated by a cell-type-conditioned gating mechanism. Specifically, each cell type τ (i) is embedded into a vector 
+
+eτ (i), which is transformed into a feature-wise gate: 
+
+gi = σ(Wtype eτ (i) + btype ), (8) that multiplicatively modulates the hidden representation. This gating allows the model to capture heterogeneous response functions, i.e., different receiver cell types may respond differently to the same neighborhood signal. 
+
+4.3 Training Objective 
+
+We train fθ to minimize the discrepancy between predictions ˆzi and observed states xi using the Huber loss: 
+
+L(θ) = 1
+
+|B| 
+
+X
+
+> i∈B
+
+ℓδ (ˆ zi, x i), (9) where ℓδ is defined as the Huber loss. 
+
+Interpretation. A low prediction error implies that neighborhood composition contains predictive information about the receiver cell state. Importantly, this learned mapping fθ serves as a surrogate model for evaluating counterfactual neighborhood perturbations (Section 6), enabling estimation of sensitivity to sender-to-receiver perturbations. 
+
+## 5 CDS 
+
+5.1 Intuition 
+
+While NIM captures how neighborhood composition predicts cell state, it does not by itself identify which neighboring cell types drive this effect. To address this, we introduce CDS , which measures the sensitivity of a receiver cell’s predicted state to targeted perturbations of its neighborhood. 
+
+5.2 Counterfactual Predictions 
+
+Let fθ be the trained NIM. For a receiver cell i, the original prediction is: 
+
+ˆzi = fθ (ai, τ (i)) , (10) where ai is the original neighborhood aggregation. We construct a counterfactual neighborhood N cf (i) via an intervention operator IS→R that modifies the presence of sender-type cells while preserving the spatial weighting structure. The corresponding counterfactual prediction is: 
+
+ˆzcf  
+
+> i
+
+= fθ (acf  
+
+> i
+
+, τ (i)) , (11) where acf  
+
+> i
+
+denotes the neighborhood aggregation computed from the counterfactual neighborhood 
+
+N cf (i).
+
+5.3 Intervention Operators 
+
+We define two structured intervention operators that modify neighborhood composition while preserv-ing key spatial and structural properties. These interventions are designed to isolate the contribution of sender-type cells to receiver predictions. 4Type-Swap Intervention. This operator removes the presence of sender-type cells from the re-ceiver’s neighborhood. For each receiver i ∈ R and each neighbor j ∈ N (i) with τ (j) = s, we replace j with a cell j′ sampled from the same tissue core such that τ (j′)̸ = s.To ensure physically plausible perturbations, we perform distance-bin-preserving replacement . The k
+
+neighbor slots are partitioned into spatial bins based on distance, and each sender slot is preferentially replaced by a non-sender cell from the same bin; if no such candidate exists, the search expands to nearby bins. This construction preserves three structural invariants: 1. Degree preservation: |N cf (i)| = |N (i)| = k.2. Microenvironment consistency: replacement cells are drawn from the same tissue core as i.3. Distance-slot preservation: spatial weights {wij } remain unchanged, so differences between 
+
+ai and acf  
+
+> i
+
+arise solely from changes in neighborhood composition. As a result, changes in prediction are attributable primarily to changes in neighborhood composition rather than artifacts of graph structure or spatial weighting. 
+
+Within-Type Intervention. This operator help characterize the effect of sender cell identity while preserving sender cell type. For each sender neighbor j ∈ N (i) with τ (j) = s, we replace j with a different cell j′ of the same type, drawn from the donor pool: 
+
+Di =  j′ ∈ V : τ (j′) = s, core( j′) = core( i), j ′̸ = i . (12) If Di = ∅, the receiver i is excluded from analysis. This intervention preserves the presence of sender-type cells while randomizing which specific cells occupy neighborhood slots. 
+
+5.4 CDS Definition 
+
+For each receiver cell i, we define: 
+
+CDS i = 1
+
+p ˆzcf  
+
+> i
+
+− ˆzi 1 . (13) This measures the average change in predicted state under the counterfactual intervention. A larger CDS i indicates that the perturbed cell type substantially influences the receiver’s transcrip-tomic state. We also define a signed variant: 
+
+CDS sgn  
+
+> i
+
+= 1
+
+p
+
+> p
+
+X
+
+> m=1
+
+ ˆzcf  
+
+> i,m
+
+− ˆzi,m 
+
+, (14) which captures the direction of influence (upregulation vs. suppression). Finally, we aggregate over receiver cells: 
+
+CDS S→R = 1
+
+|R∗|
+
+X
+
+> i∈R∗
+
+CDS i, (15) where R∗ includes receivers for which the intervention is valid. 
+
+Interpretation. CDS provides a model-based measure of directional influence: it quantifies how much the predicted state of receiver cells depends on the presence or identity of sender-type cells in their local neighborhood. 
+
+## 6 Theoretical Properties of Counterfactual Directionality 
+
+CDS can be interpreted as a finite-difference measure of the sensitivity of model predictions to structured neighborhood perturbations. The difference acf  
+
+> i
+
+− ai captures changes in neighborhood composition induced by the intervention while preserving spatial structure and neighborhood size. 5Structured interventions preserve neighborhood size, spatial distances (and therefore weights wij ), and receiver type, so 
+
+acf  
+
+> i
+
+− ai = X 
+
+> m∈N(i)
+
+wim 
+
+ xcf  
+
+> m
+
+− xm
+
+,
+
+thereby separating compositional changes from changes in graph topology. Under within-type exchangeability, 
+
+E[acf  
+
+> i
+
+− ai] = 0 ,
+
+providing an empirical null baseline. Because CDS depends on the aggregated neighborhood representation ai, it captures only effects mediated through this representation. If fθ is L-Lipschitz, then 
+
+CDS i ≤ Lp ∥acf  
+
+> i
+
+− ai∥2.
+
+For statistical inference, we use a core-level bootstrap procedure: we resample M tissue cores with replacement, compute bootstrap means μ(b), and construct percentile confidence intervals to account for dependence within tissue cores. 
+
+Implementation. We train NIM using standard optimization procedures and compute CDS via structured counterfactual perturbations of local neighborhoods. Full algorithmic details are provided in Appendix A. 
+
+## 7 Experiments 
+
+We evaluate whether CDS recovers directional influence under controlled synthetic settings and com-pare it against standard attribution and perturbation baselines. Our evaluation focuses on directionality, robustness to confounding, and stability. These experiments empirically validate the theoretical prop-erties of CDS derived in Section 6, including its sensitivity to neighborhood perturbations and robustness under null exchangeability. 
+
+7.1 Experimental Setup Synthetic Spatial Generator We construct spatial graphs with three cell types: sender ( S), receiver (R), and background ( B). Cell coordinates are sampled uniformly and a k-nearest neighbor graph is built with distance-based softmax weights. Receiver features are generated under three regimes: • Positive (true influence): 
+
+zi = μR + aiW + ϵ, 
+
+where μR ∈ Rp is a receiver-type baseline expression vector, ai is the weighted aggregation of neighboring sender features, W ∈ Rp×p controls sender-to-receiver influence strength, and ϵ ∼ N (0 , σ 2I) is Gaussian noise. • Null (no influence): 
+
+zi ∼ N (μR, σ 2I),
+
+independent of neighboring cells. • Spurious (confounded): A shared latent variable induces correlation across cell types without local directional influence. This design preserves feature marginals while controlling the underlying directional dependency structure. 
+
+Predictive Model We train NIM, a residual neural network that predicts cell features from neigh-borhood aggregates with cell-type gating. CDS is computed by comparing model predictions under original and counterfactual neighborhoods constructed via constrained neighbor replacement. 6Figure 1: Directional CDS across synthetic regimes. Boxplots comparing CDS S→R and CDS R→S
+
+in positive, null, and spurious regimes. 
+
+7.2 Synthetic Validation Directional Recovery We first evaluate whether CDS correctly recovers directional structure under controlled synthetic settings. Figure 1 shows that in the positive regime, CDS consistently assigns higher values to the true direction ( S → R) than the reverse ( R → S) across all noise levels and random seeds. This gap remains stable as noise increases, indicating that the learned model captures directional dependencies rather than symmetric correlations. In contrast, in the null regime, both directions yield near-zero CDS values, confirming that the method does not produce spurious directional signal (Table 1) and is well calibrated in the absence of true interaction. 
+
+Null Control Under the null setting, where receiver features are independent of neighboring sender cells, CDS values collapse to near zero for both directions (Table 1), confirming that the method does not introduce spurious directional signal under null conditions. 
+
+Spurious Correlation Control To test robustness to confounding, we introduce a shared latent signal affecting all cell types. As shown in Figure 1 and Table 1, CDS values remain lower than in the positive regime, and the directional gap is reduced. This indicates that CDS preferentially captures structured local influence rather than global correla-tions, and does not incorrectly attribute strong directional effects under confounding. 
+
+7.3 Quantitative Evaluation 
+
+We evaluate the ability of CDS to distinguish true interaction from null and confounded settings using ROC analysis. As shown in Figure 2, CDS achieves high AUC for distinguishing positive from null regimes (AUC = 0.97) and maintains above-chance discrimination under confounding (AUC = 0.79). These results indicate that CDS captures structured directional signals beyond simple correlation-based separation. Table 1 summarizes CDS magnitude and stability across regimes. In the positive setting, CDS is substantially larger than in null and spurious regimes, with a low coefficient of variation across bootstrap samples. Bootstrap analysis further shows that CDS estimates are tightly concentrated, with narrow confidence intervals, indicating stable estimation across tissue cores. We compare CDS against random perturbation and gradient sensitivity baselines (Table 2). CDS consistently achieves higher scores in the positive regime while remaining near zero under null conditions.                                   
+
+> Regime CDS (S →R) CDS (R →S) AUC vs. Positive Stability (CV)
+> Positive 0.2915 ±0.0156 0.1907 ±0.0140 —0.034 ±0.016
+> Null 0.0969 ±0.0030 0.0852 ±0.0047 0.970 0.023 ±0.009
+> Spurious 0.1813 ±0.0114 0.1492 ±0.0161 0.793 0.055 ±0.014
+
+Table 1: Summary of CDS performance across regimes. 
+
+7Figure 2: Influence detection performance. ROC curves for distinguishing positive influence from null and spurious controls using CDS scores.                               
+
+> Method Positive Null Spurious
+> CDS (ours) 0.272 ±0.016 0.099 ±0.003 0.176 ±0.011
+> Gradient 0.104 ±0.012 0.039 ±0.005 0.045 ±0.007
+> Random 0.098 ±0.008 0.097 ±0.009 0.095 ±0.010
+
+Table 2: Baseline comparison. Mean normalized scores across regimes. Gradient sensitivity values are rescaled for comparability. 
+
+7.4 Ablation Study 
+
+We evaluate the importance of structural constraints in the counterfactual intervention. Table 3 shows that removing degree preservation, distance preservation, or within-type baseline correction alters CDS magnitude and increases variability relative to the full method. In particular, unmatched donor replacement introduces variability by altering neighborhood composition, while removing distance preservation disrupts spatial weighting, leading to noisier estimates. These results are consistent with the theoretical motivation for the structured intervention design (Section 6) and suggest that preserving neighborhood structure improves the stability and specificity of CDS estimates. 
+
+7.5 Robustness Analysis Noise and Interaction Robustness. As observation noise increases, CDS magnitude decreases but the directional gap between S → R and R → S persists, showing graceful degradation. Core-level bootstrap yields low variance and tight confidence intervals, confirming stability (Figure 3). Increasing ground-truth interaction strength produces monotonic increases in CDS, consistent with the finite-difference sensitivity interpretation of CDS (Section 6). 
+
+Figure 3: Robustness analysis of CDS. (a) Noise robustness: mean CDS S→R and CDS R→S across increasing observation noise. (b) Bootstrap stability: distribution of bootstrap CDS estimates across resampled tissue cores. (c) Influence-strength sensitivity: CDS as a function of ground-truth sender-to-receiver interaction strength. 8Method CDS Drop (%) CV Receivers                 
+
+> Full method 0.269 0.0 0.027 217 Unmatched donor replacement 0.286 -5.5 0.013 240 No distance preservation 0.216 20.6 0.027 217 No within-type baseline 0.272 0.0 0.034 217
+
+Table 3: Ablation study of structural constraints. Removing structural constraints alters CDS magnitude and/or increases variability relative to the full intervention design. 
+
+7.6 Real-World Data 
+
+We applied our CDS framework to two independent spatial transcriptomics datasets: breast cancer (BRCA) and lung cancer tissue microarrays [ 11 ]. For each dataset, we considered three major cell populations: Tumor, Stromal, and Immune—resulting in four directional hypotheses, namely, Tumor →Stromal, Stromal →Tumor, Tumor →Immune, and Stromal →Immune. We trained separate NIMs for each cancer type using the same architecture and hyperparameters, computed CDS via type-swap interventions with core-level bootstrap validation (1000 iterations; 3 test cores per cancer type), and report mean CDS values with 95% bootstrap confidence intervals. Figure 4 shows CDS estimates for all four sender–receiver pairs in BRCA and lung cancer. Tumor →Stromal influence (CDS = 0.0715 [0.0550, 0.0758]) substantially exceeded Stromal →Tumor influence (CDS = 0.0247 [0.0191, 0.0271]), indicating asymmetric directional signaling from malig-nant to stromal compartments. We observed similar moderate scores for Tumor →Immune (0.0657 [0.0598, 0.0677]) and Stromal →Immune (0.0687 [0.0576, 0.0784]), suggesting that immune cell states are influenced by both tumor and stromal microenvironments. The confidence intervals for Tumor →Stromal and Stromal →Tumor do not overlap, providing evidence for directional asymmetry. 
+
+Figure 4: Comparative CDS estimates for breast and lung cancer. 
+
+In the lung tissue, a clear directional signature can be seen (Figure 4). Tumor →Stromal influence (0.0917 [0.0837, 0.0965]) was again the strongest observed effect, exceeding the BRCA magnitude and showing the largest directional gap relative to Stromal →Tumor (0.0315 [0.0277, 0.0368]). How-ever, immune-related interactions diverged from BRCA: Tumor →Immune (0.0358 [0.0328, 0.0591]) and Stromal →Immune (0.0523 [0.0495, 0.0583]) were substantially lower in lung. This suggests tissue-specific immune interaction patterns. The Stromal →Immune signal remained moderately elevated relative to Tumor →Immune, a pattern reversed from BRCA. Higher immune-directed CDS values in BRCA than in lung suggest that the framework captures biologically plausible differences in tumor–immune crosstalk across cancer contexts. 
+
+## 8 Conclusion 
+
+We introduced CDS, a framework for structured counterfactual interventions in spatial graphs to quantify directional influence between cell populations. By combining neighborhood-based predic-tive modeling with spatially constrained counterfactual perturbations, CDS provides a principled measure of sensitivity to sender-to-receiver perturbations while preserving key structural properties 9of the tissue microenvironment. Across controlled synthetic experiments, CDS recovers directional structure, remains well calibrated under null conditions, and is robust to confounding signals. Pre-liminary results on spatial transcriptomics datasets further demonstrate biologically plausible and consistent interaction patterns across tissue cores. More broadly, our results suggest that structured counterfactual interventions provide a useful framework for studying directional dependencies in spatially organized biological systems. 
+
+## References 
+
+[1] Rex Ying, Dylan Bourgeois, Jiaxuan You, Marinka Zitnik, and Jure Leskovec. Gnnexplainer: Generating explanations for graph neural networks. In Advances in Neural Information Pro-cessing Systems 32 (NeurIPS) , pages 9244–9255, 2019. [2] Dongsheng Luo, Wei Cheng, Dongkuan Xu, Wenchao Yu, Bo Zong, Haifeng Chen, and Xiang Zhang. Parameterized explainer for graph neural networks. In Advances in Neural Information Processing Systems 33 (NeurIPS) , pages 19620–19631, 2020. [3] Petar Veliˇ ckovi´ c, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua Bengio. Graph attention networks. In International Conference on Learning Representations (ICLR) , 2018. [4] Mirjana Efremova, Roser Vento-Tormo, Sarah A Teichmann, and Miquel Vento-Tormo. Cell-phonedb: inferring cell–cell communication from combined expression of multi-subunit lig-and–receptor complexes. Nature Protocols , 15(4):1484–1506, 2020. [5] Robin Browaeys, Wouter Saelens, and Yvan Saeys. Nichenet: modeling intercellular communi-cation by linking ligands to target genes. Nature Methods , 17(2):159–162, 2020. [6] Erick Armingol, Adam Officer, Olivier Harismendy, and Nathan E Lewis. Deciphering cell–cell interactions and communication from gene expression. Nature Reviews Genetics , 22(2):71–88, 2021. [7] Jie Liao, Yang Lu, Jun Zhang, Xiang Li, Xia Shen, and Shuai Li. Spatalk: a graph attention network to infer cell-type-specific spatial signaling. Nucleic Acids Research , 50(12):e70, 2022. [8] Judea Pearl. Causality: Models, Reasoning, and Inference . Cambridge University Press, 2nd edition, 2009. [9] Sandra Wachter, Brent Mittelstadt, and Chris Russell. Counterfactual explanations without opening the black box: automated decisions and the gdpr. Harvard Journal of Law & Technology ,31(2):841–887, 2017. [10] Abubakar Abid, Pang Wei Koh, Kwang Lee, and Percy Liang. Counterfactual generation for graph neural networks. In Proceedings of the 39th International Conference on Machine Learning (ICML) , pages 42–57, 2022. [11] Gene Expression Omnibus. GSE308148. https://www.ncbi.nlm.nih.gov/geo/query/ acc.cgi?acc=GSE308148 , 2025. Accessed: 2026-02-21. 
+
+## A Algorithms 
+
+We present the algorithms 1, 2 , and 3 that together constitute our pipeline: 10 Algorithm 1 NIM Training 
+
+Require: Spatial graph G = ( V, E ); cell features X ∈ R|V |× p; cell type labels τ ; training cores 
+
+Ctrain ; validation cores Cval ; number of neighbors k = 20 ; temperature τagg = 1 .0.
+
+Ensure: Trained NIM parameters θ∗. 
+
+> 1:
+
+// Step 1: Build spatial KNN graph  
+
+> 2:
+
+for each cell i ∈ V do  
+
+> 3:
+
+Compute N (i) ← k nearest neighbors of i by Euclidean distance over (xcentroid , y centroid ) 
+
+> 4:
+
+Compute softmax weights: wij = exp( −dij /τ agg )
+
+P 
+
+> j′
+
+exp( −dij ′ /τ agg ) + ε for each j ∈ N (i) 
+
+> 5:
+
+end for  
+
+> 6:
+
+// Step 2: Compute aggregated neighborhood representations  
+
+> 7:
+
+for each cell i ∈ V do  
+
+> 8:
+
+ai ← P  
+
+> j∈N(i)
+
+wij xj (distance-weighted average of neighbor states)  
+
+> 9:
+
+end for  
+
+> 10:
+
+// Step 3: Initialize NIM fθ 
+
+> 11:
+
+Initialize: BatchNorm → Linear (p, 512) → 3× ResidualBlock (512) → TypeGate (64) →
+
+Linear (512 , p ) 
+
+> 12:
+
+// Step 4: Train with early stopping  
+
+> 13:
+
+θ∗ ← θ, best_val ← ∞ , patience ← 0 
+
+> 14:
+
+for each epoch e = 1 , 2, . . . , 100 do  
+
+> 15:
+
+for each mini-batch B ⊆ C train do  
+
+> 16:
+
+ˆzi ← fθ (ai, τ (i)) for each i ∈ B  
+
+> 17:
+
+L ← 1
+
+> |B|
+
+P 
+
+> i∈B
+
+ℓδ (ˆ zi, x i) (Huber loss, δ = 1 .0) 
+
+> 18:
+
+Update θ via AdamW ( η = 3 × 10 −4, λ = 10 −4), gradient clipping at norm 1.0 
+
+> 19:
+
+end for  
+
+> 20:
+
+Compute validation loss on Cval  
+
+> 21:
+
+if val_loss < best_val then  
+
+> 22:
+
+θ∗ ← θ, best_val ← val_loss, patience ← 0 
+
+> 23:
+
+else  
+
+> 24:
+
+patience ← patience + 1  
+
+> 25:
+
+end if  
+
+> 26:
+
+if patience ≥ 15 then  
+
+> 27:
+
+break (early stopping)  
+
+> 28:
+
+end if  
+
+> 29:
+
+end for  
+
+> 30:
+
+return θ∗
+
+## B Theoretical Properties of Counterfactual Directionality 
+
+We next clarify what the proposed CDS measures and why the structured intervention design helps isolate directional influence. The following results show that CDS admits a first-order interpretation as a local intervention effect and that the proposed interventions disentangle neighborhood composition from graph-structural artifacts. 
+
+B.1 CDS as a Local Intervention Effect 
+
+Let ai ∈ Rp denote the aggregated neighborhood representation of receiver cell i, and let acf  
+
+> i
+
+denote the counterfactual representation obtained via a structured intervention. Let fθ : Rp × T → Rp be continuously differentiable in its first argument. Define 
+
+ˆzi = fθ (ai, τ (i)) , ˆzcf  
+
+> i
+
+= fθ (acf  
+
+> i
+
+, τ (i)) .
+
+Theorem B.1 (First-Order Interpretation of CDS) . There exists a point ξi on the line segment between 
+
+ai and acf  
+
+> i
+
+such that 
+
+ˆzcf  
+
+> i
+
+− ˆzi = Jf (ξi, τ (i)) ( acf  
+
+> i
+
+− ai),
+
+11 Algorithm 2 Type-Swap CDS 
+
+Require: Trained NIM fθ∗ ; spatial graph G; features X; cell type labels τ ; sender type s; re-ceiver type r; tissue cores Ctest ; distance bins B = {[0 , 10) , [10 , 20) , [20 , 30) , [30 , 40) , [40 , ∞)};bootstrap iterations B = 1000 ; min receivers per core = 20. 
+
+Ensure: Type-Swap CDS S→R; CI 95% . 
+
+> 1:
+
+// Step 1: Identify valid receivers  
+
+> 2:
+
+R∗ ← { i ∈ V : τ (i) = r and ∃ j ∈ N (i) s.t. τ (j) = s} 
+
+> 3:
+
+// Step 2: Type-Swap counterfactual + CDS per receiver  
+
+> 4:
+
+for each receiver cell i ∈ R∗ do  
+
+> 5:
+
+Compute ai = P  
+
+> j∈N(i)
+
+wij xj , predict ˆzi = fθ∗ (ai, τ (i))  
+
+> 6:
+
+// Construct counterfactual neighborhood  
+
+> 7:
+
+N cf (i) ← N (i), nreplaced ← 0 
+
+> 8:
+
+for each j ∈ N (i) with τ (j) = s do  
+
+> 9:
+
+Let b ← distance bin of dij in B 
+
+> 10:
+
+for expansion = 0 , 1, 2 do (search bin b, then widen)  
+
+> 11:
+
+Candidates ← cells in same core as i, τ̸ = s, within expanded bin, not already used  
+
+> 12:
+
+if Candidates ̸ = ∅ then  
+
+> 13:
+
+Pick j′ ← random cell from Candidates  
+
+> 14:
+
+N cf (i)[ j] ← j′, nreplaced += 1  
+
+> 15:
+
+break  
+
+> 16:
+
+end if  
+
+> 17:
+
+end for  
+
+> 18:
+
+end for  
+
+> 19:
+
+if nreplaced = 0 then  
+
+> 20:
+
+skip (no valid replacement found)  
+
+> 21:
+
+end if  
+
+> 22:
+
+Compute acf  
+
+> i
+
+= P   
+
+> j∈Ncf (i)
+
+wij xj (distances unchanged)  
+
+> 23:
+
+Predict ˆzcf  
+
+> i
+
+= fθ∗ (acf  
+
+> i
+
+, τ (i))  
+
+> 24:
+
+CDS i ← 1 
+
+> p
+
+∥ˆzcf  
+
+> i
+
+− ˆzi∥1, CDS sgn  
+
+> i
+
+← 1
+
+> p
+
+P
+
+> p
+
+(ˆ zcf  
+
+> i,p
+
+− ˆzi,p ) 
+
+> 25:
+
+end for  
+
+> 26:
+
+// Step 3: Filter cores with too few receivers  
+
+> 27:
+
+Remove from R∗ all cells from cores with < 20 valid receivers  
+
+> 28:
+
+// Step 4: Core-level bootstrap  
+
+> 29:
+
+for b = 1 to B do  
+
+> 30:
+
+Sample C(b) from Ctest with replacement  
+
+> 31:
+
+μ(b) ← mean  {CDS i : core( i) ∈ C (b)} 
+
+> 32:
+
+end for  
+
+> 33:
+
+// Step 5: Report  
+
+> 34:
+
+CDS S→R ← 1
+
+> |R∗|
+
+P 
+
+> i∈R∗
+
+CDS i 
+
+> 35:
+
+CI 95% ← [ˆ μ2.5, ˆμ97 .5] 
+
+> 36:
+
+return CDS S→R, CI 95% 
+
+12 Algorithm 3 Within-Type CDS 
+
+Require: Trained NIM fθ∗ ; spatial graph G; features X; cell type labels τ ; sender type s; receiver type r; tissue cores Ctest .
+
+Ensure: Within-Type CDS wt 
+
+> S→R
+
+. 
+
+> 1:
+
+// Step 1: Identify valid receivers  
+
+> 2:
+
+R∗ ← { i ∈ V : τ (i) = r and ∃ j ∈ N (i) s.t. τ (j) = s} 
+
+> 3:
+
+// Step 2: Within-type counterfactual + CDS per receiver  
+
+> 4:
+
+for each receiver cell i ∈ R∗ do  
+
+> 5:
+
+Compute ai = P  
+
+> j∈N(i)
+
+wij xj , predict ˆzi = fθ∗ (ai, τ (i))  
+
+> 6:
+
+// Build donor pool: same type, same core  
+
+> 7:
+
+Di ← { j′ ∈ V : τ (j′) = s, core( j′) = core( i), j ′̸ = i} 
+
+> 8:
+
+if Di = ∅ then  
+
+> 9:
+
+skip (no same-type donor in this core)  
+
+> 10:
+
+end if  
+
+> 11:
+
+// Replace each sender slot with a random donor  
+
+> 12:
+
+N cf (i) ← N (i) 
+
+> 13:
+
+for each j ∈ N (i) with τ (j) = s do  
+
+> 14:
+
+j′ ← random draw from Di 
+
+> 15:
+
+N cf (i)[ j] ← j′ 
+
+> 16:
+
+end for  
+
+> 17:
+
+Compute acf  
+
+> i
+
+= P   
+
+> j∈Ncf (i)
+
+wij xj (distances unchanged)  
+
+> 18:
+
+Predict ˆzcf  
+
+> i
+
+= fθ∗ (acf  
+
+> i
+
+, τ (i))  
+
+> 19:
+
+CDS wt  
+
+> i
+
+← 1 
+
+> p
+
+∥ˆzcf  
+
+> i
+
+− ˆzi∥1 
+
+> 20:
+
+end for  
+
+> 21:
+
+// Step 3: Aggregate  
+
+> 22:
+
+CDS wt  
+
+> S→R
+
+← 1
+
+> |R∗|
+
+P 
+
+> i∈R∗
+
+CDS wt  
+
+> i
+> 23:
+
+return CDS wt 
+
+> S→R
+
+where Jf (ξi, τ (i)) denotes the Jacobian of fθ (·, τ (i)) evaluated at ξi. Consequently, 
+
+CDS i = 1
+
+p Jf (ξi, τ (i)) ( acf  
+
+> i
+
+− ai) 1 .
+
+If ∥acf  
+
+> i
+
+− ai∥2 is small, then 
+
+CDS i = 1
+
+p Jf (ai, τ (i)) ( acf  
+
+> i
+
+− ai) 1 + O ∥acf  
+
+> i
+
+− ai∥22
+
+ .
+
+This result shows that CDS measures the magnitude of a local, first-order response of the learned model to perturbations in neighborhood composition. 
+
+B.2 Structural Invariance of Interventions 
+
+Recall that the aggregated neighborhood representation is defined as 
+
+ai = X 
+
+> j∈N(i)
+
+wij xj ,
+
+with weights wij determined by spatial distances. 
+
+Theorem B.2 (Invariance under Structured Interventions) . Assume that the counterfactual interven-tion preserves: (i) the number of neighborhood slots k, (ii) the spatial distances associated with each slot (and hence weights wij ), and (iii) the receiver identity τ (i).Then the perturbation satisfies 
+
+acf  
+
+> i
+
+− ai = X
+
+> m∈R i
+
+wim 
+
+ xcf  
+
+> m
+
+− xm
+
+ ,
+
+where Ri is the set of replaced neighborhood slots. In particular, the perturbation depends only on the change in feature vectors occupying fixed spatial slots and is independent of graph degree, spatial weighting, or receiver identity. 
+
+13 Consequently, ˆzcf  
+
+> i
+
+− ˆzi depends only on compositional changes induced by the structured intervention design under fθ .
+
+This property ensures that CDS captures compositional effects rather than artifacts arising from changes in graph topology or weighting. 
+
+B.3 Null Behavior under Within-Type Exchangeability Lemma B.3 (Exchangeability Null) . Assume that, conditional on tissue core and sender type, sender cells are exchangeable with respect to their contribution to the receiver prediction. Then, for within-type interventions, 
+
+Eacf  
+
+> i
+
+− ai
+
+ = 0 ,
+
+and, to first order, 
+
+Eˆzcf  
+
+> i
+
+− ˆzi
+
+ ≈ 0.
+
+Thus, the expected within-type CDS reflects baseline variability due to finite sampling and sender-state heterogeneity rather than systematic sender-type effects. 
+
+This result justifies the use of within-type interventions as a baseline for interpreting type-swap CDS values. 
+
+B.4 Approximation Bias from Neighborhood Aggregation Lemma B.4 (Aggregation Bias) . Suppose the true receiver response depends on the full neighborhood configuration 
+
+z⋆i = g {(wij , x j )}j∈N (i), τ (i),
+
+while the model uses only the aggregated representation 
+
+ai = X 
+
+> j∈N(i)
+
+wij xj .
+
+If g cannot be expressed solely as a function of ai, then no function f exists such that 
+
+g = f (ai, τ (i)) 
+
+for all neighborhoods. Consequently, CDS may be biased relative to intervention effects defined on the full neighborhood. 
+
+This highlights that CDS captures effects mediated through the chosen neighborhood summary and may not reflect higher-order interactions among neighbors. 
+
+B.5 Statistical Inference via Core-Level Bootstrap 
+
+Cells within the same tissue core are not statistically independent: they share a common microen-vironment, patient-level covariates, and technical batch effects. Naively treating each cell as an independent observation would severely underestimate uncertainty. We therefore perform statistical inference at the tissue-core level using a nonparametric bootstrap. Let C = {c1, c 2, . . . , c M } denote the set of M test tissue cores. The bootstrap procedure is as follows: for each iteration b = 1 , . . . , B (with B = 1000 ): 1. Sample M cores with replacement from C to obtain a bootstrap core set C(b). Some cores may appear multiple times; some may not appear at all. 2. Pool all cell-level CDS values from cores in C(b): V(b) = CDS i : core( i) ∈ C (b) .3. Compute the bootstrap mean: μ(b) = |V (b)|−1 P 
+
+> v∈V (b)
+
+v.The resulting distribution {μ(b)}Bb=1 approximates the sampling distribution of CDS S→R under core-level resampling. Confidence intervals are computed via the percentile method :
+
+CI 95% =
+
+h
+
+ˆμ2.5, ˆμ97 .5
+
+i
+
+, (16) 14 where ˆμα denotes the α-th percentile of {μ(b)}. A sender–receiver interaction is considered sta-tistically meaningful if (i) CI 95% for the signed CDS excludes zero, or (ii) the magnitude CDS is substantially elevated relative to the within-type baseline, which quantifies the expected CDS under same-type reshuffling. 15
