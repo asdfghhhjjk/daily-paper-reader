@@ -1,0 +1,660 @@
+Title: LATTICE: Graph Self-Supervised Learning for Multimodal Spatial Omics Integration
+
+URL Source: https://arxiv.org/pdf/2607.14410v1
+
+Published Time: Fri, 17 Jul 2026 00:30:57 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# LATTICE: Graph Self-Supervised Learning for Multimodal Spatial Omics Integration 
+
+Jagan Mohan Reddy Dwarampudi 
+
+University of Houston 
+
+jdwaramp@cougarnet.uh.edu 
+
+Veena Kochat 
+
+MD Anderson Cancer Center 
+
+vkochat@mdanderson.org 
+
+Suresh Satpati 
+
+MD Anderson Cancer Center 
+
+ssatpati@mdanderson.org 
+
+Kunal Rai 
+
+MD Anderson Cancer Center 
+
+krai@mdanderson.org 
+
+Tania Banerjee 
+
+University of Houston 
+
+tbanerje@central.uh.edu 
+
+## Abstract 
+
+Spatially resolved omics studies increasingly combine transcriptomic and epige-nomic assays, yet downstream analysis is often still performed using single-modality pipelines. We present LATTICE (Latent Alignment of Tissue-level and Transcriptomic Information for Cross-modal Embedding), a graph-based self-supervised framework that learns spot-level representations from harmonized mul-timodal features. LATTICE integrates five aligned modality blocks per Visium spot: Visium RNA, scMultiome RNA, scMultiome ATAC, spatial ATAC, and spatial CUT&Tag. These modalities capture spatial transcriptomic measurements, single-cell inferred regulatory activity, and in situ chromatin and histone states within a unified lattice representation. LATTICE constructs a spatial neighbor-hood graph and trains a TransformerConv encoder using masked reconstruction, cross-modal alignment, and spatial smoothness objectives. On a private 11-sample melanoma cohort from an anonymized clinical collaborator comprising 54,912 total spots, LATTICE demonstrated stable optimization behavior, reproducible embeddings across analysis seeds, and complete multimodal integration across all samples. Adding scMultiome RNA to Visium RNA alone substantially im-proved concordance with Space Ranger clusters across 11 runs (adjusted Rand index [ARI] +0.157, normalized mutual information [NMI] +0.143, and spatial contiguity +0.174). Additional modalities further improved spatial contiguity and multimodal utility score (MUS), although they sometimes reduced agreement with RNA-derived reference labels, likely because the learned embeddings captured chromatin and regulatory structure beyond transcriptomic similarity alone. These results position LATTICE as a practical and empirically grounded framework for multimodal spatial omics integration, while also highlighting the need for stronger supervision and broader external benchmarking. 
+
+## 1 Introduction 
+
+Spatially resolved omics technologies have transformed our ability to study tissue organization by measuring molecular profiles while preserving spatial context. Platforms such as spatial transcrip-tomics [ 1] enable genome-wide gene expression across sections, while spatial epigenomic assays and single-cell multiome profiles add accessibility, histone, and cell-state-resolved chromatin readouts. In integrative cohorts, those channels are not redundant. Visium RNA captures broad transcriptional organization. Mapped scMultiome provides higher-resolution transcriptional signals and ATAC-derived gene activities mapped onto the same spots. In situ spatial ATAC and spatial CUT&Tag [ 2]add section-level chromatin and histone-modification context that need not follow RNA-defined         
+
+> Preprint. arXiv:2607.14410v1 [cs.LG] 15 Jul 2026 Visium RNA
+> (gene expression)
+> scRNA -seq
+> (projected to spots)
+> scATAC -seq
+> (cell -level chromatin
+> accessibility)
+> Spatial ATAC
+> (spot -aligned )
+> Multimodal
+> Feature Matrix
+> Construction
+> Xspot =concatenated
+> multimodal features
+> (5 modalities)
+> Inputs
+> Aligned to spots
+> Feature Construction
+> (fusion step)
+> Spatial Graph -based
+> Representation Learning
+> Spatially -aware
+> Multimodal
+> Encoder
+> •Multimodal
+> integration
+> •Spatial
+> neighborhood
+> consistency
+> •Graph -based
+> aggregation
+> Spatial graph
+> (kNN graph over spatial
+> coordinates)
+> Loss:
+> •Reconstruction
+> •Spatial
+> neighborhood
+> consistency /
+> contrastive
+> (A) Spatial Domains
+> Leiden clustering
+> (B) TF Activity
+> Gene regulatory
+> programs
+> (C) Differential
+> Signals
+> Pre vs. Post
+> treatment
+
+Z 
+
+> (latent embedding
+> per spot)
+> Output
+> Nodes = spots;
+> Edges = neighbors
+> Spatial CUT&Tag
+> (spot -aligned)
+
+Figure 1: Overview of LATTICE. Multimodal spatial features combining transcriptomic and epigenomic signals aligned at Visium spot resolution, are fused into a unified feature matrix and organized using a spatial k-nearest neighbor graph. A graph-based multimodal encoder learns spot-level embeddings through masked reconstruction, cross-modal alignment, and spatial smoothness objectives. The resulting embeddings capture both molecular and spatial structure and enable downstream tasks including spatial domain identification, regulatory program analysis, and pre/post-treatment differential characterization. domains. An expression-only view can therefore conflate cell state, microenvironment, and regulatory state. Integrating these sources offers spatially grounded views of both transcriptional and regulatory organization. Despite rapid progress, computational integration of multimodal spatial data remains challenging. Existing approaches often treat one aspect of the problem in isolation. GraphST [ 3] and related models use graph neural networks and self-supervision on expression and spatial proximity. Other work maps single-cell profiles to locations or aligns modalities through shared latent spaces, but typically does not learn a unified spot-level representation from a fully aligned multimodal feature tensor. A key limitation is the lack of frameworks that simultaneously capture spatial structure and cross-modal consistency in multimodal spatial datasets. In practice, such datasets are often assembled by combining spatial transcriptomics with projected single-cell modalities or spatial epigenomic measurements. However, downstream analysis is typically performed using methods designed for single-modality data, limiting the ability to fully exploit complementary signals across modalities. This motivates the need for representation learning approaches that operate directly on multimodal spatial feature graphs. Figure 1 summarizes the overall LATTICE workflow and multimodal integration strategy. Our evalu-ation uses harmonized spot-level tensors generated from two upstream components that we reference throughout the paper. ReCAST is an internal engineering pipeline that standardizes inputs, performs multimodal harmonization, and applies sample-level quality control; implementation and export details are summarized in Appendix F. SARSIM (Spatially Anchored Regulatory State Inference in Melanoma) [ 4] is a framework for spatially anchored regulatory inference that integrates paired Visium and single-cell multiome data, learns a soft cell-to-spot mapping, and projects accessibility and motif activity into tissue space. We additionally reuse its overlap-gene constraints and clustering metadata during evaluation. Section 4.1 states how their outputs become the five modality blocks fed to LATTICE. In this work, we present LATTICE, a graph-based self-supervised learning framework for multimodal spatial omics integration. LATTICE takes as input spatially organized multimodal features that 2combine transcriptomic and epigenomic signals, and constructs a graph that encodes spatial proximity and feature similarity. We then learn latent representations using a graph neural network trained with a combination of self-supervised objectives. Specifically, LATTICE integrates (i) masked feature reconstruction to preserve modality-specific information, (ii) cross-modal alignment to enforce consistency across modalities, and (iii) spatial regularization to enforce local coherence in tissue structure. We evaluate LATTICE on a private melanoma multimodal cohort from an anonymized clinical collaborator and report both per-sample and joint analyses. We define a cumulative modality ladder referred to throughout the paper as M1–M5: • M1: Visium RNA only. • M2: M1 plus projected scMultiome RNA. • M3: M2 plus projected scMultiome ATAC gene scores. • M4: M3 plus spatial ATAC. • M5: M4 plus spatial CUT&Tag (full input tensor). Levels M2 to M3 align with the SARSIM-scope inputs, and levels M4 to M5 add ReCAST-derived in situ epigenomics (Section 4.2). LATTICE is modular with respect to multimodal feature construction, which makes it compatible with a range of upstream integration or mapping strategies. In summary, our contributions are as follows: 1. We introduce LATTICE, a graph self-supervised learning framework for learning represen-tations from multimodal spatial omics data. 2. We propose a combination of masked reconstruction, cross-modal alignment losses, and spatial regularization for multimodal spatial representation learning. 3. We provide an end-to-end implementation that harmonizes five modality blocks at spot resolution and exports reproducible integration/training artifacts. 4. We quantify modality-ladder behavior on 11 successful cohort runs, identifying both robust gains and challenging integration regimes that require additional methodological work. These results highlight the potential of graph-based self-supervised learning as a general paradigm for multimodal spatial omics analysis. 
+
+## 2 Related Work 
+
+Spatial omics, multimodal integration, and graph self-supervision Spatial transcriptomics methods increasingly use graphs and self-supervision. GraphST [ 3], STAGATE [ 5], and SpaGCN [ 6]combine expression with spatial neighborhoods for domains and clustering, but typically emphasize RNA with limited multimodal side information. Separately, single-cell spatial integration methods (SIMO [ 7 ], SSpMosaic [ 8], MaxFuse [ 9 ]) match or align dissociated cells to tissue, yielding maps or fused views rather than a unified encoder over spot-aligned multimodal tensors. SARSIM [ 4] extends this line by integrating Visium with scMultiome to learn spatially coherent cell-to-spot mappings and project accessibility and motif activity into tissue space for domain-level regulatory interpretation. Graph self-supervised learning is well developed for attributed graphs but is still used predominantly in single- or weakly multimodal settings. Multimodal spatial analysis therefore needs objectives that couple spatial neighborhoods with heterogeneous spot features, not only cross-dataset alignment. 
+
+Positioning of LATTICE LATTICE targets representation learning on a single spatial graph whose node attributes concatenate all harmonized assay blocks at each location. Masked reconstruction preserves per-modality signal, cross-modal alignment ties views of the same spot, and spatial regularization enforces local coherence. Together these components yield one embedding space for downstream spatial and regulatory analysis without requiring a separate alignment stage. Relative to the modality ladder introduced in Section 1, M2 through M3 correspond to the Visium plus projected scMultiome slice of the upstream stack, which is the assay pairing SARSIM is built around, and M4 through M5 add ReCAST-derived in situ chromatin channels on the same spot lattice (Section 4.1). 33 Proposed Method: LATTICE 
+
+3.1 Multimodal inputs and objective overview 
+
+We propose LATTICE, a graph-based self-supervised learning framework for learning representations from multimodal spatial omics data. Given spatially resolved measurements augmented with multiple molecular modalities, LATTICE learns low-dimensional embeddings that jointly capture spatial structure and cross-modal relationships. Let N denote the number of spatial locations (e.g., spots), and let 
+
+X = [ X(1) , X (2) , . . . , X (B)] ∈ RN ×D (1) be the concatenated multimodal feature matrix, where X(b) ∈ RN ×db corresponds to modality block 
+
+b, db is the feature dimension of block b, and D = PBb=1 db is the total input feature dimension. In our cohort B = 5 , matching levels M1 to M5 in the modality ladder. Visium and projected scMultiome contribute gene-expression and ATAC-derived gene-score features, whereas spatial ATAC and spatial CUT&Tag [ 2] provide in situ chromatin and histone measurements on the same spot lattice. We treat these blocks as complementary views of each location for reconstruction and cross-modal alignment (block listing in Section 4.1). LATTICE then learns node embeddings Z ∈ RN ×d, where d is the embedding dimension, using three self-supervised objectives: masked reconstruction Lrec (Eq. 6), cross-modal alignment Lalign (Eq. 8), and spatial regularization Lspatial (Eq. 9). Their weighted sum is defined in Eq. 10, and implementation details appear in Section H. 
+
+3.2 Spatial graph construction 
+
+Each node i ∈ V is a Visium spot in the concatenated multimodal feature space, with spatial coordinate si ∈ R2 and multimodal feature vector xi ∈ RD . We define edges by spatial proximity. For each node i, we define its neighborhood N (i) as the set of its k-nearest neighbors (kNN) based on Euclidean distance: 
+
+N (i) = kNN (si) (2) Edges are added between i and all j ∈ N (i). Optionally, edge weights are defined using a Gaussian kernel: 
+
+wij = exp 
+
+
+
+− ∥si − sj ∥2
+
+2σ2
+
+
+
+(3) 
+
+3.3 Graph encoder and self-supervised objective 
+
+We employ a graph neural network to learn node embeddings from the multimodal feature graph. Given input features X and graph G, the encoder produces embeddings Z = fθ (X, G ). The imple-mentation stacks TransformerConv message-passing layers with modality-specific input adapters and LayerNorm using PyTorch [ 10 ] and PyTorch Geometric [ 11 ]. Full architectural and optimization hyperparameters appear in Appendix H. To preserve modality-specific information, we adopt a masked reconstruction objective. Let Ω ∈ { 0, 1}N ×D be the reconstruction mask, where Ωij = 1 
+
+means that entry (i, j ) is hidden from the encoder and used as a prediction target. The masked input is: ˜X = (1 − Ω) ⊙ X (4) A decoder gϕ maps embeddings back to feature space: 
+
+ˆX = gϕ(Z) (5) We compute reconstruction loss only on hidden entries: 
+
+Lrec = 1
+
+|Ω|
+
+X
+
+> i,j
+
+Ωij (Xij − ˆXij )2 (6) where |Ω| = P 
+
+> i,j
+
+Ωij is the number of masked target entries. To align representations across modalities, we introduce a cross-modal alignment objective. For modalities a and b, we treat modality-specific features x(a) 
+
+> i
+
+and x(b) 
+
+> i
+
+from the same spot as a positive pair, and features from different spots are negatives. We define modality-specific projections: 
+
+h(m) 
+
+> i
+
+= pm(z(m) 
+
+> i
+
+) (7) 4Algorithm 1 Training LATTICE                                                             
+
+> Require: Multimodal feature matrix X= [ X(1) , . . . , X (B)], spatial coordinates S, graph neighborhood size k, encoder fθ,decoder gϕ, modality projectors {pb}Bb=1
+> Ensure: Spatial embeddings Z
+> 1: Build spatial graph G= ( V, E )from k-nearest neighbors of S
+> 2: for each epoch do
+> 3: Sample reconstruction mask Ω
+> 4: Mask input features: ˜X←(1 −Ω) ⊙X
+> 5: Encode graph nodes: Z←fθ( ˜X, G )
+> 6: Decode features: ˆX←gϕ(Z)
+> 7: Compute masked reconstruction loss Lrec
+> 8: Compute cross-modal alignment loss Lalign across modality pairs 9: Compute spatial smoothness loss Lspatial
+> 10: Form total loss:
+> L=λ1Lrec +λ2Lalign +λ3Lspatial
+> 11: Update model parameters by backpropagation 12: end for
+> 13: Compute final embeddings with trained encoder: Z←fθ(X, G )
+> 14: return Z
+
+where pm(·) is a learnable projection for modality m. The alignment loss is a noise-contrastive style objective [12]: 
+
+Lalign = −
+
+> N
+
+X
+
+> i=1
+
+log exp( sim (h(a) 
+
+> i
+
+, h (b) 
+
+> i
+
+)/τ )
+
+PNj=1 exp( sim (h(a) 
+
+> i
+
+, h (b) 
+
+> j
+
+)/τ ) (8) where sim (·, ·) denotes cosine similarity and τ is a temperature parameter. To enforce spatial smoothness, we encourage neighboring nodes to have similar embeddings: 
+
+Lspatial = X
+
+> (i,j )∈E
+
+wij ∥zi − zj ∥22 (9) The final objective combines all components: 
+
+L = λ1Lrec + λ2Lalign + λ3Lspatial (10) where λ1, λ 2, λ 3 are hyperparameters. 
+
+3.4 Training and inference 
+
+Training first builds the spatial k-NN graph. At each epoch, LATTICE samples a reconstruction mask, runs the encoder and decoder, and minimizes the objective L from Eq. 10 with AdamW [ 13 ] until early stopping. Algorithm 1 summarizes the training procedure. After training, LATTICE produces embeddings Z for each spatial location. These embeddings can be used for downstream tasks such as spatial domain identification, visualization, and integration across datasets. LATTICE is not tied to a specific upstream projection tool or spatial assay. More generally, LATTICE is compatible with any upstream pipeline that produces modality-specific feature blocks aligned to a common spatial unit, including alternatives to SARSIM or ReCAST, making the framework extensible across integration strategies, epigenomic assays, and emerging high-resolution spatial platforms such as Visium HD [14] and Xenium [15]. 
+
+## 4 Experiments 
+
+Our experiments address three questions: 1. How does embedding quality change across modality-ladder levels M1 to M5? 2. Do chromatin and histone features improve spatial organization when agreement with an RNA-only reference decreases? 3. Which training components contribute most to the observed gains? 5Table 1: Processed cohort used for evaluation. Each retained slide has 4,992 Visium spots. Signal columns report mean post-harmonization values per spot.                                                 
+
+> Processed sample Multiome cells Spatial ATAC signal Spatial CUT&Tag signal Final intersected genes
+> 1-pre 9,531 2.415 0.904 248 1-post 16,936 1.934 1.547 198 2-post 746 1.352 1.185 150 4-pre 16,391 3.426 1.443 133 4-post 15,577 3.918 1.297 322 5-pre 8,005 2.188 2.788 154 5-post 10,394 2.051 2.268 129 7-pre 7,734 2.843 1.796 146 8-pre 716 5.819 1.091 211 9-pre 9,791 2.532 1.105 205 10-post 3,254 2.505 1.836 160
+
+4.1 Dataset and evaluation setup 
+
+Table 1 summarizes the retained cohort. We start from 14 source samples and retain 11 after quality control, giving 54,912 Visium spots. Each retained slide has 4,992 spots. Three patients have paired pre/post-treatment samples. These paired samples capture tissue before and after treatment. For every spot, LATTICE assembles five aligned blocks: Visium RNA, projected scMultiome RNA, projected scMultiome ATAC gene scores, spatial ATAC, and spatial CUT&Tag. We evaluate these blocks using the modality ladder levels M1 to M5 defined in Section 1. ReCAST performs preprocessing and harmonization, SARSIM performs spatially anchored regulatory projection, and LATTICE performs graph SSL representation learning. ARI and NMI [ 16 ] compare LATTICE clusters with Space Ranger RNA-derived clusters. Space Ranger is the 10x Genomics analysis pipeline for Visium data [ 17 ], and its RNA-derived clusters are used here as a transcriptomic reference, not ground truth. Spatial contiguity measures whether neighboring spots receive coherent labels, and silhouette measures cluster separation in embedding space. Because ARI and NMI reward agreement with an RNA-only reference, they can undervalue embed-dings that capture chromatin or histone structure beyond transcriptomic similarity. We therefore define a multimodal utility score (MUS) to summarize complementary aspects of spatial and multimodal organization. MUS averages four normalized quantities: spatial contiguity, embedding silhouette, same-cluster spatial-neighbor fraction, and overlap between embedding k-nearest neighbors and spatial k-nearest neighbors: 
+
+MUS v = 14 (SpotCut norm  
+
+> v
+
++ Silhouette norm  
+
+> v
+
++ BioKNN norm  
+
+> v
+
++ BioJaccard norm  
+
+> v
+
+) . (11) Higher MUS values indicate embeddings that jointly preserve spatial coherence, local neighborhood consistency, and multimodal biological structure. Full normalization details appear in Appendix A.2. Table 2 compares LATTICE with spatial and multimodal baselines under the same evaluation metrics. When a baseline has multiple configurations, we report the strongest configuration according to cohort-mean ARI and leave sweep details to the appendix. The raw data cannot be publicly released because of institutional data-use and privacy restrictions. Institution and collaborator identifiers are anonymized for double-blind review and can be restored in the camera-ready version where appropriate. 
+
+4.2 Main results 
+
+Table 2 gives the main cohort-level result, and Figure 2 visualizes cohort-level trends across the M1–M5 modality ladder. • The largest change is from M1 to M2. Adding projected scMultiome RNA to Visium RNA improves ARI, NMI, spatial contiguity, silhouette, and MUS. • Adding scMultiome ATAC gene scores at M3 keeps performance close to M2. • Adding in situ chromatin and histone channels at M4 and M5 changes the behavior. ARI and NMI decrease relative to M2 because the embedding no longer follows the RNA reference alone, while spatial contiguity and MUS increase. 6Table 2: Cohort-level benchmarks and LATTICE modality ladder. Modalities are Visium RNA only (M1), plus projected scMultiome RNA (M2), plus scMultiome ATAC gene scores (M3), plus spatial ATAC (M4), and plus spatial CUT&Tag (M5). ARI/NMI compare with Space Ranger RNA clusters. MUS summarizes spatial and multimodal structure. 
+
+Method Modalities ARI NMI Spatial contiguity Silhouette MUS 
+
+GraphST M1 0.423 ± 0.124 0.536 ± 0.107 0.837 ± 0.052 0.055 ± 0.061 0.666 
+
+STAGATE M1 0.308 ± 0.136 0.420 ± 0.130 0.825 ± 0.061 0.005 ± 0.069 0.657 
+
+SpaGCN M1 + histology 0.408 ± 0.078 0.553 ± 0.098 0.707 ± 0.065 0.426 ± 0.063 0.387 
+
+SIMO M1 0.358 ± 0.155 0.457 ± 0.135 0.697 ± 0.090 0.064 ± 0.056 0.139 
+
+MaxFuse scRNA and spatial ATAC 0.278 ± 0.126 0.442 ± 0.107 0.794 ± 0.069 0.199 ± 0.106 0.493 
+
+LATTICE M1 0.269 ± 0.067 0.364 ± 0.066 0.653 ± 0.135 0.147 ± 0.176 0.111 
+
+LATTICE M2 0.426 ± 0.075 0.507 ± 0.073 0.827 ± 0.043 0.440 ± 0.122 0.733 
+
+LATTICE M3 0.417 ± 0.082 0.493 ± 0.077 0.824 ± 0.053 0.426 ± 0.137 0.718 
+
+LATTICE M4 0.343 ± 0.086 0.462 ± 0.101 0.844 ± 0.037 0.453 ± 0.130 0.801 
+
+LATTICE M5 0.329 ± 0.115 0.450 ± 0.122 0.850 ± 0.036 0.417 ± 0.088 0.803 0.0     
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> ARI
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> NMI
+> M1 M2 M3 M4 M5
+> Modality ladder (cohort mean ± std, N=11 samples)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Spatial contiguity
+
+Reference agreement and spatial contiguity across M1–M5 
+
+Figure 2: M1 through M5 trends from Table 2. RNA-reference agreement peaks near M2 through M3 (SARSIM-scope inputs). ReCAST-backed M4 through M5 favor contiguity and MUS. 7Figure 3: Joint PCA for paired pre/post-treatment samples. Shift magnitude varies by patient. LATTICE M5 has the highest MUS, with M4 close behind. LATTICE M1 underperforms RNA-specialized baselines because the architecture and objectives are designed for multimodal representa-tion learning rather than optimization for transcriptomic clustering alone. This supports the claim that full multimodal inputs improve spatial coherence and multimodal neighborhood structure, even when RNA-reference agreement is not maximal. Figure 3 shows the joint PCA for the three paired patients. Pre- and post- treatment samples separate within each patient, but the shift size differs by patient. This motivates considering pre/post-treatment behavior as patient-specific rather than as a universal treatment signature. Figures 4–6 show how the embeddings support downstream spatial and regulatory analysis for one paired patient: spatial domains remain coherent on tissue coordinates, TF programs vary across Leiden clusters, and accessibility–gene links can be summarized from the learned representation. 
+
+4.3 Patient-level behavior 
+
+Paired pre/post-treatment samples show patient-specific shifts. Across the three paired patients, global shift alignment is near zero, and leave-one-patient-out prediction is mixed. We therefore do not claim a consistent cross-patient treatment signature. Instead, these results show that LATTICE captures stable sample-level structure while preserving patient-specific variation. 
+
+Figure 4: Spatial Leiden clusters for Patient 1 pre-treatment (left) and post-treatment (right) 
+
+Figure 5: TF program activity by Leiden cluster for Patient 1. 8Figure 6: Accessibility–gene link strength distributions for Patient 1. Table 3: Training ablations and test-time modality dropout using full M5 inputs. Rows remove spatial regularization, masking, spatial ATAC at evaluation, or CUT&Tag at evaluation. The final row is the full model.                                                         
+
+> Spatial reg. Masking Spatial ATAC at eval. CUT&Tag at eval. Spatial contiguity Silhouette MUS –✓✓✓0.783 ±0.076 0.294 ±0.067 0.546
+> ✓–✓✓0.849 ±0.044 0.398 ±0.083 0.790
+> ✓✓–✓0.838 ±0.044 0.430 ±0.154 0.765
+> ✓✓✓–0.839 ±0.027 0.417 ±0.117 0.769
+> ✓✓✓✓0.850 ±0.036 0.417 ±0.088 0.803
+
+4.4 Ablation study 
+
+Table 3 separates two questions from the modality ladder. The ladder asks which input blocks help. The ablation table asks which training choices matter when the full M5 input is fixed. Removing spatial regularization lowers spatial contiguity most, supporting the spatial loss. Removing masking changes RNA-reference agreement but does not improve silhouette, suggesting that masking shapes embedding geometry. Withholding chromatin channels at test time does not destabilize training or inference but the metric changes are not uniformly better. Robustness therefore means operational stability, not guaranteed improvement. 
+
+## 5 Conclusion 
+
+LATTICE is a reproducible graph self-supervised learning framework that harmonizes five spot-aligned assay blocks and combines masked reconstruction, cross-modal alignment, and spatial regularization for multimodal spatial omics integration. Across an 11-sample melanoma cohort, LATTICE showed substantial gains when moving from Visium RNA alone to Visium RNA plus projected scMultiome RNA, while full multimodal inputs produced the strongest spatial coherence and MUS performance. ARI and NMI [ 16 ] did not increase monotonically with additional epigenomic channels, suggesting that the learned embeddings capture regulatory and chromatin structure beyond transcriptome-only organization. Within the upstream integration stack, Visium RNA with projected scMultiome RNA and projected scMultiome ATAC gene scores already performs well within the SARSIM assay scope [ 4 ], while adding ReCAST-derived spatial ATAC and spatial CUT&Tag further improves spatial structure metrics. Paired and LOPO analyses did not reveal a consistent cross-patient treatment signature, indicating that treatment-associated shifts remain patient specific in the current cohort. Richer multimodal views of tissue can support discovery when they are interpreted with appropriate safeguards, and we hope this line of work contributes careful tooling that complements expert judgment rather than replacing it. Future work includes deeper biological validation, broader external benchmarking, and evaluation against additional fully multimodal spatial baselines as such datasets become available. 9References 
+
+[1] Patrik L Ståhl, Fredrik Salmén, Sanja Vickovic, Anna Lundmark, José Fernández Navarro, Jens Magnusson, Stefania Giacomello, Michaela Asp, Jakub O Westholm, Mikael Huss, et al. Visualization and analysis of gene expression in tissue sections by spatial transcriptomics. 
+
+Science , 353(6294):78–82, 2016. [2] Hatice S Kaya-Okur, Steven J Wu, Christine A Codomo, Erica S Pledger, Terri D Bryson, Jorja G Henikoff, Kami Ahmad, and Steven Henikoff. Cut&tag for efficient epigenomic profiling of small samples and single cells. Nature communications , 10(1):1930, 2019. [3] Yahui Long, Kok Siong Ang, Mengwei Li, Kian Long Kelvin Chong, Raman Sethi, Chengwei Zhong, Hang Xu, Zhiwei Ong, Karishma Sachaphibulkij, Ao Chen, et al. Spatially informed clustering, integration, and deconvolution of spatial transcriptomics with graphst. Nature communications , 14(1):1155, 2023. [4] Jagan Mohan Reddy Dwarampudi, Veena Kochat, Suresh Satpati, Md Ishtyaq Mahmud, Humaira Anzum, Khalida Wani, Alexander Lazar, Ajay Kumar Saw, Jared Malke, Hien V Nguyen, et al. Spatially anchored regulatory state inference in melanoma. bioRxiv , 2026. [5] Kangning Dong and Shihua Zhang. Deciphering spatial domains from spatially resolved transcriptomics with an adaptive graph attention auto-encoder. Nature communications , 13(1): 1739, 2022. [6] Jian Hu, Xiangjie Li, Kyle Coleman, Amelia Schroeder, Nan Ma, David J Irwin, Edward B Lee, Russell T Shinohara, and Mingyao Li. Spagcn: Integrating gene expression, spatial location and histology to identify spatial domains and spatially variable genes by graph convolutional network. Nature methods , 18(11):1342–1351, 2021. [7] Penghui Yang, Kaiyu Jin, Yue Yao, Lijun Jin, Xin Shao, Chengyu Li, Xiaoyan Lu, and Xiaohui Fan. Spatial integration of multi-omics single-cell data with simo. Nature communications , 16 (1):1265, 2025. [8] Yuelei Zhang, Wenxuan Ming, Bianjiong Yu, Lele Wang, Kaiyan Lu, Lei Xu, Yanhong Ni, Runzhi Deng, and Dijun Chen. Robust integration and annotation of single-cell and spatial omics data using interpretable gene programs. Cell Genomics , 6(4), 2026. [9] Bokai Zhu and Zongming Ma. Maxfuse enables data integration across weakly linked spatial and single-cell modalities. Nature biotechnology , 42(7):1036–1037, 2024. [10] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style, high-performance deep learning library. Advances in neural information processing systems , 32, 2019. [11] Matthias Fey and Jan Eric Lenssen. Fast graph representation learning with pytorch geometric. 
+
+arXiv preprint arXiv:1903.02428 , 2019. [12] Michael Gutmann and Aapo Hyvärinen. Noise-contrastive estimation: A new estimation principle for unnormalized statistical models. In Proceedings of the thirteenth international con-ference on artificial intelligence and statistics , pages 297–304. JMLR Workshop and Conference Proceedings, 2010. [13] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 , 2017. [14] 10x Genomics. Hd spatial gene expression, 2024. URL https://www.10xgenomics.com/ support/spatial-gene-expression-hd . Accessed: 2026-05-06. [15] 10x Genomics. Xenium in situ platform, 2024. URL https://www.10xgenomics.com/ platforms/xenium . Accessed: 2026-05-06. [16] Alexander Strehl and Joydeep Ghosh. Cluster ensembles—a knowledge reuse framework for combining multiple partitions. Journal of machine learning research , 3(Dec):583–617, 2002. 10 [17] 10x Genomics. Space ranger, 2026. URL https://www.10xgenomics.com/support/ software/space-ranger/latest . Accessed: 2026-05-06. [18] Peter J Rousseeuw. Silhouettes: a graphical aid to the interpretation and validation of cluster analysis. Journal of computational and applied mathematics , 20:53–65, 1987. [19] Vincent A Traag, Ludo Waltman, and Nees Jan Van Eck. From louvain to leiden: guaranteeing well-connected communities. Scientific reports , 9(1):5233, 2019. [20] Leland McInnes, John Healy, and James Melville. Umap: Uniform manifold approximation and projection for dimension reduction. arXiv preprint arXiv:1802.03426 , 2018. 
+
+## A Extended Experimental Details 
+
+A.1 Datasets and Preprocessing 
+
+The successful batch uses 11 private collaborator sample runs (54,912 total spots), each with five modality blocks aligned on the strict SARSIM-anchor five-way gene intersection. In the reported configuration, highly variable gene (HVG) filtering is configured but disabled (apply_hvg_filter=false ). Modality preprocessing uses per-modality log1p_then_zscore 
+
+before concatenation. 
+
+A.2 Evaluation Metrics Multimodal Utility Score (MUS). Let SpotCut v denote graph-edge spatial contiguity on the spot kNN graph, Silhouette v the mean cosine silhouette [ 18 ] of embeddings with respect to Leiden clusters [ 19 ], BioKNN v the same-cluster neighbor consistency from single-sample biological diag-nostics, and BioJaccard v the mean Jaccard overlap between embedding kNNs and spatial kNNs. Each term is min–max normalized across all methods and LATTICE modality-ladder rows in the cohort evaluation pool before averaging: 
+
+MUS v = 14 (SpotCut norm  
+
+> v
+
++ Silhouette norm  
+
+> v
+
++ BioKNN norm  
+
+> v
+
++ BioJaccard norm  
+
+> v
+
+) .
+
+The resulting MUS values rank rows in Table 2. External methods use the same graph construction and K-matching procedure as LATTICE with a tractable Leiden [ 19 ] resolution sweep. Additional implementation details accompany the released artifacts. 
+
+Marker Gene Enrichment Score. To quantify biological consistency, we define a marker gene enrichment score for each cluster. Let Gc denote a set of known marker genes for cluster c. For each gene g ∈ Gc, we compute: 
+
+∆g,c = ¯ xin  
+
+> g
+
+− ¯xout  
+
+> g
+
+.
+
+The cluster score is: Score c = 1
+
+|Gc|
+
+X
+
+> g∈Gc
+
+∆g,c ,
+
+and the overall score: Marker Score = 1
+
+C
+
+> C
+
+X
+
+> c=1
+
+Score c.
+
+Higher values indicate stronger enrichment of marker genes within predicted clusters. 
+
+## B Extended Ablation Studies 
+
+B.1 Relation to Main-Text Ablations 
+
+Cohort-scale evidence for which modalities are included appears in the M1 through M5 ladder (Table 2). Evidence for training choices and test-time withholding of chromatin blocks while keeping the full M5 tensor definition appears in Table 3. Together these tables cover RNA-only through full multimodal inputs, spatial regularization and masking, and evaluation when spatial ATAC or spatial CUT&Tag are withheld at test time. We do not report an additional appendix grid beyond these cohort summaries. 11 B.2 Effect of Modality Combinations 
+
+We evaluate the configured modality-combination variants exported by the analysis matrix. Improve-ments are strongest for Visium RNA alone to Visium RNA plus projected scMultiome RNA, while additional modalities show metric-dependent trade-offs (for example, better spatial contiguity without uniformly higher ARI/NMI). 
+
+B.3 Effect of Graph Modeling 
+
+Training keeps the spot k-NN graph for graph convolution while optionally applying explicit spatial smoothness in the objective (Section 4.4). Removing spatial regularization lowers cohort spatial contiguity and RNA-reference agreement relative to LATTICE M5 (Table 3), supporting explicit spatial coupling beyond graph propagation alone. 
+
+## C Robustness to Missing Modalities 
+
+C.1 Test-Time Modality Withholding 
+
+We follow the same test-time withholding protocol as Section 4.4: chromatin blocks may be omitted at evaluation while the model trained on full M5 inputs is held fixed. Cohort-level outcomes appear in Table 3 (rows with spatial ATAC or CUT&Tag absent at evaluation). Runs complete without failures and remain numerically stable, but metric changes are mixed, so we do not claim uniform superiority under all missing-modality patterns. 
+
+C.2 Comparison to Naive Handling 
+
+The robustness discussion in the main text applies here as well: graceful execution is observed, without monotonic gains across all metrics when modalities are missing at test time. 
+
+## D Hyperparameter and Implementation Summary 
+
+Fixed hyperparameters for the reported batch (architecture, loss weights, optimization, graph neigh-borhood size, masking ratio, and alignment temperature) are listed in Appendix H. We do not include quantitative one-dimensional sensitivity curves in this submission. Such sweeps can accompany extended reproducibility materials if needed. 
+
+## E Patient-Level Analysis 
+
+E.1 Per-Patient Performance 
+
+Per-sample metrics and paired pre/post-treatment summaries appear in the main text (Section 4.3) alongside cohort-level tables. 
+
+E.2 Cross-Patient Generalization 
+
+Leave-one-patient-out analyses in Section 4.3 show heterogeneous pre/post-treatment prediction across patients. We therefore describe current evidence as supporting stable per-sample embeddings without consistent cross-patient generalization for treatment prediction. 
+
+## F ReCAST Pipeline Notes 
+
+ReCAST is the internal preprocessing and harmonization stage used to prepare multimodal tensors before SARSIM and LATTICE. It is an internal engineering pipeline and is included here for reproducibility of this submission’s data flow. In our stack, ReCAST is responsible for ingesting raw per-sample Visium and scMultiome exports, applying sample-level quality checks, and producing aligned matrices and manifests consumed by downstream stages. 12 Scope and outputs. At a high level, ReCAST performs three functions. First, it standardizes modality-level inputs into a common sample schema (spot identifiers, feature indices, and QC metadata). Second, it runs cross-modality gene and feature harmonization, including consistency checks needed for downstream five-block concatenation. Third, it exports machine-readable manifests (sample registry, modality availability, and preprocessing parameters) that are versioned with each run so later stages can be replayed deterministically. 
+
+Role in this paper. For this study, ReCAST provides the harmonized spatial ATAC and spatial CUT&Tag blocks (reported as ReCAST CGMC in the main text), as well as quality-controlled sample manifests used to define the 14-source/11-successful cohort. SARSIM [ 4 ] then operates on the harmonized cohort to produce spatially anchored regulatory projections and overlap-gene artifacts. LATTICE consumes those exported blocks and artifacts to train and evaluate the embedding model. This staged organization separates engineering harmonization (ReCAST), regulatory projection (SARSIM), and representation learning (LATTICE), and keeps each component’s scope explicit during review. We do not present ReCAST as a scientific baseline or claim methodological novelty for it here. Its purpose in this manuscript is operational reproducibility of the multimodal tensor assembly. Camera-ready materials can include a public code release and fuller implementation documentation for this stage. 
+
+## G Disclosures for reproducibility and responsible research 
+
+This appendix states how we share artifacts, what ran on the cluster, and how human data were governed. Model and training specifics appear in Appendix H. 
+
+G.1 Supplementary code and data availability 
+
+We include anonymized code, Slurm driver scripts, pinned dependency manifests, and run snapshots as supplementary material. The cohort tensors are de-identified clinical biospecimen-derived profiles under a collaborator institution’s proprietary agreement, cannot be redistributed publicly, and have no public five-modality substitute at this lattice resolution. 
+
+G.2 Compute scheduling and resources 
+
+All reported LATTICE training used CPU execution through manifests that set device=cpu , so reproducing the batch at Visium density does not require a GPU. In practice each end-to-end per-sample LATTICE job occupied one cluster node provisioned with sixteen CPU cores and 128 GB RAM, and the joint multisample follow-up used the same one-node, sixteen-core, 128 GB footprint. ReCAST harmonization for spatial epigenomics ran on single nodes with eight cores and 64 GB RAM. Peak resident set size stayed below those RAM ceilings for completed jobs. Archived cluster logs that bracket a full per-sample run from harmonization through graph SSL, embedding export, and routine clustering or plot steps show roughly eight minutes of wall clock under light queue contention, which we take as the indicative per-sample duration for planning. Across the retained cohort, early stopping spans 36–63 epochs with a mean of 45.2, so runs that exit earlier skew shorter while queue wait or heavier diagnostics skew longer. Supplementary logs retain timestamps and optional accounting exports for readers who need finer per-job estimates. 
+
+G.3 Research ethics and data agreements 
+
+Ethics and IRB oversight for human biospecimens are handled by the collaborating clinical institution. A data transfer agreement is in place between that institution and the authors’ site. For double-blind review, identifying protocol numbers and committee names are withheld. They can be restored in the camera-ready version together with any journal-required ethics boilerplate. 
+
+## H Implementation Details 
+
+LATTICE was implemented in Python using PyTorch [ 10 ] and PyTorch Geometric [ 11 ]. The pipeline consists of a multimodal integration followed by graph-based self-supervised representation 13 learning. In the integration stage, spatial transcriptomic measurements are combined with projected single-cell and epigenomic modalities to construct a concatenated spot-by-feature matrix. All downstream learning is performed at the level of spatial capture spots , consistent with the resolution of the available data. 
+
+Third-party software and licenses. We additionally rely on Scanpy-style tooling where applicable and on 10x Genomics Space Ranger [ 17 ] for RNA-derived reference clusters. Each third-party component remains governed by its upstream license (BSD-style terms for PyTorch, MIT terms for PyTorch Geometric, and commercial terms for Space Ranger). The supplementary bundle ships pinned dependency files ( environment.yml and/or requirements.txt ) so recipients can verify versions and license compatibility before reuse. 
+
+Input features. For each sample, we construct a multimodal feature matrix 
+
+X = [ X(1) , X (2) , . . . , X (M )] ∈ RN ×D ,
+
+where N is the number of spots, M is the number of modality blocks, and D = PMm=1 dm is the total feature dimension. In our experiments, M = 5 with modality blocks: Visium RNA, spatial ATAC (CGMC prediction), spatial CUT&Tag (CGMC prediction), projected scMultiome RNA, and projected scMultiome ATAC (gene scores). Harmonization uses a strict five-way gene intersection anchored on SARSIM overlap_genes.txt , and each modality block is standardized with log1p_then_zscore before concatenation. Because the final intersected gene set is sample-specific, D = 5 G varies across runs, and in the successful batch, G ∈ [129 , 322] .
+
+Graph construction. We build a kNN spatial graph from Visium array coordinates with k = 6 and union symmetrization. Radius-graph mode is implemented in configuration validation but was not used in the reported runs. For N = 4 ,992 spots per sample, the expected directed edge count before deduplication is approximately N × k ≈ 29 ,952 .
+
+Encoder architecture. Each modality block is first projected into a shared hidden space using a modality-specific linear adapter. Let dh denote the hidden dimension. We set 
+
+dh = 128 .
+
+The projected modality representations are fused by modality-aware mean pooling (weighted by observed modality presence per spot). The fused representation is then passed through a stack of graph encoder layers. In the current implementation, the encoder uses TransformerConv layers with: • number of graph layers: 3
+
+• number of attention heads: 4
+
+• hidden dimension per layer: 128 
+
+• dropout rate: 0.1
+
+• activation function: ReLU 
+
+• normalization: LayerNorm 
+
+The final embedding dimension is 
+
+d = 128 .
+
+Decoder architecture. A feedforward decoder reconstructs the full multimodal input from the learned embedding. The decoder maps from Rd back to RD using one hidden layer of width 2d (i.e., 
+
+256 units when d = 128 ) followed by a linear output layer. 
+
+Masked reconstruction. During training, we apply random modality-block masking at the feature level. The masking ratio is set to 
+
+ρ = 0 .15 .
+
+Let Ω ∈ { 0, 1}N ×D denote the binary reconstruction mask. Reconstruction error is computed only on masked entries using the Huber loss with parameter 
+
+δ = 1 .0.
+
+14 Cross-modal alignment. Cross-modal alignment uses a noise-contrastive estimation (NCE)-style objective [ 12 ] applied to selected modality pairs. In the reported configuration, modality indices zero and one correspond to Visium RNA and spatial ATAC latent branches after graph refinement. Each modality block is passed through a projection head of output dimension 
+
+dc = 64 .
+
+The projection head uses a two-layer MLP with hidden width 64 . The temperature parameter in the alignment loss is set to 
+
+τ = 0 .1.
+
+Spatial regularization. To enforce spatial consistency, we apply graph Laplacian smoothness in the reported runs: X
+
+> (i,j )∈E
+
+wij ∥zi − zj ∥2,
+
+with edge coupling induced by the constructed kNN graph. An alternative neighbor-based alignment regularizer is implemented but was not used for the successful batch. 
+
+Overall objective. The final training loss is 
+
+L = λ1Lrec + λ2Lalign + λ3Lspatial ,
+
+with loss weights: 
+
+λ1 = 1 .0, λ2 = 0 .5, λ3 = 0 .1.
+
+Optimization. We optimize the model using AdamW [13] with: • learning rate: 1 × 10 −3
+
+• weight decay: 1 × 10 −4
+
+• batch size: full graph • number of epochs: up to 100 (early stopping enabled) • early stopping patience: 20 
+
+• gradient clipping norm: 1.0
+
+Training uses full-graph optimization (neighbor sampling is not enabled in the current implementa-tion). Automatic mixed precision is disabled. The validation fraction is set to 
+
+0.1,
+
+with train/validation masks generated at the node level. 
+
+Reproducibility. Single-sample runs use global_seed=42 (propagated into graph-SSL training), with deterministic cuDNN flags enabled when CUDA is used and strict deterministic algorithms disabled by default. Joint multisample analysis uses seed 7 and reports stability summaries over 11 analysis seeds {7, 11, 19, 23, 29, 31, 37, 41, 43, 47, 53}. Model checkpoints, training logs, config snapshots, and embeddings are saved for all runs. 
+
+Hardware and runtime. Training used CPU-only manifests ( device=cpu ). Resource footprints and indicative wall times appear in Appendix G.2. Supplementary Slurm logs and optional sacct 
+
+exports provide per-job timestamps and peak RSS where captured by the scheduler. 
+
+Downstream analysis. After training, embeddings are clustered by Leiden [ 19 ] with target cluster count K imported from SARSIM clustering metadata and achieved via a resolution sweep. Vi-sualizations are generated with PCA and UMAP [ 20 ] (UMAP fallback to PCA if umap-learn is unavailable). Predicted spot clusters are compared with Space Ranger clustering labels using ARI and NMI [16] when overlap is available. 15 I Theoretical Analysis of LATTICE 
+
+In this appendix, we provide theoretical insights into the behavior of the LATTICE objective. We show that the combination of masked reconstruction, cross-modal alignment, and spatial regularization yields embeddings that are (i) spatially smooth, (ii) informative with respect to input modalities, and (iii) aligned across modalities. 
+
+I.1 Preliminaries 
+
+Let G = ( V, E ) denote the spatial graph with weighted adjacency matrix W = [ wij ]. Let Z ∈ RN ×d
+
+denote the learned embeddings, and X = [ X(1) , . . . , X (M )] the multimodal input features. The LATTICE objective is: 
+
+L = λ1Lrec + λ2Lalign + λ3Lspatial . (12) We analyze each component in turn. 
+
+I.2 Spatial Smoothness Lemma I.1 (Spatial Smoothness) . Minimizing the spatial regularization term 
+
+Lspatial = X
+
+> (i,j )∈E
+
+wij ∥zi − zj ∥2 (13) 
+
+encourages the learned embeddings Z to be smooth over the graph, such that neighboring nodes have similar representations. Proof sketch. The spatial loss can be written in matrix form as: 
+
+Lspatial = Tr( Z⊤LZ ), (14) where L = D − W is the graph Laplacian and D is the degree matrix. Minimizing Tr( Z⊤LZ )
+
+penalizes high-frequency variations over the graph, forcing zi ≈ zj for strongly connected nodes. This is a standard result in spectral graph theory, implying smoothness of embeddings over the spatial graph. □
+
+I.3 Reconstruction Consistency Lemma I.2 (Reconstruction Consistency) . Assuming sufficient model capacity, minimizing the masked reconstruction loss 
+
+Lrec = 1
+
+|Ω|
+
+X
+
+> i,j
+
+Ωij (Xij − ˆXij )2 (15) 
+
+ensures that the embedding Z retains sufficient information to reconstruct the multimodal input features. Proof sketch. The reconstruction objective corresponds to training an autoencoder under partial observation. Under standard assumptions on universal function approximation, there exists an encoder-decoder pair (fθ , g ϕ) such that ˆX ≈ X. Therefore, minimizing Lrec forces Z = fθ (X) to preserve the information content of X, up to the capacity of the model. □
+
+I.4 Cross-Modal Alignment Lemma I.3 (Cross-Modal Alignment) . The alignment loss 
+
+Lalign = −
+
+> N
+
+X
+
+> i=1
+
+log exp(sim( h(a) 
+
+> i
+
+, h (b) 
+
+> i
+
+)/τ )
+
+PNj=1 exp(sim( h(a) 
+
+> i
+
+, h (b) 
+
+> j
+
+)/τ ) (16) 
+
+encourages representations of the same spatial location across modalities to be aligned, while separating representations of different locations. 
+
+16 Proof sketch. The objective follows an NCE-style formulation [ 12 ]. It maximizes similarity between positive pairs (h(a) 
+
+> i
+
+, h (b) 
+
+> i
+
+) while minimizing similarity with negative pairs (h(a) 
+
+> i
+
+, h (b) 
+
+> j
+
+) for j̸ = i,which tightens a mutual-information bound between modality-specific representations under standard assumptions. Thus embeddings for the same spatial location become aligned across modalities. □
+
+I.5 Joint Objective Behavior Theorem I.4 (Structured Multimodal Embedding) . Let Z⋆ be an optimal solution of the LATTICE objective. Then Z⋆ simultaneously: 1. preserves multimodal feature information, 2. aligns modality-specific representations, 3. enforces spatial smoothness over the graph. Proof sketch. The result follows directly from the additive structure of the objective. The reconstruc-tion term enforces information preservation (Lemma 2), the alignment term enforces cross-modal agreement (Lemma 3), and the spatial term enforces smoothness (Lemma 1). Since each term is min-imized jointly, the optimal embedding Z⋆ must balance all three properties, yielding a representation that captures both spatial structure and multimodal relationships. □
+
+I.6 Interpretation 
+
+The LATTICE objective can be interpreted as learning embeddings that lie on a low-dimensional manifold structured by both spatial proximity and multimodal consistency. The spatial term enforces local smoothness, while the alignment term relates different modality-specific views of the same location. Together, these objectives produce representations that are robust to noise and capable of integrating heterogeneous molecular signals. 17
