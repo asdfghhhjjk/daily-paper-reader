@@ -6,34 +6,31 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-22
-- 运行时间：2026-07-22 21:34:50 UTC
+- 最新运行日期：2026-07-23
+- 运行时间：2026-07-23 21:37:36 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：3
 - 精读区：2
-- 速读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今天聚焦病理图像分析，精读概念引导学习与高效基础模型两篇新作，速读细粒度分类与数据泄露审计。  
-概念引导剪枝与高效病理基础模型，分别提升了全切片分类效果和肿瘤微环境分析效率。  
-读者可关注这类方法如何降低病理AI的计算成本，并警惕多模态基准中的数据泄露问题。
-- 详情：[/202607/22/README](/202607/22/README)
+精读了两篇8分病理AI论文：高效基础模型GigaPath-Flash与GigaTIME-Flash实现全切片及微环境分析，以及将病理学家注意力对齐的前列腺癌报告生成模型。  
+最值得关注的方向是：通过蒸馏大规模基础模型或对齐专家注意力，让病理AI更快、更具可解释性地报告生成。  
+下一步可多关注如何将这类“注意力对齐”方法迁移到自己的病理分析任务中，提升报告可信度。
+- 详情：[/202607/23/README](/202607/23/README)
 
 ### 精读区论文标签
-1. [CGRL: Concept-Guided Pruning and Representation Learning for Whole-Slide Image Classification](/202607/22/2607.12556v1-cgrl-concept-guided-pruning-and-representation-learning-for-whole-slide-image-classification)  
-   标签：评分：9.0/10、query:path-xai-sel
-   evidence：概念相关性剪枝通过类别概念相似度对补丁排序，选择最具信息量的补丁
-2. [GigaPath-Flash and GigaTIME-Flash: Efficient Pathology Foundation Models for Whole-Slide and Tumor Microenvironment Analysis](/202607/22/2607.18218v1-gigapath-flash-and-gigatime-flash-efficient-pathology-foundation-models-for-whole-slide-and-tumor-microenvironment-analysis)  
+1. [GigaPath-Flash and GigaTIME-Flash: Efficient Pathology Foundation Models for Whole-Slide and Tumor Microenvironment Analysis](/202607/23/2607.18218v1-gigapath-flash-and-gigatime-flash-efficient-pathology-foundation-models-for-whole-slide-and-tumor-microenvironment-analysis)  
    标签：评分：8.0/10、query:profile
-   evidence：为计算病理学设计的高效全切片与肿瘤微环境基础模型
+   evidence：应用于全切片病理和肿瘤微环境分析的基础模型
+2. [Pathologist Attention-Aligned Report Generation for Prostate Histopathology](/202607/23/2607.19624v1-pathologist-attention-aligned-report-generation-for-prostate-histopathology)  
+   标签：评分：8.0/10、query:path-xai-sel
+   evidence：利用病理学家注意力识别WSI中的诊断关键区域
 
 ### 速读区论文标签
-1. [CLIP-Guided Label-Free Discriminative Region Scoring for Fine-Grained Classification](/202607/22/2607.13437v1-clip-guided-label-free-discriminative-region-scoring-for-fine-grained-classification)  
+1. [Pretraining Multiple Instance Learning Networks with Multi-Teacher Distillation from Pathology Slide Foundation Models](/202607/23/2607.14703v1-pretraining-multiple-instance-learning-networks-with-multi-teacher-distillation-from-pathology-slide-foundation-models)  
    标签：评分：7.0/10、query:path-xai-sel
-   evidence：CLIP引导的无标签区域评分框架选择判别性区域
-2. [Auditing Data Leakage in Whole-Slide Image Multimodal Benchmarks](/202607/22/2607.12278v1-auditing-data-leakage-in-whole-slide-image-multimodal-benchmarks)  
-   标签：评分：6.0/10、query:path-xai-sel
-   evidence：审计全切片图像计算病理基准中的数据泄露
+   evidence：在计算病理学中预训练MIL网络用于全切片图像分析
 
 
 <div class="dpr-home-promo-card">
