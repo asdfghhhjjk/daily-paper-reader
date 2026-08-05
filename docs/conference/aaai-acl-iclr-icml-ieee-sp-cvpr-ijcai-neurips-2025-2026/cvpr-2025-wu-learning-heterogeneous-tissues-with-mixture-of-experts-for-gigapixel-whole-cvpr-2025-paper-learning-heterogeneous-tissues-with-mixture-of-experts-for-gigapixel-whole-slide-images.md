@@ -1,21 +1,21 @@
 ---
 title: Learning Heterogeneous Tissues with Mixture of Experts for Gigapixel Whole Slide Images
-title_zh: 用混合专家学习异质组织以处理千兆像素全切片图像
+title_zh: 利用专家混合模型学习异质性组织用于千兆像素全切片图像
 authors: "Wu, Junxian, Chen, Minheng, Ke, Xinyi, Xun, Tianwang, Jiang, Xiaoming, Zhou, Hongyu, Shao, Lizhi, Kong, Youyong"
 date: 2025-06-01
 pdf: "https://openaccess.thecvf.com/content/CVPR2025/papers/Wu_Learning_Heterogeneous_Tissues_with_Mixture_of_Experts_for_Gigapixel_Whole_CVPR_2025_paper.pdf"
-tags: ["query:profile"]
-score: 6.0
-evidence: 提出MoE将组织区域路由到专家，实现WSI分析中的跨patch信息整合
-tldr: 针对全切片图像中组织异质性和领域知识缺失的挑战，提出即插即用的病理感知混合专家模块PAMoE，通过将不同组织区域路由到多个专家网络，学习特定组织类型相关的病理知识。实验表明该方法能有效捕捉瘤内组织异质性，提升下游任务性能。该模块可灵活集成到现有框架，为利用跨patch信息进行WSI级任务提供了新思路。
+tags: ["query:cellseg"]
+score: 7.0
+evidence: 提出专家混合模型用于全切片图像分析，推进数字病理学
+tldr: 针对千兆像素全切片图像分析中组织异质性和领域知识缺乏的挑战，提出病理感知专家混合模块PAMoE，通过门控机制将不同组织区域路由至对应专家，在无需额外先验的情况下学习组织特异性特征，在多个下游任务中展现出优于现有方法的性能，为可扩展的WSI分析提供了新范式，有望推动数字病理学中数据驱动的发现。
 source: CVPR-2025-Accepted
 selection_source: conference_retrieval
 figures_json: "[{\"url\": \"assets/figures/cvpr-2025-accepted/cvpr-2025-wu-learning-heterogeneous-tissues-with-mixture-of-experts-for-gigapixel-whole-cvpr-2025-paper/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 793, \"height\": 759, \"label\": \"Figure\"}, {\"url\": \"assets/figures/cvpr-2025-accepted/cvpr-2025-wu-learning-heterogeneous-tissues-with-mixture-of-experts-for-gigapixel-whole-cvpr-2025-paper/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 837, \"height\": 833, \"label\": \"Figure\"}, {\"url\": \"assets/figures/cvpr-2025-accepted/cvpr-2025-wu-learning-heterogeneous-tissues-with-mixture-of-experts-for-gigapixel-whole-cvpr-2025-paper/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1498, \"height\": 820, \"label\": \"Figure\"}, {\"url\": \"assets/figures/cvpr-2025-accepted/cvpr-2025-wu-learning-heterogeneous-tissues-with-mixture-of-experts-for-gigapixel-whole-cvpr-2025-paper/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 1472, \"height\": 996, \"label\": \"Figure\"}, {\"url\": \"assets/figures/cvpr-2025-accepted/cvpr-2025-wu-learning-heterogeneous-tissues-with-mixture-of-experts-for-gigapixel-whole-cvpr-2025-paper/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 694, \"height\": 554, \"label\": \"Figure\"}]"
 tables_json: "[{\"url\": \"assets/tables/cvpr-2025-accepted/cvpr-2025-wu-learning-heterogeneous-tissues-with-mixture-of-experts-for-gigapixel-whole-cvpr-2025-paper/table-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 1802, \"height\": 659, \"label\": \"Table\"}, {\"url\": \"assets/tables/cvpr-2025-accepted/cvpr-2025-wu-learning-heterogeneous-tissues-with-mixture-of-experts-for-gigapixel-whole-cvpr-2025-paper/table-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1797, \"height\": 373, \"label\": \"Table\"}, {\"url\": \"assets/tables/cvpr-2025-accepted/cvpr-2025-wu-learning-heterogeneous-tissues-with-mixture-of-experts-for-gigapixel-whole-cvpr-2025-paper/table-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1797, \"height\": 246, \"label\": \"Table\"}]"
-motivation: WSI分析面临复杂组织环境和领域知识缺失。
-method: 提出病理感知的混合专家模块，学习将组织区域路由到专家。
-result: 模型能有效捕捉组织异质性并提升预测性能。
-conclusion: PAMoE为WSI分析提供了一种灵活有效的跨patch信息整合方案。
+motivation: 千兆像素全切片图像分析缺乏目标驱动的领域知识引导。
+method: 提出病理感知专家混合模块，将组织区域路由到特定专家学习。
+result: 模型可学习组织异质性，识别新的预后相关因素，性能优越。
+conclusion: 为WSI分析提供可插拔模块，提升模型可扩展性和可解释性。
 ---
 
 ## Abstract
@@ -26,60 +26,66 @@ Analyzing gigapixel Whole Slide Images (WSIs) is challenging due to the complex 
 ## 论文详细总结（自动生成）
 
 ### 1. 论文的核心问题与整体含义（研究动机和背景）
-*   **核心问题**：在处理千兆像素的全切片图像（WSI）时，面临两大挑战：一是肿瘤内部存在高度异质性（即组织类型的多样性及其相互作用）；二是传统方法在利用病理先验知识时，需要额外且复杂的推理步骤和特定工作流程（如预分类、构建异构图），这限制了模型的可扩展性和发现未知预后特征的能力。
-*   **整体含义**：该研究旨在设计一种端到端的、无需在推理阶段依赖额外先验知识的模块，能够自适应地学习、识别并处理WSI中的异质性组织区域，从而提升基于弱监督多实例学习（MIL）框架的病理图像分析性能。
+- **核心问题**：千兆像素全切片图像（WSI）分析面临两大挑战：
+  - 复杂的病理组织环境（组织异质性，intratumoral heterogeneity）；
+  - 缺乏与任务目标直接相关的领域知识引导。
+- **现有方法局限**：先前工作（如 PANTHER、HEAT）通过引入病理先验（如聚类原型、组织分类器）来利用组织异质性，但依赖额外的推理步骤和专用工作流，限制了可扩展性以及模型发现新的预后相关因素的能力。
+- **研究动机**：设计一种无需额外推理先验、可端到端学习并利用组织异质性的方法，从而更灵活地挖掘不同病理组织间的关系，提升 WSI 分析性能。
 
 ### 2. 论文提出的方法论
-*   **核心思想**：提出一个即插即用的“病理感知混合专家模块”（PAMoE），其核心是让不同“专家”网络专门负责处理特定类型的肿瘤内组织，并滤除与任务无关的背景区域。
-*   **关键技术细节**：
-    *   **基于专家选择的路由规则**：区别于传统为每个输入分配专家的方法，PAMoE让每个专家网络主动选择其“感兴趣”的patch。未被任何专家选中的patch将被直接丢弃，从而天然地滤除了噪声和无关组织。
-    *   **专家路由的病理先验监督**：
-        1.  **原型预提取**：利用预训练基础模型（CONCH）对数据集中的patch进行分类，提取出与预后高度相关的四种组织类别（肿瘤、基质、免疫浸润、坏死）的原型特征向量。
-        2.  **专家分组与监督**：将专家分为“有监督先验专家”和“自由专家”。通过计算patch特征与组织原型之间的余弦相似度，获得每个patch属于各组织类别的概率，并以此监督“有监督先验专家”的patch选择偏好。保留“自由专家”是为了让模型能发现未知的、但与预后相关的模式。
-        3.  **损失函数**：最终损失函数为任务相关损失（如Cox回归损失）与专家路由偏好监督损失（交叉熵损失）的加权和。
-*   **公式与算法流程（文字说明）**：
-    *   流程从使用基础模型提取所有WSI patch的特征开始。
-    *   路由器网络计算每个patch对于所有专家的“被选择概率”得分。
-    *   每个专家根据得分选择固定数量（由容量因子决定）的前K个patch。
-    *   选定patch的最终输入特征是其原始特征经对应专家网络处理后，再根据归一化的被选择概率加权求和的结果。未被选中的patch特征被置零（后被移除）。
+- **核心思想**：提出一种即插即用的**病理感知专家混合模块（PAMoE）**，基于 Mixture-of-Experts（MoE）架构，让不同专家“专精”于特定的瘤内组织类型，通过可训练的门控机制自动将组织块路由到对应专家，同时过滤与任务无关的噪声块。
+- **关键技术细节**：
+  - **专家选择路由（Expert Choice Routing）**：与传统 patch-选-expert 不同，PAMoE 让每个专家独立选择其感兴趣的 Top-k 个 patch，未被任何专家选中的 patch 被丢弃。这既解决了专家负载不平衡问题，又天然滤除了 MIL 流程中的无关实例。
+  - **先验原型预提取**：利用预训练基础模型 CONCH 作为分类器，确定每个 patch 所属的瘤内组织类别（肿瘤、间质、免疫浸润、坏死、其他），并计算各类别实例的平均特征作为**先验原型**。
+  - **专家选择的先验监督**：将 MoE 专家分为“先验监督专家”和“自由专家”。对先验监督专家，计算其选择概率与对应原型引导概率（余弦相似度经 softmax 归一化）之间的交叉熵损失 \(\mathcal{L}_{\text{PAMoE}}\)，引导专家偏好与病理先验一致。自由专家无监督约束，保留模型发现未知因素的能力。
+  - **总损失**：\(\mathcal{L} = \mathcal{L}_{\text{task}} + \alpha \mathcal{L}_{\text{PAMoE}}\)，其中 \(\mathcal{L}_{\text{task}}\) 为下游任务（如生存预测）的损失，\(\alpha\) 为平衡超参数。
+  - **模块集成**：PAMoE 可替换经典 WSI 分析方法（如 TransMIL、LongViT、PatchGCN）中的全连接层，作为即插即用组件。
 
 ### 3. 实验设计
-*   **数据集与场景**：实验基于癌症生存期预测任务，使用了来自癌症基因组图谱（TCGA）的五个不同癌种数据集：结肠腺癌（COAD）、低级别胶质瘤（LGG）、肺腺癌（LUAD）、胰腺腺癌（PAAD）、乳腺浸润癌（BRCA）。
-*   **Benchmark方法**：
-    *   **经典MIL方法**： ABMIL, AttnMISL。
-    *   **利用组织先验的方法**：PANTHER (基于原型), HEAT (基于异构图)。
-    *   **其他对比方法**：CaMIL (基于Transformer并具有空间感知能力)。
-    *   **基线集成模型**：将PAMoE集成到TransMIL, LongViT (基于Transformer) 和 PatchGCN (基于图神经网络) 中进行对比。
-*   **评估指标**：采用生存分析常用的一致性指数（C-index），并报告了5折交叉验证的均值和标准差。所有方法统一使用UNI作为patch特征编码器以保证公平。
+- **任务与数据集**：在**生存预测**任务上验证，使用 5 个公开癌症数据集（COAD、LGG、LUAD、PAAD、BRCA），均来自 TCGA。
+- **对比方法**：
+  - 经典 MIL 方法：ABMIL、AttnMISL
+  - Transformer 方法：CaMIL（含空间感知）
+  - 引入先验的方法：PANTHER（原型引导）、HEAT（异质图+组织分类器）
+  - 基线方法集成 PAMoE：PatchGCN+PAMoE、TransMIL+PAMoE、LongViT+PAMoE
+- **统一设置**：所有方法均采用 UNI 作为实例特征编码器，相同 5 折交叉验证分割，评估指标为 C-index（均值±标准差）。
 
 ### 4. 资源与算力
-*   论文中**未明确说明**所使用的GPU型号、数量或具体的训练时长。
+- 论文正文和补充材料中**未明确提及**使用的 GPU 型号、数量或训练时长。仅声明因硬件限制未能在更大规模模型上探索 PAMoE。
 
 ### 5. 实验数量与充分性
-*   **实验数量**：论文进行了多组实验来评估PAMoE的有效性。
-    *   **主实验**：在5个数据集上，将PAMoE集成到3种基线模型中的性能对比。
-    *   **消融实验**：
-        1.  专家数量与配比（4/6/8个专家，有监督专家从0到4个不等）。
-        2.  Mixture-of-Experts（MoE）架构的必要性（对比了基于直接余弦相似度分配的CSA方法）。
-        3.  先验损失函数权重 \(\alpha\) 的影响。
-        4.  文中提及在补充材料中还有对路由方式、残差连接、原型获取方式等的进一步消融。
-*   **充分性评估**：实验设计**较为充分和客观**。通过与多种先进方法对比、集成到不同架构的基线模型中、并在多个数据集上验证，有力地证明了方法的有效性。消融实验细致探讨了关键设计选择的影响，增强了结论的可靠性。
+- **主要实验组数**：
+  - 与 5 种 SOTA 方法及 3 种基线的集成对比（表 1，共 8 个方法配置）。
+  - 消融实验：
+    - 专家数量与先验监督比例（表 2，3 种总数 × 3 种分配方式）。
+    - MoE 架构的必要性对比（表 3，PAMoE vs. 余弦相似度分配 CSA）。
+    - 损失超参数 α 的影响（图 5，5 个 α 值）。
+    - 补充材料中包含更多消融：专家选择路由、跳跃连接与类别令牌处理、原型获取方式、使用 CONCH 作为编码器、容量因子、patch 丢弃比例分析、自由专家分析等。
+- **实验充分性评价**：
+  - 实验覆盖 5 种不同癌型，比较方法多样，消融维度丰富，能较全面验证模块的有效性。
+  - 采用相同编码器、统一数据划分和指标，对比公平性较高。
+  - 受限于硬件，未在更大型模型或更多样架构上测试，这是潜在的不足。
 
 ### 6. 论文的主要结论与发现
-*   PAMoE作为一个即插即用模块，能在多种癌种的生存预测任务中，一致地提升基于Transformer的MIL基线模型的性能。
-*   性能提升归因于PAMoE模型通过不同的专家以不同方式映射和组织patch，扩展了模型的潜在表示空间，并通过Transformer的全局自注意力机制更有效地捕捉全局组织间的交互。
-*   可解释性分析证实，“有监督先验专家”成功学习到了与预定义组织类别高度一致的patch选择偏好，而“自由专家”则展现出更分散的偏好，倾向于探索新模式。
+- **性能提升**：PAMoE 集成到基于 Transformer 的基线模型后，在大多数数据集上一致提升生存预测 C-index，且性能优于或相当 SOTA 方法。
+- **有效性验证**：PAMoE 通过稀疏专家处理，有效应对组织异质性，增强了块表征学习；先验监督有助于专家形成与病理组织一致的偏好，自由专家则能探索新模式。
+- **适用边界**：PAMoE 对基于 Transformer 的模型改进显著，但对以局部邻域交互为主的图网络模型（PatchGCN）提升有限。
+- **可解释性**：专家热图可视化显示，监督专家能聚焦于对应的组织类型，自由专家偏好分散，表明模块可解释性和任务适应性。
 
-### 7. 优点
-*   **即插即用性**：模块可无缝集成到现有的主流WSI分析框架中，无需改变其整体架构。
-*   **端到端学习**：在推理阶段无需像以往方法那样依赖额外的分类器或聚类等先验工作流。
-*   **显式处理异质性与噪声**：通过专家选择路由机制，直接识别并处理不同组织，同时有效丢弃无关背景，这是针对WSI分析痛点的创新设计。
-*   **可解释性**：专家对特定组织类型的偏好提供了良好的可解释性，有助于理解模型的决策依据。
+### 7. 优点：方法或实验设计上的亮点
+- **即插即用**：PAMoE 无需专用工作流，可轻松嵌入现有 MIL 模型（替换全连接层），具有良好通用性。
+- **端到端学习**：训练中引入病理先验，但推断时无需额外先验信息或推理步骤，简化了预测流程。
+- **噪声过滤机制**：专家选择路由天然丢弃无关 patch，有助于模型聚焦关键组织区域，减少噪声干扰。
+- **专家解耦设计**：区分监督专家与自由专家，在利用先验的同时保留了模型发现新模式的灵活性。
+- **实验全面**：在多个癌型上验证，涉及多种对比方法和消融设置，结果有说服力。
+- **可解释性分析**：通过专家选择概率热图直观展示病理组织的路由偏好，增强模型透明度。
 
-### 8. 不足与局限
-*   **架构普适性有限**：实验证明PAMoE对Transformer架构提升显著，但对PatchGCN这类基于图神经网络、仅建模局部上下文交互的模型提升有限且不稳定。其优势的发挥依赖于长距离全局交互机制。
-*   **依赖于额外分类器**：原型提取步骤需要依赖一个预训练的组织分类器（CONCH），这引入了额外的计算开销和对第三方模型的依赖（尽管文中在补充材料中讨论了替代方案）。
-*   **实验场景单一**：所有实验仅基于生存预测这一个“全景”任务进行验证，未探讨在癌症分型（typing）、分级（grading）等其他关键预后任务上的表现。
-*   **算力规模限制**：作者承认受限于硬件，未能在更大规模的模型上探索PAMoE的效果，其在大规模参数下的性能表现尚不明确。
+### 8. 不足与局限：包括实验覆盖、偏差风险、应用限制等
+- **架构适应局限**：对非 Transformer 架构（如图网络）的性能提升有限，未在更多样化架构上验证。
+- **先验原型依赖外部模型**：原型提取依赖 CONCH 分类器，增加了前期计算开销；虽然讨论了替代方案，但默认设置仍引入额外模型。
+- **参数敏感性**：容量因子 \(c\)、平衡系数 \(\alpha\)、专家总数和配比等超参数需针对不同任务调整，可能增加调参成本。
+- **任务局限**：仅验证了生存预测任务，尚未在分类、分级等其他下游任务上测试。
+- **算力限制未完全探索**：未进行大规模模型实验，限制了 MoE 在大参数场景下的潜力挖掘。
+- **类别不平衡路由风险**：若某些病理组织类别样本极端稀少（如坏死），相应专家可能难以充分训练，文中未深入讨论。
 
 （完）
