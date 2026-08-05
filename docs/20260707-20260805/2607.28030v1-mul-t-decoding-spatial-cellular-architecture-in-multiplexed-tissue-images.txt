@@ -1,0 +1,222 @@
+Title: MUL-T: Decoding Spatial Cellular Architecture in Multiplexed Tissue Images
+
+URL Source: https://arxiv.org/pdf/2607.28030v1
+
+Published Time: Fri, 31 Jul 2026 01:04:53 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# MUL-T: Decoding Spatial Cellular Architecture in Multiplexed Tissue Images 
+
+Farzaneh Seyedshahi 1,2 , Kai Rakovic 1,2 , Adalberto Claudio Quiros 2 , John LeQuesne 1,2 , and Ke Yuan 1,2 
+
+> 1
+
+Cancer Research UK Scotland Institute, Glasgow, UK  
+
+> 2
+
+University of Glasgow, Glasgow, UK 
+
+Abstract. Understanding tissue organisation in multiplexed imaging re-quires modelling both cellular phenotypes and their spatial context. Ex-isting approaches typically rely on handcrafted features, such as marker intensity statistics or cell-type proportions, which often fail to scale or generalise across cohorts with heterogeneous marker panels. We intro-duce MUL-T, a lightweight transformer framework that reframes tis-sue architecture as a masked contextual prediction task over discrete cell tokens. By learning contextualised [CLS] embeddings without task-specific supervision, the model captures higher-order cellular interactions while remaining computationally efficient. We evaluate MUL-T on sev-eral clinically relevant downstream tasks, including core-level tumour pattern classification, patient-level grading, PD-L1 positivity prediction, and cross-dataset treatment response prediction. Across tasks, MUL-T consistently outperforms classical feature-based baselines and achieves performance comparable to a foundation ViT model, despite substan-tially fewer parameters and lower training cost. 
+
+Keywords: Transformer · Multiplexed Imaging · Spatial Learning 
+
+## 1 Introduction 
+
+Spatially resolved tissue imaging has become a key modality for studying com-plex biological systems, enabling the measurement of cellular phenotypes along with their spatial organisation at single-cell resolution [8, 16]. Beyond individual cell states, the arrangement and co-occurrence of cells encode critical informa-tion about tissue structure and function [6,7]. From a computational perspective, this creates a structured data problem where meaning arises not from isolated observations, but from spatial context and interactions across many heteroge-neous entities. Effectively modelling such spatial context remains a central chal-lenge [4]. Recent advances in multiplexed imaging technologies have substantially increased both the dimensionality and scale of spatial tissue profiling [10, 16]. Modern platforms routinely generate datasets comprising millions of cells, each described by high-dimensional protein marker vectors and precise spatial coor-dinates [19]. In cancer, such data provides an unprecedented opportunity to in-terrogate tumour microenvironment organisation, cellular neighbourhood struc-ture, and rare or spatially restricted phenotypes that are not apparent from bulk arXiv:2607.28030v1 [cs.AI] 30 Jul 2026 2 F.Seyedshahi et al. 
+
+measurements alone. However, heterogeneous cell states, dense spatial packing, and multi-channel signals create a level of combinatorial complexity that current computational pipelines are not designed to handle. Traditional analysis of multiplexed tissue imaging typically relies on marker intensity and manual thresholding, by platforms like QuPath [1]. These methods use rigid gating strategies and effectively treat cells as binary (positive or nega-tive) for specific proteins. While computationally simple, this approach is highly sensitive to signal noise and batch effects. Also, because it requires subjective manual tuning, it limits both automation and reproducibility across different studies. [4, 5]. Another common paradigm uses algorithms like PhenoGraph [9] for high-dimensional clustering and aggregation of the clustered cells at tissue level. While effective at identifying phenotypic states, these tools often adopt a "bag-of-cells" mentality. By focusing on global cluster frequencies, they decontextualise the data and strip away the spatial coordinates that define tissue structure. Modern graph-based formulations often assume local homophily, meaning neighbouring nodes (cells) are similar [20]. However, tissue environments are inherently heterogeneous; critical interactions often occur between dissimilar or rare cell types. These signals can be diluted by standard neighbourhood aggrega-tion, which tends to be dominated by the most abundant populations [22]. Fur-thermore, constructing and processing cell-level graphs for large tissue samples is computationally expensive, often requiring aggressive subsampling or neighbour-hood truncation, which limits the ability to capture long-range spatial structure and undermines scalability to large cohorts. Vision Transformer (ViT) architectures have emerged as a robust alterna-tive to traditional methods, using attention mechanisms to model both local structures and long-range dependencies. These models have demonstrated strong representation learning in natural imagery [11, 13] and histopathology [3, 18, 21]. Typically, the pipeline partitions whole-slide images into fixed size pixel tiles (e.g . 256 × 256 ), encode them independently, and aggregate embeddings using strategies like Multiple Instance Learning (MIL) or different pooling methods. While effective for RGB histopathology images, this paradigm is less suited for multiplexed imaging for several reasons. The high-dimensional marker chan-nels in mIF are difficult to interpret simultaneously. Collapsing channels into an RGB-pixel tile entangles spatial structure with marker semantics, making it hard to distinguish phenotypic variation from spatial context. Moreover, ViTs operate on fixed grids and assume consistent channel semantics. However, mIF marker panels vary significantly across cohorts and platforms, preventing the direct transfer of pretrained models on a cohort to another one. Also, training panel-agnostic foundation models requires massive, harmonised datasets that are currently scarce and expensive to produce. Finally and crucially, tile-based embeddings often blur cell boundaries and dilute signals from rare cell popula-tions or specific microniches; both of which are critical to cancer biology and discovery. MUL-T 3
+
+These limitations motivate a modelling framework that separates marker-space reasoning from spatial reasoning and shifting the focus from patch-level to cell-level analysis. By decoupling these elements, the model can more effec-tively support transfer learning across heterogeneous panels, allowing knowledge gained from large primary cohorts to generalise to smaller, specialised datasets without sacrificing biologically meaningful resolution. Furthermore, by modelling at the cellular level rather than processing dense pixel grids, we can significantly reduce the overhead required for large-scale deployments. Focusing on cell-level modelling also addresses the high cost of data acquisition, aiming for a robust architecture that maintains high performance even when training on the smaller, more limited datasets typically available in clinical settings. In this work, we formulate spatial cellular organisation as a contextual mod-elling problem by representing tissue as sequences of discrete tokens. Drawing inspiration from natural language, each segmented cell constitutes a token, with spatially contiguous regions defining sequences similar to sentences. This shift from pixel-based to biologically grounded entities uses cell segmentation and unsupervised phenotypic clustering to create a compact, interpretable abstrac-tion of high-dimensional marker profiles. The cell tokens are granular enough to capture rare phenotypes while maintaining global structural logic. To process these sequences, we employ a lightweight transformer that oper-ates directly on cell-level tokens. Through self-attention, the model learns spatial dependencies and produces a contextualised [CLS] embedding that summarises tissue architecture for downstream tasks. By opting for a tiny transformer archi-tecture, the framework achieves high performance without the need for massive, foundation-scale datasets. Furthermore, modelling at the cellular level provides a higher density of training tokens compared to patch-based approaches, im-proving statistical efficiency and preserving biological resolution. This balance ensures scalable training and robust cross-dataset transfer, resulting a reusable model that generalises across heterogeneous cohorts and downstream tasks. 
+
+## 2 Methodology 
+
+In this section, we describe the two datasets used in this study and formalise the problem setting for tokenisation, transformer training, and downstream evalu-ation. Figure 1 shows a representative multiplex tissue microarray (TMA) core from the primary dataset, where individual marker channels are colour-coded and composited into an RGB visualisation. 
+
+2.1 Datasets LATTICeA-IO (Primary Dataset) The primary dataset for this study is LATTICeA-IO, a large-scale multiplex immunofluorescence (mIF) cohort. It comprises approximately 2,500 TMA cores (1mm diameter) from 1,025 patients with lung adenocarcinoma, representing a total of roughly 17 million segmented cells. 4 F.Seyedshahi et al.       
+
+> Fig. 1: Example mIF image from the LATTICeA-IO co-hort.
+
+The marker panel is designed to capture key axes of the tumour microenvironment us-ing spectrally distinct Opal fluorophores. These include: DAPI (nuclear counterstain), Ki-67 (proliferation), CD68 (macrophages), CD8 and CD4 (cytotoxic and helper T cells), α-SMA (stromal/myofibroblastic components), and pan-cytokeratin (epithelial compartment). Whole-slide images were acquired at 20x magnification and spectrally unmixed via Phenochart to generate quantitative per-channel fluorescence maps. For downstream tasks, the dataset provides core-level labels (including predominant tumour patterns and PD-L1 positivity) alongside patient-level clin-ical gradings. Cell segmentation was performed by identifying nuclei in the DAPI channel followed by whole-cell expansion to approximate cytoplasmic bound-aries, enabling extraction of per-cell marker intensities across nuclear and non-nuclear compartments. The resulting dataset provides high-dimensional, spa-tially resolved single-cell representations spanning epithelial, immune, prolifer-ative, and stromal niches, forming the foundation for downstream tokenisation and transformer-based modelling. 
+
+CTCL-P (Additional Dataset) External validation was performed using a public mIF dataset [12], which profiles cutaneous T-cell lymphoma (CTCL) sam-ples treated with pembrolizumab using CODEX [2] imaging. This dataset con-tains 70 tumour cores from 14 patients and includes a panel of approximately 56 protein markers. Several markers overlap biologically with the LATTICeA-IO panel, including CD8, CD4, Ki-67, and CD68. For markers not directly available, biologically analogous substitutes were used: DRAQ5 served as a nuclear marker in place of DAPI, and cytokeratin markers were used to represent epithelial com-ponents in place of CKPAN. To enable cross-dataset generalisation, a shared-marker alignment protocol was used to transfer token identities learned from the primary dataset to the CTCL-P dataset (see Sec. 2.2). The downstream task on CTCL-P is binary classification of responders versus non-responders to PD-1 blockade based solely on generated [CLS] tokens from the transformer trained on primary dataset. In total, the dataset contains approximately 117,000 cells. 
+
+2.2 Problem formulation 
+
+The objective of this work is to model spatial cellular organisation in histological tissue by drawing an analogy to natural language. In natural language, semantic meaning emerges from contextual relationships between words within a sentence. Similarly, we aim to learn representations of tissue architecture from the spatial context and phenotypic identity of cells, thereby defining a language of cells. In this language, individual cells are treated as discrete tokens, and spatially localised groups of cells form fixed-size windows across the tissue. MUL-T 5
+
+The proposed framework consists of two main stages. First, in the tokenisa-tion step, cells are tokenised by assigning discrete phenotypic and spatial iden-tifiers. This stage also includes cross-dataset cluster assignment by supporting consistent tokenisation to the additional dataset with different marker panels. Second, sequences of cell tokens are used to train a transformer-based language model that captures spatial dependencies through masked token prediction. Once trained, the model produces contextualised sequence-level representations via a classification (CLS) token, which summarises spatial relationships within each window or sequence. These [CLS] embeddings are subsequently pooled as rep-resentations of tissue cores or patients for downstream prediction tasks. 
+
+Tokenisation To tokenise cells, mIF images are processed using a U-Net-based [14] cell segmentation framework. Nuclei are identified via the DAPI marker, a standard approach for reliable nucleus detection. For every detected cell, precise spatial coordinates (xi, y i) are extracted to form the foundation of the spatial representation. Phenotypic identities (or clusters) are assigned through unsupervised k-means clustering ( K = 10 ) based on cellular morphology and marker expression. To build the cluster model, a random subset of 5 million cells is sampled from the total pool of 17 ,432 ,758 cells. Each sampled cell is represented by a feature vector containing z-normalised marker intensities, cell area, and circularity. Following clustering, all cells in the dataset are assigned to their nearest cluster centroid, providing the discrete labels to be used as token number later. To convert the irregular spatial distribution of cells into a structured format suitable for transformer models, we discretised each tissue core into a regular grid using a cell binning strategy. Let P = ( xi, y i)Ni=1 denote the set of cell coordinates within a core. For each cell, we computed the Euclidean distance to its k-th nearest neighbour ( k = 2 , excluding self-distance), and defined a characteristic local spacing as the median of these distances: 
+
+d = median i
+
+ ∥pi − pi, (k)∥ . (1) To ensure that bins capture local cellular neighbourhoods rather than in-dividual pixels, a scaling factor α = 2 was applied, resulting the final bin size 
+
+∆ = αd . Each tissue core was partitioned into a uniform grid with a spacing or bin size of ∆ (∆ = 0 .8μm), and each cell was assigned to its nearest grid bin. Each grid bin inherits the cluster number corresponding to the cell it contains and is treated as a discrete token. Grid bins without assigned cells are encoded us-ing a dedicated background token. Analogous to whitespace in natural language, these tokens preserve spatial separation between neighbouring cell tokens and prevent the implicit collapse of spatial distances during sequence construction. This grid-based tokenisation preserves local biological structure while introduc-ing minimal spatial approximation, enabling cell-level spatial information to be represented as sequences directly consumable by transformer architectures. A visual illustration of cell locations and their corresponding token assignments is shown in Figure 2. 6 F.Seyedshahi et al. DAPI Channel Clustered Cells Cell Tokens 
+
+> Token Window
+> Multiplex Immunofluorescence
+> 25 μm
+
+Fig. 2: Tokenisation of cellular spatial information from multiplex im-munofluorescence images. An example mIF image and its corresponding DAPI channel used for nuclear-based cell segmentation are shown. Extracted cell centroids are coloured according to their cluster assignments, representing discrete cellular phe-notypes. These labelled cells are subsequently binned into a fixed-size spatial grid to generate cell tokens. 
+
+Cross-dataset token assignment using shared markers To transfer simi-lar cellular token identities from the reference dataset (primary) to the external dataset (additional), we employ a k-nearest neighbour (k-NN)-based label trans-fer strategy restricted to shared markers. Six biologically corresponding markers were used for alignment: CD4, CD8, CD68, Ki67, Cytokeratin, and a nuclear marker (DAPI in LATTICeA-IO and DRAQ5 in CTCL-P). For computational efficiency and balanced token representation, a stratified subset of 25 ,000 cells was sampled from the reference dataset, preserving the original phenotypic token proportions. For both datasets, mean marker inten-sities were extracted per cell and independently z-score normalised within the dataset. This independent normalisation avoids redefining cohort-specific expres-sion contexts while ensuring comparable feature scaling across shared markers. Token assignment was performed using a k-NN classifier ( k = 250 ), trained on the reference cells in the shared-marker feature space. For each target cell, the 250 nearest reference neighbours were identified, and the cell was assigned the token receiving the majority of neighbour votes. Assignment confidence was defined as the fraction of neighbours voting for the assigned token: 
+
+ci = 1
+
+k max 
+
+> tk
+
+X
+
+> j=1
+
+1( yj = t), (2) where yj denotes the token identity of the j-th nearest neighbour. The validation of cross-dataset tokenisation focuses on assignment confidence statistics and phenotypic consistency across cohorts. Specifically, we report the mean and median assignment confidence across all target cells, as well as token-wise confidence distributions. 
+
+Masked Transformer Pretraining Following cell tokenisation, each tissue core is represented as a collection of integer-valued token sequences correspond-ing to inherited cell cluster numbers (Fig. 3a). To preserve spatial structure MUL-T 7
+
+within local contexts, tokens are augmented with rotary positional embeddings [17] within each window prior to transformer encoding. Each input sequence is constructed from a 30 × 30 grid of tokens, flattened into a one-dimensional se-quence of length 900 . This window size was empirically selected to balance com-putational efficiency with the ability to capture meaningful spatial dependencies between neighbouring cells. For masked pretraining, we use a tiny BERT-style transformer encoder with 4 layers, 4 self-attention heads, and an embedding di-mension of 256, resulting in 3.5M parameters. Owing to the small vocabulary size, the model remains lightweight and computationally efficient compared to standard transformer architectures. A random subset of token positions M is selected and replaced with a mask-ing token, and the model is trained to recover the original identities from the surrounding context (Fig. 3b). We explore masking ratios of 20-30%. Background tokens are excluded from masking to concentrate learning on biologically mean-ingful structures. The resulting vocabulary consists of 13 discrete tokens: 10 
+
+phenotypic cluster tokens, one background token, one [CLS] token, and one masking token. The training objective is defined as the token-level cross-entropy loss restricted to masked positions: 
+
+LMLM = − 1
+
+|M| 
+
+X
+
+> i∈M
+
+wyi log pθ (yi | x), (3) where yi denotes the ground-truth token at position i, pθ (yi | x) is the model-predicted probability, and wyi denotes optional class-specific weighting (the proportion of training tokens belonging to each phenotypic cluster). Optimisation was performed using AdamW with β1 = 0 .9, β2 = 0 .95 , and a weight decay of 0.01 . The learning rate was set to 10 −4 with a linear warm-up. Training was conducted with a batch size of 32 per device using distributed data parallelism across two NVIDIA H200 GPUs (epoch time ≈ 12 minutes) for 300 epochs. 
+
+Downstream Tasks After masked transformer pretraining, the model out-puts a [CLS] embedding for each sequence (=window), summarising the local spatial context of the corresponding grid window. These [CLS] embeddings act as compact representations of local tissue architecture and form the basis for downstream prediction tasks at both tissue core and patient levels. Each [CLS] 
+
+token therefore represents a spatial snapshot of tissue organisation within a local region of a patient sample. For each tissue core, multiple spatial grid windows are extracted, resulting a set of [CLS] embeddings associated with that core. These embeddings corre-spond to spatially distinct windows sampled across the core, as illustrated in the second part of Fig. 3b using a 5 × 5 set. A core-level representation is ob-tained by aggregating the [CLS] embeddings across all windows belonging to the same core. Similarly, for patients with multiple tissue cores, patient-level representations are constructed by aggregating embeddings across all their asso-ciated cores. Formally, let Wc = w1, . . . , w Nc denote the set of spatial windows 8 F.Seyedshahi et al. Masked Cell Token    
+
+> …
+> (Window Dim)**2
+> <CLS> …
+> <CLS>
+> <CLS>
+> <CLS>
+> …
+> <CLS> …
+> <CLS>
+> <CLS>
+> <CLS>
+> Classification
+> Token
+> Tokenised Cell Window
+> Cell
+> Segmentation
+> Clustering Transformer Dataset
+> CLS
+> …
+> Embedding Dim
+> Avg.
+> Pattern
+> Grade
+> Response
+> Survival
+> …Classifier
+> (a)
+> (b)
+> Flatten
+> Window Dim
+
+Fig. 3: MUL-T pipeline (a) Cells are segmented and then clustered using K-means. The tissue is then binned into a spatial grid where bins, acting as tokens, inherit majority cell cluster labels. These tokens are grouped within fixed spatial windows to create input sequences for the transformer. (b) A transformer model processes masked sequences to produce contextualised [CLS] representations for each sequence. These local spatial contexts are aggregated into core-level or patient-level vectors, enabling downstream predictions. 
+
+extracted from tissue core c, and let zCLS 
+
+w ∈ Rd denote the [CLS] embedding produced by the transformer for window w, with d (=transformer embedding dimension) . The core-level representation is defined as the mean aggregation of 
+
+[CLS] embeddings: 
+
+z(c)
+
+core = 1
+
+|W c|
+
+X
+
+w∈W c
+
+zCLS 
+
+w . (4) For patient p with a set of associated tissue cores Cp = c1, . . . , c Mp , the patient-level representation is obtained by aggregating the corresponding core-level em-beddings: 
+
+z(p)
+
+patient = 1
+
+|C p|
+
+X
+
+c∈C p
+
+z(c)
+
+core . (5) This aggregation strategy results in fixed-dimensional representations suit-able for downstream classifications using regular machine learning classifier mod-els. Core-level prediction tasks include treatment response classification (respon-der vs. non-responder), PD-L1 positive, and predominant tumour pattern clas-sification across two categories (Acinar, Cribriform, and Lepidic as lower risk patterns - Micropapillary, Papillary, and Solid as higher risk patterns). Patient-level predictions include tumour grade classification across three classes (G1, G2, and G3). For multi-class classification tasks, binary logistic regression was extended using a one-versus-rest strategy. To demonstrate performance, we compare against two common baseline ap-proaches, as well as the foundational ViT model, KRONOS [15]. For KRONOS, we extract features from 256-pixel tiles within each core and aggregate these embeddings in the same way as our [CLS] representations, ensuring a controlled comparison with MUL-T. In addition, we evaluate two classical feature-based MUL-T 9
+
+baselines. First, marker intensity statistics, where per-marker mean and standard deviation are computed across cells within each core. Second, cluster frequency features, where the normalised proportion of cells assigned to each K-means phenotypic cluster is used. 
+
+## 3 Experiments 
+
+This section evaluates the MUL-T framework from two complementary perspec-tives. First, we assess the quality of the tokenisation stage by analysing clustering of the primary dataset and token assignment of the additional dataset. Second, we evaluate the performance of the proposed method for downstream prediction and benchmark it against two baselines and a state-of-the-art foundation model. These experiments target both core-level and patient-level tasks, including treat-ment response, PD-L1 positivity, tumour pattern, and grading. 
+
+3.1 Tokenisation 
+
+Using K-means clustering in the primary dataset, we identified 10 distinct clus-ters (token IDs). The cell features (normalised marker intensities and cell shapes) are not fully independent, leading to partially overlapping cluster profiles. Never-theless, all clusters display statistically significant differences across features ( p < 
+
+0.05 ). The clusters are both compact and well separated (BCSS/WCSS=1.27). They also maintain balanced cell distributions (see bar plot in Fig. 4a.) A com-plementary UMAP visualisation of a subsample of 25,000 cells, colour-coded by cluster, further illustrates this separation. The heatmap of cluster-level feature profiles presents correlations between cell features and cluster numbers. Some clusters show strong positive or negative associations with specific markers and morphological traits. For example, cluster 1 groups cells with high CD4 expres-sion but smaller areas and lower SMA and CD8 levels. In contrast, cluster 2 captures more elongated, spindle-shaped cells with higher cytokeratin expres-sion. A k-nearest-neighbour-based ( k = 250 ) token transfer approach resulted in a robust assignment of the reference dataset clusters to the additional dataset cells. A confidence score for each cell is defined as the fraction of the nearest neigh-bours’ votes for the assigned token. Across all target cells, the mean assignment confidence score is reported as 0.54, ranging from 0.12 to 1.00. (Figure 4b, per cell histogram plot). This high-confidence assignment is observed for  49 .2%  of the target cells. Assignment confidence varied across tokens (Figure 4b, per token bar plot), with the mean per token confidence ranging from 0.338 to 0.676. Despite substantial biological differences in cellular composition between the primary and additional datasets, transferred tokens showed strong biological consistency at the marker level. Token-wise mean marker intensities were highly correlated between the reference and target datasets across all six shared mark-ers (Figure 4c), with a mean Pearson correlation coefficient of 0.8545 and values 10 F.Seyedshahi et al. (a)              
+
+> (b) (c)
+> Fig. 4: Assessment of clustering, tokenisation, and cross-dataset marker alignment. (a) Distribution of cluster tokens and corresponding feature profiles in the primary dataset (LATTICeA-IO). (b) Assignment confidence for cross-dataset to-ken transfer. (c) Correlation of shared markers between the primary and additional cohorts.
+
+ranging from 0.720 to 0.989. These results demonstrate that label transfer pre-serves token-specific molecular profiles across datasets, supporting the biological validity of the transferred token identities under domain shift. 
+
+3.2 Downstream Tasks 
+
+Using the generated [CLS] embeddings, we evaluate clinically relevant down-stream tasks at both core and patient levels. In the primary dataset, we as-sess PD-L1 positivity and predominant pattern classification at the core level, and grading at the patient level. Cross-dataset generalisation is further exam-ined using zero-shot [CLS] embeddings from the additional CTCL-P cohort for treatment response prediction (Figure 5a). The model achieves an AUC of 0.86 for pattern classification, 0.79 for patient grading, and 0.72 for PD-L1 positivity. Without task-specific training, it differ-entiates responders from non-responders in the external cohort with an AUC of 0.68. Across all tasks, the model outperforms classical baselines and achieves performance comparable to the foundation model. All results are validated using 10-fold cross-validation, and AUC scores are reported using balanced averaging to account for class imbalance. To further support core-level tumour pattern prediction, we perform a retrieval-based evaluation. The model attains a ranking accuracy of 0.56 across six im-MUL-T 11 High Risk 
+
+> Low Risk
+> Intermediate Risk
+> (c) (b) (a)
+
+Fig. 5: Experimental evaluation. (a) Benchmarking of downstream tasks against classical baselines and a foundation model. (b) UMAP projection of core-level embed-dings coloured by dominant tumour pattern. (c) Data scalability analysis, reporting loss, perplexity, and Top-1 and Top-3 accuracy for masked token prediction during transformer pretraining. 
+
+balanced pattern classes and a mean average precision of 0.29 when measuring label consistency among the top-k neighbours ( k = 250 ). These results highlight the suitability of transformer-based [CLS] embeddings for clinically meaningful similarity search between cores. Figure 5b shows a supervised UMAP projection of averaged core-level embeddings coloured by dominant histological pattern, illustrating clear separation induced by the learned representations. Furthermore, we examine data scalability and observe consistent but grad-ually diminishing improvements as the training set increases from 1% to 50%. Loss decreases from 1.597 to 1.519 and perplexity from 5.01 to 4.63, while Top-1 accuracy increases modestly from 0.441 to 0.462 (Figure 5c). Most gains occur at very small data fractions, after which performance stabilises. This suggests that the model rapidly captures the dominant statistical structure of the cellular token space. The early saturation likely reflects limited model capacity rather than insuffi-cient data. Despite its small size, the transformer achieves competitive accuracy with substantially fewer parameters and lower training cost. Overall, these re-sults indicate that the cellular token space contains structured regularities that can be effectively learned by a lightweight architecture, offering a favourable balance between efficiency and representational performance. 
+
+## 4 Discussion 
+
+The MUL-T framework represents a shift in how we interpret multiplex tissue images, moving away from global phenotype aggregation towards a context-aware approach. By treating cells and their spatial arrangements as fundamental units, the model captures the grammar of tissue architecture. A key strength of this framework is the use of masked cell phenotype mod-elling through the attention mechanism. By tasking the model with inferring 12 F.Seyedshahi et al. 
+
+missing cell tokens from their neighbours, we force it to learn the underlying bi-ological rules of the microenvironment. This mirrors the biological reality where cellular function is not an isolated trait but is continuously modulated by sur-rounding signals. Unlike traditional methods that rely on simple marker inten-sities, MUL-T identifies higher-order spatial motifs that may be indicative of specific disease states or immune responses. The technical implementation of grid-based tokenisation further bridges the gap between spatial fidelity and computational practicality. By deriving grid resolution from empirical inter-cell distances, the framework avoids the com-putational overhead of graph neural networks while maintaining the integrity of the tissue layout. Our findings suggest that phenotype homogeneity is pre-served within these bins, ensuring that biological signals are not lost during discretisation. Furthermore, the inclusion of background tokens is a critical de-sign choice.This acknowledges that empty space in a tissue sample is structurally informative and prevents the model from creating artificial adjacencies between distant cell clusters. A core strength of the proposed framework is its streamlined architecture, which utilises a tiny BERT-style transformer encoder. Because the vocabulary of cell phenotypes is significantly smaller than that of human natural language, the model requires substantially fewer parameters. This makes the architecture exceptionally lightweight and computationally efficient compared to standard transformer models. This design prevents over-parameterisation while maintain-ing the capacity to learn complex relational and spatial dependencies within the tissue microenvironment. Finally, the decision to use a lightweight machine learning downstream model, such as logistic regression, and average aggregation serves as a rigorous validation of the learned representations. It ensures that the predictive power is derived from the quality of the embeddings themselves rather than the complexity of the classifier. This approach enhances interpretability which is a vital requirement for clinical adoption. 
+
+4.1 Limitations 
+
+Despite MUL-T’s strengths, the proposed framework has several limitations. First, while the grid-based tokenisation preserves local spatial structure, it in-troduces a discretisation step that may smooth fine-grained spatial variations, particularly in regions with highly heterogeneous cell packing or rare pheno-types. Although empirical analysis suggests minimal phenotype mixing within bins, extreme cellular densities or atypical tissue architectures may violate this assumption. In addition, the model focuses on local neighbourhoods and does not explicitly model long-range spatial dependencies, which may be relevant for certain global tissue-level processes. Second, the current formulation relies on predefined cell phenotypes derived from upstream clustering or annotation, making performance partially depen-dent on the quality and consistency of cell segmentation and phenotype assign-ment (clustering). Errors at this stage may propagate into downstream rep-MUL-T 13 
+
+resentations. While the model supports cross-dataset transfer through marker alignment, complete biological equivalence between cohorts cannot be guaran-teed, particularly when marker panels or staining protocols differ substantially. Finally, although lightweight downstream models improve interpretability and stability, they may limit performance ceilings compared to task-specific end-to-end optimisation. 
+
+## 5 Conclusion 
+
+MUL-T introduces a scalable and biologically grounded approach to multiplexed image analysis. By reframing tissue architecture as a contextual prediction prob-lem, the framework successfully extracts complex spatial relationships that are often missed by traditional global metrics. The results demonstrate that self-supervised masked modelling can gener-ate transferable embeddings that align with histopathological logic. Despite the challenges posed by upstream data variability and the local nature of the atten-tion windows, the framework provides a transparent and interpretable pathway for clinical data analysis. Future work may explore the integration of multi-scale attention mechanisms to bridge the gap between local microenvironments and global tissue morphology. Ultimately, MUL-T establishes a foundation for ap-plying the principles of large language models to the intricate language of tissue. 
+
+## Acknowledgements 
+
+The authors would like to express their sincere gratitude to the group’s pathol-ogists for their guidance on cell biology and marker panel design, which were instrumental in ensuring the clinical relevance and biological integrity of this work. 
+
+## References      
+
+> 1. Bankhead, P., Loughrey, M.B., Fernández, J.A., Dombrowski, Y., McArt, D.G., Dunne, P.D., McQuaid, S., Gray, R.T., Murray, L.J., Coleman, H.G., et al.: Qupath: Open source software for digital pathology image analysis. Scientific re-ports 7(1), 1–7 (2017) 2 2. Black, S., Phillips, D., Hickey, J.W., Kennedy-Darling, J., Venkataraaman, V.G., Samusik, N., Goltsev, Y., Schürch, C.M., Nolan, G.P.: Codex multiplexed tissue imaging with dna-conjugated antibodies. Nature protocols 16 (8), 3802–3835 (2021) 43. Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F., Jaume, G., Chen, B., Zhang, A., Shao, D., Song, A.H., Shaban, M., et al.: Towards a general-purpose foundation model for computational pathology. Nature Medicine (2024) 2 4. Fassler, D.J., Abousamra, S., Gupta, R., Chen, C., Zhao, M., Paredes, D., Batool, S.A., Knudsen, B.S., Escobar-Hoyos, L., Shroyer, K.R., et al.: Deep learning-based image analysis methods for brightfield-acquired multiplex immunohistochemistry images. Diagnostic pathology 15 (1), 100 (2020) 1, 2
+
+14 F.Seyedshahi et al. 5. Garbo, E., Alessi, J.V.M., Ricciuti, B., Pecci, F., Di Federico, A., Aldea, M., Wang, X., Ghandi, M.M., Saini, A., Makarem, M., et al.: Evaluating multiplex immunoflu-orescence analysis of the tumor microenvironment for predicting immunotherapy efficacy in nsclc compared to traditional biomarkers. (2025) 2 6. Hanahan, D.: Hallmarks of cancer: new dimensions. Cancer discovery 12 (1), 31–46 (2022) 1 7. Hanahan, D., Weinberg, R.A.: Hallmarks of cancer: the next generation. cell 
+
+144 (5), 646–674 (2011) 1 8. Janeiro, A.L., Wong, E.M., Jiménez-Sánchez, D., de Solorzano, C.O., Lozano, M.D., Teijeira, A., Schalper, K.A., Melero, I., De Andrea, C.E.: Spatially resolved tissue imaging to analyze the tumor immune microenvironment: beyond cell-type densities. Journal for Immunotherapy of Cancer 12 (5), e008589 (2024) 1 9. Levine, J.H., Simonds, E.F., Bendall, S.C., Davis, K.L., Amir, E.a.D., Tadmor, M.D., Litvin, O., Fienberg, H.G., Jager, A., Zunder, E.R., et al.: Data-driven phe-notypic dissection of aml reveals progenitor-like cells that correlate with prognosis. Cell 162 (1), 184–197 (2015) 2 10. Lin, J.R., Fallahi-Sichani, M., Sorger, P.K.: Highly multiplexed imaging of single cells using a high-throughput cyclic immunofluorescence method. Nature commu-nications 6(1), 8390 (2015) 1 11. Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al.: Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 (2023) 2 12. Phillips, D., Matusiak, M., Gutierrez, B.R., Bhate, S.S., Barlow, G.L., Jiang, S., Demeter, J., Smythe, K.S., Pierce, R.H., Fling, S.P., et al.: Immune cell topog-raphy predicts response to pd-1 blockade in cutaneous t cell lymphoma. Nature communications 12 (1), 6726 (2021) 4 13. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al.: Learning transferable visual models from natural language supervision. In: International conference on machine learning. pp. 8748–8763. PmLR (2021) 2 14. Ronneberger, O., Fischer, P., Brox, T.: U-net: Convolutional networks for biomedi-cal image segmentation. In: International Conference on Medical image computing and computer-assisted intervention. pp. 234–241. Springer (2015) 5 15. Shaban, M., Chang, Y., Qiu, H., Yeo, Y.Y., Song, A.H., Jaume, G., Wang, Y., Weishaupt, L.L., Ding, T., Vaidya, A., Lamane, A., Shao, D., Zidane, M., Bai, Y., McCallum, P., Luo, S., Wu, W., Wang, Y., Cramer, P., Chan, C.N., Stephan, P., Schaffenrath, J., Lee, J.L., Michel, H.A., Tian, C., Almagro-Perez, C., Wagner, S.J., Sahai, S., Lu, M.Y., Chen, R.J., Zhang, A., Gonzales, M.E.M., Makky, A., Lee, J., Cheng, H., Haist, M., Phillips, D., Tan, Y., Nolan, G.P., Burack, W.R., Estes, J.D., Liu, J.T., Choueiri, T.K., Agarwal, N., Barry, M., Rodig, S.J., Le, L.P., Gerber, G., Schürch, C.M., Theis, F.J., Kim, Y.H., Yeong, J., Signoretti, S., Howitt, B., Loo, L.H., Ma, Q., Jiang, S., Mahmood, F.: A foundation model for spatial proteomics (2025), preprint 8 16. de Souza, N., Zhao, S., Bodenmiller, B.: Multiplex protein imaging in tumour biology. Nature Reviews Cancer 24 (3), 171–191 (2024) 1 17. Su, J., Ahmed, M., Lu, Y., Pan, S., Bo, W., Liu, Y.: Roformer: Enhanced trans-former with rotary position embedding. Neurocomputing 568 , 127063 (2024) 7 18. Vorontsov, E., Bozkurt, A., Casson, A., Shaikovski, G., Zelechowski, M., Sever-son, K., Zimmermann, E., Hall, J., Tenenholtz, N., Fusi, N., et al.: A foundation model for clinical-grade computational pathology and rare cancers detection. Na-ture medicine 30 (10), 2924–2935 (2024) 2 MUL-T 15 19. Wang, X.Q., Danenberg, E., Huang, C.S., Egle, D., Callari, M., Bermejo, B., Dugo, M., Zamagni, C., Thill, M., Anton, A., et al.: Spatial predictors of immunotherapy response in triple-negative breast cancer. Nature 621 (7980), 868–876 (2023) 1 20. Wu, Z., Trevino, A.E., Wu, E., Swanson, K., Kim, H.J., D’Angio, H.B., Preska, R., Charville, G.W., Dalerba, P.D., Egloff, A.M., et al.: Graph deep learning for the characterization of tumour microenvironments from spatial protein profiles in tissue specimens. Nature Biomedical Engineering 6(12), 1435–1448 (2022) 2 21. Xu, H., Usuyama, N., Bagga, J., Zhang, S., Rao, R., Naumann, T., Wong, C., Gero, Z., González, J., Gu, Y., et al.: A whole-slide foundation model for digital pathology from real-world data. Nature 630 (8015), 181–188 (2024) 2 22. Yun, S., Peng, J., Trevino, A.E., Park, C., Chen, T.: Mew: Multiplexed immunoflu-orescence image analysis through an efficient multiplex network. In: European Con-ference on Computer Vision. pp. 127–144. Springer (2024) 2
