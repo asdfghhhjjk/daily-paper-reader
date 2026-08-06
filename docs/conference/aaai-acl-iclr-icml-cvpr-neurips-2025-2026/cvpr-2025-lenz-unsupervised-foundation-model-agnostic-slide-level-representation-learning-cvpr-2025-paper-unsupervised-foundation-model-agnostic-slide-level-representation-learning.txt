@@ -1,0 +1,407 @@
+Title: Unsupervised Foundation Model-Agnostic Slide-Level Representation Learning
+
+URL Source: https://openaccess.thecvf.com/content/CVPR2025/papers/Lenz_Unsupervised_Foundation_Model-Agnostic_Slide-Level_Representation_Learning_CVPR_2025_paper.pdf
+
+Published Time: Mon, 02 Jun 2025 14:33:07 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Unsupervised Foundation Model-Agnostic Slide-Level Representation Learning 
+
+Tim Lenz 1 *, Peter Neidlinger 1 ∗, Marta Ligero 1, Georg W¨ olflein 1,2, Marko van Treeck 1,Jakob N. Kather 1,3,41EKFZ for Digital Health TU Dresden, 2University of St Andrews, 
+
+> 3
+
+Heidelberg University Hospital, 4University Hospital Dresden 
+
+> {tim.lenz,peter.neidlinger,jakob nikolas.kather }@tu-dresden.de
+
+Abstract 
+
+Representation learning of pathology whole-slide images (WSIs) has primarily relied on weak supervision with Mul-tiple Instance Learning (MIL). This approach leads to slide representations highly tailored to a specific clinical task. Self-supervised learning (SSL) has been successfully ap-plied to train histopathology foundation models (FMs) for patch embedding generation. However, generating patient or slide level embeddings remains challenging. Existing ap-proaches for slide representation learning extend the prin-ciples of SSL from patch level learning to entire slides by aligning different augmentations of the slide or by utilizing multimodal data. By integrating tile embeddings from mul-tiple FMs, we propose a new single modality SSL method in feature space that generates useful slide representations. Our contrastive pretraining strategy, called C OBRA , em-ploys multiple FMs and an architecture based on Mamba-2. C OBRA exceeds performance of state-of-the-art slide encoders on four different public Clinical Protemic Tumor Analysis Consortium (CPTAC) cohorts on average by at least +4 .4% AUC, despite only being pretrained on 3048 WSIs from The Cancer Genome Atlas (TCGA). Addition-ally, C OBRA is readily compatible at inference time with previously unseen feature extractors. Code available at https://github.com/KatherLab/COBRA. 
+
+1. Introduction 
+
+In recent years, self-supervised learning (SSL) has emerged as a foundational approach in Computational Pathology (CPath), providing the basis for weakly supervised models to achieve remarkable results in diagnostic, prognostic, and treatment response prediction tasks [3, 4, 10, 11, 19, 24, 26– 28, 32, 37, 39, 41, 44, 47]. By capturing informative, low-dimensional representations from unannotated whole-slide images (WSIs), SSL has enabled weakly supervised mod-* Equal contribution els to use these features for downstream tasks, effectively bridging the gap between high-resolution data and the lim-ited availability of fully annotated datasets. SSL excels in generating low-dimensional feature representations for gi-gapixel WSIs, which can reach dimensions of 150,000 ×
+
+150,000 pixels (px), making them challenging to process with Vision Transformers (ViTs) [8] due to memory con-straints. Consequently, most CPath approaches tessellate WSIs into smaller patches and extract low-dimensional em-beddings for these patches using pretrained histopathology foundation models (FMs) [23]. Typically, these patch em-beddings are used in weakly-supervised models for down-stream classification tasks via multiple-instance learning (MIL) [7, 16, 35]. In addition to patch-based representations, SSL can also generate slide-level embeddings without any human annota-tions [20, 21, 46]. Pretrained SSL models can be leveraged to achieve impressive results on downstream tasks with minimal labeled data for task-specific fine-tuning, offering practical advantages like reduced labeling costs, elimination of noisy labels inherent to inter-observer variability, and im-proved generalizability through label-free representations. Central to SSL is the alignment of multiple representations of WSIs or related modalities (e.g., morphological text de-scriptions) into a shared latent space using contrastive learn-ing or other similarity-based pretraining methods. However, generating effective augmentations to create these represen-tations remains challenging. While image-level augmenta-tions have been widely explored for patch-based learning, they may fail to produce diverse feature augmentations, as many modern FMs are designed to be invariant to these transformations [29, 43]. Other approaches, such as us-ing different stainings (e.g., hematoxylin and eosin (H&E) combined with immunohistochemistry (IHC)), have shown potential but are limited by the availability of multi-stained tissue samples [18]. Similarly, aligning multiple modalities, such as text or gene expression data, has produced promis-ing results but is constrained by the limited availability of such datasets and requires additional compute to process the This CVPR paper is the Open Access version, provided by the Computer Vision Foundation. Except for this watermark, it is identical to the accepted version; the final published version of the proceedings is available on IEEE Xplore. 30807 Figure 1. C OBRA overview for self-supervised slide representation learning ( A). A WSI is tessellated into patches at different magnifica-tions ( B) and encoded using different foundation models (FMs) ( C) to produce tile embeddings. The magnifications ( B) and foundation models (FMs) ( C) serve as feature space augmentations to pretrain the C OBRA slide encoder ( D) using contrastive self-supervised learning. different modalities [17, 34, 42]. To address these challenges, we propose a novel SSL method for image-only slide representation learning called COntrastive Biomarker Representation Alignment (C O -BRA ). C OBRA integrates tile embeddings from multiple FMs to generate augmentations directly in feature space, which can then be used to train a slide- or patient-level en-coder. By employing Mamba-2 [6] followed by multi-head gated attention [18] and a contrastive loss objective, C OBRA produces robust slide-level embeddings. Our contributions are summarized as follows: • We propose an unsupervised single-modality contrastive slide encoder framework (C OBRA ) that avoids the need for stochastic image augmentations as it is trained and deployed on frozen patch embeddings. Extensive evalua-tions across 15 downstream classification tasks on three tissue types with external validation demonstrate C O -BRA ’s superiority over existing slide encoders. • Our patient level encoder produces state-of-the-art (SOTA) unsupervised slide representations with unprece-dented data efficiency, outperforming existing approaches with only a fraction of the pretaining data (3048 WSIs across four tissue types). • We show that C OBRA can turn patch level FMs, includ-ing ones not encountered during training, into better slide level feature extractors without any additional finetuning ,making it particularly valuable as new FMs emerge. • C OBRA can be deployed across different WSI magni-fications, where lower magnifications yield significant gains in computational efficiency with minimal sacrifice of downstream classification performance. 
+
+2. Related work Patch representation learning Most works applying SSL focus on creating embeddings from image patches. Training a ViT with an SSL method like Dino-v2 [30] is now the preferred approach for learning task-agnostic im-age representations in CPath. SOTA FMs usually com-bine alignment- and reconstruction-based objectives trained with a student-teacher learning paradigm. These FMs are trained on increasingly large datasets and architectures (e.g. ViT-Giant [44] or trained on up to 3M WSIs [47]). 30808 Table 1. Slide encoder overview . Abbreviations are as follows: # Ps refers to the number of parameter and # WSI refers to the number of WSIs the slide encoder was pretrained on.                   
+
+> Model # Ps [M] # WSI [K] Patch FM
+> Gigapath-SE [44] 86 171 Gigapath [44] CHIEF [42] 160 CTransPath [41] PRISM [34] 513 587 Virchow [39] MADELEINE [18] 521 CONCH [24] COBRA 15 3CTransPath [41], UNI [4], Virchow2 [47], H-Optimus-0 [32]
+
+Besides image-only FMs, vision-language pathology FMs have recently emerged which rely on large-scale paired data [15, 24]. 
+
+Multiple instance learning The SOTA approach for WSI classification is generating tile embeddings using FMs and then using these embeddings in a MIL approach to train an aggregator model for a specific downstream task. In par-ticular, Attention-based MIL (ABMIL) [16] and many ex-tensions thereof have been proposed [10, 23, 35, 40, 45]. While MIL approaches are prevalent for WSI classification, they are typically supervised and tailored to specific tasks. 
+
+Slide representation learning In contrast to MIL, slide representation learning constructs embeddings in an unsu-pervised manner and is task-agnostic. This next frontier in representation learning of histology images has been pro-posed in several works. In early work, Chen et al. proposed a hierarchical self-distillation approach for learning unsu-pervised WSI-level representations [3]. Lazard et al. used augmented patches to create many embeddings of the same input image to enable contrastive learning with slide embed-dings [21]. In GigaPath, Xu et al. trained a masked autoen-coder on the embeddings of their patch encoder to obtain slide representations [44]. More recent work applied vast amounts of multimodal data to pretrain aggregation mod-els [18, 34, 42]. Differing from previous methodologies, we achieve state-of-the-art WSI-patient-level encoding by per-forming self-supervised contrastive learning on frozen vi-sion features with a fraction of the data volume. None of the mentioned studies used less than 10K WSIs for WSI-level encoder pretraining [3, 18, 21, 42], while PRISM [34] and Gigapath [44] were trained on over 100K WSIs. C OBRA surpasses the performance of earlier work, even though it is trained on only 3K publicly available WSIs (see Table 1). 
+
+3. Method 
+
+C OBRA is an unsupervised slide representation learning framework. Given a set of WSIs {Xi|Xi ∈ Rdx×dy ×3}
+
+belonging to a single patient, it produces a single d-dimensional feature vector z ∈ Rd representing that pa-tient. We provide a brief overview of C OBRA below and in Fig. 1, before going into detail in the following subsections. C OBRA operates on preprocessed patch embeddings (Sec. 3.1) from a set of CPath FMs. Its architecture consists of a Mamba-2 [6] encoding module, a multi-head attention-based pooling module for learning a patient-level slide em-bedding (Sec. 3.2) and an embedding module that learns to align multiple FMs into the same embedding space. C OBRA can be deployed in various different modes, which makes it very flexible to adapt to different FMs (see Sec. 3.3). We train C OBRA using a contrastive loss [38] (Sec. 3.4) and evaluate it on a variety of external validation tasks (Sec. 4). 
+
+3.1. Preprocessing 
+
+Given a histology slide (Xi ∈ Rdx×dy ×3), we tessellate the slide into ( 224 × 224 ) px patches and remove background tiles by employing Canny background detection [31]. Next, we extract patch embeddings with pretrained FMs and pool the resulting feature vectors into a slide embedding. We use f e n to refer to the nth FM, f e n ∈ { CTP , UNI , V2 , H0 }
+
+denoting CTransPath [41], UNI [4], Virchow2 [47], and H-optimus-0 [32], respectively. By integrating FMs of dif-ferent sizes and with different strengths, we aim to cap-ture a diverse set of morphological features and ensure that our slide representations are robust and that C OBRA is adaptable to other FMs. We obtain the patch embed-dings Hf e n ∈ RNt×dn with Nt and dn denoting the num-ber of tiles and the embedding dimension dn ∈ ds =
+
+{768 , 1024 , 1280 , 1536 }. We extract patch embeddings at 0.5, 1.14 and 2 microns per pixel (MPP) using 3048 WSIs from 2848 patients in TCGA BRCA, CRC, LUAD, LUSC and STAD. The use of multiple magnifications acts as a form of data augmentation in feature space, enriching the model’s learning by providing multiscale contextual infor-mation. This approach enhances the model’s ability to learn scale-invariant representations and improves its generaliza-tion across different tasks. 
+
+3.2. Architecture 
+
+The slide encoder consists of individual embedding MLPs for the different FMs and two Mamba-2 layers [6] followed by multihead gated attention [16, 18]. The embedding mod-ule is a layer norm [1] followed by an MLP with one hidden layer and SiLU activation [14]. It projects the different em-bedding dimensions of the FMs to the shared embedding space of the slide encoder. Inspired by MambaMIL [45], we use two Mamba [12] layers to efficiently encode the feature embeddings. We opt for the Mamba-2 state space dual (SSD) modules as they scale substantially better for higher state-space dimensions compared to original Mamba modules [6]. Additional information on the hyperparame-30809 ters used can be found in Appendix A. Formally, the architecture may be described as follows: Let fSE : RNt×ds → Rd denote the slide encoder con-sisting of three submodules fE : RNt×ds → RNt×d,
+
+fS : RNt×d → RNt×d and fA : RNt×d → Rd, given by 
+
+z = fSE (Hf e n ) = fA(fS (fE (Hf e n ))) , Hf e n ∈ RNt×dn ,
+
+(1) where fE ,fS ,fA denote the embedding module , the state-space dual module and the aggregation module , respec-tively, and dn ∈ ds = {768 , 1024 , 1280 , 1536 } and Hf e n
+
+refers to the patch embedding of the nth FM. The embedding module fE is defined as follows: 
+
+HE = fE (Hf e n ) = Lin (SiLU (Lin (LN (Hf e n )))) , (2) where Lin denotes a linear layer and LN denotes layer norm. The state-space dual module fS is specified as: 
+
+HS = fS (HE ) = Lin (SSD (SSD (HE ) + HE ) + HE ).
+
+(3) The aggregation module fA consists of multi-head gated attention [16, 18] to aggregate the input embeddings into a single feature vector via a weighted average. For multi-head gated attention, the encoded embeddings are split into 
+
+M parts for the M heads: HS = {HmS }m∈{ 1,...,M } with 
+
+HmS ∈ RNt× dM . The aggregation module fA is given by 
+
+z = fA(HS ) = 
+
+> Nt
+
+X
+
+> k=1
+
+ak(HS,k ) · HS,k ;
+
+ak(HS,k ) = 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+amk (HmS,k ),
+
+(4) with HS,k ∈ Rd and amk ∈ R is defined as: 
+
+amk (HmS,k ) = exp 
+
+(
+
+w
+
+> m
+
+(
+
+tanh (Vm(Hm 
+
+> S,k
+
+))  σ(UmHm
+
+> S,k
+
+)))
+
+> Nt
+
+P
+
+> i
+
+exp 
+
+(
+
+w
+
+> m
+
+(
+
+tanh (VmHm
+
+> S,i
+
+)  σ(UmHm
+
+> S,i
+
+))) ,
+
+(5) with σ denoting the sigmoid function and w ∈ Rp×1, U ∈
+
+Rp×d, V ∈ Rp×d as learnable parameters and p being the attention dimension. 
+
+3.3. Inference modes 
+
+During self-supervised pretraining, the slide encoder learns to map the patch embeddings ( Hf e n ) of different slides, patches, FMs and magnifications from the same pa-tient to be close in slide embedding space ( z). For this pur-pose, encoded embeddings are aggregated to a single fea-ture vector. 
+
+Single-FM inference mode In line with Wang et al. [42], we found it beneficial at inference time to compute the weighted average in Eq. (4) using the original patch em-beddings ( Hf e n ) instead of the encoded embeddings ( HS )to obtain the slide-level representation (see Appendix D.1). Importantly, we still use the encoded embeddings to com-pute the weighting ak(HS,k ) of that average. Specifically, at inference time, Eq. (4) becomes 
+
+z = fAinf (HS , Hf e n ) = 
+
+> Nt
+
+X
+
+> k
+
+ak(HS,k ) · Hf e n 
+
+> k
+
+. (6) We refer to this as the single-FM inference mode of C OBRA and provide an ablation for the choice of Eq. (4) vs . Eq. (6) in Appendix D.1. Unless stated otherwise, we will denote as C OBRA the single-FM inference mode version using Vir-chow2 patch embeddings as input, which is given by 
+
+z = fSE inf 
+
+(HV 2, HV 2). (7) 
+
+Multi-FM inference mode Additionally, one can use feature vectors from multiple different FMs and average the embeddings after the embedding module to extract patient-level features which incorporate the knowledge of the different FMs simultaneously with f † 
+
+> SE inf
+
+: RNt×ds ×
+
+RNt×dk → Rd (dk ∈ ds ): 
+
+z† = f †
+
+> SE inf
+
+({Hf e n }n∈{ 1,...,N F M }, Hf e l
+
+)
+
+= fAinf fS
+
+( P NF M  
+
+> n
+
+f † 
+
+> E
+
+(Hf e n )
+
+NF M 
+
+)
+
+, Hf e l
+
+!
+
+. (8) Here, NF M denotes the number of FMs used for pretrain-ing and Hf e l refers to the patch embeddings that are ag-gregated during inference. Additional information on the inference modes can be found in Appendix B. 
+
+3.4. Contrastive loss function 
+
+Following He et al. [13], we interpret contrastive learning as training an encoder for a dictionary look-up task :Consider a set of encoded samples, denoted as K =
+
+{k1, k2, . . . , kN }, which represent the keys of a dictio-nary. For a given query q, there exists exactly one matching key k+ ∈ K. The contrastive loss is minimized when q
+
+closely matches k+ and diverges from all other keys. The InfoNCE [38] loss function is defined as 
+
+Lq = − log ψ(q, k+)
+
+> N
+
+P
+
+> i=1
+
+ψ(q, ki)
+
+, (9) where q and the corresponding k+ represent feature vectors produced by a randomly selected pretrained encoder, sam-pling patches from WSIs of the same patient and N is the 30810 batch size or the length of the memory queue. The function 
+
+ψ is defined as follows: 
+
+ψ(x1, x2) = exp( sim (x1, x2)/τ ), (10) where τ denotes the temperature parameter and the cosine similarity function is depicted as sim (·). To avoid feature collapse, the keys and queries should be generated by dis-tinct encoders. Let θq denote the parameters of the query encoder with the dense projection head, then the parame-ters of the key encoder θk are updated as follows: 
+
+θk ← mθ k + (1 − m)θq , (11) where m ∈ [0 , 1) is the momentum coefficient. With the key encoder as the exponential average of the query en-coder, the key representations stay more consistent, which enables a more stabilized training process. We adapted the public MoCo-v3 [5] repository for our experiments to align the embedding space of the slide embeddings gener-ated with tile embeddings from different FMs. 
+
+4. Experiments & results 4.1. Dataset TCGA We collected 3048 WSIs from 2848 patients using the cohorts TCGA [36] Breast Invasive Carcinoma (TCGA-BRCA, 1112 WSIs), TCGA Colorectal Carcinoma (TCGA-CRC, 566 WSIs), TCGA Lung Adenocarcinoma (TCGA-LUAD, 524 WSIs), TCGA Lung Squamous Cell Carcinoma (TCGA-LUSC, 496 WSIs), and TCGA Stomach Adenocar-cinoma (TCGA-STAD, 350 WSIs). See Appendix C for de-tailed information. These cohorts were used for pretraining C OBRA and for training the downstream classifiers and lin-ear regression models. We emphasize that neither C OBRA nor any FMs used in this study were pretrained on datasets included in the evaluation of the downstream tasks, preclud-ing any data leakage. 
+
+CPTAC We collected 1604 WSIs from 444 patients us-ing the cohorts CPTAC [9] Breast Invasive Carcinoma (CPTAC-BRCA, 395 WSIs), CPTAC Colon Adenocarci-noma (CPTAC-COAD, 233 WSIs), CPTAC Lung Adeno-carcinoma (CPTAC-LUAD, 498 WSIs), and CPTAC Lung Squamous Cell Carcinoma (CPTAC-LUSC, 478 WSIs). These cohorts were exclusively used for external validation. 
+
+4.2. Pretraining setup 
+
+We trained C OBRA on patch embeddings derived from slides of 2848 patients, using a batch size of 1024 across four NVIDIA A100 GPUs for 2000 epochs, which took ap-proximately 40 hours. In total, we used 36576 extracted feature embeddings consisting of 3048 WSIs for each of the four FMs models and each of the three magnifications included into the pretraining. Additional information about the hyperparameters used for the training of C OBRA can be found in the Appendix Tab. 5. 
+
+4.3. Tasks 
+
+CPath is used for different task categories. One impor-tant such category is biomarker prediction. Here, we fo-cused on STK11 , EGFR , KRAS and TP53 mutation pre-diction in LUAD, ESR1 , PGR and ERBB2 expression, and 
+
+PIK3CA mutation prediction in BRCA, and MSI status, 
+
+BRAF , KRAS , PIK3CA mutation prediction in COAD. We also included classification of phenotypic subtypes, Non-Small Cell Lung Cancer (NSCLC) Subtyping and Sided-ness prediction of COAD. Finally, we added N-Status pre-diction in COAD, a task that goes beyond the tissue it-self and tries to classify whether the tumor has infiltrated lymph nodes, thereby influencing prognostication. We re-port area under the receiver operating characteristic (AUC) results in the main text, additional metrics such as F1 score, area under the precision recall characteristic (AUPRC) and the balanced accuracy of all experiments can be found in Appendix D. Unless indicated otherwise, all results are re-ported for 0.5 MPP (20 × WSI magnification). In general, we conducted our evaluation experiments for three different WSI magnifications: 0.5 MPP (20 ×), 1.14 MPP (9 ×) and 2 MPP (5 ×). Additional information about the downstream experiments can be found in Appendix A.1. 
+
+4.4. Evaluation of patient embeddings MLP downstream classification We evaluated C OBRA ’s patient-level slide embeddings following standard practice in CPath using 5-fold cross-validation on the TCGA train-ing cohort followed by deploying all five classifiers on the full external validation set CPTAC. The classifier is a sim-ple MLP. Generating a slide embedding and then training a small MLP is much more efficient than current MIL ap-proaches using tile embeddings. We compare C OBRA to all mean patch embeddings of FMs used in this study and to the slide encoders MADELEINE [18], PRISM [34], Giga-Path [44] and CHIEF [42] (see Tab. 2). All slide encoders except GigaPath and MADELEINE manage to outperform the mean patch embeddings of the FM they are based upon. However, C OBRA is the only model that manages to reach a higher macro-AUC than Virchow2 mean patch embed-dings. Nevertheless, it should be noted that MADELEINE was trained only on BRCA slides. Still, C OBRA also sub-stantially outperforms MADELEINE on most BRCA tasks (ESR1 : +9.5%, PGR +5.5%, ERBB2 +4.9%, PIK3CA -1.3% AUC). Overall, C OBRA improves over PRISM by +4.4% average AUC and over the mean of the patch embeddings of Virchow2 by +1.5%. Especially on the COAD down-stream tasks, MSI and BRAF , C OBRA achieves substantial performance increases over the other slide encoders of at 30811 Table 2. Comparison of different slide encoders and mean baselines. AUC performance of downstream tasks trained on TCGA and deployed on CPTAC. ST denotes Subtyping, SE denotes Slide Encoder. Overline indicates mean over patch embeddings, Concatenated refers to concatenated mean embeddings of all FMs involved in C OBRA ’s pretraining, and Ensemble Prediction refers to the average of predictions from the mean patch embeddings of the training FMs. Bold indicates the best performance, and underline indicates the second-best performance. AUROC[%] NSCLC LUAD BRCA COAD Average Model ST STK11 EGFR TP53 KRAS ESR1 PGR ERBB2 PIK3CA MSI BRAF LN KRAS Side PIK3CA CTransPath [41] 87 .21.5 62 .82.5 59 .37.4 70 .12.3 52 .45.9 68 .12.5 66 .52.1 48 .61.5 56 .33.0 76 .14.6 59 .82.3 59 .81.0 55 .97.7 52 .52.6 56 .36.3 62 .14.2
+
+Virchow [39] 89 .40.6 76 .56.8 60 .32.0 70 .71.7 54 .36.9 66 .94.8 60 .53.9 51 .35.7 63 .53.7 62 .16.7 65 .02.6 58 .25.1 53 .97.1 52 .33.1 52 .45.7 62 .54.9
+
+CONCH [24] 96 .50.3 66 .010 .3 62 .07.6 74 .61.6 59 .07.4 85 .31.5 80 .32.0 58 .811 .0 63 .23.1 79 .20.5 57 .53.4 67 .32.0 55 .78.6 53 .42.4 63 .25.3 68 .15.7
+
+UNI [4] 95 .81.1 69 .42.4 70 .112 .1 73 .90.8 50 .74.7 87 .43.1 74 .92.3 64 .03.4 62 .35.0 89 .01.6 73 .03.4 62 .07.8 63 .52.8 59 .43.7 63 .56.2 70 .64.9
+
+H-Optimus [32] 97 .20.4 78 .52.7 78 .23.5 71 .31.1 58 .13.7 85 .22.7 74 .93.3 51 .44.5 59 .54.9 94 .70.7 77 .17.1 55 .53.6 59 .24.2 62 .23.4 62 .49.0 71 .04.3
+
+GigaPath [44] 96 .60.7 71 .31.9 75 .76.8 75 .41.3 56 .96.2 85 .71.1 75 .91.8 64 .52.7 62 .25.9 93 .31.6 77 .52.6 61 .72.9 56 .15.0 60 .01.5 59 .47.9 71 .54.0
+
+Virchow2 [47] 95 .80.7 79 .65.5 78 .34.6 72 .10.7 60 .95.6 89 .22.8 79 .32.7 71 .31.8 63 .24.8 94 .91.2 81 .64.5 63 .01.9 59 .36.2 56 .33.8 62 .711 .6 73 .84.7
+
+Ensemble Prediction 97 .20.3 77 .23.7 78 .54.1 73 .30.6 59 .55.1 87 .62.8 77 .22.7 65 .62.0 63 .34.1 94 .71.0 78 .95.4 62 .53.9 64 .13.0 60 .52.1 64 .59.1 73 .64.0
+
+Concatenated 97 .40.4 75 .73.0 80 .22.2 72 .50.8 57 .64.8 89 .61.4 79 .13.4 67 .53.9 61 .84.0 95 .01.1 82 .24.3 61 .62.5 59 .75.8 62 .02.4 70 .24.1 74 .13.3
+
+GigaPath-SE [44] 90 .91.3 67 .04.4 65 .44.4 73 .71.4 57 .15.2 72 .90.9 71 .93.3 55 .44.7 60 .54.6 66 .22.1 56 .74.5 54 .65.2 51 .32.9 45 .83.1 53 .25.7 62 .83.9
+
+MADELEINE [18] 94 .00.6 72 .28.7 64 .06.7 72 .02.8 51 .93.9 80 .11.7 73 .71.3 66 .72.7 64 .91.6 68 .69.1 54 .26.7 60 .37.3 58 .96.6 50 .51.6 59 .58.6 66 .15.5
+
+CHIEF [42] 93 .60.8 64 .210 .7 62 .810 .9 73 .41.5 50 .15.0 83 .00.5 77 .50.3 63 .42.3 65 .41.5 75 .14.8 63 .64.3 58 .01.7 58 .43.8 48 .24.2 56 .63.2 66 .24.9
+
+PRISM [34] 99 .20.1 87 .61.6 70 .72.4 78 .20.5 52 .98.5 92 .20.7 84 .20.5 64 .56.0 69 .42.1 79 .11.5 59 .91.4 67 .22.4 54 .66.2 52 .21.8 52 .16.8 70 .93.8
+
+C OBRA 98 .10.2 84 .02.9 80 .02.4 78 .42.9 59 .26.2 89 .62.0 79 .22.4 71 .62.2 63 .66.2 94 .10.5 87 .82.0 65 .72.5 62 .110 .4 58 .31.9 57 .67.5 75 .34.4
+
+Table 3. Ablation over different inference modes. AUC performance of C OBRA embeddings compared to mean embeddings of the FMs involved. Overline indicates mean over patch embeddings, † indicates that embeddings of all four training FMs were used to generate the weighting vector (Eq. (8)). For the other C OBRA entries, we used the inference mode from (Eq. (6)). Bold indicates the best performance, and underline indicates the second-best performance. The abbreviations are as follows: CTP: CTransPath [41], H0: H-Optimus-0 [32], V2: Virchow-2 [47], GP: GigaPath [44]. The different magnifications (5 ×, 9 ×, 20 ×) indicate which magnification of the WSIs was used to extract the embeddings. AUC[%] NSCLC LUAD BRCA COAD Average Model ST STK11 EGFR TP53 KRAS ESR1 PGR ERBB2 PIK3CA MSI BRAF LN KRAS Side PIK3CA CTransPath [41] 87 .21.5 62 .82.5 59 .37.4 70 .12.3 52 .45.9 68 .12.5 66 .52.1 48 .61.5 56 .33.0 76 .14.6 59 .82.3 59 .81.0 55 .97.7 52 .52.6 56 .36.3 62 .14.2
+
+UNI [4] 95 .81.1 69 .42.4 70 .112 .1 73 .90.8 50 .74.7 87 .43.1 74 .92.3 64 .03.4 62 .35.0 89 .01.6 73 .03.4 62 .07.8 63 .52.8 59 .43.7 63 .56.2 70 .64.9
+
+H-Optimus [32] 97 .20.4 78 .52.7 78 .23.5 71 .31.1 58 .13.7 85 .22.7 74 .93.3 51 .44.5 59 .54.9 94 .70.7 77 .17.1 55 .53.6 59 .24.2 62 .23.4 62 .49.0 71 .04.3
+
+GigaPath [44] 96 .60.7 71 .31.9 75 .76.8 75 .41.3 56 .96.2 85 .71.1 75 .91.8 64 .52.7 62 .25.9 93 .31.6 77 .52.6 61 .72.9 56 .15.0 60 .01.5 59 .47.9 71 .54.0
+
+Virchow2 [47] 95 .80.7 79 .65.5 78 .34.6 72 .10.7 60 .95.6 89 .22.8 79 .32.7 71 .31.8 63 .24.8 94 .91.2 81 .64.5 63 .01.9 59 .36.2 56 .33.8 62 .711 .6 73 .84.7
+
+C OBRA -CTP 95 .90.6 65 .010 .5 66 .05.5 74 .81.8 49 .24.4 78 .60.7 72 .20.6 62 .01.4 60 .93.6 80 .32.2 73 .23.0 61 .31.6 52 .44.2 48 .12.3 56 .34.3 66 .44.0
+
+C OBRA -UNI 98 .80.3 79 .42.5 76 .55.3 78 .91.2 52 .24.2 88 .11.7 80 .53.0 65 .14.3 63 .95.2 89 .11.1 82 .81.5 64 .62.2 59 .08.4 57 .42.1 64 .35.8 73 .43.9
+
+C OBRA -H0 99 .40.2 86 .51.8 79 .92.9 80 .12.4 54 .34.7 87 .11.0 74 .04.2 64 .24.9 55 .72.3 96 .00.6 86 .23.3 58 .22.5 62 .24.4 57 .21.9 62 .94.7 73 .63.2
+
+C OBRA -V2 98 .10.2 84 .02.9 80 .02.4 78 .42.9 59 .26.2 89 .62.0 79 .22.4 71 .62.2 63 .66.2 94 .10.5 87 .82.0 65 .72.5 62 .110 .4 58 .31.9 57 .67.5 75 .34.4
+
+C OBRA †-CTP 95 .90.6 68 .15.1 69 .24.7 75 .11.6 46 .74.1 77 .90.8 71 .31.3 59 .31.5 59 .21.3 80 .31.5 73 .53.4 60 .62.5 55 .24.5 48 .33.4 54 .35.2 66 .33.2
+
+C OBRA †-UNI 99 .10.2 79 .12.8 76 .24.6 80 .20.7 55 .05.7 86 .01.7 78 .13.2 60 .34.9 62 .33.1 89 .10.7 83 .51.5 65 .72.1 65 .34.2 57 .22.1 61 .92.1 73 .33.1
+
+C OBRA †-H0 99 .40.1 86 .92.0 80 .93.4 79 .91.8 56 .73.6 87 .81.2 72 .83.4 59 .92.1 58 .00.9 95 .21.1 84 .93.7 58 .12.6 59 .77.2 58 .52.4 61 .23.4 73 .33.1
+
+C OBRA †-V2-5 × 99 .00.2 79 .01.2 82 .92.7 79 .91.8 59 .43.1 89 .01.3 81 .61.5 62 .14.7 67 .22.9 94 .10.7 75 .52.7 68 .18.5 69 .63.4 51 .47.8 61 .31.5 74 .73.7
+
+C OBRA †-V2-9 × 98 .90.2 79 .51.2 76 .73.9 80 .01.8 53 .04.4 89 .61.6 83 .61.7 70 .62.6 65 .84.8 95 .10.9 82 .52.5 61 .70.5 61 .23.2 61 .92.9 58 .412 .8 74 .64.2
+
+C OBRA †-V2-20 × 98 .40.2 84 .61.9 78 .93.6 78 .42.6 55 .97.1 89 .61.7 80 .02.3 72 .21.7 65 .14.5 94 .20.6 88 .71.6 64 .82.3 60 .65.7 58 .61.7 61 .54.1 75 .43.3
+
+C OBRA †-GP 98 .90.3 81 .52.3 78 .74.2 80 .91.1 56 .95.3 87 .81.2 77 .51.1 65 .41.3 64 .63.8 93 .51.2 85 .62.0 64 .72.4 59 .26.6 57 .42.1 56 .99.4 74 .03.8
+
+least +15% and +24.2% average AUC, respectively. 
+
+Linear probing few-shot classification We also evalu-ate C OBRA in a few-shot setting across 10 runs for high-performance tasks, where the mean patch embeddings of at least one FM scores an average macro-AUC of > 0.7 across the five folds of the full classification and where the TCGA cohorts contain at least 50 cases per class. These tasks are NSCLC Subtyping, STK11 , EGFR and TP53 mutation in LUAD, ESR1 , PGR and ERBB2 expression in BRCA, and BRAF mutation, Sidedness and MSI status prediction in COAD (see Fig. 2). Although C OBRA was only trained on very few samples and with only one modality, we ob-serve that it is still robust enough to achieve high few-shot performance compared to the other slide encoders. On the BRCA tasks, it slightly outperforms the competition, while it substantially exceeds the results of the other models on the COAD tasks. We provide further results and informa-tion about the few shot experiments in Appendix D.2. In-terestingly, slide encoders demonstrate greater robustness with fewer training samples compared to their mean patch embedding baselines, as all slide encoders except GigaPath consistently outperform their corresponding baselines. 
+
+4.5. Inference ablations Foundation models As C OBRA is FM-agnostic, it can be used to improve small, inferior tile level FMs like CTransPath as C OBRA -CTP improves over all slide en-coders but PRISM (see Tabs. 2 and 3). This substantially improves efficiency, as CTransPath has approximately 30M 30812 Table 4. Evaluation of the magnification augmentation during pretraining AUC performance of downstream tasks trained on TCGA and deployed on CPTAC. † indicates that embeddings of all four training FMs were used to generate the weighting vector (Eq. (8)), 
+
+‡ indicates that C OBRA was only pretrained on 0.5 MPP. ST denotes Subtyping. Bold indicates the best performance, and underline indicates the second-best performance. AUC[%] NSCLC LUAD BRCA COAD Average Model ST STK11 EGFR TP53 KRAS ESR1 PGR ERBB2 PIK3CA MSI BRAF LN KRAS Side PIK3CA 5×
+
+C OBRA ‡-CTP 88 .71.5 63 .810 .5 66 .22.7 69 .92.0 51 .73.9 82 .81.2 75 .07.7 58 .53.1 61 .54.1 75 .41.4 62 .510 .3 63 .12.5 53 .88.8 51 .31.4 51 .74.0 65 .15.4
+
+C OBRA ‡-UNI 90 .30.5 72 .39.9 68 .54.0 69 .22.2 53 .37.5 81 .41.2 75 .91.4 56 .02.9 64 .14.8 77 .81.6 71 .92.6 60 .42.4 57 .48.0 55 .32.3 51 .310 .4 67 .05.2
+
+C OBRA ‡-H0 89 .51.2 80 .44.2 69 .12.5 67 .91.6 52 .53.2 77 .71.8 73 .62.2 56 .22.8 62 .04.3 79 .82.8 71 .43.4 62 .91.9 56 .33.6 56 .32.1 58 .04.1 67 .62.9
+
+C OBRA †-CTP 96 .60.4 70 .53.9 70 .52.1 74 .31.0 53 .22.4 82 .20.9 77 .10.8 65 .72.9 66 .02.6 79 .31.3 67 .92.8 60 .63.2 53 .08.8 47 .22.4 51 .62.3 67 .73.2
+
+C OBRA †-H0 97 .60.4 78 .54.0 71 .34.0 73 .11.3 51 .85.2 81 .81.1 74 .91.8 56 .72.0 63 .14.1 82 .31.6 71 .41.8 59 .63.1 56 .06.6 50 .62.4 55 .75.3 68 .33.5
+
+C OBRA †-UNI 97 .10.4 77 .11.6 71 .52.5 75 .21.1 57 .32.0 82 .70.7 74 .31.5 57 .13.2 68 .24.2 78 .81.9 70 .52.2 55 .94.3 54 .67.0 49 .36.8 58 .44.4 68 .53.5
+
+C OBRA ‡-V2 97 .30.4 81 .33.2 72 .92.6 77 .01.6 58 .15.2 91 .21.2 81 .31.2 71 .91.8 65 .03.1 87 .21.5 78 .01.8 64 .23.6 57 .212 .4 60 .31.5 62 .68.8 73 .74.6
+
+C OBRA †-V2 99 .00.2 81 .61.5 75 .52.7 79 .91.8 51 .47.8 89 .01.3 79 .01.2 67 .22.9 62 .14.7 94 .10.7 82 .92.7 61 .31.5 68 .18.5 59 .43.1 69 .63.4 74 .73.7
+
+9×
+
+C OBRA ‡-CTP 93 .71.1 68 .717 .7 70 .93.8 72 .31.5 51 .06.8 81 .00.7 74 .50.8 50 .23.8 57 .32.2 72 .42.1 64 .91.7 58 .94.8 56 .85.5 54 .21.7 63 .42.4 66 .05.6
+
+C OBRA †-CTP 96 .40.3 75 .53.5 69 .46.7 74 .41.4 52 .13.8 81 .60.6 76 .20.2 65 .71.5 62 .02.1 81 .31.0 72 .12.5 59 .92.2 52 .68.1 49 .44.4 55 .48.0 68 .34.0
+
+C OBRA ‡-H0 98 .00.6 83 .91.7 74 .64.0 75 .91.7 47 .93.1 83 .01.2 76 .81.1 61 .14.7 60 .92.0 76 .52.0 69 .12.3 66 .42.5 58 .64.6 57 .51.7 58 .47.2 69 .93.2
+
+C OBRA ‡-UNI 97 .30.5 80 .23.1 77 .64.6 75 .71.2 53 .53.5 86 .31.2 79 .10.8 60 .05.5 66 .72.5 78 .32.2 72 .00.9 60 .13.0 56 .911 .5 58 .81.9 59 .76.1 70 .84.3
+
+C OBRA ‡-V2 97 .50.7 84 .31.5 77 .24.2 77 .72.1 52 .06.8 88 .41.9 79 .41.3 68 .64.4 62 .12.2 81 .31.6 72 .80.4 62 .62.3 58 .59.7 60 .31.1 59 .411 .1 72 .14.7
+
+C OBRA †-H0 99 .30.2 83 .42.3 73 .63.3 78 .72.1 52 .45.5 84 .12.0 77 .20.9 66 .71.7 62 .33.6 91 .40.7 82 .53.3 63 .82.7 56 .24.5 57 .32.8 58 .32.5 72 .52.9
+
+C OBRA †-UNI 98 .90.3 71 .616 .2 74 .83.4 80 .51.7 56 .34.1 87 .20.7 79 .10.9 65 .52.6 66 .03.8 89 .51.4 85 .21.9 59 .94.9 62 .08.7 58 .43.9 56 .55.7 72 .85.6
+
+C OBRA †-V2 98 .90.2 83 .61.7 76 .73.9 80 .01.8 53 .04.4 89 .61.6 79 .51.2 70 .62.6 65 .84.8 95 .10.9 82 .52.5 61 .70.5 58 .412 .8 61 .92.9 61 .23.2 74 .64.2
+
+20 ×
+
+C OBRA ‡-CTP 94 .10.9 69 .04.7 67 .911 .3 77 .00.9 51 .37.3 76 .51.7 70 .70.8 58 .01.5 51 .35.7 81 .90.7 67 .12.4 54 .74.6 54 .67.1 51 .21.6 59 .45.4 65 .64.8
+
+C OBRA †-CTP 95 .90.6 68 .15.1 69 .24.7 75 .11.6 46 .74.1 77 .90.8 71 .31.3 59 .31.5 59 .21.3 80 .31.5 73 .53.4 60 .62.5 55 .24.5 48 .33.4 54 .35.2 66 .33.2
+
+C OBRA ‡-UNI 97 .80.6 75 .53.7 78 .54.9 80 .41.7 53 .65.7 83 .12.4 73 .62.2 63 .43.7 59 .22.7 86 .41.6 76 .51.0 62 .03.2 57 .56.4 61 .11.4 60 .62.4 71 .33.3
+
+C OBRA ‡-H0 98 .80.2 85 .12.9 78 .08.4 79 .51.0 55 .83.9 86 .71.2 75 .52.7 66 .34.2 50 .92.7 91 .00.8 79 .02.7 56 .04.1 56 .36.3 64 .30.9 62 .83.4 72 .43.7
+
+C OBRA †-H0 99 .40.1 86 .92.0 80 .93.4 79 .91.8 56 .73.6 87 .81.2 72 .83.4 59 .92.1 58 .00.9 95 .21.1 84 .93.7 58 .12.6 59 .77.2 58 .52.4 61 .23.4 73 .33.1
+
+C OBRA †-UNI 99 .10.2 79 .12.8 76 .24.6 80 .20.7 55 .05.7 86 .01.7 78 .13.2 60 .34.9 62 .33.1 89 .10.7 83 .51.5 65 .72.1 65 .34.2 57 .22.1 61 .92.1 73 .33.1
+
+C OBRA ‡-V2 96 .90.3 83 .44.0 80 .93.4 78 .81.5 56 .74.4 88 .31.7 77 .81.9 70 .74.7 58 .11.3 91 .80.8 80 .62.3 62 .21.8 54 .711 .9 61 .31.9 61 .07.2 73 .54.4
+
+C OBRA †-V2 98 .40.2 84 .61.9 78 .93.6 78 .42.6 55 .97.1 89 .61.7 80 .02.3 72 .21.7 65 .14.5 94 .20.6 88 .71.6 64 .82.3 60 .65.7 58 .61.7 61 .54.1 75 .43.3
+
+CPTAC Breast CPTAC Lung CPTAC Colon 
+
+0.50 0.55 0.60 0.65 0.70 0.75 0.80 
+
+> Few-shot performance (Macro-AUC)
+
+k=5 k=10 k=25 CHIEF MADELEINE PRISM GigaPath Cobra 
+
+Figure 2. Few shot linear probing classification . Linear probing macro-AUC performance comparison for k samples per class. parameters, compared to more than 600M in Virchow2 and more than 1B in H-optimus-0. 
+
+Magnifications Another way to achieve efficiency im-provements is to reduce the magnification of the WSIs for the patch embeddings, which in turn significantly reduces the number of tiles that need to be extracted and embed-ded. In particular, this change does not result in a significant performance drop as C OBRA †-V2-5 × and C OBRA †-V2-9 ×
+
+achieve performance gains over the next best slide encoder PRISM at 0.5 MPP of +3.8% and +3.7% average AUC, re-spectively (see Tabs. 2 and 3), which we attribute to our multiscale alignment during pretraining. 
+
+Combined inference and unseen FMs In a combined in-ference mode (indicated by † in Tab. 3), where embeddings from all pretrained FMs are used, performance is slightly better for C OBRA -V2, though it does not notably improve the downstream classification performance for 0.5 MPP. In general, performance is comparable to the single-FM mode. However, for smaller magnifications, the benefits of the combined inference mode become more notable (see Appendix Tabs. 10 and 11). Especially on 2 MPP, C O -BRA exhibits gains over the single-FM mode (on average +0.53% AUC). Furthermore, C OBRA remains useful for fu-ture FMs as it can aggregate embeddings from unseen FMs and improve their performance over the mean baseline. We show evidence for this by deploying C OBRA on GigaPath patch embeddings, which improves over the mean baseline of +2.5% average AUC and +3.1% average AUC over the next best slide encoder PRISM (Tabs. 2 and 3). 
+
+4.6. Pretraining ablation Single-magnification pretraining We analyze the per-formance of a single magnification training on only 0.5 MPP embeddings and find that the use of all three magnifications results in an average AUC improvement of +1.73% AUC across all models when comparing the multi-FM inference mode (Eq. (8)). Furthermore, the three-magnification setup yields substantial gains in NSCLC sub-typing at 5 × magnification, with improvements of +6.8% 30813 Figure 3. C OBRA Unsupervised Heatmap . Visualization of the weighting scores for the tiles of a WSI generated by C OBRA for Patient-ID TCGA-CA-6716 from TCGA-CRC. AUC for UNI, +7.9% for CTransPath, +8.1% for H-optimus-0 and +1.7% for Virchow2 (Tab. 4). These results indicate that the use of multiple magnifications can enhance performance in certain cases and does not negatively impact model performance. 
+
+4.7. Interpretability 
+
+C OBRA enables unsupervised interpretability as it is an ag-gregation method of patch embeddings that calculates a weighted average by assigning each tile a softmaxed value, which can be interpreted as an attention value. By visualiz-ing these weightings for WSIs, we observe that the model shows high attention values for the tumor regions in the slide (see Fig. 3). It is worth mentioning that for these heatmaps, no GradCam [33] is required, and they are gen-erated only based on patch embeddings, so each tile only receives one value instead of pixel-level attention that can be achieved with other methods. However, this extremely simple approach is sufficient to identify important tumor regions in detail without any supervision such as targeted segmentation training. More examples and detailed expla-nations can be found in Appendix E. Furthermore, we visualized C OBRA ’s embedding space using uniform manifold approximation and projection (UMAP) [25] plots of C OBRA ’s patient-level slide embed-dings extracted at 0.5 MPP for TCGA and CPTAC (see Fig. 4). We observe a decent separation between the dif-ferent tissue types involved in this study, indicating that C OBRA learned meaningful representations that can distin-guish between tissue types without supervision. 
+
+5. Conclusion 
+
+In this paper, we introduced C OBRA , a novel FM- and task-agnostic approach for slide representation learning. Trained on only 3048 WSIs from TCGA, C OBRA achieves SOTA Figure 4. UMAP visualization of C OBRA ’s patient-level slide em-beddings for TCGA and CPTAC datasets at 0.5 MPP. Each color represents a different tissue type, with five tissue types in total. performance, even surpassing multimodal slide encoders. This is particularly valuable for medical imaging, where ac-quiring large annotated datasets is challenging due to pri-vacy concerns and annotation costs. While additional data might enhance performance, our results indicate that C O -BRA is highly effective even in low-data regimes. These results highlight the potential of SSL in leveraging the strengths of histopathology FMs. Future work includes ex-ploring SSL objectives that extend beyond contrastive ap-proaches, as well as incorporating more cancer types, pre-training data and a larger variety of FMs into C OBRA .
+
+Acknowledgments The authors gratefully acknowledge the GWK’s support for funding this project by providing computing time through the Center for Information Services and HPC (ZIH) at TU Dresden. We also acknowledge the TCGA Research Net-work and the Clinical Proteomic Tumor Analysis Consortium (CP-TAC), which generated the data on which the results shown in this study are based. GW is supported by Lothian NHS. 30814 References 
+
+[1] Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E. Hinton. Layer normalization, 2016. 3 [2] Ethan Cerami, Jianjiong Gao, Ugur Dogrusoz, Benjamin E Gross, Serdar O Sumer, B¨ ulent A Aksoy, Anders Jacobsen, Christina J Byrne, Michael L Heuer, Erik Larsson, Yevgeniy Antipin, Boris Reva, Allen P Goldberg, Chris Sander, and Nikolaus Schultz. The cbio cancer genomics portal: an open platform for exploring multidimensional cancer genomics data. Cancer discovery , 2(5):401–404, 2012. 2 [3] Richard J. Chen, Chengkuan Chen, Yicong Li, Tiffany Y. Chen, Andrew D. Trister, Rahul G. Krishnan, and Faisal Mahmood. Scaling vision transformers to gigapixel images via hierarchical self-supervised learning. In 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 16123–16134, 2022. 1, 3 [4] Richard J Chen, Tong Ding, Ming Y Lu, Drew FK Williamson, Guillaume Jaume, Bowen Chen, Andrew Zhang, Daniel Shao, Andrew H Song, Muhammad Shaban, et al. Towards a general-purpose foundation model for com-putational pathology. Nature Medicine , 2024. 1, 3, 6, 4, 5, 7, 8, 9, 10, 11, 12 [5] Xinlei Chen*, Saining Xie*, and Kaiming He. An empirical study of training self-supervised vision transformers. arXiv preprint arXiv:2104.02057 , 2021. 5 [6] Tri Dao and Albert Gu. Transformers are ssms: General-ized models and efficient algorithms through structured state space duality, 2024. 2, 3 [7] Thomas G. Dietterich, Richard H. Lathrop, and Tom´ as Lozano-P´ erez. Solving the multiple instance problem with axis-parallel rectangles. Artificial Intelligence , 89(1):31–71, 1997. 1 [8] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. 2021. 1 [9] NJ Edwards, M Oberti, RR Thangudu, S Cai, PB McGarvey, S Jacob, S Madhavan, and KA Ketchum. The cptac data portal: A resource for cancer proteomics research. Journal of Proteome Research , 14(6):2707–2713, 2015. Epub 2015 May 4. 5 [10] Omar S. M. El Nahhas, Marko van Treeck, Georg W¨ olflein, Michaela Unger, Marta Ligero, Tim Lenz, Sophia J. Wagner, Katherine J. Hewitt, Firas Khader, Sebastian Foersch, Daniel Truhn, and Jakob Nikolas Kather. From whole-slide im-age to biomarker prediction: end-to-end weakly supervised deep learning in computational pathology. Nature Protocols ,2024. 1, 3 [11] Alexandre Filiot, Ridouane Ghermi, Antoine Olivier, Paul Jacob, Lucas Fidon, Alice Mac Kain, Charlie Saillard, and Jean-Baptiste Schiratti. Scaling self-supervised learning for histopathology with masked image modeling. medRxiv ,2023. 1 [12] Albert Gu and Tri Dao. Mamba: Linear-time sequence mod-eling with selective state spaces, 2024. 3 [13] Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick. Momentum contrast for unsupervised visual repre-sentation learning. In 2020 IEEE/CVF Conference on Com-puter Vision and Pattern Recognition (CVPR) , pages 9726– 9735, 2020. 4 [14] Dan Hendrycks and Kevin Gimpel. Gaussian error linear units (gelus), 2023. 3, 1 [15] Z. Huang, F. Bianchi, M. Yuksekgonul, et al. A vi-sual–language foundation model for pathology image anal-ysis using medical twitter. Nature Medicine , 29:2307–2316, 2023. 3 [16] Maximilian Ilse, Jakub Tomczak, and Max Welling. Attention-based deep multiple instance learning. In Proceed-ings of the 35th International Conference on Machine Learn-ing , pages 2127–2136. PMLR, 2018. 1, 3, 4 [17] Guillaume Jaume, Lukas Oldenburg, Anurag Vaidya, Richard J. Chen, Drew F. K. Williamson, Thomas Peeters, Andrew H. Song, and Faisal Mahmood. Transcriptomics-guided slide representation learning in computational pathol-ogy, 2024. 2 [18] Guillaume Jaume, Anurag Jayant Vaidya, Andrew Zhang, Andrew H Song, Richard J. Chen, Sharifa Sahai, Dandan Mo, Emilio Madrigal, Long Phi Le, and Mahmood Faisal. Multistain pretraining for slide representation learning in pathology. In European Conference on Computer Vision .Springer, 2024. 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 [19] Mingu Kang, Heon Song, Seonwook Park, Donggeun Yoo, and S´ ergio Pereira. Benchmarking self-supervised learning on diverse pathology datasets. In 2023 IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) ,pages 3344–3354, 2023. 1 [20] Navid Alemi Koohbanani, Balagopal Unnikrishnan, Syed Ali Khurram, Pavitra Krishnaswamy, and Nasir Rajpoot. Self-path: Self-supervision for classification of pathology images with limited annotations, 2020. 1 [21] Tristan Lazard, Marvin Lerousseau, Etienne Decenci` ere, and Thomas Walter. Giga-ssl: Self-supervised learning for gi-gapixel images. In 2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW) , pages 4305–4314, 2023. 1, 3 [22] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019. 1 [23] Ming Y Lu, Drew FK Williamson, Tiffany Y Chen, Richard J Chen, Matteo Barbieri, and Faisal Mahmood. Data-efficient and weakly supervised computational pathology on whole-slide images. Nature Biomedical Engineering , 5(6):555– 570, 2021. 1, 3 [24] Ming-Yu Lu, Bo Chen, Drew F.K. Williamson, et al. Avisual-language foundation model for computational pathol-ogy. Nature Medicine , 30:863–874, 2024. 1, 3, 6, 4, 5, 7, 8, 9, 10, 11, 12 [25] Leland McInnes, John Healy, Nathaniel Saul, and Lukas Großberger. Umap: Uniform manifold approximation and projection. Journal of Open Source Software , 3(29):861, 2018. 8 [26] Patience Mukashyaka, Todd B. Sheridan, Ali Foroughi pour, and Jeffrey H. Chuang. Sampler: unsupervised repre-30815 sentations for rapid analysis of whole slide tissue images. 
+
+eBioMedicine , 99:104908, 2024. 1 [27] O. S. M. El Nahhas, C. M. L. Loeffler, Z. I. Carrero, et al. Regression-based deep-learning predicts molecular biomarkers from pathology slides. Nature Communications ,15:1253, 2024. [28] Dmitry Nechaev, Alexey Pchelnikov, and Ekaterina Ivanova. Hibou: A family of foundational vision transformers for pathology, 2024. 1 [29] Peter Neidlinger, Omar S. M. El Nahhas, Hannah So-phie Muti, Tim Lenz, Michael Hoffmeister, Hermann Bren-ner, Marko van Treeck, Rupert Langer, Bastian Dislich, Hans Michael Behrens, Christoph R¨ ocken, Sebastian Foer-sch, Daniel Truhn, Antonio Marra, Oliver Lester Saldanha, and Jakob Nikolas Kather. Benchmarking foundation models as feature extractors for weakly-supervised computational pathology, 2024. 1 [30] Maxime Oquab, Timoth´ ee Darcet, Th´ eo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, Mah-moud Assran, Nicolas Ballas, Wojciech Galuba, Russell Howes, Po-Yao Huang, Shang-Wen Li, Ishan Misra, Michael Rabbat, Vasu Sharma, Gabriel Synnaeve, Hu Xu, Herv´ e Je-gou, Julien Mairal, Patrick Labatut, Armand Joulin, and Piotr Bojanowski. Dinov2: Learning robust visual features with-out supervision, 2024. 2 [31] Weibin Rong, Zhanjing Li, Wei Zhang, and Lining Sun. An improved canny edge detection algorithm. In 2014 IEEE international conference on mechatronics and automation ,pages 577–582. IEEE, 2014. 3 [32] Charlie Saillard, Rodolphe Jenatton, Felipe Llinares-L´ opez, Zelda Mariet, David Cahan´ e, Eric Durand, and Jean-Philippe Vert. H-optimus-0, 2024. 1, 3, 6, 4, 5, 7, 8, 9, 10, 11, 12 [33] Ramprasaath R. Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh, and Dhruv Ba-tra. Grad-cam: Visual explanations from deep networks via gradient-based localization. International Journal of Com-puter Vision , 128(2):336–359, 2019. 8, 3 [34] George Shaikovski, Adam Casson, Kristen Severson, Eric Zimmermann, Yi Kan Wang, Jeremy D. Kunz, Juan A. Re-tamero, Gerard Oakley, David Klimstra, Christopher Kanan, Matthew Hanna, Michal Zelechowski, Julian Viret, Neil Tenenholtz, James Hall, Nicolo Fusi, Razik Yousfi, Peter Hamilton, William A. Moye, Eugene Vorontsov, Siqi Liu, and Thomas J. Fuchs. Prism: A multi-modal generative foundation model for slide-level histopathology, 2024. 2, 3, 5, 6, 4, 7, 8, 9, 10, 11, 12 [35] Zhuchen Shao, Hao Bian, Yang Chen, Yifeng Wang, Jian Zhang, Xiangyang Ji, et al. Transmil: Transformer based correlated multiple instance learning for whole slide image classification. Advances in Neural Information Processing Systems , 34:2136–2147, 2021. 1, 3 [36] The Cancer Genome Atlas Research Network, J Weinstein, E Collisson, et al. The cancer genome atlas pan-cancer analysis project. Nature Genetics , 45:1113–1120, 2013. 5 [37] Michaela Unger and Jakob Nikolas Kather. A systematic analysis of deep learning in genomics and histopathology for precision oncology. BMC Medical Genomics , 17(1):48, 2024. 1 [38] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Repre-sentation learning with contrastive predictive coding, 2019. 3, 4 [39] E. Vorontsov, A. Bozkurt, A. Casson, et al. A foundation model for clinical-grade computational pathology and rare cancers detection. Nature Medicine , 2024. 1, 3, 6, 4, 5, 7, 8, 9, 10, 11, 12 [40] SJ Wagner, D Reisenb¨ uchler, NP West, JM Niehues, J Zhu, S Foersch, GP Veldhuizen, P Quirke, HI Grabsch, PA van den Brandt, GGA Hutchins, SD Richman, T Yuan, R Langer, JCA Jenniskens, K Offermans, W Mueller, R Gray, SB Gru-ber, JK Greenson, G Rennert, JD Bonner, D Schmolze, J Jon-nagaddala, NJ Hawkins, RL Ward, D Morton, M Seymour, L Magill, M Nowak, J Hay, VH Koelzer, DN Church, TransS-COT consortium, C Matek, C Geppert, C Peng, C Zhi, X Ouyang, JA James, MB Loughrey, M Salto-Tellez, H Bren-ner, M Hoffmeister, D Truhn, JA Schnabel, M Boxberg, T Peng, and JN Kather. Transformer-based biomarker predic-tion from colorectal cancer histology: A large-scale multi-centric study. Cancer Cell , 41(9):1650–1661.e4, 2023. Epub 2023 Aug 30. 3 [41] Xiyue Wang, Sen Yang, Jun Zhang, Minghui Wang, Jing Zhang, Wei Yang, Junzhou Huang, and Xiao Han. Transformer-based unsupervised contrastive learning for histopathological image classification. Medical Image Anal-ysis , 2022. 1, 3, 6, 4, 5, 7, 8, 9, 10, 11, 12 [42] X. Wang, J. Zhao, E. Marostica, et al. A pathology foun-dation model for cancer diagnosis and prognosis prediction. 
+
+Nature , 2024. 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 [43] Georg W¨ olflein, Dyke Ferber, Asier R. Meneghetti, Omar S. M. El Nahhas, Daniel Truhn, Zunamys I. Carrero, David J. Harrison, Ognjen Arandjelovi´ c, and Jakob Nikolas Kather. Benchmarking pathology feature extractors for whole slide image classification, 2024. 1 [44] Hanwen Xu, Naoto Usuyama, Jaspreet Bagga, Sheng Zhang, Rajesh Rao, Tristan Naumann, Cliff Wong, Zelalem Gero, Javier Gonz´ alez, Yu Gu, Yanbo Xu, Mu Wei, Wenhui Wang, Shuming Ma, Furu Wei, Jianwei Yang, Chunyuan Li, Jian-feng Gao, Jaylen Rosemon, Tucker Bower, Soohee Lee, Roshanthi Weerasinghe, Bill J. Wright, Ari Robicsek, Brian Piening, Carlo Bifulco, Sheng Wang, and Hoifung Poon. A whole-slide foundation model for digital pathology from real-world data. Nature , 2024. 1, 2, 3, 5, 6, 4, 7, 8, 9, 10, 11, 12 [45] Shu Yang, Yihui Wang, and Hao Chen. MambaMIL: En-hancing Long Sequence Modeling with Sequence Reorder-ing in Computational Pathology . In proceedings of Medi-cal Image Computing and Computer Assisted Intervention – MICCAI 2024 . Springer Nature Switzerland, 2024. 3 [46] Zhimiao Yu, Tiancheng Lin, and Yi Xu. Slpd: Slide-level prototypical distillation for wsis, 2023. 1 [47] Eric Zimmermann, Eugene Vorontsov, Julian Viret, Adam Casson, Michal Zelechowski, George Shaikovski, Neil Tenenholtz, James Hall, David Klimstra, Razik Yousfi, Thomas Fuchs, Nicolo Fusi, Siqi Liu, and Kristen Sever-30816 son. Virchow2: Scaling self-supervised mixed magnification models in pathology, 2024. 1, 2, 3, 6, 4, 5, 7, 8, 9, 10, 11, 12 30817

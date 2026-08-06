@@ -1,0 +1,461 @@
+Title: TopoCellGen: Generating Histopathology Cell Topology with a Diffusion Model
+
+URL Source: https://openaccess.thecvf.com/content/CVPR2025/papers/Xu_TopoCellGen_Generating_Histopathology_Cell_Topology_with_a_Diffusion_Model_CVPR_2025_paper.pdf
+
+Published Time: Mon, 02 Jun 2025 02:25:15 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# TopoCellGen : Generating Histopathology Cell Topology with a Diffusion Model 
+
+## Meilong Xu 1 Saumya Gupta 1 Xiaoling Hu 2 Chen Li 1 Shahira Abousamra 3
+
+## Dimitris Samaras 1 Prateek Prasanna 1 Chao Chen 11Stony Brook University, NY, USA 
+
+> 2
+
+## Athinoula A. Martinos Center for Biomedical Imaging, Massachusetts General Hospital and Harvard Medical School, MA, USA 
+
+> 3
+
+## Department of Biomedical Data Science, Stanford University, CA, USA  
+
+> meixu@cs.stonybrook.edu, chao.chen.1@stonybrook.edu
+
+## Abstract 
+
+Accurately modeling multi-class cell topology is crucial in digital pathology, as it provides critical insights into tis-sue structure and pathology. The synthetic generation of cell topology enables realistic simulations of complex tis-sue environments, enhances downstream tasks by augment-ing training data, aligns more closely with pathologists’ do-main knowledge, and offers new opportunities for control-ling and generalizing the tumor microenvironment. In this paper, we propose a novel approach that integrates topolog-ical constraints into a diffusion model to improve the gener-ation of realistic, contextually accurate cell topologies. Our method refines the simulation of cell distributions and inter-actions, increasing the precision and interpretability of re-sults in downstream tasks such as cell detection and classi-fication. To assess the topological fidelity of generated lay-outs, we introduce a new metric, Topological Fr´ echet Dis-tance (TopoFD), which overcomes the limitations of tradi-tional metrics like FID in evaluating topological structure. Experimental results demonstrate the effectiveness of our approach in generating multi-class cell layouts that cap-ture intricate topological relationships. Code is available at https://github.com/Melon-Xu/TopoCellGen. 
+
+## 1. Introduction 
+
+Deep-learning methods have made substantial advances in foundational tasks for nuclei analysis, including instance segmentation [21, 29, 32, 40, 73], classification, and detec-tion [1, 52]. These tasks provide the basis for downstream analyses, enabling detailed characterization of tissue archi-tecture and cellular interactions, which are crucial for di-agnostic and prognostic applications in pathology [12, 46]. However, accurately annotating multi-class cell arrange-ments in pathology images is challenging, as distinct cell types display unique spatial patterns, requiring significant domain expertise. Although annotated datasets for multi-ple cell types exist, they often lack the diversity needed for generalization across various tissues and organs. To alleviate the burden of manual annotation and en-hance the efficiency of analysis, there has been growing interest in utilizing generative models. Early works use Generative Adversarial Networks (GANs) [20] for auto-matic generation of pathology images [2, 10, 34]. In re-cent years, diffusion models [11, 31, 45, 50, 61, 69, 75, 76] have emerged as much more reliable alternatives, generat-ing accurate, high-resolution histopathology images [4, 23, 48, 51, 72]. However, all these diffusion models are only trained to directly generate the histopathology images. De-spite the impressive visual results, these powerful models deliver limited insight into the underlying biology. It is very hard to connect the learned distributions with human knowledge about tumor microenvionment. This makes it challenging to validate, generalize, or control these models. We argue that a key issue is the lack of explicit gener-ation of cells and their spatial arrangement. The spatial organization of cells and the interactions across different cell types are critical for understanding tumor microenvi-ronments, disease progression, and tissue regeneration [59]. The density and spatial distribution of various cell types -such as lymphocytes, epithelial cells, and stromal cells-are essential for pathologists in making accurate diagnoses and prognoses. For instance, the detection and quantifi-cation of tumor-infiltrating lymphocytes (TILs), which are lymphocytes located within the boundaries of invasive tu-mors [56], have been strongly linked to improved clinical outcomes [57, 63]. The presence of isolated or small clus-ters of tumor cells at the invasive front, known as tumor budding, serves as a prognostic biomarker associated with a higher risk of lymph node metastasis in colorectal carci-noma and other solid malignancies [47]. This CVPR paper is the Open Access version, provided by the Computer Vision Foundation. Except for this watermark, it is identical to the accepted version; the final published version of the proceedings is available on IEEE Xplore. 20979 Histopathology Image  Intra -class Distribution  Histopathology Image  Inter -class Relationship    
+
+> Tumor/Epithelial Lymphocyte Stroma lCell Figure 1. Illustrations of intra-class distribution and the inter-class relationship across various cell types. Here we only highlight the tumor/epithelial, lymphocytes, and stromal cells.
+
+In this paper, we explore the problem of generating cell spatial layouts, with multiple benefits. First and foremost, directly modeling cell layouts brings us closer to aligning with pathologists’ domain knowledge. This enables the di-rect verification of synthetic data through quantification and comparison with expert knowledge, facilitating greater ac-curacy and trust in the generated data. Additionally, it opens up the possibility of controlling the layout generation pro-cess, allowing the model to generalize to previously unseen scenarios. From a data augmentation perspective, generat-ing cell layouts also enables the creation of histology im-ages conditioned on these layouts. This capability allows for the production of synthetic images with cell annotations, which can significantly aid in the training of models for var-ious downstream tasks, particularly cell detection and clas-sification. 
+
+Cell topology is the key. To generate accurate cell lay-outs, we argue that the key is to model the topological re-lationships between cells, defined by their spatial organiza-tion, clustering, mixing, and connectivity. These topologi-cal patterns provide valuable insights into cellular commu-nication, structural changes, and morphological abnormal-ities linked to pathological conditions such as cancer, in-flammation, and fibrosis. Fig. 1 illustrates the significance of these topological relationships in understanding tissue organization and disease progression. These relationships reveal how cells are spatially arranged to form structural motifs that are crucial for tissue function and stability. For example, on the left, we show that in healthy glandular tis-sues, epithelial cells typically organize into circular or tubu-lar structures, forming acinar units that are essential for se-cretion and nutrient transport [59]. In tissues with diverse cell types, topological relationships capture spatial configu-rations and connectivity patterns that reveal cellular interac-tions critical for tissue health or disease [74]. For example, immune cells clustering around tumor cells (Fig. 1 (right)) or specific fibroblast-epithelial arrangements highlight pro-cesses like immune surveillance, inflammation, and stromal support. By identifying these patterns, topological methods offer insights into multi-class cellular interactions, reveal-ing potential biomarkers and enhancing our understanding of disease progression. 
+
+We propose the first diffusion model that generates cell topology for digital pathology. Our method guides the generation process with both 0- and 1-dimensional topolog-ical features, i.e., cell clusters and holes/gaps enclosed by cells. We implement this using the theory of persistent ho-mology, which models cell topology in a multi-scale man-ner. As illustrated in Fig. 1, learning the topology ensures that the generated cell layouts not only preserve intra-class spatial/structural property but also accurately capture inter-class interactions. The second contribution of this paper is a novel cell counting loss that ensures the diffusion model learns the correct distribution of cell numbers from the data. This addresses a key challenge in previous diffusion models for histopathology images [4, 23, 44], which is often biased to-ward unrealistically low or high cell counts. By ensuring both accurate cell topology and cell count, our method generates layouts that more closely resemble real tissue microenvironments. This precision in model-ing cell distributions and interactions enhances the utility of generated images for augmenting training in downstream tasks such as cell detection and classification, as demon-strated in our experiments. From a modeling perspective, our approach moves closer to generating biologically faith-ful representations of cellular environments, integrating hu-man domain knowledge, and improving generalization to diverse scenarios. Finally, we introduce the Topological Fr´ echet Distance (TopoFD), a novel metric designed to assess the spatial and topological accuracy of the generated layouts. TopoFD measures the similarity between the topological features of real and synthetic cell layouts, whereas traditional metrics such as FID focus solely on visual similarity. In summary, our contribution is three-fold: • We present the first diffusion model designed to gener-ate cell topology for digital pathology, simulating realistic intra- and inter-class spatial distributions in the generated layouts. • We introduce a novel cell counting loss that aligns the generated cell numbers with real data, addressing biases in prior diffusion models and ensuring realistic cell den-sity in synthetic layouts. • We introduce the Topological Fr´ echet Distance (TopoFD), a new metric designed to evaluate the topological similarity of generated cell layouts. Extensive experiments demonstrate the effectiveness of our proposed method, showing that it not only enhances sam-ple quality but also significantly improves performance in downstream tasks such as cell detection and classification. 
+
+## 2. Related Works 
+
+Diffusion Models for Digital Pathology. Diffusion mod-els, such as Denoising Diffusion Probabilistic Models 20980 (DDPMs) [11, 15, 31, 33, 50, 61, 62, 77] and Latent Diffusion Models (LDMs) [6, 53, 55], have significantly advanced image synthesis by modeling data distributions through iterative denoising processes on data sample or la-tent spaces. These models have been adapted to gener-ate high-fidelity histopathology images in digital pathol-ogy [4, 23, 28, 72]. However, these methods often over-look the significance of multi-class cell layouts, which are crucial for accurately representing tissue structures. Recent approaches to synthetic cell layout generation in digital pathology have explored nuclei labeling and cell arrangement. Abousamra et al. utilized spatial statistics and topological descriptors in GANs to model complex cell configurations [2]. DiffMix employs conditioned diffu-sion models for augmenting imbalanced nuclear pathology datasets, generating more realistic images than earlier meth-ods [51]. Similarly, a inter diffusion framework proposed in [48] generates paired histopathology images and nuclei labels simultaneously, enhancing the context-awareness of synthetic data. Another strategy, a diffusion model focused on cell layout generation, uses density maps to incorpo-rate spatial distributions, though it simplifies cell counts into five categorical conditions, which provides only lim-ited guidance [44]. While these models have contributed to more realistic cell layout synthesis, they generally lack fine control over cell density and fail to explicitly preserve intra-class spatial distributions and inter-class spatial rela-tionships across cell types. This limits their effectiveness in replicating the complex and varied structures of real tissue. 
+
+Topology-Driven Methods in Deep Learning. Incorporat-ing algebraic topology [49] in deep learning frameworks is becoming increasingly significant. A key development in this front has been persistent homology [13, 14], a mathe-matical theory that analyzes how structural features (such as connected components, loops, and voids) persist across different scales in data. This approach has proven partic-ularly valuable for understanding complex data structures while being resistant to noise. Its applications range from image segmentation [8, 36, 64, 71], feature extraction [19] and disease diagnosis [42, 43, 67, 70]. The field has further expanded through additional mathematical frameworks, in-cluding discrete Morse theory [17, 37, 38], homotopy warp-ing [35], structural relationship studies [25, 27], and meth-ods for analyzing shape features [60, 68]. For generative models, topological information has be-come increasingly essential, particularly in biomedical imaging, where capturing both visual realism and topo-logical integrity is critical. One notable method is To-poGAN [66], which integrates topology into GANs by in-troducing a novel topological loss based on persistent ho-mology. Recently, TopoDiffusionNet [26] has integrated topology with diffusion models, introducing a topology-based objective function that guides the model’s denoising process to generate images with exact object counts. How-ever, these methods, designed for natural images, are un-suitable for our cell topology generation task. Their em-phasis on overall structure numbers cannot capture the cell structural pattern and cell spatial interactions among multi-ple cell types as our method does. 
+
+## 3. Method 
+
+In this section, we introduce our methodology for generat-ing realistic multi-class cell layouts with precise topological control. To accurately control the cell density in the gener-ated layout, we employ a conditioning mechanism based on the cell count for each type. In the multi-class setting, as-suming we have n classes of cells, we define the condition vector c = [ c1, c 2, ..., c n], where each element ci represents the count of cells in the respective channel. However, the condition vector c alone is insufficient to precisely control cell counts [26]. Additionally, it can-not preserve the intra-class spatial distributions as well as inter-class topological relationships in the generated lay-outs. To address this, we formulate a cell counting loss to strengthen the control on accurate cell counts and introduce two topology-aware objective functions based on persistent homology [13, 49] to guide the generation process, ensuring realistic and contextually accurate cell layouts that respect both spatial and topological constraints. The remainder of this section is structured as follows: In Sec. 3.1, we present a brief introduction to diffusion models. Next, in Sec. 3.2, we provide a quick back-ground on persistent homology. Following this, we in-troduce TopoCellGen , our topology-preserving cell layout generation method, in Sec. 3.3. We introduce our proposed Topological Fr´ echet Distance (TopoFD) in Sec. 3.4. Finally, in Sec. 3.5, we present the overall inference pipeline and how the generated cell layouts are transformed into H&E images for training augmentation for downstream tasks. 
+
+Preliminaries. In a multi-class cell layout containing n
+
+channels, each channel corresponds to a specific cell type (e.g., lymphocyte), with each cell represented as a square where the pixel value is set to 1, while the pixel value of the background is set to 0.
+
+3.1. Diffusion Models 
+
+Our generative approach utilizes a denoising diffusion prob-abilistic model (DDPM) [31], which learns to reverse a forward process that incrementally adds Gaussian noise to transform a structured cell layout into a noise distribution. The reverse process then reconstructs the layout from noise via iterative denoising. Let x0 represent the target cell layout and xT denote pure Gaussian noise. At each time step t, noise is added to the data based on a variance schedule βt: q(xt|xt−1) = 20981 Figure 2. An overview of our method TopoCellGen . ( a) denotes the overview workflow. ( b) shows the details of Lcount , Lintra and Linter .
+
+N (xt; √1 − βtxt−1, β tI). This forward process results in the progressively noisier version of the data, with xT
+
+approximating an isotropic Gaussian distribution as t in-creases. The reverse process, parameterized by a neural network 
+
+ϵθ (xt, t ) (typically UNet [54]), learns to iteratively denoise 
+
+xT back to x0. Conditioning on the cell count vector c, the model is trained by minimizing a simplified variant of the variational lower bound, specifically focusing on predicting the noise added at each step: 
+
+Lsimple = Et,x 0,ϵ 
+
+∥ϵ − ϵθ (xt, c, t )∥2 (1) where ϵ ∼ N (0 , I ) is the noise sampled during training. This objective enables the model to learn the reverse pro-cess effectively. Instead of the standard iterative denoising, we also approximate the noiseless layout bxt 
+
+> 0
+
+deterministi-cally for any noisy state xt by marginalizing over the noise schedule: 
+
+bxt 
+
+> 0
+
+≈ 1
+
+√¯αt
+
+ xt − √1 − ¯αtϵθ (xt, c, t ) (2) where αt = 1 −βt and ¯αt = Qts=1 αs, which aggregates the effect of the variance schedule up to time t. This predicted noiseless layout, bxt
+
+> 0
+
+, will be used to impose constraints in subsequent stages. 
+
+3.2. Background: Persistent Homology 
+
+In algebraic topology [49], homology classes provide a structured way to capture topological features across mul-tiple dimensions. For instance, 0-, 1-, and 2-dimensional features represent connected components, loops, and voids, respectively. The d-dimensional Betti number, βd, quanti-fies the number of d-dimensional features present, offering insights into the underlying topological complexity. How-ever, extending these concepts to real-world data, which is often continuous and noisy, introduces challenges for accu-rately capturing topological structures. Persistent homology, developed in the early 2000s [13, 14], addresses this need by tracking the evolution of topo-logical features across multiple scales, making it particu-larly effective for discrete datasets like cell point clouds. The process begins by constructing a filtration—a sequence of nested simplicial complexes built from the point cloud data by incrementally connecting points based on a scale pa-rameter. As the parameter varies, topological features such as connected components and loops appear and eventually vanish, each represented by a point in a persistence diagram (Dgm). In a diagram, each point (b, d ) marks the birth and death of a feature, capturing its persistence across scales and providing a compact, multi-scale summary of the underly-ing topology. More details are in the Supplementary. 
+
+3.3. Spatially Aligned Cell Layout Generation 
+
+The primary objective of our method is to generate multi-class cell layouts that accurately simulate both the topolog-ical and spatial properties of real-world biological cell dis-tributions. To achieve this, we ensure accurate cell counts for each cell type through a cell counting loss, while also preserving spatial relationships within individual cell types via enforcing intra-class spatial consistency. Furthermore, we maintain structural coherence across all cell types by applying an inter-class structural regularization, leverag-ing 1-dimensional persistent homology to encapsulate both type-specific and collective spatial properties. The overall pipeline is shown in Fig. 2. 
+
+Cell Counting Loss. Given the target layout x0, which 20982 serves as the ground truth, for each time step t, we obtain the predicted noiseless layout bxt 
+
+> 0
+
+using Eq. (2). To ensure precise control over the number of cells in the generated layout, we introduce a differentiable cell counting loss. The key challenge lies in making the counting operation differ-entiable for gradient-based optimization. We address this by employing the Straight-Through Estimator (STE) [5], which enables gradient flow through the discrete binariza-tion operation. Specifically, after obtaining bxt
+
+> 0
+
+, we apply a hard threshold to obtain binary values: 
+
+b(bxt
+
+> 0
+
+) = f loat (( bxt 
+
+> 0
+
+≥ τ ))  (3) where τ is the threshold parameter. Here we set it to the me-dian value of bxt
+
+> 0
+
+. During back-propagation, the STE treats the thresholding operation as an identity function, allowing gradients to flow through. The cell counting loss is then formulated as: 
+
+Lcount = 1
+
+|n|
+
+> n
+
+X
+
+> i=1
+
+P b(bxt
+
+> 0
+
+)(i)
+
+δ −
+
+P x(i)0
+
+δ (4) where b(bxt
+
+> 0
+
+)(i) represents the binarized prediction for the 
+
+i-th channel, and δ indicates the area ( 3 × 3) of a single cell in the layouts. This formulation provides a differen-tiable approximation to the discrete cell counting operation, enabling end-to-end training while maintaining precise con-trol over the number of cells for each cell type. 
+
+Intra-Class Spatial Consistency. To enforce spatial con-sistency within each cell type, we first calculate the distance transform map [16] for each channel in both the target lay-out x0 and the predicted noiseless layout bxt
+
+> 0
+
+. The distance transform D(x) is a function that assigns to each pixel the minimum Euclidean distance to the nearest cell (or non-zero pixel) in the channel. This can be formally written as: 
+
+D(x) = min  
+
+> p∈cells
+
+∥x − p∥ (5) where p represents the positions of cells in the layout. Af-ter obtaining the distance transform maps of the target lay-out and the predicted noiseless layout, bxedt t = D(b(bxt
+
+> 0
+
+)) 
+
+and xedt  
+
+> 0
+
+= D(x0), we calculate the 1-dim persistence di-agrams for both of them, Dgm (bxedt t ) and Dgm (xedt  
+
+> 0
+
+) re-spectively. Similar to previous topological losses [36], we will use the classic Wasserstein distance between the two diagrams. Given two diagrams Dgm (q) and Dgm (s), the 
+
+p-th Wasserstein distance is defined as follows: 
+
+Wp(Dgm (q), Dgm (s)) = 
+
+inf 
+
+> γ∈Γ
+
+X
+
+> x∈Dgm (q)
+
+|| x − γ(x)|| p
+
+
+
+> 1
+> p
+
+where Γ represents all bijections from Dgm (q) to Dgm (s).The Wasserstein distance operates by identifying an op-timal correspondence between points in two diagrams, as-signing unmatched points to their projections on the diag-onal. This distance metric is calculated by summing the distances between all paired points. The process of finding this optimal matching, as well as calculating the Wasser-stein distance, can be accomplished using either the tra-ditional Hungarian algorithm or more sophisticated meth-ods [39, 41]. Next, we denote γ∗, the optimal matching between 
+
+Dgm (bxedt t ) and Dgm (xedt  
+
+> 0
+
+). Each persistence dot in 
+
+Dgm (bxedt t ) is matched either to a target dot in Dgm (xedt  
+
+> 0
+
+)
+
+or its projection on the diagonal. We can now formulate the spatial distribution consistency loss as the squared distance between every dot in Dgm (bxedt t ) and its match: 
+
+Lspc = X 
+
+> q∈Dgm (bxedt t)
+
+|| q − γ∗(q)|| 2 (6) For a multi-class cell layout containing n classes of cells, we formulate the intra-class spatial consistency loss as fol-lows by averaging the Eq. (6) across multiple classes: 
+
+Lintra = 1
+
+|n|
+
+> n
+
+X
+
+> i=1
+
+Lspc 
+
+
+
+Dgm (( bxedt t )(i))) , Dgm (( xedt  
+
+> 0
+
+)(i))
+
+
+
+(7) 
+
+Inter-Class Structural Regularization. Beyond maintain-ing spatial distribution consistency within individual cell types, it is equally important to capture the relationships between different cell types. To achieve this, we construct a unified layout by combining all cell types into a single-channel representation, referred to as the aggregated layout: 
+
+xagg  
+
+> 0
+
+= Agg (x0) and bxt,agg  
+
+> 0
+
+= Agg (bxt
+
+> 0
+
+). We then com-pute the distance transform for the aggregated layouts, with 
+
+bxedt t,agg = D(bxt,agg  
+
+> 0
+
+) representing the distance transform of the predicted layout and xedt  
+
+> 0,agg
+
+= D(xagg  
+
+> 0
+
+) for the target layout. The inter-class structural loss Linter is computed similarly to the intra-class loss: 
+
+Linter = Lspc 
+
+ Dgm (bxedt t,agg ), Dgm (xedt  
+
+> 0,agg
+
+) (8) Together, these class-specific and cross-class regulariza-tions ensure that both individual cell distributions and their cumulative spatial interactions are enforced, preserving crit-ical spatial dynamics within and between cell types in the generated layouts. 
+
+Final Objectives. The final training objective function of the model is the weighted sum of the three losses with 
+
+Lsimple :
+
+Ltotal = Lsimple + λcLcount + λintra Lintra + λinter Linter  (9) where λc, λintra and λinter are hyper-parameters that control the relative contributions of the respective loss terms. 
+
+3.4. Topological Fr´ echet Distance (TopoFD) 
+
+Fr´ echet Inception Distance (FID) [30] is a key metric for evaluating the quality of generated image data by compar-ing the distributions of real and generated samples. FID op-erates by computing the mean and covariance of feature rep-resentations extracted from a pre-trained model, typically 20983 FID: 0.1736       
+
+> TopoFD :221.771
+> FID: 0.1959
+> TopoFD :1159.240
+> Set 1 Set 2
+> Similar…
+> Distinguishable!
+> Ref Set
+> FID
+> TopoFD
+> TCE: 0TCE: 10.0
+> TCE
+> Heterogeneous
+
+Figure 3. Intuition of our proposed Topological Fr´ echet Distance. TCE indicates the Total Count Error. 
+
+InceptionV3 [65]. The distance between these distributions is then measured using the Fr´ echet distance [18]. The for-mula for FID is as follows: 
+
+FID = ∥μr − μg ∥2 + Tr (Σ r + Σ g − 2(Σ r Σg ) 12 ) (10) where μr , Σr and μg , Σg are the mean and covariance of the real and generated data, respectively. Traditional FID measures feature similarities but fail to capture complex spatial and topological cell interactions. For example, in Fig. 3, synthetic layouts of three cell types (lymphocyte, tumor/epithelial and stromal cells) demon-strate this limitation. Both Set 1 and Set 2 yield similar FID scores with respect to the Ref Set, yet differ signifi-cantly from each other in spatial configuration. Set 1 mir-rors the reference with cohesive single cycles per cell type, while Set 2 presents multiple distinct cycles, deviating from the reference. The Total Count Error (TCE) reveals identi-cal counts between Set 1 and the reference (TCE = 0) but substantial discrepancies for Set 2 (TCE = 10). Despite matching counts, Set 1’s spatial arrangement still diverges from the reference. This suggests that a count metric alone does not ensure spatial and topological fidelity. We propose Topological Fr´ echet Distance (TopoFD) to capture higher-dimensional topological features, enabling greater sensitiv-ity to spatial configurations essential in synthetic pathology data generation. The pipeline of our Topological Fr´ echet Distance (TopoFD) is shown in Fig. 4, taking one type of cell as an example. For each layout in the reference and synthetic sets, we first obtain a point cloud, with the points corre-sponding to the cell center coordinates. Then, we calculate 1-dimensional persistence diagrams of each point cloud in each set: 
+
+Dgm ref = {Dgm 1 
+
+> r
+
+, Dgm 2 
+
+> r
+
+, ..., Dgm nr }
+
+Dgm syn = {Dgm 1
+
+> s
+
+, Dgm 2
+
+> s
+
+, ..., Dgm ns }
+
+Figure 4. The overall pipeline of calculating the Topological Fr´ echet Distance. Take the lymphocyte as an example. 
+
+where Dgm ir and Dgm js are persistence diagrams in ref-erence and synthetic sets, n is the number of the samples. We then compute each set’s barycenter [7, 9], which min-imizes the sum of Wasserstein distances [9] between indi-vidual diagrams and the barycenter. For the reference set, the barycenter Dgm real is given by: 
+
+Dgm r = arg min 
+
+> Dgm r
+> n
+
+X
+
+> i=1
+
+W 22 (Dgm ir , Dgm r ) (11) where W2 is the 2-Wasserstein distance. A similar process is applied for Dgm s from the synthetic set. To enable statistical analysis, we transform the persis-tence diagrams and their barycenters into persistence land-scapes, transforming each diagram into a sequence of con-tinuous, piecewise linear functions that preserve topolog-ical information while enabling standard statistical opera-tions [7]. The vectorized barycenters are regarded as mean vectors μ and we compute the covariance matrices Σ from both sets of persistence diagrams. For multi-class layouts, TopoFD is calculated in two steps. First, for each cell type, we compute the vectorized persistence diagrams for both reference and synthetic lay-outs containing that type. Then, the final TopoFD is the average Fr´ echet Distance across cell types: 
+
+TopoFD = 1
+
+|n|
+
+> n
+
+X
+
+> i=1
+
+FD (μri , Σri , μsi , Σsi ) (12) where FD (·) denotes the Fr´ echet distance computation. 
+
+3.5. Layout-Guided Pathology Image Generation 
+
+In the final stage of our methodology, we focus on gener-ating high-resolution pathology images based on the previ-ously created cell layouts. These layouts serve as spatial and structural guides, ensuring that the pathology images adhere to the organization of cells within the layout. We employ a guided diffusion model [11] to synthesize realistic pathol-ogy images, conditioned on the underlying cell arrange-ment. This approach ensures that cells’ spatial distribution and organization in the generated images align closely with the provided cell layouts. More details are provided in the Supplementary. 20984 Figure 5. The qualitative results of our proposed TopoCellGen . Columns 1-3: BRCA-M2C dataset. Columns 4-6: Lizard dataset. The cell types and their corresponding colors are shown on the right side of the figure. 
+
+## 4. Experiments 
+
+We conduct extensive experiments on two public and widely used nuclei analysis datasets. We compare our method against SoTA layout generation methods in terms of sample quality and performance on downstream tasks. 
+
+Datasets. We evaluate our proposed method on TCGA Breast Cancer Cell Classification Dataset (BRCA-M2C) [1] and Lizard dataset [22]. More details about the datasets, the test set split, and the cell count distribution analysis are pro-vided in the Supplementary. 
+
+Evaluation Metrics. We evaluate our proposed method on both sample quality and the performance of downstream tasks. We use Fr´ echet Inception Distance (FID) [30], the cell count error for each cell type, the total count er-ror (TCE) , our proposed TopoFD and maximum mean discrepancy (MMD) [66] to evaluate how well the gen-erated cell layouts align with the reference layouts. Note that for FID, feature extraction is tailored to each dataset with custom-trained models. On the other hand, we gener-ate 2, 000 image-layout pairs as augmented training data for cell detection and classification tasks, evaluating their per-formance with the F1-score . More details are provided in the Supplementary. 
+
+Implementation Details are in the Supplementary. 
+
+Biological Plausibility. To further validate the quality of our generated cell layouts, we conducted an evaluation in-volving a board-certified pathologist with 7+ years of expe-rience. From a pathologist’s perspective, the synthetic cell layouts are nearly indistinguishable from real ones and ac-curately capture the defining benign or malignant features of their real counterparts. More details are in the Supple-mentary. 
+
+Backpropagation from Distance Transform Map to Bi-nary Mask. To backpropagate the gradient from the dis-tance transform map to a binary mask, we leverage an ef-ficient implementation of the geodesic distance transform provided by the FastGeodis library [3]. This method en-ables the computation of a differentiable distance map, which allows us to propagate gradients through the distance transform during training. The library implements a par-allelized raster scan method that efficiently computes the Euclidean distance transforms on GPU hardware. 
+
+4.1. Experimental Results 
+
+Qualitative Results. Qualitative results are shown in Fig. 5. Our proposed TopoCellGen method demonstrates cell lay-outs that closely match the reference layouts in both density and spatial arrangement. The generated layouts exhibit a high degree of distribution consistency, preserving density patterns and spatial relationships among cell types while re-flecting the structural characteristics of the reference lay-outs. 
+
+Quantitative Results on Sample Quality. Tab. 1 shows the results of sample quality and generation accuracy on the BRCA-M2C and Lizard datasets compared with the state-of-the-art cell layout generation baselines: ADM [11], TM-CCG [2] and Spatial Diffusion [44]. Across all multi-class datasets, our proposed TopoCellGen attains the lowest FID and TopoFD, indicating superior visual fidelity and topo-logical accuracy. Moreover, TopoCellGen notably reduces multi-class count errors, resulting in more precise and topo-logically consistent synthetic cell layouts. These findings highlight TopoCellGen ’s capacity to preserve realistic cell distributions, maintain topological relationships, and enable accurate control over cell density. 
+
+Performance on Downstream Tasks. In Tab. 2, we show the results of cell detection and classification tasks using our synthetic image-layout pairs as data augmentations. We present the results using two frameworks, UNet [54] and 20985 Method FID ↓ Lym. ↓ Epi. ↓ Stro. ↓ Neu. ↓ Pla. ↓ Eos. ↓ Con. ↓ TCE ↓ TopoFD ↓ MMD ↓                                                                                        
+
+> BRCA-M2C ADM [11] 1.150 13.757 40.230 15.491 ––––22.465 133.012 0.732 TMCCG [2] 0.634 11.503 34.032 12.907 ––––19.687 89.252 0.635 Spatial Diffusion [44] 0.263 10.852 35.954 13.496 ––––20.806 97.584 0.589
+> TopoCellGen 0.005 2.090 3.824 2.468 ––––5.192 69.354 0.421
+> Lizard ADM [11] 0.059 16.508 11.796 –1.123 4.328 1.598 10.737 23.964 65.910 0.783 TMCCG [2] 1.093 15.548 10.011 –2.376 4.293 1.872 11.643 22.604 63.120 0.667 Spatial Diffusion [44] 0.137 10.740 9.062 –3.040 6.552 2.173 11.225 20.606 79.591 0.883
+> TopoCellGen 0.027 6.155 6.560 –1.022 2.982 1.167 7.288 11.590 31.607 0.536
+
+Table 1. Results for BRCA-M2C and Lizard datasets on the quality of the generated samples.                                                                                                                                                            
+
+> Data Method F1-Score ↑
+> Lymphocytes Epithelial Stromal Mean Detection Real. UNet
+> 0.569 ±0.010 0.736 ±0.012 0.507 ±0.015 0.604 ±0.011 0.857 ±0.006
+> Real+Syn. (Rand) 0.549 ±0.009 0.693 ±0.014 0.472 ±0.016 0.571 ±0.013 0.848 ±0.008
+> Real+Syn (TMCCG) 0.650 ±0.007 0.768 ±0.010 0.511 ±0.012 0.643 ±0.009 0.852 ±0.005
+> Real+Syn (SpaDM) 0.647 ±0.006 0.797 ±0.003 0.554 ±0.011 0.666 ±0.007 0.853 ±0.005
+> Real+Syn ( TopoCellGen )0.656 ±0.003 0.803 ±0.005 0.574 ±0.004 0.678 ±0.004 0.860 ±0.004
+> Real. MCSpatNet
+> 0.615 ±0.008 0.777 ±0.010 0.540 ±0.013 0.644 ±0.009 0.855 ±0.005
+> Real+Syn. (Rand) 0.578 ±0.009 0.756 ±0.012 0.502 ±0.014 0.612 ±0.010 0.851 ±0.006
+> Real+Syn (TMCCG) 0.678 ±0.006 0.800 ±0.005 0.522 ±0.014 0.667 ±0.007 0.853 ±0.004
+> Real+Syn (SpaDM) 0.639 ±0.005 0.804 ±0.007 0.563 ±0.012 0.669 ±0.006 0.855 ±0.005
+> Real+Syn ( TopoCellGen )0.652 ±0.004 0.817 ±0.006 0.582 ±0.005 0.684 ±0.004 0.862 ±0.004
+
+Table 2. Results on cell detection and classification tasks on BRCA-M2C dataset. The best and statistically significant results are high-lighted in bold .
+
+MCSpatNet [1]. The results indicate that TopoCellGen 
+
+achieves the highest F1 scores across various cell types, in-cluding inflammation and epithelial cells, resulting in supe-rior mean F1 scores and detection metrics on the BRCA-M2C dataset. This demonstrates our TopoCellGen ’s capa-bility to capture both spatial fidelity and topological accu-racy, ensuring that synthetic data closely resembles real bi-ological structures. By accurately modeling complex spa-tial distributions and inter-class relationships, TopoCellGen 
+
+provides biologically plausible synthetic samples that im-prove the generalizability of detection and classification models. Furthermore, its balanced representation of cel-lular compositions reduces class-wise biases, allowing the classifiers to better learn fine-grained distinctions. 
+
+4.2. Ablation Studies 
+
+Extensive experiments are conducted to elucidate the effec-tiveness and robustness of our loss components and hyper-parameters. All experiments are performed on the BRCA-M2C dataset. 
+
+Ablation Study on Loss Components. We evaluate the contributions of three loss functions to the model’s per-formance in generating synthetic cell layouts, measured by FID, Total Counting Error, and TopoFD. As shown in Tab. 3, the results demonstrate that Lcount significantly re-duces the counting errors, achieving better accuracy when combined with the other losses. The Lintra improves the fi-delity and topological accuracy of the generated multi-class layouts, as indicated by lower FID and TopoFD. The Linter 
+
+has a smaller effect on the cell counting error but enhances structural consistency, as reflected in improved TopoFD. Combining all three losses yields superior results across all metrics, highlighting their complementary contributions to accurate and realistic multi-class cell layouts.                                                 
+
+> Lcount Lintra Linter BRCA-M2C FID ↓TCE ↓TopoFD ↓
+> ✗✗✗1.150 22.465 133.012
+> ✓✗✗0.842 12.253 118.304
+> ✗✓✗0.621 16.315 98.798
+> ✗✗✓1.083 21.928 126.742
+> ✓✓✗0.232 6.854 85.672
+> ✓✗✓0.498 8.012 91.324
+> ✗✓✓0.327 17.573 73.612
+> ✓✓✓0.005 5.192 69.354
+
+Table 3. Ablation study on loss components. 
+
+Ablation Study on Loss Weights. The ablation study on loss weights is presented in Tab. 4. The results indicate that when the loss weights are higher, such as 0.005 or 0.001 ,they impose overly strong regularization, leading to subop-timal outcomes. Conversely, when the loss weights are low-ered to 1e − 4 or even 5e − 5, the regularization becomes too weak to achieve optimal performance. The configura-tion with moderate weights 5e−4 achieves the best balance, yielding the lowest FID, total count error, and TopoFD.                                  
+
+> λcλintra λinter BRCA-M2C FID ↓TCE ↓TopoFD ↓
+> 0.005 0.005 0.005 0.289 14.920 92.718 0.001 0.001 0.001 0.153 12.471 85.642 1e-4 1e-4 1e-4 0.012 8.275 88.627 5e-5 5e-5 5e-5 0.129 11.378 83.629 5e-4 5e-4 5e-4 0.005 5.192 69.354
+
+Table 4. Ablation study on loss weights. 
+
+## 5. Conclusion 
+
+In summary, TopoCellGen presents a robust framework for generating realistic cell topologies in digital pathology. It accurately preserves both intra- and inter-class spatial pat-terns, ensures cell count control, and achieves high struc-tural fidelity. Experimental results confirm its close ap-proximation of real tissue layouts, thereby enhancing down-stream tasks such as cell detection and classification. 20986 Acknowledgment. We thank Dr. Michael L. Miller for evaluating the biological plausibility of our results. This research was partially supported by the National Science Foundation (NSF) grants CCF-2144901, IIS-2123920, IIS-2212046, the National Institute of Health (NIH) grants R01GM148970, R01GM148970-03S1, R21CA258493, R21CA258493-01A1, R01CA297843, and the Stony Brook Trustees Faculty Award. 
+
+## References 
+
+[1] Shahira Abousamra, David Belinsky, John Van Arnam, Fe-licia Allard, Eric Yee, Rajarsi Gupta, Tahsin Kurc, Dimitris Samaras, Joel Saltz, and Chao Chen. Multi-class cell detec-tion using spatial context representation. In ICCV , 2021. 1, 7, 8, 12 [2] Shahira Abousamra, Rajarsi Gupta, Tahsin Kurc, Dimitris Samaras, Joel Saltz, and Chao Chen. Topology-guided multi-class cell context generation for digital pathology. In CVPR ,2023. 1, 3, 7, 8 [3] Muhammad Asad, Reuben Dorent, and Tom Vercauteren. Fastgeodis: Fast generalised geodesic distance transform. 
+
+Journal of Open Source Software , 2022. 7 [4] Marco Aversa, Gabriel Nobis, Miriam H¨ agele, Kai Stand-voss, Mihaela Chirica, Roderick Murray-Smith, Ahmed M Alaa, Lukas Ruff, Daniela Ivanova, Wojciech Samek, et al. Diffinfinite: Large mask-image synthesis via parallel random patch diffusion in histopathology. NeurIPS , 2024. 1, 2, 3 [5] Yoshua Bengio, Nicholas L´ eonard, and Aaron Courville. Estimating or propagating gradients through stochastic neurons for conditional computation. arXiv preprint arXiv:1308.3432 , 2013. 5 [6] Tim Brooks, Aleksander Holynski, and Alexei A Efros. In-structpix2pix: Learning to follow image editing instructions. In CVPR , 2023. 3 [7] Peter Bubenik et al. Statistical topological data analysis us-ing persistence landscapes. JMLR , 2015. 6 [8] James R Clough, Nicholas Byrne, Ilkay Oksuz, Veronika A Zimmer, Julia A Schnabel, and Andrew P King. A topologi-cal loss function for deep-learning based image segmentation using persistent homology. TPAMI , 2020. 3 [9] David Cohen-Steiner, Herbert Edelsbrunner, John Harer, and Yuriy Mileyko. Lipschitz functions have l p-stable persis-tence. Foundations of computational mathematics , 2010. 6 [10] Srijay Deshpande, Muhammad Dawood, Fayyaz Minhas, and Nasir Rajpoot. Synclay: Interactive synthesis of his-tology images from bespoke cellular layouts. Medical Image Analysis , 2024. 1 [11] Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. In NeurIPS , 2021. 1, 3, 6, 7, 8, 12, 13 [12] Ruiwen Ding, Prateek Prasanna, Germ´ an Corredor, Cristian Barrera, Philipp Zens, Cheng Lu, Priya Velu, Patrick Leo, Niha Beig, Haojia Li, et al. Image analysis reveals molec-ularly distinct patterns of tils in nsclc associated with treat-ment outcome. NPJ precision oncology , 2022. 1 [13] Edelsbrunner, Letscher, and Zomorodian. Topological per-sistence and simplification. Discrete & Computational Ge-ometry , 2002. 3, 4, 12 [14] Herbert Edelsbrunner and John L Harer. Computational topology: an introduction . American Mathematical Society, 2022. 3, 4, 12 [15] Ben Fei, Zhaoyang Lyu, Liang Pan, Junzhe Zhang, Weidong Yang, Tianyue Luo, Bo Zhang, and Bo Dai. Generative dif-fusion prior for unified image restoration and enhancement. In CVPR , 2023. 3 [16] Pedro F Felzenszwalb and Daniel P Huttenlocher. Dis-tance transforms of sampled functions. Theory of computing ,2012. 5 [17] Robin Forman. Morse theory for cell complexes. Advances in mathematics , 1998. 3 [18] Maurice Fr´ echet. Sur la distance de deux lois de probabilit´ e. In Annales de l’ISUP , 1957. 6 [19] Rickard Br¨ uel Gabrielsson, Bradley J Nelson, Anjan Dwaraknath, and Primoz Skraba. A topology layer for ma-chine learning. In AISTATS , 2020. 3 [20] Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial networks. Commu-nications of the ACM , 2020. 1 [21] Simon Graham, Quoc Dang Vu, Shan E Ahmed Raza, Ayesha Azam, Yee Wah Tsang, Jin Tae Kwak, and Nasir Rajpoot. Hover-net: Simultaneous segmentation and clas-sification of nuclei in multi-tissue histology images. MedIA ,2019. 1 [22] Simon Graham, Mostafa Jahanifar, Ayesha Azam, Mo-hammed Nimir, Yee-Wah Tsang, Katherine Dodd, Emily Hero, Harvir Sahota, Atisha Tank, Ksenija Benes, et al. Lizard: A large-scale dataset for colonic nuclear instance segmentation and classification. In ICCV , 2021. 7, 12 [23] Alexandros Graikos, Srikar Yellapragada, Minh-Quan Le, Saarthak Kapse, Prateek Prasanna, Joel Saltz, and Dimitris Samaras. Learned representation-guided diffusion models for large-image generation. In CVPR , 2024. 1, 2, 3 [24] Arthur Gretton, Karsten M Borgwardt, Malte J Rasch, Bern-hard Sch¨ olkopf, and Alexander Smola. A kernel two-sample test. JMLR , 2012. 13 [25] Saumya Gupta, Xiaoling Hu, James Kaan, Michael Jin, Mut-shipay Mpoy, Katherine Chung, Gagandeep Singh, Mary Saltz, Tahsin Kurc, Joel Saltz, et al. Learning topological interactions for multi-class medical image segmentation. In 
+
+ECCV , 2022. 3 [26] Saumya Gupta, Dimitris Samaras, and Chao Chen. Topodif-fusionnet: A topology-aware diffusion model. arXiv preprint arXiv:2410.16646 , 2024. 3 [27] Saumya Gupta, Yikai Zhang, Xiaoling Hu, Prateek Prasanna, and Chao Chen. Topology-aware uncertainty for image seg-mentation. In NeurIPS , 2024. 3 [28] Robert Harb, Thomas Pock, and Heimo M¨ uller. Diffusion-based generation of histopathological whole slide images at a gigapixel scale. In WACV , 2024. 3 [29] Hongliang He, Jun Wang, Pengxu Wei, Fan Xu, Xiangyang Ji, Chang Liu, and Jie Chen. Toposeg: Topology-aware nu-clear instance segmentation. In ICCV , 2023. 1 20987 [30] Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilib-rium. In NeurIPS , 2017. 5, 7, 13 [31] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffu-sion probabilistic models. In NeurIPS , 2020. 1, 3 [32] Fabian H¨ orst, Moritz Rempe, Lukas Heine, Constantin Sei-bold, Julius Keyl, Giulia Baldini, Selma Ugurel, Jens Siveke, Barbara Gr¨ unwald, Jan Egger, et al. Cellvit: Vision trans-formers for precise cell segmentation and classification. Me-dIA , 2024. 1 [33] Jinhui Hou, Zhiyu Zhu, Junhui Hou, Hui Liu, Huanqiang Zeng, and Hui Yuan. Global structure-aware diffusion pro-cess for low-light image enhancement. In NeurIPS , 2024. 3[34] Le Hou, Ayush Agarwal, Dimitris Samaras, Tahsin M Kurc, Rajarsi R Gupta, and Joel H Saltz. Robust histopathology image analysis: To label or to synthesize? In CVPR , 2019. 1 [35] Xiaoling Hu. Structure-aware image segmentation with ho-motopy warping. In NeurIPS , 2022. 3 [36] Xiaoling Hu, Fuxin Li, Dimitris Samaras, and Chao Chen. Topology-preserving deep image segmentation. In NeurIPS ,2019. 3, 5 [37] Xiaoling Hu, Yusu Wang, Li Fuxin, Dimitris Samaras, and Chao Chen. Topology-aware segmentation using discrete morse theory. In ICLR , 2021. 3 [38] Xiaoling Hu, Dimitris Samaras, and Chao Chen. Learn-ing probabilistic topological representations using discrete morse theory. In ICLR , 2023. 3 [39] Michael Kerber, Dmitriy Morozov, and Arnur Nigmetov. Geometry helps to compare persistence diagrams. In 2016 Proceedings of the Eighteenth Workshop on Algorithm Engi-neering and Experiments (ALENEX) , 2016. 5 [40] Navid Alemi Koohbanani, Mostafa Jahanifar, Neda Zamani Tajadin, and Nasir Rajpoot. Nuclick: a deep learning frame-work for interactive segmentation of microscopic images. 
+
+MedIA , 2020. 1 [41] Th´ eo Lacombe, Marco Cuturi, and Steve Oudot. Large scale computation of means and clusters for persistence diagrams using optimal transport. In NeurIPS , 2018. 5 [42] D-S Lee, Juyong Park, KA Kay, Nicholas A Christakis, Zoltan N Oltvai, and A-L Barab´ asi. The implications of human metabolic network topology for disease comorbidity. 
+
+PNAS , 2008. 3 [43] Richard M Levenson, Yashbir Singh, Bastian Rieck, Quincy A Hathaway, Colleen Farrelly, Jennifer Rozenblit, Prateek Prasanna, Bradley Erickson, Ashok Choudhary, Gunnar Carlsson, et al. Advancing precision medicine: al-gebraic topology and differential geometry in radiology and computational pathology. Laboratory Investigation , 2024. 3 [44] Chen Li, Xiaoling Hu, Shahira Abousamra, Meilong Xu, and Chao Chen. Spatial diffusion for cell layout generation. In 
+
+MICCAI , 2024. 2, 3, 7, 8, 13 [45] Ming Li, Taojiannan Yang, Huafeng Kuang, Jie Wu, Zhaon-ing Wang, Xuefeng Xiao, and Chen Chen. Controlnet++: Improving conditional controls with efficient consistency feedback. In ECCV , 2024. 1 [46] Cheng Lu, Can Koyuncu, German Corredor, Prateek Prasanna, Patrick Leo, XiangXue Wang, Andrew Janowczyk, Kaustav Bera, James Lewis Jr, Vamsidhar Velcheti, et al. Feature-driven local cell graph (flock): new computational pathology-based descriptors for prognosis of lung cancer and hpv status of oropharyngeal cancers. 
+
+MedIA , 2021. 1 [47] Alessandro Lugli, Inti Zlobec, Martin D Berger, Richard Kirsch, and Iris D Nagtegaal. Tumour budding in solid can-cers. Nature Reviews Clinical Oncology , 2021. 1 [48] Seonghui Min, Hyun-Jic Oh, and Won-Ki Jeong. Co-synthesis of histopathology nuclei image-label pairs using a context-conditioned joint diffusion model. In ECCV , 2024. 1, 3 [49] James R Munkres. Elements of algebraic topology, 1984. 3, 4, 12 [50] Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models. In ICML , 2021. 1, 3, 13 [51] Hyun-Jic Oh and Won-Ki Jeong. Diffmix: Diffusion model-based data synthesis for nuclei segmentation and classifica-tion in imbalanced pathology image datasets. In MICCAI ,2023. 1, 3 [52] Tim Prangemeier, Christoph Reich, and Heinz Koeppl. Attention-based transformers for instance segmentation of cells in microstructures. In 2020 IEEE international con-ference on Bioinformatics and Biomedicine (BIBM) . IEEE, 2020. 1 [53] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨ orn Ommer. High-resolution image syn-thesis with latent diffusion models. In CVPR , 2022. 3 [54] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image segmentation. In MICCAI , 2015. 4, 7 [55] Chitwan Saharia, William Chan, Saurabh Saxena, Lala Li, Jay Whang, Emily L Denton, Kamyar Ghasemipour, Raphael Gontijo Lopes, Burcu Karagol Ayan, Tim Salimans, et al. Photorealistic text-to-image diffusion models with deep language understanding. In NeurIPS , 2022. 3 [56] Roberto Salgado, Carsten Denkert, S Demaria, N Sirtaine, F Klauschen, Giancarlo Pruneri, S Wienert, Gert Van den Eynden, Frederick L Baehner, Frederique P´ enault-Llorca, et al. The evaluation of tumor-infiltrating lymphocytes (tils) in breast cancer: recommendations by an international tils working group 2014. Annals of oncology , 2015. 1 [57] Joel Saltz, Rajarsi Gupta, Le Hou, Tahsin Kurc, Pankaj Singh, Vu Nguyen, Dimitris Samaras, Kenneth R Shroyer, Tianhao Zhao, Rebecca Batiste, et al. Spatial organization and molecular correlation of tumor-infiltrating lymphocytes using deep learning on pathology images. Cell reports , 2018. 1[58] Hanan Samet and Markku Tamminen. Efficient component labeling of images of arbitrary dimension represented by lin-ear bintrees. TPAMI , 1988. 13 [59] Denis Schapiro, Hartland W Jackson, Swetha Raghuraman, Jana R Fischer, Vito RT Zanotelli, Daniel Schulz, Charlotte Giesen, Ra´ ul Catena, Zsuzsanna Varga, and Bernd Boden-miller. histocat: analysis of cell phenotypes and interactions 20988 in multiplex image cytometry data. Nature methods , 2017. 1, 2 [60] Suprosanna Shit, Johannes C Paetzold, Anjany Sekuboyina, Ivan Ezhov, Alexander Unger, Andrey Zhylka, Josien PW Pluim, Ulrich Bauer, and Bjoern H Menze. cldice-a novel topology-preserving loss function for tubular structure seg-mentation. In CVPR , 2021. 3 [61] Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised learning using nonequilibrium thermodynamics. In ICML , 2015. 1, 3 [62] Jiaming Song, Chenlin Meng, and Stefano Ermon. Denois-ing diffusion implicit models. In ICLR , 2021. 3, 13 [63] Sasha E Stanton and Mary L Disis. Clinical significance of tumor-infiltrating lymphocytes in breast cancer. Journal for immunotherapy of cancer , 2016. 1 [64] Nico Stucki, Johannes C Paetzold, Suprosanna Shit, Bjoern Menze, and Ulrich Bauer. Topologically faithful image seg-mentation via induced matching of persistence barcodes. In 
+
+ICML , 2023. 3 [65] Christian Szegedy, Vincent Vanhoucke, Sergey Ioffe, Jon Shlens, and Zbigniew Wojna. Rethinking the inception ar-chitecture for computer vision. In CVPR , 2016. 6 [66] Fan Wang, Huidong Liu, Dimitris Samaras, and Chao Chen. Topogan: A topology-aware generative adversarial network. In ECCV , 2020. 3, 7, 13 [67] Fan Wang, Zhilin Zou, Nicole Sakla, Luke Partyka, Nil Rawal, Gagandeep Singh, Wei Zhao, Haibin Ling, Chuan Huang, Prateek Prasanna, et al. Topotxr: A topology-guided deep convolutional network for breast parenchyma learning on dce-mris. MedIA , 2024. 3 [68] Haotian Wang, Min Xian, and Aleksandar Vakanski. Ta-net: Topology-aware network for gland segmentation. In WACV ,2022. 3 [69] Jueqi Wang, Jacob Levman, Walter Hugo Lopez Pinaya, Petru-Daniel Tudosiu, M Jorge Cardoso, and Razvan Mari-nescu. Inversesr: 3d brain mri super-resolution using a latent diffusion model. In MICCAI . Springer, 2023. 1 [70] Frederick H Xu, Michael Gao, Jiong Chen, Sumita Garai, Duy Anh Duong-Tran, Yize Zhao, and Li Shen. Topology-based clustering of functional brain networks in an alzheimer’s disease cohort. AMIA Summits on Translational Science Proceedings , 2024. 3 [71] Meilong Xu, Xiaoling Hu, Saumya Gupta, Shahira Abousamra, and Chao Chen. Semi-supervised segmentation of histopathology images with noise-aware topological con-sistency. In ECCV , 2024. 3 [72] Srikar Yellapragada, Alexandros Graikos, Prateek Prasanna, Tahsin Kurc, Joel Saltz, and Dimitris Samaras. Pathldm: Text conditioned latent diffusion model for histopathology. In WACV , 2024. 1, 3 [73] Chenyu You, Weicheng Dai, Fenglin Liu, Yifei Min, Nicha C Dvornek, Xiaoxiao Li, David A Clifton, Lawrence Staib, and James S Duncan. Mine your own anatomy: Revisiting medical image segmentation with extremely limited labels. 
+
+TPAMI , 2024. 1 [74] Yinyin Yuan. Spatial heterogeneity in the tumor microen-vironment. Cold Spring Harbor perspectives in medicine ,2016. 2 [75] Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding conditional control to text-to-image diffusion models. In 
+
+ICCV , 2023. 1 [76] Shihao Zhao, Dongdong Chen, Yen-Chun Chen, Jianmin Bao, Shaozhe Hao, Lu Yuan, and Kwan-Yee K Wong. Uni-controlnet: All-in-one control to text-to-image diffusion models. In NeurIPS , 2024. 1 [77] Zixiang Zhao, Haowen Bai, Yuanzhi Zhu, Jiangshe Zhang, Shuang Xu, Yulun Zhang, Kai Zhang, Deyu Meng, Radu Timofte, and Luc Van Gool. Ddfm: denoising diffusion model for multi-modality image fusion. In ICCV , 2023. 3 20989
