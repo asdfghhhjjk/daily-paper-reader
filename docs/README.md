@@ -1,96 +1,107 @@
-<div class="dpr-home-notice-card">
-  <h3 class="dpr-home-notice-title">🚀 Start Here</h3>
-  <ul class="dpr-home-notice-list">
-    <li><a href="#/tutorial/README">使用教程</a></li>
-  </ul>
+<div class="dpr-home-notice-card dpr-home-panel">
+  <div class="dpr-home-notice-header dpr-home-panel-header">
+    <h3 class="dpr-home-notice-title">公告与更新</h3>
+    <a class="dpr-home-notice-tutorial" href="#/tutorial/README">使用教程 <span aria-hidden="true">›</span></a>
+  </div>
+  <div class="dpr-home-notice-entry">
+    <time class="dpr-home-notice-date" datetime="2026-07-20">07.20</time>
+    <div>
+      <strong class="dpr-home-notice-entry-title">反馈功能上线</strong>
+      <span class="dpr-home-notice-entry-summary">新增反馈功能，欢迎大家踊跃反馈各种建议，我们会第一时间查看并协调处理。</span>
+    </div>
+  </div>
+  <div class="dpr-home-notice-entry">
+    <time class="dpr-home-notice-date" datetime="2026-07-19">07.19</time>
+    <div>
+      <strong class="dpr-home-notice-entry-title">首页新增社区统计</strong>
+      <span class="dpr-home-notice-entry-summary">现在可以看到今天看论文的人数和项目加入人数。</span>
+    </div>
+  </div>
+  <div class="dpr-home-site-stats" data-dpr-site-stats hidden aria-live="polite">
+    <span>今天有 <strong class="dpr-home-site-stat-value" data-dpr-daily-readers>--</strong> 人在看论文</span>
+    <span class="dpr-home-site-stat-separator" aria-hidden="true">·</span>
+    <span>昨天有 <strong class="dpr-home-site-stat-value" data-dpr-yesterday-readers>--</strong> 人在看论文</span>
+    <span class="dpr-home-site-stat-separator" aria-hidden="true">·</span>
+    <span>已有 <strong class="dpr-home-site-stat-value" data-dpr-fork-count>--</strong> 人加入 Daily Paper Reader</span>
+    <span class="dpr-home-history">
+      <button type="button" class="dpr-home-history-trigger" data-dpr-history-trigger aria-label="查看最近 14 天阅读趋势"><span aria-hidden="true">🔍</span></button>
+      <span class="dpr-home-history-popover" data-dpr-history-popover role="tooltip">
+        <span class="dpr-home-history-header">近 14 天阅读趋势</span>
+        <span class="dpr-home-history-meta">
+          <span data-dpr-history-range>--</span>
+          <span>峰值 <strong data-dpr-history-peak>--</strong></span>
+        </span>
+        <span class="dpr-home-history-chart" data-dpr-history-chart></span>
+      </span>
+    </span>
+  </div>
 </div>
 
-## 每次日报
-- 最新运行日期：2026-07-07 ~ 2026-08-05
-- 运行时间：2026-08-05 07:10:45 UTC
-- 运行状态：成功
-- 本次总论文数：21
-- 精读区：9
-- 速读区：12
+<div class="dpr-home-dashboard-grid">
+<section class="dpr-home-dashboard-card dpr-home-report-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">2026-07-08 ~ 2026-08-06</span>
+      <h3 class="dpr-home-dashboard-title">今日汇总</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">共 19 篇</strong>
+  </div>
+  <dl class="dpr-home-dashboard-stats">
+    <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>8</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>11</dd></div>
+  </dl>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-06 07:44:12 UTC<br>状态：成功</p>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-brief-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">合并后生成</span>
+      <h3 class="dpr-home-dashboard-title">今日简报</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">AI</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<p>计算病理双满分突破：通过虚拟RNA与空间蛋白组学，无成本解析免疫治疗特征并锁定三阴性乳腺癌复发高风险生态位。</p>
+<p>下一步可关注空间转录组基因预测（COAST）与仅用低倍镜图像的弱监督语义分割等高效新思路。</p>
+  </div>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-deep-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">今日累计</span>
+      <h3 class="dpr-home-dashboard-title">精读推荐</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">8 篇</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Zero-Cost Virtual RNA: Approximating Immunotherapy Signatures via Cross-Modal WSI Retrieval">Zero-Cost Virtual RNA: Approximating Immunotherapy Signatures via Cross-Modal WSI Retrieval</span></li><li><span class="dpr-home-dashboard-paper-title" title="Spatial proteomics guided by H&amp;E-based AI reveals recurrence-risk niches in triple-negative breast cancer">Spatial proteomics guided by H&amp;E-based AI reveals recurrence-risk niches in triple-negative breast cancer</span></li><li><span class="dpr-home-dashboard-paper-title" title="Slide-Level Active Learning Reduces Annotation Burden in H&amp;E images">Slide-Level Active Learning Reduces Annotation Burden in H&amp;E images</span></li></ul>
+  </div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">immuno-topo <strong>7</strong></span><span class="dpr-home-dashboard-tag">path-xai-sel <strong>1</strong></span></div>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-skim-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">今日累计</span>
+      <h3 class="dpr-home-dashboard-title">速读推荐</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">11 篇</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="COAST: Context-Aware Differential Learning for Gene Expression Prediction in Spatial Transcriptomics">COAST: Context-Aware Differential Learning for Gene Expression Prediction in Spatial Transcriptomics</span></li><li><span class="dpr-home-dashboard-paper-title" title="TVT-PAPD: Pathology-Aware Prototype Distillation for Self-Supervised Whole Slide Image Classification">TVT-PAPD: Pathology-Aware Prototype Distillation for Self-Supervised Whole Slide Image Classification</span></li><li><span class="dpr-home-dashboard-paper-title" title="Toward Efficient Weakly Supervised Semantic Segmentation Using Only Low-Magnification Histopathological Images">Toward Efficient Weakly Supervised Semantic Segmentation Using Only Low-Magnification Histopathological Images</span></li></ul>
+  </div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">immuno-topo <strong>10</strong></span><span class="dpr-home-dashboard-tag">cellseg <strong>1</strong></span></div>
+</section>
+</div>
 
-### 今日简报（AI）
-近一个月追踪了21篇数字病理前沿论文，重点研读高效基础模型与肿瘤微环境分析的最新突破。  
-最值得关注的方向是：GigaPath-Flash系列实现整张切片与微环境的高效建模，以及基于肿瘤微环境特征解析弥漫大B细胞淋巴瘤的起源表型。  
-建议病理AI方向的研究者跟进多源掩码自编码器预训练，尝试将其应用于前列腺癌等分级任务中。
-- 详情：[/20260707-20260805/README](/20260707-20260805/README)
-
-### 精读区论文标签
-1. [Characterization of DLBCL cell of origin-phenotypes based on tumor microenvironment features](/20260707-20260805/2607.06129v1-characterization-of-dlbcl-cell-of-origin-phenotypes-based-on-tumor-microenvironment-features)  
-   标签：评分：9.0/10、query:tme-evidence
-   evidence：利用肿瘤微环境特征从组织病理学角度表征DLBCL亚型
-2. [GigaPath-Flash and GigaTIME-Flash: Efficient Pathology Foundation Models for Whole-Slide and Tumor Microenvironment Analysis](/20260707-20260805/2607.18218v1-gigapath-flash-and-gigatime-flash-efficient-pathology-foundation-models-for-whole-slide-and-tumor-microenvironment-analysis)  
-   标签：评分：9.0/10、query:profile
-   evidence：提出用于全切片和肿瘤微环境分析的高效病理基础模型
-3. [GigaPath-Flash and GigaTIME-Flash: Efficient Pathology Foundation Models for Whole-Slide and Tumor Microenvironment Analysis](/20260707-20260805/2607.18218v2-gigapath-flash-and-gigatime-flash-efficient-pathology-foundation-models-for-whole-slide-and-tumor-microenvironment-analysis)  
-   标签：评分：9.0/10、query:tme-evidence
-   evidence：全切片病理AI与肿瘤微环境分析模型
-4. [Weakly Supervised Instance-Level Gleason Pattern Estimation Using Primary and Secondary Labels](/20260707-20260805/2607.23594v1-weakly-supervised-instance-level-gleason-pattern-estimation-using-primary-and-secondary-labels)  
-   标签：评分：9.0/10、query:path-xai-sel
-   evidence：从WSI估计实例级Gleason模式，识别诊断相关区域
-5. [PathSelect: Sequential Token Selection for Whole Slide Pathology](/20260707-20260805/2607.23631v1-pathselect-sequential-token-selection-for-whole-slide-pathology)  
-   标签：评分：9.0/10、query:path-xai-sel
-   evidence：顺序令牌选择以识别WSI中的重要区域
-6. [A Hierarchical Framework for Graph Structure Learning in Histopathology Image Classification](/20260707-20260805/2607.26153v1-a-hierarchical-framework-for-graph-structure-learning-in-histopathology-image-classification)  
-   标签：评分：9.0/10、query:tme-evidence
-   evidence：通过两级图学习建模组织病理中细胞与组织的空间组织，用于全切片分类
-7. [SAFViT: Spatial Attention Fusion Gating for Vision Transformer-Based Nucleus Segmentation and Classification](/20260707-20260805/2607.27835v1-safvit-spatial-attention-fusion-gating-for-vision-transformer-based-nucleus-segmentation-and-classification)  
-   标签：评分：9.0/10、query:cellseg
-   evidence：针对数字病理提出空间注意力融合门控实现细胞核分割与分类联合模型
-8. [From Patches to Evidence Balls: Class-Conditioned Evidence Retrieval for Few-Shot Whole Slide Image Classification](/20260707-20260805/2608.01104v1-from-patches-to-evidence-balls-class-conditioned-evidence-retrieval-for-few-shot-whole-slide-image-classification)  
-   标签：评分：9.0/10、query:path-xai-sel
-   evidence：类别条件下的证据检索选择诊断相关斑块
-9. [SAGE: Semantic Explainability of Attention-Based Survival Models in Computational Pathology](/20260707-20260805/2608.02803v1-sage-semantic-explainability-of-attention-based-survival-models-in-computational-pathology)  
-   标签：评分：9.0/10、query:path-xai-sel
-   evidence：使用组织学概念为计算病理中的注意力生存模型提供语义、语言锚定的解释
-
-### 速读区论文标签
-1. [ProsMAE: Multi-Source MAE Pretraining for ISUP Grade Classification](/20260707-20260805/2607.08162v1-prosmae-multi-source-mae-pretraining-for-isup-grade-classification)  
-   标签：评分：8.0/10、query:tme-evidence
-   evidence：在多个WSI数据集上预训练MAE，用于前列腺癌ISUP分级分类
-2. [TVT-PAPD: Pathology-Aware Prototype Distillation for Self-Supervised Whole Slide Image Classification](/20260707-20260805/2607.10406v1-tvt-papd-pathology-aware-prototype-distillation-for-self-supervised-whole-slide-image-classification)  
-   标签：评分：8.0/10、query:path-xai-sel
-   evidence：学习病理特异性形态原型用于WSI分类
-3. [Demonstration of the common dual-channel feature decoupling characteristic of front-door mediation causal inference methods in whole-slice image classification](/20260707-20260805/2607.12376v1-demonstration-of-the-common-dual-channel-feature-decoupling-characteristic-of-front-door-mediation-causal-inference-methods-in-whole-slice-image-classification)  
-   标签：评分：8.0/10、query:path-xai-sel
-   evidence：因果推断MIL选择关键子图像用于WSI分类，提供可解释的补丁筛选。
-4. [Weakly Supervised Instance-Level Gleason Pattern Estimation Using Primary and Secondary Labels](/20260707-20260805/2607.23594v2-weakly-supervised-instance-level-gleason-pattern-estimation-using-primary-and-secondary-labels)  
-   标签：评分：8.0/10、query:path-xai-sel
-   evidence：用于WSI中格里森模式估计的多实例学习框架
-5. [PathScale-R1: Cross-scale Reasoning for Pathological Image Analysis](/20260707-20260805/2607.23794v1-pathscale-r1-cross-scale-reasoning-for-pathological-image-analysis)  
-   标签：评分：8.0/10、query:profile
-   evidence：整合全局组织结构与细胞形态进行跨尺度病理推理
-6. [MUL-T: Decoding Spatial Cellular Architecture in Multiplexed Tissue Images](/20260707-20260805/2607.28030v1-mul-t-decoding-spatial-cellular-architecture-in-multiplexed-tissue-images)  
-   标签：评分：8.0/10、query:profile
-   evidence：利用Transformer从多重染色图像的空间细胞结构中学习上下文细胞表示用于下游任务
-7. [Learning To Focus: Anatomy-Guided Attention Regularization for Medical Image Classification](/20260707-20260805/2607.10851v1-learning-to-focus-anatomy-guided-attention-regularization-for-medical-image-classification)  
-   标签：评分：7.0/10、query:path-xai-sel
-   evidence：利用分割基础模型的解剖形状先验引导注意力至诊断相关区域。
-8. [qZACH-ViT: Quantization-Aware Intrinsic Explanations with Recursive Attribution-Stabilized Optimization](/20260707-20260805/2607.15421v1-qzach-vit-quantization-aware-intrinsic-explanations-with-recursive-attribution-stabilized-optimization)  
-   标签：评分：7.0/10、query:path-xai-sel
-   evidence：为医学图像提供内在的patch级类别证据
-9. [HistoGPA: A Context-Conditioned Gene-Prior Attention Framework for Histology-Based Spatial Gene Expression Prediction](/20260707-20260805/2607.24364v1-histogpa-a-context-conditioned-gene-prior-attention-framework-for-histology-based-spatial-gene-expression-prediction)  
-   标签：评分：7.0/10、query:profile
-   evidence：利用跨补丁上下文和基因先验从H&E全切片预测空间基因表达
-10. [Beyond Classification: Pathology Foundation Models as Detection Encoders for Mitotic Figures](/20260707-20260805/2607.28007v1-beyond-classification-pathology-foundation-models-as-detection-encoders-for-mitotic-figures)  
-   标签：评分：7.0/10、query:tme-evidence
-   evidence：病理基础模型用作有丝分裂象检测的编码器，即细胞分类任务
-11. [PathView-Bench: Can Multimodal Large Language Models Achieve Fine-grained Multiscale Understanding of Pathology Images?](/20260707-20260805/2607.28318v1-pathview-bench-can-multimodal-large-language-models-achieve-fine-grained-multiscale-understanding-of-pathology-images)  
-   标签：评分：7.0/10、query:path-xai-sel
-   evidence：一个评估病理图像细粒度多尺度理解的基准
-12. [From Multi-Resolution Cells to Gigapixel Whole Slide Images Foundation Model for Computational Pathology](/20260707-20260805/2608.03508v1-from-multi-resolution-cells-to-gigapixel-whole-slide-images-foundation-model-for-computational-pathology)  
-   标签：评分：6.0/10、query:profile
-   evidence：分层聚合多分辨率细胞到WSI特征的计算病理基础模型
-
-
-<div class="dpr-home-promo-card">
-  <h3 class="dpr-home-promo-title">💬 社区与支持</h3>
-  <ul class="dpr-home-promo-list">
-    <li>欢迎 Star / Fork / Issue / PR</li>
-    <li>QQ群：583867967（欢迎交流，已有：1151人）</li>
-  </ul>
+<div class="dpr-home-promo-card dpr-home-panel">
+  <div class="dpr-home-panel-header">
+    <h3 class="dpr-home-promo-title">社区与支持</h3>
+  </div>
+  <p class="dpr-home-promo-copy">欢迎通过 Star、Fork、Issue 或 PR 一起完善 Daily Paper Reader。</p>
+  <div class="dpr-home-promo-meta">
+    <span>QQ群 <strong>583867967</strong></span>
+    <span class="dpr-home-promo-separator" aria-hidden="true">·</span>
+    <span>已有 <strong>1,491</strong> 人参与交流</span>
+  </div>
 </div>
