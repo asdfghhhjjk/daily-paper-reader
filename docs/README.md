@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-07-08 ~ 2026-08-06</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-07</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 19 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 0 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>8</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>11</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>0</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>0</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-06 07:44:12 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-07 00:49:56 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,8 +62,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>计算病理双满分突破：通过虚拟RNA与空间蛋白组学，无成本解析免疫治疗特征并锁定三阴性乳腺癌复发高风险生态位。</p>
-<p>下一步可关注空间转录组基因预测（COAST）与仅用低倍镜图像的弱监督语义分割等高效新思路。</p>
+<p>今日无新推荐，系统未产出可展示论文。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -72,12 +71,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">8 篇</strong>
+    <strong class="dpr-home-dashboard-count">0 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Zero-Cost Virtual RNA: Approximating Immunotherapy Signatures via Cross-Modal WSI Retrieval">Zero-Cost Virtual RNA: Approximating Immunotherapy Signatures via Cross-Modal WSI Retrieval</span></li><li><span class="dpr-home-dashboard-paper-title" title="Spatial proteomics guided by H&amp;E-based AI reveals recurrence-risk niches in triple-negative breast cancer">Spatial proteomics guided by H&amp;E-based AI reveals recurrence-risk niches in triple-negative breast cancer</span></li><li><span class="dpr-home-dashboard-paper-title" title="Slide-Level Active Learning Reduces Annotation Burden in H&amp;E images">Slide-Level Active Learning Reduces Annotation Burden in H&amp;E images</span></li></ul>
+<p class="dpr-home-dashboard-empty">今日暂无推荐。</p>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">immuno-topo <strong>7</strong></span><span class="dpr-home-dashboard-tag">path-xai-sel <strong>1</strong></span></div>
+
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -85,12 +84,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">11 篇</strong>
+    <strong class="dpr-home-dashboard-count">0 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="COAST: Context-Aware Differential Learning for Gene Expression Prediction in Spatial Transcriptomics">COAST: Context-Aware Differential Learning for Gene Expression Prediction in Spatial Transcriptomics</span></li><li><span class="dpr-home-dashboard-paper-title" title="TVT-PAPD: Pathology-Aware Prototype Distillation for Self-Supervised Whole Slide Image Classification">TVT-PAPD: Pathology-Aware Prototype Distillation for Self-Supervised Whole Slide Image Classification</span></li><li><span class="dpr-home-dashboard-paper-title" title="Toward Efficient Weakly Supervised Semantic Segmentation Using Only Low-Magnification Histopathological Images">Toward Efficient Weakly Supervised Semantic Segmentation Using Only Low-Magnification Histopathological Images</span></li></ul>
+<p class="dpr-home-dashboard-empty">今日暂无推荐。</p>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">immuno-topo <strong>10</strong></span><span class="dpr-home-dashboard-tag">cellseg <strong>1</strong></span></div>
+
 </section>
 </div>
 
