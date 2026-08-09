@@ -1,0 +1,429 @@
+Title: GigaMoE: Sparsity-Guided Mixture of Experts for Efficient Gigapixel Object Detection
+
+URL Source: https://ojs.aaai.org/index.php/AAAI/article/download/38810/42772
+
+Number of Pages: 9
+
+Markdown Content:
+# GigaMoE: Sparsity-Guided Mixture of Experts for Efficient Gigapixel Object Detection 
+
+# Xiang Li 1,2* , Wenxi Li 3,6* , Yuetong Wang 4, Chenyang Lyu 7,Haozhe Lin 1, Guiguang Ding 1,5† , Yuchen Guo 1† 
+
+> 1
+
+Beijing National Research Center for Information Science and Technology, Tsinghua University, Beijing, China 
+
+> 2
+
+Department of Automation, Tsinghua University, Beijing, China 
+
+> 3
+
+KLATASDS-MOE, School of Statistics, East China Normal University, Shanghai, China 
+
+> 4
+
+Xiuzhong College,Tsinghua University, Beijing, China 
+
+> 5
+
+School of Software, Tsinghua University, Beijing, China 
+
+> 6
+
+Zhuoxi Lab, Hangzhou, China 
+
+> 7
+
+AI Business, Alibaba International Digital Commerce, Hangzhou, China 
+
+{xiang-li22, wangyuet23 }@mails.tsinghua.edu.cn, {linhz, dinggg }@tsinghua.edu.cn, wxli@sfs.ecnu.edu.cn, lyuchenyang.dcu@gmail.com, yuchen.w.guo@gmail.com 
+
+Abstract 
+
+Object detection in High-Resolution Wide (HRW) shots, or gigapixel images, presents unique challenges due to ex-treme object sparsity and vast scale variations. State-of-the-art methods like SparseFormer have pioneered sparse pro-cessing by selectively focusing on important regions, yet they apply a uniform computational model to all selected regions, overlooking their intrinsic complexity differences. This leads to a suboptimal trade-off between performance and efficiency. In this paper, we introduce GigaMoE, a novel backbone architecture that pioneers adaptive computation for this domain by replacing the standard Feed-Forward Net-works (FFNs) with a Mixture-of-Experts (MoE) module. Our architecture first employs a shared expert to provide a robust feature baseline for all selected regions. Upon this founda-tion, our core innovation—a novel Sparsity-Guided Routing mechanism—insightfully repurposes importance scores from the sparse backbone to provide a “computational bonus,” dy-namically engaging a variable number of specialized experts based on content complexity. The entire system is trained ef-ficiently via a loss-free load-balancing technique, eliminating the need for cumbersome auxiliary losses. Extensive experi-ments show that GigaMoE sets a new state-of-the-art on the PANDA benchmark, improving detection accuracy by 1.1% over SparseFormer while simultaneously reducing the com-putational cost (FLOPs) by a remarkable 32.3%. 
+
+# Introduction 
+
+Object detection, a fundamental task in computer vision, aims to identify and localize objects of interest within an im-age. Over the past decade, the field has seen great progress, with methods developed on benchmarks like MS COCO (Lin et al. 2014) achieving remarkable performance, with 
+
+> *
+
+These authors contributed equally. 
+
+> †
+
+These authors are co-corresponding authors. Copyright © 2026, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 22.38 22.38 46.45 21.98 6.88 6.88 020 40 60 80 SparseFormer GigaMoE GFLOPs Other Total FFN/MoE Total Attention 7.22 7.45 23.89 7.89 3.46 3.58 11.47 3.47 0510 15 20 25 Stage0 Stage1 Stage2 Stage3 GFLOPs FFN (SparseFormer) MoE (GigaMoE) 
+
+Figure 1: FLOPs analysis of GigaMoE versus SparseFormer. (a) Backbone FLOPs breakdown. Our analysis identifies the Feed-Forward Network (FFN) as the primary compu-tational bottleneck in SparseFormer, accounting for a sub-stantial 61.4% of the backbone’s FLOPs. Our adaptive MoE module targets this specific component, reducing its com-putational cost by a remarkable 52.7% . (b) Stage-by-stage comparison illustrating that our MoE design is consistently more efficient than the standard FFN across all stages of the backbone. iconic architectures evolving from R-CNN variants (Gir-shick et al. 2014; Girshick 2015; Ren et al. 2015) to the widely-adopted YOLO series (Redmon et al. 2016; Redmon and Farhadi 2018; Ge et al. 2021; Wang et al. 2024a; Tian, Ye, and Doermann 2025), and Transformer-based mod-els (Carion et al. 2020; Zhang et al. 2023). These successes, however, are predominantly rooted in “close-up” scenarios, where images typically capture a limited field of view with objects occupying a significant portion of the frame. The rapid advancement of imaging systems has propelled a new frontier: object detection in High-Resolution Wide (HRW) shots (Li et al. 2024b,d; Fan et al. 2022; Chen et al. 2022; Lin et al. 2024b; Ma et al. 2024; Liu et al. 2024; Li et al. 2024c). Often referred to as gigapixel imaging, this paradigm analyzes images of immense scale, where a sin-The Fortieth AAAI Conference on Artificial Intelligence (AAAI-26) 
+
+17553 gle frame can encapsulate vast scenes into billions of pixels, introducing unique challenges. These advances are comple-mented by progress in related vision tasks such as cross-modal retrieval (Wang et al. 2017) and video understand-ing (Gao et al. 2017), which also benefit from efficient large-scale visual analysis. Detecting objects in HRW shots by simply applying meth-ods designed for close-up images proves ineffective. The unique characteristics of HRW data, as found in benchmarks like PANDA (Wang et al. 2020), present a distinct set of ob-stacles. The most significant of these is extreme informa-tion sparsity . With objects of interest often occupying less than 5% of the total image area, detectors must sift through a veritable “sea of background noise”. This leads to a high rate of false positives in empty regions and, conversely, false negatives where small or low-contrast objects are missed. To address the inefficiency born from sparsity, the paradigm has shifted towards sparse processing. For HRW shots, methods like SparseFormer (Li et al. 2024d,a) have pioneered the concept of spatial selection. They divide the full image into windows and employ a lightweight scoring network to select only the most important regions for sub-sequent feature extraction, effectively reducing computation in the spatial dimension. However, our analysis, illustrated in Figure 1, reveals that even for these sparsely selected regions, a new com-putational bottleneck emerges. The Feed-Forward Network (FFN) accounts for the vast majority of the computational load ( 61.4% ) within the backbone. This inspired us to ques-tion whether the principle of sparsity could be extended from the spatial dimension to the computational dimension itself. We posit that the uniform application of a dense FFN to all selected windows—regardless of their intrinsic complex-ity—is suboptimal. A window with simple content does not require the same computational power as one with dense, complex objects. To solve this, we propose to dynamically allocate the computational resources of the FFN. We introduce Gig-aMoE, a novel architecture designed to dynamically al-locate computational resources precisely where they are needed most. Our core conceptual leap is to replace the standard, monolithic Feed-Forward Network (FFN) layers within the vision transformer backbone with a Mixture-of-Experts (MoE) module. This architectural shift enables a heterogeneous, on-demand application of computational power. Instead of forcing every selected region through the same fixed-size network, GigaMoE provides a collection of specialized expert networks and allows a dynamic router to decide how many experts should be engaged for each spe-cific region based on its content. The key to enabling this adaptive computation is our Sparsity-Guided Routing mechanism, which orchestrates the collaboration between shared and specialized experts. Inspired by recent advances in MoE architectures, our model first routes all selected windows through a single, shared ex-pert . The designated role of this expert is to capture founda-tional knowledge and extract common feature patterns that are universally beneficial across all regions. By compressing this shared knowledge into a dedicated component, we allow our other experts to become more specialized. The core of our innovation is how we engage these spe-cialized experts. We insightfully repurpose the importance scores from the ScoreNet —a lightweight network used by methods like SparseFormer (Li et al. 2024d) to guide region selection—to orchestrate a computational bonus . Based on this score, our novel router dynamically allocates an addi-tional number of these specialized experts , from zero for the simplest regions up to three for the most complex, an idea that resonates with recent findings that more complex inputs can benefit from more experts (Huang et al. 2024). This design allows the model to first build a baseline under-standing of all important regions via the shared expert, and then dedicate more powerful, specialized resources only to the areas that require deeper, context-specific analysis. The efficacy of our approach is validated through exten-sive experiments on the PANDA benchmark, where Gig-aMoE significantly improves detection accuracy by 1.1% while reducing computational costs (FLOPs) by 32.3% over the state-of-the-art. Our contributions are threefold: • We introduce GigaMoE, a new backbone for gigapixel object detection that, to our knowledge, is the first to leverage Mixture-of-Experts for adaptive, window-wise computational allocation in this domain. • We propose a novel and efficient Sparsity-Guided Rout-ing mechanism that creates a synergistic link between sparse region selection and adaptive expert allocation, re-purposing existing signals to guide computation. • We demonstrate through extensive experiments that Gig-aMoE sets a new state-of-the-art on the challenging PANDA benchmark, proving the efficacy and efficiency of our adaptive approach over existing methods. 
+
+# Related Work 
+
+Object Detection for Close-up Shots 
+
+Object detection has matured significantly on benchmarks of close-up shots, such as PASCAL VOC (Everingham et al. 2010) and MS COCO (Lin et al. 2014). Methodologies have continuously evolved from classic two-stage and one-stage paradigms (Ren et al. 2015; Cai and Vasconcelos 2018; Red-mon et al. 2016; Liu et al. 2016; Lin et al. 2017) to modern Transformer-based architectures (Carion et al. 2020; Zhang et al. 2023), with various architectural innovations improv-ing feature representation (Ding et al. 2019), achieving re-markable performance. These methods, however, excel in standard “close-up” scenarios where objects occupy a sig-nificant portion of the frame. Their core designs are funda-mentally challenged when scaling to the vast and sparse na-ture of gigapixel images, necessitating a different approach. 
+
+High-Resolution Wide (HRW) Shot Detection 
+
+The emergence of HRW detection, benchmarked by datasets like PANDA (Wang et al. 2020), introduced challenges of extreme scale and computational cost. The quadratic com-plexity of standard Vision Transformers (Dosovitskiy et al. 2021) makes them impractical for such large images. To 17554 address this, hierarchical backbones with windowed atten-tion were proposed to achieve linear complexity (Liu et al. 2021). Building on this, the dominant strategy shifted to-wards sparse processing, a concept broadly explored in vi-sion transformers to improve efficiency through dynamic token selection (Rao et al. 2021; Meng et al. 2022) and efficient representation learning (Shen et al. 2015, 2018), where, in the context of HRW detection, only a small subset of salient regions are selected for the expensive backbone computation (Li et al. 2024b; Yang, Huang, and Wang 2022; Li et al. 2024d). Although these methods effectively reduce spatial redundancy, they still apply a uniform computational workload to all selected regions. This uniform processing overlooks the varying complexity of different regions, creat-ing a efficiency bottleneck that our work aims to resolve. 
+
+Mixture-of-Experts for Conditional Computation 
+
+The Mixture-of-Experts (MoE) paradigm enables condi-tional computation by activating only a subset of expert subnetworks, scaling model capacity more efficiently than dense models. The router design is an active research area, with strategies ranging from top-k gating to more dynamic expert selection schemes (Huang et al. 2024; Yang et al. 2024; Nie et al. 2021; Zheng et al. 2024). While MoE has been successfully applied in NLP and vision for classifica-tion (Riquelme et al. 2021; He et al. 2021) and multimodal learning (Lin et al. 2024a), and in object detection (Oksuz et al. 2023), its application to gigapixel object detection re-mains unexplored. 
+
+# Method 
+
+Our work introduces GigaMoE, a novel backbone architec-ture designed for efficient and adaptive object detection in gigapixel images. An ideal vision model should not only focus on salient regions but also allocate computational re-sources adaptively based on content complexity. To this end, GigaMoE enhances the sparse processing paradigm by intro-ducing a dynamic, on-demand computational mechanism. The overall architecture is illustrated in Figure 2. 
+
+Overall Architecture 
+
+Inspired by Swin Transformer (Liu et al. 2021), GigaMoE is built upon a hierarchical structure consisting of four stages, which produce feature maps at different scales. Each stage begins with a Patch Merging layer that downsamples the fea-ture map by a factor of 2, followed by a series of sequential blocks. This hierarchical design allows the model to capture features at various resolutions, which is crucial for detecting objects of vastly different sizes in HRW images. Each stage is centered around two distinct types of atten-tion blocks designed to capture features at different scales: a global attention block and a local attention block. The Global Attention block, following the design of Sparse-Former (Li et al. 2024d), operates on aggregated features from all windows to efficiently capture coarse-grained, long-range dependencies. Following the global block, our novel GigaMoE Local Block processes the features to extract fine-grained details. Unlike SparseFormer, which applies a uni-form FFN to all selected regions, our primary contribution is the redesign of this local processing step. We replace the standard FFN with a Mixture-of-Experts (MoE) module, en-abling adaptive, complexity-aware computation. This key architectural shift allows GigaMoE to move beyond mere selective processing to true adaptive processing, allocating more computational power to complex regions while con-serving resources on simpler ones. 
+
+Sparse Processing Foundation 
+
+Our approach is built upon the sparse processing framework pioneered by SparseFormer (Li et al. 2024d), which first en-riches local features with global context and then identifies information-rich regions for further processing. 
+
+Global Attention on Aggregated Features. To comple-ment the fine-grained local processing, the architecture first incorporates a global attention mechanism to efficiently model long-range dependencies. This is achieved in three steps. First, Feature Aggregation generates a coarse repre-sentation ¯z of the input feature map z by averaging the to-kens within each window of size M × M .
+
+¯zx′,y ′ = 1
+
+M 2 
+
+> M−1
+
+X 
+
+> ∆x=0
+> M−1
+
+X
+
+> ∆y=0
+
+zx+∆ x,y +∆ y (1) where (x′, y ′) are the coordinates in the aggregated feature map, corresponding to the top-left coordinate (x, y ) of a window in the original feature map z. Second, a standard Multi-Head Self-Attention (MSA) module is applied to the aggregated feature map ¯z to perform Window-level Global Attention . Finally, the output of the global attention is up-sampled back to the original resolution and used to update the original feature map via a residual connection: 
+
+z ← z + Upsample (MSA (LN (¯ z))) (2) 
+
+Variance-based Scoring. After the feature map z is updated with global context, a lightweight ScoreNet is employed to differentiate salient regions. To do this, a coarse represen-tation, ˆz, is first calculated by averaging features within each window of the updated map. The ScoreNet , which is an MLP, then processes the residual z − ˆz, feeding its output to a SoftMax function to generate an importance score for each window: ScoreNet (z, ˆz) = SoftMax (MLP (z − ˆz)) (3) 
+
+Window Sparsification. Based on the scores from 
+
+ScoreNet , we apply a top-k selection strategy to create a sparse set of windows. This selection can be formally ex-pressed as: 
+
+Zsparse = Mselect · Z (4) where Z ∈ RN ×D represents the features of all N win-dows, Mselect ∈ { 0, 1}K×N is a one-hot selection matrix that chooses the top K windows, and Zsparse ∈ RK×D are the features for resulting sparse windows. This allows subse-quent local operations to focus only on these salient regions. 
+
+GigaMoE Local Block for Adaptive Computation 
+
+As illustrated in the lower panel of Figure 2, the GigaMoE Local Block operates on the sparse set of windows identified 17555 48 44 ×× WH CWH ×× 44 CWH 288 ×× CWH 416 16 ×× CWH 832 32 ××
+
+> Patch Merging Local Block Global Block  ×6
+> ×6Patch Merging Local Block Global Block  ×2
+> ×2Patch Partition Local Block Global Block Linear Embedding
+> ×2
+> ×2Patch Merging Local Block Global Block  ×2
+> ×2
+
+## GigaMoE FFN Selected Windows Expert Pool 
+
+> Shared
+> Expert
+
+Routed Feature map       
+
+> Specialized
+> Expert 1
+> Specialized
+> Expert 2
+> Specialized
+> Expert 3 k=3 k=2 k=2 k=1 k=0 Router Heuristic Mapping
+> 0.190 0.113 0.018 0.252 0.248 0.090 0.021 0.010 0.058
+> ScoreNet Windows Sparsification
+
+Window Scores 
+
+## Local Attention Feature map z z updated by attention  
+
+> 0.190 0.113 0.248 0.252 0.090
+> 3WH××
+
+Figure 2: The overall architecture of GigaMoE, composed of four hierarchical stages.The lower panel details our core contribu-tion. The ScoreNet first generates scores to select salient windows for local attention (highlighted with a red border). These scores then guide a Heuristic Mapping to determine the number of experts ( k) for each window. Finally, a router selects the specific k experts. As detailed in the diagram’s legend, simple geometric shapes are used to represent different experts. in the previous stage ( Zsparse ). It performs intensive local computation in two sequential steps: local window attention and our adaptive GigaMoE FFN. 
+
+Local Window Attention. The features corresponding to the selected sparse windows ( Zsparse ) are first processed by a standard Multi-Head Self-Attention (MSA) module. We use the shifted-window attention mechanism from Swin Transformer (Liu et al. 2021) to enable interaction both within and across the most salient local regions, resulting in fine-grained feature refinement. 
+
+GigaMoE FFN with Sparsity-Guided Routing. The out-put of the attention module is then passed to our novel Gig-aMoE FFN, which replaces the standard, monolithic FFN. It comprises a single shared expert (Eshared ) and a set of Ns
+
+specialized experts ({Ei}Ns
+
+> i=1
+
+). Each expert, both shared and specialized, is a standard two-layer Feed-Forward Network (FFN). Our core design principle is to partition the computational capacity of a sin-gle, large FFN from a baseline model (like SparseFormer) across our multiple, smaller experts. Specifically, if the base-line FFN has a hidden dimension of Cf f n , and our model is configured to use a shared expert and route to a maximum of kmax specialized experts, we set the hidden dimension of each of our experts to Cexpert = Cf f n /(kmax + 1) . This design ensures that even in the most computationally inten-sive case (when a window is processed by the shared expert and all kmax specialized experts), the total FLOPs remain comparable to that of the original monolithic FFN, thereby enabling adaptive computation without a significant increase in theoretical peak cost. The key innovation here is our Sparsity-Guided Routing 
+
+mechanism, which repurposes the importance scores from the ScoreNet to dynamically control the computational budget. This process, depicted in Figure 2, involves two steps: a Heuristic Mapping to determine the number of ex-perts, followed by a router to select them. Let S = {sw}Kw=1 
+
+be the set of importance scores for the K sparsely selected windows. We first rank these windows in descending or-der of their scores. The core of our heuristic is a prede-fined distribution vector P = (p0, p 1, . . . , p kmax ) where 
+
+Pkmax  
+
+> i=0
+
+pi = 1, and pi represents the desired proportion of windows to be assigned i specialized experts. Based on this, the number of experts kw for a window w with rank 
+
+rw ∈ { 1, . . . , K } is determined by the following assignment rule: 
+
+kw = j if K
+
+> kmax
+
+X
+
+> i=j+1
+
+pi < r w ≤ K
+
+> kmax
+
+X
+
+> i=j
+
+pi (5) For our best-performing model, we use kmax = 3 and a distribution of P = (0 .4, 0.3, 0.2, 0.1) , which assigns 3 ex-perts to the top 10% of windows, 2 experts to the next 20%, 1 expert to the next 30%, and no specialized experts to the bottom 40%. This creates a powerful synergy: the same sig-nal used to decide what to process is also used to decide how much computation to allocate. This design allows the model to dedicate more powerful, specialized resources only to the areas that require deeper analysis, a behavior qualitatively confirmed by the visualizations in Figure 3. While the number of experts kw is determined by this heuristic mapping, the choice of which kw experts to use is determined by a lightweight router G, implemented as a single linear layer. For each window’s feature tensor zw
+
+from the attention module, the router first computes its layer-normalized representation z′ 
+
+> w
+
+= LN (zw) and then calculates logits over all Ns specialized experts based on its mean-17556 Figure 3: Visualization of first-stage expert allocation for GigaMoE on the PANDA dataset. The original images (top) are shown with their corresponding expert allocation maps overlaid (bottom), where warmer colors (from blue to green) signify a higher computational budget. GigaMoE intelligently allocates computational resources to complex regions, such as dense crowds, vehicles, and richly-textured foliage. It also focuses on object edges, including building facades, road curbs, and traffic markings. In contrast, semantically simple areas like the sky and open ground receive minimal resources (deep blue). pooled features ¯z′ 
+
+> w
+
+= mean (z′
+
+> w
+
+):
+
+gw = G(¯ z′
+
+> w
+
+) (6) The final output for the window, yw, is the sum of the shared expert’s output and the weighted sum of the top kw selected specialized experts’ outputs, both of which take the normal-ized features z′ 
+
+> w
+
+as input: 
+
+yw = Eshared (z′
+
+> w
+
+) + X  
+
+> i∈Top-k (gw,k w)
+
+SoftMax (gw)i · Ei(z′
+
+> w
+
+)
+
+(7) 
+
+Online Expert Load Balancing 
+
+A common challenge in training MoE models is “expert col-lapse,” where the router disproportionately favors a few ex-perts, leaving others under-trained. The standard solution is an auxiliary load-balancing loss, which, however, introduces an extra hyperparameter that is often difficult to tune and can interfere with the primary training objective. To circumvent this, we employ a more direct and elegant online, bias-based load balancing mechanism, inspired by recent work (Wang et al. 2024b). Rather than modifying the loss function, this method introduces a learnable bias term bi for each spe-cialized expert Ei. This bias is dynamically adjusted during training based on real-time usage statistics. If an expert is underutilized, its bias is increased to make it a more attrac-tive choice for the router, and vice-versa, thereby directly encouraging balanced utilization without complicating the loss landscape. Building upon this mechanism, we introduce a simple yet effective enhancement: an adaptive bias update rate . We posit that a fixed update rate is suboptimal. In the early stages of training, a larger update rate is beneficial to quickly correct severe load imbalances. Conversely, in later stages, a smaller rate is preferable for fine-tuning the expert load without disrupting the learned routing patterns. To achieve this, we make the update rate u decay over the course of training, from an initial value uinit to zero. We implement Algorithm 1: Online Expert Load Balancing with Adaptive Update Rate. 
+
+Input : MoE model θ, training batch iterator B, initial bias update rate uinit , total training steps Tmax , number of spe-cialized experts Ns. 
+
+> 1:
+
+Initialize per-expert bias bi = 0 for i = 1 , . . . , N s. 
+
+> 2:
+
+Initialize step counter t = 0 . 
+
+> 3:
+
+for a batch {(xw, y w)}w in B do  
+
+> 4:
+
+t ← t + 1 . 
+
+> 5:
+
+Calculate decay factor αt based on a schedule (e.g., linear: 1 − t/T max , or cosine).  
+
+> 6:
+
+Set current update rate ut = uinit · αt. 
+
+> 7:
+
+Calculate gating scores gw for each window w. 
+
+> 8:
+
+Select top-kw experts for each window w based on the biased scores gw + b. 
+
+> 9:
+
+Count the number of windows ci assigned to each ex-pert Ei, and the average number ¯c. 
+
+> 10:
+
+Calculate the load violation error ei = ¯ c − ci. 
+
+> 11:
+
+Update bias bi ← bi + ut · sign (ei). 
+
+> 12:
+
+end forOutput : Trained model θ, updated bias b.two decay schedules based on the current training step t and total steps Tmax : a linear decay, where the rate is scaled by 
+
+(1 − t/T max ), and a cosine annealing schedule, where it is scaled by 12 (1 + cos( t·πTmax )) . The update process is detailed in Algorithm 1. This method leads to more stable and effi-cient training of the MoE module. 
+
+# Experiments 
+
+Main Results 
+
+Datasets. Our evaluation is on the public PANDA bench-mark (Wang et al. 2020), which is the first human-centric gigapixel-level dataset. It contains 18 scenes with over 15,974.6k bounding boxes annotated. Specifically, there are 13 scenes for training and 5 scenes for testing. 17557 Evaluation Metrics. We report the FLOPs and standard COCO metrics, including AP total , AP S (< 96 2 pixels), AP M (96 2 – 288 2 pixels), and AP L (> 288 2 pixels). For a fair efficiency evaluation, the GFLOPs for all methods are calculated based on the average computational cost to pro-cess a 1280 × 800 image window. Furthermore, we report GFLOPs for both foreground (F) and background (B) re-gions to specifically demonstrate the efficiency of our adap-tive computation approach in reducing redundant calcula-tions on non-salient areas. 
+
+Implementation Details. We implement all detectors us-ing the MMDetection toolbox (Chen et al. 2019). To en-sure a fair comparison against baseline backbones such as SparseFormer and Swin Transformer, all models are con-figured with identical architectural hyperparameters (e.g., depths, embedding dimensions, number of multi-heads) when paired with the same detection head. Following stan-dard practice, all models are trained from scratch for 36 epochs. The code for our model and experiments will be made available in the supplementary material. 
+
+Comparison with State-of-the-Art. Table 1 compares our model with state-of-the-art methods on the challenging PANDA benchmark, unequivocally demonstrating the supe-riority of our approach. When paired with DINO head, Gig-aMoE not only achieves a new state-of-the-art AP of 79.1% ,surpassing the previous best (SparseFormer) by a significant margin of 1.1% , but also does so with vastly greater effi-ciency. Our model requires only 51.24 GFLOPs , a remark-able 32.3% reduction in computational cost compared to SparseFormer’s 75.71 GFLOPs. This gain underscores the power of our adaptive computation. Notably, our approach also yields a considerable improvement in small object de-tection (AP S ), a critical challenge in this domain. A similar trend is observed with the Dynamic-Head, where GigaMoE improves performance while cutting GFLOPs by 18.1%. As illustrated in the Pareto frontier plot in Figure 4, our Gig-aMoE models, represented by the green and orange bub-bles in the top-left, consistently establish a more favorable accuracy-efficiency trade-off, pushing the boundary towards higher accuracy at a significantly lower computational cost. 
+
+Ablation Studies 
+
+Expert Allocation Strategy. We ablate our dynamic ex-pert allocation strategy in Table 2, which rigorously quanti-fies its benefits. First, we establish baselines by forcing all windows to use a fixed number of specialized experts (from 0 to 3), in addi-tion to the shared expert. As expected, using more experts consistently improves performance, but at a steep compu-tational cost. The “Shared + 3 Specialized” configuration reaches a peak AP of 79.4%, but requires 74.03 GFLOPs. Conversely, relying solely on the shared expert (“Shared Expert Only”) causes a severe performance drop to 74.3% AP, confirming that the specialized experts are essential for achieving high accuracy. Against these baselines, our adaptive strategies demon-strate a far superior trade-off. Our main configuration, the GigaDet Dynamic-Head+Swin-T Dynamic-Head+DEG Dynamic-Head+SparseFormer            
+
+> DINO+GigaMoE
+> DINO+Swin-T DINO+DEG DINO+SparseFormer Dynamic-Head +GigaMoE
+> DINO+SparseNet 50 55 60 65 70 75 80 85 40 50 60 70 80 90 100 110 120 130 140 150
+> APtotal GFLOPs
+
+Figure 4: FLOPs vs. AP on PANDA. The center of bubbles represents the model’s performance, while the radius is pro-portional to its GFLOPs. Our GigaMoE models, labeled in red, achieve a superior accuracy-efficiency trade-off. “Inverted Pyramid,” which allocates more experts to higher-scoring windows, achieves an AP of 79.1% —statistically on par with the expensive “Shared + 3 Specialized” base-line—while requiring only 51.24 GFLOPs . This represents a massive 30.8% reduction in computation for a negligible 0.3% AP difference. This result substantiates our claim that GigaMoE achieves the performance of a much larger model at a fraction of the cost. 
+
+Effectiveness of GigaMoE Components. Table 3 dissects the contribution of each GigaMoE component. (a) We start with a strong sparse processing baseline (SparseFormer), which uses a standard FFN and achieves a competitive 78.0% AP. (b) Simply replacing the FFN with a traditional MoE module that routes every window to a fixed number of experts (top-2) yields a marginal performance gain (+0.1% AP) but at a significantly lower computational cost (-16.9% GFLOPs), demonstrating the inherent efficiency of the MoE structure. (c) The introduction of our core contribution, the 
+
+Sparsity-Guided Routing mechanism, marks a significant leap. By dynamically allocating experts based on content complexity, our model achieves a new peak performance of 
+
+79.1% AP (+1.0% over traditional MoE) while further re-ducing the computational cost to just 51.24 GFLOPs . This clearly validates that our adaptive routing strategy is superior to fixed routing. (d) Finally, to verify the role of the shared expert, we remove it from our full model. This results in a drastic performance drop of 5.6% AP down to 73.5%, even though the FLOPs are lower. This confirms its crucial role in providing a feature baseline, which the specialized experts build upon. 
+
+Load Balancing Mechanism. To ensure a robust expert balance beyond the implicit balancing from our routing, we employ an online, bias-based strategy (Table 4). We eval-uate the expert load balance using the Maximal Violation 17558 Method Backbone GFLOPs-F GFLOPs-B GFLOPs-A AP total AP S AP M AP L                                                                                                                                                
+
+> General Two-Stage Detectors
+> FasterRCNN (Ren et al. 2015) ResNet-101 14.15 268.98 283.14 -19.0 55.2 74.4 FasterRCNN* (Fan et al. 2022) ResNet-50 10.35 196.71 207.07 70.5 20.3 71.2 76.0 RetinaNet (Lin et al. 2017) ResNet-101 15.77 299.62 315.39 -22.1 56.1 74.0 CascadeRCNN (Cai and Vasconcelos 2018) ResNet-101 15.54 295.24 310.78 -22.7 57.9 76.5
+> Specialized Gigapixel Detectors
+> ClusDet (Yang et al. 2019) ResNet-50 10.35 196.71 207.07 71.8 21.9 69.6 78.2 DMNet (Li et al. 2020) ResNet-50 10.35 196.71 207.07 54.0 11.9 37.1 71.4 GigaDet (Chen et al. 2022) CSP-DarkNet-53 4.61 87.59 92.20 68.4 21.0 59.9 76.2 PAN (Fan et al. 2022) ResNet-50 10.35 196.71 207.07 71.5 25.6 71.9 76.8
+> Sparse Processing Methods
+> Dynamic-Head (Dai et al. 2021) Swin-T 5.74 109.1 114.8 59.2 16.5 53.7 69.4 Dynamic-Head+DEG (Song et al. 2021) PVT-DEG 6.12 60.11 66.23 57.5 15.4 50.8 69.5 Dynamic-Head+SparseFormer (Li et al. 2024d) SparseFormer 6.29 58.35 64.64 77.1 36.4 74.0 86.3 Dynamic-Head+GigaMoE (Ours) GigaMoE 6.07 46.87 52.94 77.9 37.7 74.3 85.5 DINO (Zhang et al. 2023) ResNet-50 6.21 118.02 124.24 54.2 28.9 53.0 59.2 DINO+SparseNet (Li et al. 2024b) SparseNet 6.53 100.97 107.50 74.6 38.1 75.4 79.7 DINO (Zhang et al. 2023) Swin-T 6.64 126.19 132.84 60.6 36.7 61.2 64.9 DINO+DEG (Song et al. 2021) PVT-DEG 6.77 78.57 85.34 58.2 33.9 57.8 62.4 DINO+SparseFormer (Li et al. 2024d) SparseFormer 6.90 68.81 75.71 78.0 50.8 78.1 82.3 DINO+GigaMoE (Ours) GigaMoE 6.36 44.88 51.24 79.1 53.8 81.9 82.1
+
+Table 1: Comparison with the SoTAs on PANDA. “F” and “B” denote foreground and background, respectively (A=F+B). AP is reported in percentage. Our GigaMoE results are highlighted in bold. 
+
+Distribution Config AP total GFLOPs-A 
+
+Fixed Number of Specialized Experts (Baselines) 
+
+(1,0,0,0) - Shared Only (0 sp.) 0.743 40.77 
+
+(0,1,0,0) - Shared + 1 sp. 0.764 51.86 (0,0,1,0) - Shared + 2 sp. 0.781 62.94 (0,0,0,1) - Shared + 3 sp. 0.794 74.03 
+
+Variable Number of Specialized Experts (Ours) 
+
+(0.25,0.25,0.25,0.25) - Uniform 0.789 57.00 (0.1,0.2,0.3,0.4) - Pyramid 0.792 62.32 (0.4,0.3,0.2,0.1) - Inverted Pyramid 0.791 51.24 
+
+Table 2: Ablation studies on the expert allocation distribu-tion for our GigaMoE module.The distribution ‘(p0, p1, p2, p3)’ defines the percentage of windows assigned 0, 1, 2, and 3 specialized experts, respectively. All experiments are con-ducted with the DINO head. (MaxVio ) metric, defined as: MaxVio = max i Load i − Load Load (8) where a lower value indicates better balance. The results clearly demonstrate the efficacy of our approach. Without any explicit balancing mechanism, the model suffers from severe expert imbalance, resulting in a high MaxVio of 0.471 and suboptimal performance. Employing a fixed up-date rate for the bias already improves the situation substan-tially, reducing the MaxVio to 0.083. Most importantly, our proposed adaptive update rate strategies prove most effec-tive. The linear decay schedule, in particular, achieves the highest AP of 79.1% while simultaneously reducing the fi-nal MaxVio to just 0.061 , demonstrating its superiority. 
+
+Configuration AP total GFLOPs-A 
+
+(a) Sparse Baseline (Standard FFN) 0.780 75.71 (b) Traditional MoE (Fixed top-2) 0.781 62.94 (c) Ours: Sparsity-Guided Routing 0.791 51.24 (d) (c) w/o Shared Expert 0.735 43.64 
+
+Table 3: Ablation study on the effectiveness of GigaMoE components. 
+
+Balancing Method AP total Avg. Final MaxVio 
+
+No Balancing 0.769 0.471 Fixed Rate 0.788 0.083 Linear Decay 0.791 0.061 
+
+Cosine Decay 0.789 0.069 
+
+Table 4: Ablation study on the load balancing mechanism. We report the average MaxVio across all stages at the final validation epoch. For methods with a bias update, the initial rate is uinit = 10 −2.
+
+# Conclusion 
+
+In this paper, we introduced GigaMoE, a novel backbone that pioneers adaptive computation for gigapixel object de-tection. Addressing the limitation of uniform computational workload in sparse methods, we replace the standard FFN with a MoE module. Our core Sparsity-Guided Routing mechanism repurposes importance scores to dynamically al-locate a “computational bonus,” engaging a variable number of specialized experts based on content complexity. This cre-ates an efficient synergy between deciding what to process and how much to process it. Experiments on the PANDA benchmark demonstrate that GigaMoE establishes a new state-of-the-art, significantly improving accuracy while re-ducing computational costs. We believe this work opens a promising new direction for designing more efficient and in-telligent vision backbones for large-scale visual recognition. 17559 Acknowledgments 
+
+This work was supported by National Science and Tech-nology Major Project (No. 2022ZD0119402), “Pioneer” and “Leading Goose” R&D Program of Zhejiang (No. 2024C01142), National Natural Science Foundation of China (No. U21B2013), and the Key R&D Program of Xin-jiang, China (No. 2022B01006). 
+
+# References 
+
+Cai, Z.; and Vasconcelos, N. 2018. Cascade r-cnn: Delving into high quality object detection. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Carion, N.; Massa, F.; Synnaeve, G.; Usunier, N.; Kirillov, A.; and Zagoruyko, S. 2020. End-to-end object detection with transformers. In Proc. Eur. Conf. Comput. Vis. 
+
+Chen, K.; Wang, J.; Pang, J.; Cao, Y.; Xiong, Y.; Li, X.; Sun, S.; Feng, W.; Liu, Z.; Xu, J.; Zhang, Z.; Cheng, D.; Zhu, C.; Cheng, T.; Zhao, Q.; Li, B.; Lu, X.; Zhu, R.; Wu, Y.; Dai, J.; Wang, J.; Shi, J.; Ouyang, W.; Loy, C. C.; and Lin, D. 2019. MMDetection: Open MMLab Detection Toolbox and Benchmark. arXiv:1906.07155. Chen, K.; Wang, Z.; Wang, X.; Gong, D.; Yu, L.; Guo, Y.; and Ding, G. 2022. Towards real-time object detection in GigaPixel-level video. Neurocomputing , 494: 251–259. Dai, X.; Chen, Y.; Xiao, B.; Chen, D.; Liu, M.; Yuan, L.; and Zhang, L. 2021. Dynamic Head: Unifying Object Detection Heads With Attentions. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Ding, X.; Guo, Y.; Ding, G.; and Han, J. 2019. ACNet: Strengthening the Kernel Skeletons for Powerful CNN via Asymmetric Convolution Blocks. CoRR , abs/1908.03930. Dosovitskiy, A.; Beyer, L.; Kolesnikov, A.; Weissenborn, D.; Zhai, X.; Unterthiner, T.; Dehghani, M.; Minderer, M.; Heigold, G.; Gelly, S.; et al. 2021. An image is worth 16x16 words: Transformers for image recognition at scale. In Proc. Int. Conf. Learn. Represent. 
+
+Everingham, M.; Van Gool, L.; Williams, C. K.; Winn, J.; and Zisserman, A. 2010. The pascal visual object classes (voc) challenge. Int. J. Comput. Vis. , 88: 303–338. Fan, J.; Liu, H.; Yang, W.; See, J.; Zhang, A.; and Lin, W. 2022. Speed Up Object Detection on Gigapixel-Level Im-ages With Patch Arrangement. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Gao, L.; Guo, Z.; Zhang, H.; Xu, X.; and Shen, H. T. 2017. Video Captioning With Attention-Based LSTM and Seman-tic Consistency. IEEE Trans. Multimedia , 19(9): 2045– 2055. Ge, Z.; Liu, S.; Wang, F.; Li, Z.; and Sun, J. 2021. Yolox: Exceeding yolo series in 2021. In Adv. Neural Inform. Pro-cess. Syst. 
+
+Girshick, R. 2015. Fast R-CNN. In Proc. IEEE/CVF Int. Conf. Comput. Vis. 
+
+Girshick, R.; Donahue, J.; Darrell, T.; and Malik, J. 2014. Rich feature hierarchies for accurate object detection and semantic segmentation. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+He, M.; Lv, G.; He, W.; Fan, J.; and Zeng, G. 2021. DeepME: Deep Mixture Experts for Large-scale Image Classification. In Proc. Int. Joint Conf. Artif. Intell. 
+
+Huang, Q.; Misra, I.; Gollakota, A.; Cordonnier, J.-B.; Bhatt, G.; Miech, A.; Bordes, F.; Arnab, A.; Lu, W.-L. B.; LeCun, Y.; Leduc, L.; Joulin, A.; and Bojanowski, P. 2024. Harder Tasks Need More Experts: Dynamic Routing in MoE Mod-els. arXiv:2403.07652. Li, C.; Yang, T.; Zhu, S.; Chen, C.; and Guan, S. 2020. Den-sity Map Guided Object Detection in Aerial Images. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. Worksh. 
+
+Li, W.; Guo, Y.; Zheng, J.; Lin, H.; Ma, C.; Fang, L.; and Yang, X. 2024a. Bridging the gap between object detection in close-up and high-resolution wide shots. Comput. Vis. Image Underst. , 249: 104181. Li, W.; Zhang, R.; Lin, H.; Guo, Y.; Ma, C.; and Yang, X. 2024b. SaccadeDet: A Novel Dual-Stage Architecture for Rapid and Accurate Detection in Gigapixel Images. In Proc. Eur. Conf. Mach. Learn. Knowl. Discov. Databases .Li, W.; Zhang, R.; Lin, H.; Guo, Y.; Ma, C.; and Yang, X. 2024c. SaccadeMOT: Enhancing Object Detection and Tracking in Gigapixel Images via Scale-Aware Density Es-timation. In Proc. Eur. Conf. Artif. Intell. 
+
+Li, W.; Zhang, R.; Lin, H.; Guo, Y.; Ma, C.; and Yang, X. 2024d. Sparseformer: Sparse-selected objects for effi-cient real-time giga-pixel image object detection. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Lin, B.; Tang, Z.; Ye, Y.; Huang, J.; Zhang, J.; Pang, Y.; Jin, P.; Ning, M.; Luo, J.; and Yuan, L. 2024a. MoE-LLaVA: Mixture of Experts for Large Vision-Language Models. arXiv:2401.15947. Lin, H.; Wei, C.; He, L.; Guo, Y.; Zhao, Y.; Li, S.; and Fang, L. 2024b. GigaTraj: Predicting Long-term Trajectories of Hundreds of Pedestrians in Gigapixel Complex Scenes. In 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Lin, T.-Y.; Goyal, P.; Girshick, R.; He, K.; and Doll´ ar, P. 2017. Focal loss for dense object detection. In Proc. IEEE/CVF Int. Conf. Comput. Vis. 
+
+Lin, T.-Y.; Maire, M.; Belongie, S.; Hays, J.; Perona, P.; Ra-manan, D.; Doll´ ar, P.; and Zitnick, C. L. 2014. Microsoft COCO: Common objects in context. In Proc. Eur. Conf. Comput. Vis. 
+
+Liu, C.; Wei, H.; Yang, J.; Liu, J.; Li, W.; Guo, Y.; and Fang, L. 2024. Gigahumandet: Exploring full-body detection on gigapixel-level images. In Proc. AAAI Conf. Artif. Intell. 
+
+Liu, W.; Anguelov, D.; Erhan, D.; Szegedy, C.; Reed, S.; Fu, C.-Y.; and Berg, A. C. 2016. SSD: Single shot multibox detector. In Proc. Eur. Conf. Comput. Vis. 
+
+Liu, Z.; Lin, Y.; Cao, Y.; Hu, H.; Wei, Y.; Zhang, Z.; Lin, S.; and Guo, B. 2021. Swin transformer: Hierarchical vision transformer using shifted windows. In Proc. IEEE/CVF Int. Conf. Comput. Vis. 
+
+Ma, T.; Bai, B.; Lin, H.; Wang, H.; Wang, Y.; Luo, L.; and Fang, L. 2024. When Visual Grounding Meets Gigapixel-level Large-scale Scenes: Benchmark and Approach. In 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 17560 Meng, L.; Li, H.; Chen, B.-C.; Lan, S.; Wu, Z.; Jiang, Y.-G.; and Lim, S.-N. 2022. AdaViT: Adaptive Vision Transform-ers for Efficient Image Recognition. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Nie, X.; Miao, X.; Zuo, S.; Lv, J.; Huang, B.; Yang, S.; Zhai, Y.; Deng, Z.-H.; Sun, Y.; Zong, Z.; and Li, H. 2021. Evo-MoE: An Evolutional Mixture-of-Experts Training Frame-work via Dense-to-Sparse Gate. arXiv:2112.14397. Oksuz, K.; Kuzucu, S.; Joy, T.; and Dokania, P. K. 2023. MoCaE: Mixture of Calibrated Experts Significantly Im-proves Object Detection. arXiv:2309.14976. Rao, Y.; Zhao, W.; Liu, B.; Lu, J.; Zhou, J.; and Hsieh, C.-J. 2021. DynamicViT: Efficient Vision Transformers with Dy-namic Token Sparsification. In Adv. Neural Inform. Process. Syst. 
+
+Redmon, J.; Divvala, S.; Girshick, R.; and Farhadi, A. 2016. You only look once: Unified, real-time object detection. In 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Redmon, J.; and Farhadi, A. 2018. YOLOv3: An Incremen-tal Improvement. arXiv:1804.02767. Ren, S.; He, K.; Girshick, R.; and Sun, J. 2015. Faster R-CNN: Towards real-time object detection with region pro-posal networks. In Adv. Neural Inform. Process. Syst. 
+
+Riquelme, C.; Puigcerver, J.; Mustafa, B.; Neumann, M.; Je-natton, R.; Pinto, A. S.; Keysers, D.; and Houlsby, N. 2021. Scaling vision with sparse mixture of experts. In Adv. Neural Inform. Process. Syst. 
+
+Shen, F.; Shen, C.; Liu, W.; and Shen, H. T. 2015. Super-vised Discrete Hashing. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Shen, F.; Xu, Y.; Liu, L.; Yang, Y.; Huang, Z.; and Shen, H. T. 2018. Unsupervised Deep Hashing with Similarity-Adaptive and Discrete Optimization. IEEE Trans. Pattern Anal. Mach. Intell. , 40(12): 3034–3044. Song, L.; Zhang, S.; Liu, S.; Li, Z.; He, X.; Sun, H.; Sun, J.; and Zheng, N. 2021. Dynamic Grained Encoder for Vision Transformers. In Adv. Neural Inform. Process. Syst. 
+
+Tian, Y.; Ye, Q.; and Doermann, D. 2025. YOLOv12: Attention-Centric Real-Time Object Detectors. arXiv preprint arXiv:2502.12524 .Wang, A.; Chen, H.; Liu, L. Y.; Chen, K.; Lin, Z.; and Han, J. 2024a. YOLOv10: Real-Time End-to-End Object Detection. 
+
+arXiv preprint arXiv:2405.14458 .Wang, B.; Yang, Y.; Xu, X.; Hanjalic, A.; and Shen, H. T. 2017. Adversarial Cross-Modal Retrieval. In Proc. ACM Int. Conf. Multimedia .Wang, L.; Gao, H.; Zhao, C.; Sun, X.; and Dai, D. 2024b. Auxiliary-Loss-Free Load Balancing Strategy for Mixture-of-Experts. arXiv:2408.15664. Wang, X.; Zhang, X.; Zhu, Y.; Guo, Y.; Yuan, X.; Xiang, L.; Wang, Z.; Ding, G.; Brady, D.; Dai, Q.; and Fang, L. 2020. PANDA: A Gigapixel-Level Human-Centric Video Dataset. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Yang, C.; Huang, Z.; and Wang, N. 2022. Querydet: Cas-caded sparse query for accelerating high-resolution small object detection. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. 
+
+Yang, F.; Fan, H.; Chu, P.; Blasch, E.; and Ling, H. 2019. Clustered Object Detection in Aerial Images. In Proc. IEEE/CVF Int. Conf. Comput. Vis. 
+
+Yang, Y.; Li, C.; Raffel, C.; Papadimitriou, P.; Feng, B.; Sachan, M.; and Dai, A. 2024. XMoE: Sparse Models with Fine-grained and Adaptive Expert Selection. In Findings Assoc. Comput. Linguistics .Zhang, H.; Li, F.; Liu, S.; Zhang, L.; Su, H.; Zhu, J.; Ni, L. M.; and Shum, H.-Y. 2023. DINO: DETR with Improved DeNoising Anchor Boxes for End-to-End Object Detection. In Proc. Int. Conf. Learn. Represent. 
+
+Zheng, H.; Xu, Z.; Wang, Z.; Tu, Y.; Chen, X.; Wang, S.; Wang, F.; Li, J.; Li, Y.; Jiang, X.; Li, C.; Zhang, Z.-Y.; and Sun, H. 2024. Learn to be Efficient: Build Structured Spar-sity in Large Language Models. arXiv:2402.06126. 17561
