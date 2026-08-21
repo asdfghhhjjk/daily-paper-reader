@@ -1,0 +1,609 @@
+Title: KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis
+
+URL Source: https://arxiv.org/pdf/2608.14757v1
+
+Published Time: Tue, 18 Aug 2026 00:12:17 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis 
+
+Qixiang Zhang a, Yi Li a, Tianqi Xiang a, Haonan Wang a, Mengjiao Wei b, Bo Xu b and Xiaomeng Li a,∗
+
+> a
+
+Department of Electronic and Computer Engineering, The Hong Kong University of Science and Technology, Hong Kong, China 
+
+> b
+
+Center for Intelligent Oncology, Chongqing University Cancer Hospital and Chongqing University School of Medicine, and Chongqing Key Laboratory of Intelligent Oncology for Breast Cancer, Chongqing, 400030, China 
+
+A R T I C L E I N F O 
+
+Keywords :Mamba Whole Slide Image Multiple Instance Learning Vision Language Model 
+
+A B S T R A C T 
+
+Whole-slide image analysis is commonly formulated as multiple instance learning (MIL), where instance features are contextually updated and aggregated into a slide representation—a process we term slide encoding dynamics. Recently, selective state-space models (SSM) have emerged as promising MIL architectures due to their long-sequence modeling capability and linear complexity. However, existing SSM-based MIL methods rely solely on visual features during MIL. Meanwhile, in large-scale WSIs, where sparse diagnostically decisive regions are surrounded by abundant irrelevant information, such purely vision-driven selective dynamics can misallocate state updates and readouts, causing the evolving SSM state to accumulate task-irrelevant evidence and dilute critical diagnostic cues over long scan trajectories. In this work, we propose the Knowledge-Aware 
+
+Hi dden-State Modulation architecture (KHiM-Mamba), which innovatively regulates Mamba’s core selective state-space mechanism with explicit knowledge priors, steering slide encoding dynamics toward diagnostically meaningful evidence accumulation. Specifically, we redesign the original SSM layer to perform knowledge modulation operations during the evolution of hidden states, thereby guiding what visual evidence is accumulated and retrieved from the hidden state at each encoding step. Furthermore, we additionally introduce a local-adaptive vocabulary retrieval module that uses large language models to assign each patch fine-grained, tissue-specific semantic descriptions, enabling precise modulation across diverse tasks. Experiments on 11 public benchmarks across 4 tasks show that KHiM-Mamba consistently achieves state-of-the-art performance. 
+
+1. Introduction 
+
+Computational pathology (CPath) has advanced rapidly with the development of artificial intelligence for patho-logical analysis [1, 11, 20]. One core element in CPath is the whole slide image (WSI), a digital scan of a pathology slide. Uniquely, WSIs can reach gigapixel resolution ( e.g. ,80,000 ×80,000 pixels). Such massive scale has motivated the development of multi-instance learning (MIL) [1, 11]. In a typical MIL pipeline, a pre-trained patch encoder [3, 13, 18] first extracts a feature for each small patch of the WSI independently, and a slide encoder then models inter-patch dependencies to facilitate contextual interaction between patch features and aggregate them into a slide-level repre-sentation for downstream prediction. We term this process— encompassing inter-patch contextual interaction and rep-resentation formation— slide encoding dynamics (Fig. 1a). It is central to WSI analysis since diagnostic evidence is often distributed across distant tissue regions and should be accumulated from multiple patches. Various architectures ( e.g. , attention [14, 15, 23, 35] and graph [38]) have been explored as slide encoders to improve 
+
+slide encoding dynamics . More recently, the Selective State Space Model (Mamba) [8] has emerged as a compelling al-ternative for WSI analysis ( e.g. , PAM [12], GMMamba [40],  
+
+> Corresponding author (eexmli@ust.hk)
+
+(X. Li) 
+
+> ORCID
+
+(s): 0009-0002-3158-9471 (Q. Zhang); 0000-0002-7840-2611 (Y. Li); 0000-0002-5550-1721 (T. Xiang); 0000-0001-8241-7982 (H. Wang);  
+
+> 0000-0001-8693-3060
+
+(B. Xu); 0000-0003-1105-8083 (X. Li) 
+
+M3Mamba [39]), achieving state-of-the-art performance. Existing Mamba-based MIL propose to scan WSIs into long sequences of patches via tailored scanning strategies ( e.g. ,PAM’s hierarchical scanning [12], GMMamba’s grouping scanning [40]), and then rely on Mamba’s native state space model (SSM) layer to perform contextual interaction during slide encoding dynamics. However, we identify a funda-mental limitation in existing Mamba-based MIL methods. The inherited SSM layer used by native Mamba could be easily affected by abundant diagnostically irrelevant vari-ations in WSIs, causing irrelevant cues to bias contextual interactions. For example, due to stain bias in the CAME-LYON dataset [6], tumor slides may appear redder, whereas normal slides appear more purple (see Fig. 1b). Such specific but diagnostic-irrelevant visual patterns may involve irrele-vant information into SSM’s evolving hidden state. Conse-quently, as a crucial intermediate, the perturbed hidden state can further bias the contextual interactions across patches (Fig. 1c), thereby hindering the effective accumulation of diagnostically relevant information from patch features. To address this limitation, we draw inspiration from prior VLM-MIL studies [10, 21, 24, 30, 31], which have high-lighted the value of language-derived diagnostic knowledge for WSI modeling. Rather than solely relying on vulnerable visual features from WSIs, we introduce Knowledge-aware 
+
+Hi dden-state Modulation (KHiM-Mamba), which injects knowledge priors into the SSM layer to steer Mamba-based slide encoding toward diagnostically relevant evidence (see 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 1 of 11 arXiv:2608.14757v1 [eess.IV] 14 Aug 2026 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis (c) Original SSM Layer (d) Knowledge-aware Hidden-state Modulation        
+
+> Knowledge Modulation Input Patch Feature Output Patch Feature Hidden State Write In Process Read Out Process
+> 𝐸 !(#)
+> ❄
+> Whole Slide Image Image Encoder Slide Feature Prediction
+> Slide Encoding Dynamics
+> Aggregation
+> Contextual Interaction
+> 𝑆 !(#)
+
+🔥 (a) Multiple Instance Learning                        
+
+> (b) Diagnostic-irrelevant Visual Pattern in WSI
+> Tumor Case: Redder Normal Case: Purple
+> !!!"!#!$
+> "!"""#"%
+> ℎ!ℎ"ℎ#ℎ$ℎ%
+> "$
+> !%
+> Hidden State remain Robust
+> !!!"!#!$!%
+> "!"""#"$"%
+> ℎ!ℎ"ℎ#ℎ$ℎ%
+> Hidden State got Perturbed
+
+……………………
+
+Figure 1: (a) MIL pipeline: a WSI is split into patches, encoded as patch features, and processed by slide encoding dynamics ( i.e. , contextual interaction and aggregation). (b) Example of diagnostically irrelevant visual patterns in WSIs: under a certain stain, tumor slides appear redder while normal slides appear purpler. (c)(d) Comparison of SSM layer in prior Mamba-based MIL methods and ours. 
+
+Fig.1cd). Crucially, our innovation lies not in the use of language per se, but in how language participates in the slide encoding process. Existing VLM-MIL methods typi-cally employ language as an external add-on at the periphery of slide encoding, either to select patches before encoding or to provide auxiliary supervision afterward (Fig.2a). Since language does not intervene in the core slide encoding dynamics, contextual interactions among WSI patches re-main governed solely by visual features, leaving the afore-mentioned limitation unresolved. In contrast, KHiM-Mamba redesigns the information flow within the SSM layer (see Fig. 1d), allowing knowledge priors to directly intervene in the transition of the evolving hidden state within the slide encoding dynamics (Fig. 2b). The underlying rationale of this design is that explicit diagnostic knowledge conveyed by language can guide contextual interactions across patches toward diagnostically relevant relations among distinct WSI regions, as exemplified by the case shown in Fig. 2c. To realize this idea, we reformulate the SSM layer with two novel knowledge modulation schemes: write-in modulation of the input-to-state matrix, which guides what visual ev-idence is incorporated into the evolving state, and read-out modulation of the state-to-output matrix, which guides what accumulated contextual evidence is retrieved to en-rich patch representations. Through these mechanisms, each patch interacts with the shared context under explicit seman-tic guidance, promoting the accumulation of diagnostically meaningful evidence (see Fig.2d). The subsequent step is to construct effective language priors for the proposed modulation. In order to provide effective language priors for such modulation, we design a local-adaptive vocabulary retrieval module via large lan-guage models (LLMs), which identifies task-relevant tissue concepts and dynamically assigns each patch fine-grained, tissue-specific language based on its local tissue type, yield-ing modulation signals that are both semantically precise and robust across diverse downstream tasks. The main contributions are summarized as follows: • We identify a fundamental limitation of existing Mamba-based MIL methods: purely vision-driven state tran-sitions may accumulate diagnostically irrelevant ev-idence and dilute critical cues over long WSI se-quences. Meanwhile, existing VLM-MIL methods employ language only at the periphery of slide encod-ing, leaving this limitation fundamentally unresolved. • We propose KHiM-Mamba, which redesigns the SSM layer by modulating the hidden states evolution via language-derived knowledge. To our knowledge, this is the first work to reshape Mamba’s internal model dynamics for WSI analysis, rather than using it as a ready-made backbone. • We propose local-adaptive vocabulary retrieval mod-ule that uses LLMs to dynamically assign each patch fine-grained language, offering semantically precise modulation signals across diverse downstream tasks. • Extensive experiments on 11 public benchmarks across cancer subtyping ( +2.07% ) and survival prediction (+2.31% ) demonstrate that KHiM-Mamba consis-tently outperforms state-of-the-art methods, with strong generalization under multi-center domain adaptation (+2.27% ) and few-shot scenarios ( +7.97% ). 
+
+2. Related Works 
+
+2.1. Multi-instance Learning in WSI Analysis 
+
+Multiple instance learning (MIL) is the standard frame-work for whole-slide image (WSI) analysis in computational pathology [1, 11]. Typical MIL pipelines consist of patch extraction, patch encoding with a pre-trained backbone, and 
+
+slide encoding dynamics for slide-level prediction. Early methods use simple max or mean pooling, while later works introduce learnable aggregation modules, including attention-based pooling (ABMIL [14]), multi-branch de-sign (CLAM [19]), dual-stream aggregation (DSMIL [15]), transformer-based modeling (TransMIL [23]), pseudo-bag optimization (DtfdMIL [35]), and deconfounding (IBMIL [16]). Despite their effectiveness, these methods primarily improve the aggregation of visual instance features, leaving slide-level representations formed purely from visual cues. In contrast, our method incorporates language priors into the 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 2 of 11 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis Cor: {16, 254} Cor: {1292, 269}     
+
+> Atypical tumor cells with small nucleus… Typical tumor cells with large nucleus…
+> Invasive Ductal Carcinoma
+> IDC: Cytologic atypia is conspicuous, Tumor nucleus with varia%on in size
+> Guide
+> Invasive Ductal Carcinoma
+> (c) Rationale of our KHiM-Mamba
+> …
+> Patch Feature Sequence
+> …
+> SSM State 𝑩 !𝑪 !
+> Write In Read Out
+> Regulate Regulate
+> 𝑃𝑟𝑜𝑗(&)
+> Updated Feature Sequence
+> (b) KHiM-Mamba injects Knowledge priors into Slide Encoding Dynamics
+> 𝐸 !(#)
+
+❄ 
+
+> Whole Slide Image Image Encoder
+
+🔥  
+
+> Slide Feature Prediction
+> Invasive Lobular Carcinoma Invasive Ductal Carcinoma
+> 𝐸 "(#)
+
+❄ 
+
+> Aggregation
+> Knowledge Prior Text Encoder
+> Slide Encoding Dynamics
+> Invasive Lobular Carcinoma
+> 𝐸 !(#)
+
+❄
+
+> Similarity TopK
+> 𝐸 "(#)
+> Similarity
+
+❄   
+
+> (a) Existing VLM-based Multiple Instance Learning
+> Prediction
+> Invasive Ductal Carcinoma Text Features Text Features Whole Slide Image Image Encoder Selected Features
+> Slide Encoding Dynamics
+> Aggregation
+> Contextual Interaction
+> 𝑆 !(#)
+
+🔥 
+
+> Separation (w/ KHR): 0.42 Separation: 0.16
+> (d) Histogram of Patch Response Score Distributions
+> Background w/o KHR Tumor-related w/o KHR Background w/ KHR Tumor-related w/ KHR
+
+Figure 2: (a) Existing VLM-MIL methods typically inject language priors either before slide encoding [10, 21] to guide patch selection via image-text similarity, or after slide encoding as auxiliary supervision [24]. (b) KHiM-Mamba injects knowledge priors into the core slide encoding dynamics by modulating two key matrix: input-to-state 𝐵 𝑡 , which governs how each patch’s information is written into the hidden state, and state-to-output 𝐶 𝑡 , which governs how accumulated context is read out to enrich patch representations. (c) An illustrative example of language-guided contextual interaction across patches. In invasive ductal carcinoma, 
+
+“conspicuous cytologic atypia and variation in nuclear size” guides the model to relate distinct patches with complementary nuclear morphologies, thereby grounding the slide-level representation in pathology-relevant evidence. (d) Histograms of patch response scores for background and tumor-related patches, with and without our Knowledge-aware Hidden-state Modulation (KHiM). KHiM markedly reduces the overlap between the two distributions, indicating stronger patch selectivity and clearer semantic separation; More quantitative and qualitative results to support this statement can be found in Tab. 5 and Fig. 5 respectively 
+
+slide encoding dynamics process, enabling distributed di-agnostic evidence to be propagated and integrated under explicit semantic guidance. To this end, we introduce KHiM-Mamba that dynamically controls information propagation during slide encoding. 
+
+2.2. Selective State Space Model (Mamba) 
+
+State space models (SSMs) [8, 9] have recently emerged as a scalable alternative to conventional sequence architec-tures for long-context modelling. By representing sequences with hidden states and transition dynamics rather than ex-plicit pairwise interactions, SSMs offer linear complexity and avoid the quadratic cost of Transformers. Two repre-sentative examples are S4 [9] and S6 (Mamba) [8], which have shown strong performance across both vision [42] and language [5] tasks. In computational pathology, S4MIL demonstrates that SSM-based models can effectively pro-cess gigapixel WSIs by capturing long-range dependencies among patch sequences. Subsequent Mamba-based methods further improve robustness and efficiency: MambaMIL [33, 34] reduces the impact of noisy instances via sequence reordering, M3amba lowers scanning cost using a memory bank of representative instance clusters, GMMamba [40] skips redundant instances through attention-based grouping, and 2DMamba [36] preserves local spatial structure with a two-dimensional scanning scheme. Existing Mamba-based MIL methods mainly use Mamba as a ready-made backbone and focus on patch scanning strategies for 1D sequence construction, while leaving its selective state transition un-changed. As a result, slide encoding remains a purely visual process. In contrast, our method adopts a naive bi-directional Mamba with vanilla scanning [42], and focus on fundamen-tal backbone-level improvements to the core selective state transitions. Our KHiM-Mamba injects language priors into the selective state transition itself, turning Mamba into a semantically guided representation formation mechanism. This design is orthogonal to existing scanning strategies and can be readily combined with previous methods. 
+
+2.3. Vision-language Multiple Instance Learning 
+
+General-purpose vision-language models, such as CLIP, have demonstrated strong transferability across a wide range of visual tasks, inspiring pathology-specific foundation mod-els including PLIP [13], CONCH [18], and MUSK [25]. Building on these advances, recent studies have combined vision-language models with MIL for WSI analysis, aim-ing to exploit their few-shot and zero-shot capabilities, as exemplified by TOP [21], ViLa-MIL [24], FOCUS [10], and MUSE [31]. Despite their promise, existing VLM-MIL methods typically use language in a relatively global or peripheral manner, e.g., through class-level prompts, patch selection, or auxiliary supervision, rather than integrating it into the instance-level encoding process itself (see Fig. 2a). As a result, language semantics have limited influence on how patch features interact and how diagnostic evidence is accumulated during slide encoding. In contrast, our method treats language as a dynamic diagnostic prior and injects 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 3 of 11 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis Survival Analysis 
+
+ℒ!"# 
+
+Visual Encoder 𝐸 $($) 
+
+Linear Projector 
+
+> Task: TCGA Breast Cancer Subtyping
+> Type 1: Invasive Ductal Carcinoma Type 2: Invasive Lobular Carcinoma
+> Q1 : Which <ssue types are most relevant in WSI for this task?
+> Q2 : What are the essen<al features of each <ssue type as seen in WSI?
+
+Large Language Model 
+
+Text Encoder 𝐸 %($)       
+
+> Tumor Epithelium :Cohesive invasive nests, cords, sheets, or tubules
+> Stroma :desmoplas6c, fibro6c, with angulated glands embedded in collagen
+
+and more ... 
+
+## ❄
+
+## ❄
+
+## ❄ 
+
+> Confidence-gated concept Routing (Sec. 3.3.2)
+> Local-Adaptive Vocabulary Retrieval Module (Sec. 3.3) KHiM-Mamba: Knowledge-aware Hidden-state Modulation (Sec. 3.2)
+> KHiM-SSM Layer
+> Cancer Subtyping
+
+ℒ!& 
+
+> Cancer Diagnosis
+
+ℒ!& 
+
+> KHiM-Mamba Block
+> ✖
+> N
+
+Causal Conv1D Linear Proj. SiLU Act. KHiM-SSM Layer Linear Proj. Aggregator 
+
+> +
+
+SiLU                          
+
+> 𝑥 !𝑒 !𝑥 "𝑒 "𝑥 #𝑒 #𝑥 $𝑒 $𝑥 %𝑒 %𝑥 &𝑒 &𝑥 '𝑒 '𝑥 (𝑒 (𝑥 )𝑒 )
+> Discre<ze (Eq. 2)
+> 𝑥 *∈ ℝ +𝑒 *∈ ℝ +
+> 𝐂 *𝐁 *∆*∆𝐁 *∆𝐂 *
+> +
+> 𝐁 (*
+> 𝐂 )*𝐁 (*
+> 𝐀 *
+> 𝐀 +*
+> ℎ*ℎ*,"
+> Recurrence (Eq. 6)
+> 𝑦 *
+> Linear Layer Low-Rank Modula6on
+> Legend
+> Intermediate Matrix
+
+Linear 
+
+> +
+
+Figure 3: Overview of KHiM-Mamba . Our framework consists of two main blocks: Local-adaptive vocabulary retrieval module (Sec. 3.3) provides precise language priors across diverse downstream tasks; and Knowledge-aware Hi dden-state Modulation (KHiM-Mamba, Sec. 3.2) which leverages language priors to modulate the Mamba-based slide encoding dynamics. 
+
+language-conditioned modulation into the core slide encod-ing dynamics , enabling semantically guided patch interac-tion and evidence integration. 
+
+3. Methodology 
+
+3.1. Preliminary 
+
+Selective State Space Models (SSMs), such as Mamba [8, 9], provide an efficient framework for long-sequence mod-eling and have recently shown strong potential in com-putational pathology [7, 12, 33]. Mamba builds upon the continuous-time SSM: 
+
+ℎ′(𝑡 ) = 𝐴ℎ (𝑡 ) + 𝐵𝑥 (𝑡 ), 𝑦 (𝑡 ) = 𝐶ℎ (𝑡 ), (1) where ℎ(𝑡 ) denotes the latent state, and 𝐴 , 𝐵 , 𝐶 are the state evolution, input projection, and output projection matrices, respectively. To process discrete sequences, the continuous system is discretized with an input-dependent time-scale parameter Δ𝑡 , yielding the recurrent form: 
+
+ℎ𝑡 =̄ 𝐴 𝑡 ℎ𝑡 −1 +Δ 𝑡 𝐁 𝑡 𝑥 𝑡 , 𝑦 𝑡 = 𝐂 𝑡 ℎ𝑡 ,̄ 𝐴 𝑡 = exp(Δ 𝑡 𝐴 ), (2) where ℎ𝑡 serves as an evolving contextual memory. Mamba’s selective mechanism makes Δ𝑡 , 𝐁 𝑡 , and 𝐂 𝑡 input-dependent: 𝐁 𝑡 governs how the current input is written into 
+
+ℎ𝑡 , while 𝐂 𝑡 governs how context is read from ℎ𝑡 . Our pro-posed Knowledge-aware Hidden-state Modulation (KHiM-Mamba) modulates both projections with language-derived knowledge priors to reshape this write–read dynamics, as detailed in Sec. 3.2. 
+
+3.2. Knowledge-aware Hidden-state Modulation 
+
+Based on the above formulation, in this section, we de-scribe how to leverage language priors to modulate Mamba to guide diagnosis-aware evidence propagation across patch sequences. Let 𝑋 = { 𝑥 𝑡 }𝑇 𝑡 =1 denote the patch sequence of a whole slide image with 𝑇 patches, where 𝑥 𝑡 ∈ ℝ𝑑 is the visual feature of the 𝑡 𝑡ℎ patch. Our goal is to modulate the selective dynamics of Mamba with language guidance, so that information flow across patches is steered by diagnosis-related semantics rather than relying solely on visual appear-ance. As established in the Sec. 3.1, 𝐁 𝑡 and 𝐂 𝑡 are the input-dependent projections that respectively control how infor-mation is written into and read from the hidden memory 
+
+ℎ𝑡 . We choose to modulate these two projections rather than the time-scale parameter Δ𝑡 or the state matrix 𝐴 , because conditioning 𝐁 𝑡 and 𝐂 𝑡 does not alter the temporal dynamics or decay behaviour of the SSM; instead, it reshapes the information injection and readout channels in a manner analogous to adapting linear projections, leading to more stable optimization. Concretely, we introduce a low-rank language modula-tion mechanism that adds language-conditioned increments to both 𝐁 𝑡 and 𝐂 𝑡 . Let 𝐞 𝑡 ∈ ℝ𝑑 denote a language embedding that encodes diagnostic semantics relevant to patch 𝑥 𝑡 ; the construction of 𝐞 𝑡 is detailed in Sec. 3.3. A shared projection maps 𝐞 𝑡 to a pair of low-rank coefficient vectors: 
+
+[𝜶 𝐵 𝑡 ; 𝜶 𝐶 𝑡 ] = MLP( 𝐞 𝑡 ) ∈ ℝ2𝑟 , (3) 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 4 of 11 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis 
+
+where 𝑟 ≪ 𝑁 is the modulation rank, 𝑁 is the SSM state dimension, and [⋅ ; ⋅] denotes concatenation. The coefficients are then composed with learnable basis matrices to form the modulation increments: 
+
+Δ𝐵 𝑡 = 𝜶 𝐵 𝑡 𝐖 𝐵 , Δ𝐶 𝑡 = 𝜶 𝐶 𝑡 𝐖 𝐶 , (4) where 𝐖 𝐵 , 𝐖 𝐶 ∈ ℝ𝑟 ×𝑁 are learnable. The modulated projections are obtained by residual addition: ̃𝐵 𝑡 = 𝐁 𝑡 + 𝛾 ⋅ Δ𝐵 𝑡 ,̃ 𝐶 𝑡 = 𝐂 𝑡 + 𝛾 ⋅ Δ𝐶 𝑡 , (5) where the scaling factor 𝛾 is initialized to a small value so that training begins near vanilla Mamba behavior, with the language influence gradually increasing during opti-mization. Substituting the modulated projections into the discretized recurrence (Eq. 2), the language-conditioned dy-namics become: 
+
+ℎ𝑡 =̄ 𝐴 𝑡 ℎ𝑡 −1 + Δ 𝑡 ̃ 𝐵 𝑡 𝑥 𝑡 , 𝑦 𝑡 =̃ 𝐶 𝑡 ℎ𝑡 . (6) Through ̃ 𝐵 𝑡 , language priors reshape what information each patch writes into the hidden state, encouraging the accumu-lation of diagnosis-relevant evidence while attenuating irrel-evant features. Through ̃ 𝐶 𝑡 , they further control what context is read out at each step, ensuring that emitted representa-tions emphasize diagnostically meaningful patterns. Conse-quently, the selective mechanism becomes diagnosis-aware without altering the SSM’s temporal dynamics, enabling sta-ble, linguistically guided aggregation of distributed patho-logical evidence. 
+
+3.3. Local-Adaptive Vocabulary Retrieval Module 
+
+Prior VLM-MIL methods [21, 24, 30] typically rely on a fixed language vocabulary shared across all patches, ignor-ing the fact that different tissue regions demand different se-mantic priors. We instead design a local-adaptive vocabulary retrieval module that identifies task-relevant tissue concepts via a large language model (LLM) and dynamically assigns each patch fine-grained, tissue-specific language based on its local tissue identity. We now describe how the language embedding 𝐞 𝑡 is constructed for each patch through this adaptive retrieval process. The central idea is to route each patch to semantically appropriate textual descriptors based on tissue identity confidence: when the tissue type can be reliably identified, fine-grained tissue-specific language is retrieved; otherwise, the module falls back to coarse-grained pathological descriptions to avoid introducing noisy priors. 
+
+Task-specific concept set construction. For each down-stream task, we prompt an LLM with the task definition and pathological background to generate the tissue types most diagnostically relevant to the target prediction, yielding a task-specific diagnostic concept set  = { 𝑇 1, … , 𝑇 𝑀 },where each concept corresponds to a distinct tissue type. For each concept 𝑇 𝑚 , we further prompt the LLM to generate a fine-grained language set 𝑚 containing textual descriptions that characterize the morphology, architectural patterns, and diagnostic implications of that tissue type. In parallel, we define a coarse-grained language set coarse that captures broader pathological categories and serves as a fallback when tissue identity is ambiguous. 
+
+Confidence-gated concept routing. Each patch is routed to the most appropriate concept via CONCH [18]. Let 𝑣 𝑡 
+
+denote the CONCH image embedding of patch 𝑥 𝑡 and 𝑞 𝑚 
+
+the CONCH text embedding of concept 𝑇 𝑚 . We compute the cosine similarity 𝑎 𝑡,𝑚 = cos( 𝑣 𝑡 , 𝑞 𝑚 ) and let 𝑚 ∗ =arg max 𝑚 𝑎 𝑡,𝑚 . The assignment is accepted only when the best similarity exceeds a threshold and the margin over the runner-up is sufficiently large: 
+
+𝑎 𝑡,𝑚 ∗ > 𝜏 sim and 𝑎 𝑡,𝑚 ∗ − max  
+
+> 𝑚 ≠𝑚 ∗
+
+𝑎 𝑡,𝑚 > 𝜏 margin . (7) The language source for patch 𝑥 𝑡 is then selected as 
+
+(𝑥 𝑡 ) = 
+
+{
+
+𝑚 ∗ , if the assignment is accepted ,
+
+coarse , otherwise . (8) 
+
+Language embedding construction. Given (𝑥 𝑡 ), we en-code each descriptor with the CONCH [18] text encoder and aggregate the resulting embeddings to form the patch-level language representation 𝐞 𝑡 ∈ ℝ𝑑 , which is then fed into the low-rank modulation mechanism of Sec. 3.2. Through confidence-gated routing, 𝐞 𝑡 receives precise diagnostic lan-guage when tissue identity is clear and falls back to a safe semantic anchor otherwise, yielding modulation signals that are both semantically precise and robust across diverse tissue compositions compared with fixed-vocabulary approaches. 
+
+4. Experiments 
+
+We compare the proposed KHiM-Mamba against a broad spectrum of SoTA methods across 11 public datasets spanning cancer sub-typing, survival prediction. For cancer sub-typing, experiments are conducted on the BRACS [2] and TCGA-BRCA [28] datasets. For survival prediction, we evaluate on six TCGA [28] subsets, namely Bladder Urothelial Carcinoma (BLCA), Breast Invasive Carcinoma (BRCA), Kidney Renal Clear Cell Carcinoma (KIRC), Kid-ney Renal Papillary Cell Carcinoma (KIRP), Lung Adeno-carcinoma (LUAD), and Stomach Adenocarcinoma (STAD). Beyond standard in-distribution evaluation, we further as-sess generalization under domain shift through cross-center adaptation experiments on the CAMELYON [6] bench-marks, where models are trained on CAMELYON16 and tested on CAMELYON17. Furthermore, to examine the performance under scarce data scenarios, we conduct few-shot experiments on TCGA-NSCLC [28] under 8-shot and 16-shot settings. 
+
+4.1. Implementation Details 
+
+All experiments are implemented in PyTorch 2.5.1. For WSI pre-processing, we employ the CLAM [19] toolkit to segment each slide into non-overlapping 512 × 512 patches, whose features are then extracted using the CONCH [18] vision encoder. The learning rate is set to 1 × 10 −5 for the BRACS, TCGA-BRCA, and CAMELYON datasets, and 
+
+1 × 10 −4 for the survival prediction task. For Local-Adaptive   
+
+> Q. Zhang et al.: Preprint submitted to Elsevier Page 5 of 11
+
+KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis 
+
+Table 1 
+
+Comparison Results of Cancer Sub-typing Task using CONCH [18] Features. 𝑝 denotes paired t-tests between our KHiM-Mamba and the second-best counterpart on the corresponding dataset. 
+
+BRACS-7 (n=547, 𝑝 < 0.05 ) BRACS-3 (n=547, 𝑝 < 0.01 ) TCGA-BRCA (n=952, 𝑝 < 0.05 )Method ACC. (±std) AUC (±std) RANK ACC. (±std) AUC (±std) RANK ACC. (±std) AUC (±std) RANK 
+
+Mean Pooling 0.5378 ±0 .0575 0.8341 ±0 .0261 𝟏𝟓 .𝟓 0.7746 ±0 .0442 0.8769 ±0 .0248 𝟏𝟓 0.8970 ±0 .0402 0.9204 ±0 .0385 𝟏𝟕 
+
+Max Pooling 0.5315 ±0 .0426 0.8084 ±0 .0588 𝟏𝟗 .𝟓 0.7463 ±0 .0424 0.8782 ±0 .0203 𝟏𝟗 .𝟓 0.8812 ±0 .0399 0.9042 ±0 .0449 𝟐𝟐 
+
+ABMIL [14] [ICML’21] 0.5378 ±0 .0354 0.8268 ±0 .0280 𝟏𝟔 .𝟓 0.7571 ±0 .0665 0.8730 ±0 .0410 𝟏𝟗 0.9028 ±0 .0275 0.9354 ±0 .0424 𝟏𝟏 
+
+TransMIL [23] [NIPS’21] 0.5149 ±0 .0555 0.8190 ±0 .0462 𝟏𝟗 0.7632 ±0 .0511 0.8953 ±0 .0299 𝟗 .𝟓 0.9006 ±0 .0297 0.9302 ±0 .0526 𝟏𝟒 
+
+CLAM-SB [19] [NAT.BME’20] 0.5499 ±0 .0521 0.8255 ±0 .0308 𝟏𝟓 .𝟓 0.7751 ±0 .0505 0.8857 ±0 .0369 𝟏𝟐 0.9118 ±0 .0368 0.9407 ±0 .0418 𝟓 
+
+CLAM-MB [19] [NAT.BME’20] 0.5673 ±0 .0427 0.8554 ±0 .0308 𝟔 .𝟓 0.7782 ±0 .0475 0.8937 ±0 .0135 𝟕 0.9064 ±0 .0389 0.9366 ±0 .0516 𝟖 .𝟓 
+
+DSMIL [15] [CVPR’21] 0.5002 ±0 .0709 0.8158 ±0 .0344 𝟐𝟎 .𝟓 0.7480 ±0 .0344 0.8903 ±0 .0281 𝟏𝟔 .𝟓 0.8869 ±0 .0463 0.9163 ±0 .0568 𝟐𝟎 
+
+ACMIL [37] [ECCV’24] 0.5524 ±0 .0506 0.8587 ±0 .0297 𝟖 0.7577 ±0 .0456 0.8692 ±0 .0250 𝟏𝟗 0.9107 ±0 .0369 0.9364 ±0 .0423 𝟕 
+
+ILRA-MIL [29] [ICLR’23] 0.5029 ±0 .0705 0.8243 ±0 .0249 𝟏𝟗 0.7594 ±0 .0451 0.8810 ±0 .0256 𝟏𝟔 0.8953 ±0 .0342 0.9252 ±0 .0470 𝟏𝟕 
+
+Dtfd-MIL [35] [CVPR’22] 0.5389 ±0 .0652 0.8477 ±0 .0591 𝟏𝟑 .𝟓 0.7488 ±0 .0396 0.8538 ±0 .0382 𝟐𝟏 0.8972 ±0 .0488 0.9179 ±0 .0382 𝟏𝟕 
+
+MHIM-ABMI [26] [IJCV’26] 0.5405 ±0 .0399 0.8328 ±0 .0477 𝟏𝟓 0.7678 ±0 .0487 0.8832 ±0 .0479 𝟏𝟒 .𝟓 0.9033 ±0 .0391 0.9345 ±0 .0518 𝟏𝟏 .𝟓 
+
+ViLa-MIL [24] ⊺ [CVPR’24] 0.5611 ±0 .0567 0.8541 ±0 .0749 𝟗 .𝟓 0.7742 ±0 .0392 0.8932 ±0 .0488 𝟏𝟎 .𝟓 0.9022 ±0 .0395 0.9422 ±0 .0676 𝟗 
+
+FOCUS [10] ⊺ [CVPR’25] 0.5654 ±0 .0468 0.8644 ±0 .0505 𝟒 .𝟓 0.7924 ±0 .0672 0.8950 ±0 .0648 𝟑 .𝟓 0.9110 ±0 .0785 0.9325 ±0 .0612 𝟕 .𝟓 
+
+TOP [21] ⊺ [NIPS’23] 0.5631 ±0 .0722 0.8573 ±0 .0684 𝟕 0.7794 ±0 .0395 0.8930 ±0 .0433 𝟕 .𝟓 0.9047 ±0 .0588 0.9391 ±0 .0551 𝟖 .𝟓 
+
+MOC [30] ⊺ [MICCAI’25] 0.5563 ±0 .0675 0.8431 ±0 .0499 𝟏𝟐 0.7780 ±0 .0617 0.8779 ±0 .0682 𝟏𝟑 0.8994 ±0 .0467 0.9164 ±0 .0259 𝟏𝟕 
+
+S4MIL [7] † [MICCAI’23] 0.5697 ±0 .0463 0.8557 ±0 .0291 𝟒 .𝟓 0.7839 ±0 .0716 0.8963 ±0 .0479 𝟑 .𝟓 0.9133 ±0 .0276 0.9445 ±0 .0377 𝟑 
+
+MambaMIL [33] † [MICCAI’24] 0.5665 ±0 .0703 0.8383 ±0 .0336 𝟏𝟎 0.7688 ±0 .0296 0.8936 ±0 .0270 𝟏𝟎 .𝟓 0.9070 ±0 .0403 0.9458 ±0 .0285 𝟒 
+
+2DMamba [36] † [CVPR’25] 0.5608 ±0 .0491 0.8479 ±0 .0405 𝟏𝟎 .𝟓 0.7858 ±0 .0475 0.8977 ±0 .0567 𝟐 .𝟓 0.8957 ±0 .0388 0.9347 ±0 .0469 𝟏𝟒 .𝟓 
+
+M3Mamba [39] †‡ [CVPR’25] 0.5692 ±0 .0488 0.8581 ±0 .0457 𝟒 0.7544 ±0 .0581 0.8875 ±0 .0632 𝟏𝟔 0.8857 ±0 .0492 0.9147 ±0 .0651 𝟐𝟏 
+
+GMMamba [40] † [ICCV’25] 0.5697 ±0 .0477 0.8589 ±0 .0369 𝟐 .𝟓 0.7774 ±0 .0498 0.8945 ±0 .0388 𝟕 .𝟓 0.9069 ±0 .0572 0.9441 ±0 .0389 𝟓 .𝟓 
+
+PAM [12] † [TMI’25] 0.5682 ±0 .0581 0.8542 ±0 .0434 𝟔 .𝟓 0.7792 ±0 .0568 0.8904 ±0 .0425 𝟖 .𝟓 0.9066 ±0 .0579 0.9249 ±0 .0577 𝟏𝟐 
+
+KHiM-Mamba (Ours) †⊺ 0.5874 ±0 .0857 0.8746 ±0 .0459 𝟏 0.8165 ±0 .0398 0.9074 ±0 .0469 𝟏 0.9330 ±0 .0427 0.9559 ±0 .0433 𝟏 
+
+‡ M3Mamba [39] did not release their codes, results are from our reproduced version; 
+
+† denotes Mamba-based multiple instance learning methods. 
+
+⊺ denotes multiple-instance learning methods that incorporate language priors. 
+
+Vocabulary Retrieval Module in Sec. 3.3, we use GPT-5.6-sol as the base LLM (More ablations are shown in Tab. 6). We train KHiM-Mamba and all competing methods for 100 epochs with a batch size of 1 on a single NVIDIA RTX 3090 GPU. Scaling factor 𝛾 in eq. 5 is initialized to 1 × 𝑒 −2 .The routing thresholds 𝜏 𝑠𝑖𝑚 and 𝜏 𝑚𝑎𝑟𝑔𝑖𝑛 in eq. 7 are set to 0.25 and 0.03 respectively. More details including system prompts will be released with codes upon acceptance. 
+
+4.2. Results in Cancer Sub-typing Tasks 
+
+Datasets & Evaluation Metrics. We evaluate on two bench-marks. The BRACS dataset [2] comprises 547 breast tu-mor WSIs annotated with three coarse categories (benign, atypical, and malignant) and seven fine-grained sub-types (Normal, Pathological Benign, Usual Ductal Hyperplasia, Flat Epithelial Atypia, Atypical Ductal Hyperplasia, Ductal Carcinoma in Situ, and Invasive Carcinoma). We report results under 10-fold Monte Carlo cross-validation with an 80%/10%/10% train/val/test split. The TCGA-BRCA dataset [28] contains 952 breast WSIs divided into Invasive Ductal Carcinoma (IDC, 749 slides) and Invasive Lobular Carcinoma (ILC, 203 slides). Following GMMamba [40], we randomly partition it into training, validation, and test sets at a 65:10:25 ratio. For both datasets, we report the mean Area Under the ROC Curve (AUC) with standard deviation (std). Results on BRACS. On the BRACS bench-mark, KHiM-Mamba consistently ranks first under both the fine-grained 7-class setting and the coarse-grained 3-class setting, outperforming conventional MIL approaches, language-informed methods, and recent Mamba-based mod-els. Specifically, on BRACS-7, KHiM-Mamba achieves an accuracy of 0.5874 and an AUC of 0.8746. The previous best accuracy is 0.5697, jointly achieved by S4MIL [7] and GMMamba [40], while the previous best AUC is 0.8644, obtained by the language-informed FOCUS [10]. KHiM-Mamba therefore improves the two metrics by 1.77 and 1.02 percentage points, respectively. These results demonstrate the effectiveness of incorporating localized linguistic knowl-edge into selective state-space modeling for challenging fine-grained subtype recognition. On BRACS-3, KHiM-Mamba similarly achieves the best accuracy and AUC of 0.8165 and 0.9074, respectively. Compared with the strongest previous results—an accuracy of 0.7924 from FOCUS [10] and an AUC of 0.8977 from 2DMamba [36]— our method yields improvements of 2.41 and 0.97 percent-age points ( 𝑝 < 0.05 ). The consistent gains under both label granularities indicate that KHiM-Mamba can effec-tively capture discriminative morphological patterns for fine-grained classification while maintaining reliable perfor-mance when diagnostic categories are consolidated. More-over, its improvements over existing language-informed methods suggest that locally adaptive language modulation is more effective than incorporating language priors through globally shared prompts or representations. 
+
+Results on TCGA-BRCA. On TCGA-BRCA, KHiM-Mamba again ranks first, achieving an accuracy of 0.9330 and an AUC of 0.9559. It advances the previous best accuracy of 0.9133, obtained by S4MIL [7], by 1.97 percentage points and the previous best AUC of 0.9458, obtained by MambaMIL [33], by 1.01 percentage points ( 𝑝 < 0.05 ). These improvements are particularly notable because many competitive methods already exceed 0.90 in accuracy and 0.94 in AUC on this benchmark, leaving relatively limited 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 6 of 11 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis 
+
+Table 2 
+
+Comparison Results of Survival Analysis Task on Six TCGA Subsets. 
+
+Method BLCA (n=437) BRCA (n=1023) KIRC (n=498) KIRP (n=261) LUAD (n=455) STAD (n=363) MEAN RANK 
+
+Mean-Pooling 0.6758 ±0 .0333 0.6274 ±0 .0368 0.7287 ±0 .0348 0.8179 ±0 .0426 0.6334 ±0 .0897 0.5917 ±0 .0412 0.6792 𝟏𝟗 
+
+Max-Pooling 0.6417 ±0 .0446 0.6095 ±0 .1011 0.7316 ±0 .0557 0.8164 ±0 .0743 0.6245 ±0 .0671 0.5554 ±0 .0423 0.6632 𝟐𝟏 
+
+ABMIL [14] [ICML’21] 0.6604 ±0 .0183 0.6621 ±0 .0263 0.7185 ±0 .0609 0.8201 ±0 .0480 0.6433 ±0 .0766 0.6053 ±0 .0329 0.6850 𝟏𝟕 
+
+TransMIL [23] [NIPS’21] 0.6705 ±0 .0244 0.6592 ±0 .0593 0.7174 ±0 .0708 0.8357 ±0 .0477 0.6185 ±0 .1102 0.6597 ±0 .0374 0.6935 𝟏𝟏 
+
+CLAM-SB [19] [NAT.BME’20] 0.6711 ±0 .0296 0.6650 ±0 .0310 0.7323 ±0 .0561 0.8216 ±0 .0390 0.6387 ±0 .0675 0.6154 ±0 .0274 0.6907 𝟏𝟒 
+
+CLAM-MB [19] [NAT.BME’20] 0.6684 ±0 .0275 0.6609 ±0 .0476 0.7293 ±0 .0583 0.8358 ±0 .0642 0.6154 ±0 .0779 0.5983 ±0 .0506 0.6848 𝟏𝟖 
+
+DSMIL [15] ⊥ [CVPR’21] 0.6751 ±0 .0185 0.6828 ±0 .0457 0.7473 ±0 .0478 0.8331 ±0 .0626 0.6568 ±0 .0901 0.6204 ±0 .0587 0.7026 𝟕 
+
+ACMIL [37] [ECCV’24] 0.6682 ±0 .0379 0.6755 ±0 .0322 0.7301 ±0 .0584 0.8314 ±0 .0492 0.6355 ±0 .0914 0.6140 ±0 .0456 0.6925 𝟏𝟑 
+
+ILRA-MIL [29] [ICLR’23] 0.6802 ±0 .0236 0.6705 ±0 .0297 0.7335 ±0 .0442 0.8368 ±0 .0287 0.6417 ±0 .0668 0.6451 ±0 .0659 0.7013 𝟖 
+
+Dtfd-MIL [35] [CVPR’22] 0.6649 ±0 .0279 0.6648 ±0 .0387 0.7279 ±0 .0458 0.8244 ±0 .0577 0.6222 ±0 .0477 0.6355 ±0 .0728 0.6900 𝟏𝟓 
+
+MHIM-MIL [26] [IJCV’26] 0.6752 ±0 .0348 0.6705 ±0 .0299 0.7145 ±0 .0699 0.8259 ±0 .0491 0.6470 ±0 .0833 0.6440 ±0 .0562 0.6961 𝟏𝟎 
+
+WSI-GCN [4] ‡ [MICCAI’21] 0.6729 ±0 .0417 0.6578 ±0 .0588 0.7050 ±0 .0233 0.8378 ±0 .0620 0.6467 ±0 .0969 0.6372 ±0 .0588 0.6929 𝟏𝟐 
+
+ED-GNN [22] ‡ [MICCAI’24] 0.6822 ±0 .0459 0.6675 ±0 .0490 0.6978 ±0 .0391 0.7946 ±0 .0285 0.6333 ±0 .0629 0.6490 ±0 .0599 0.6874 𝟏𝟔 
+
+VLSA [17] ⊺ [ICLR’25] 0.6176 ±0 .0215 0.6652 ±0 .0570 0.7157 ±0 .0579 0.7822 ±0 .0647 0.6370 ±0 .0270 0.6475 ±0 .0298 0.6766 𝟐𝟎 
+
+S4-MIL [7] † [MICCAI’23] 0.6811 ±0 .0314 0.6686 ±0 .0609 0.7378 ±0 .0341 0.8296 ±0 .0544 0.6445 ±0 .1075 0.6579 ±0 .0693 0.7033 𝟔 
+
+MambaMIL [33] † [MICCAI’24] 0.6837 ±0 .0465 0.6841 ±0 .0258 0.7388 ±0 .0436 0.8257 ±0 .0369 0.6509 ±0 .0594 0.6632 ±0 .0459 0.7077 𝟑 
+
+2DMamba [36] † [CVPR’25] 0.6902 ±0 .0384 0.6977 ±0 .0567 0.7290 ±0 .0391 0.8465 ±0 .0277 0.6644 ±0 .0498 0.6700 ±0 .0389 0.7163 𝟐 
+
+M3Mamba [39] † [CVPR’25] 0.6675 ±0 .0392 0.6738 ±0 .0388 0.7279 ±0 .0577 0.8144 ±0 .0690 0.6549 ±0 .0485 0.6605 ±0 .0720 0.6998 𝟗 
+
+GMMamba [40] † [ICCV’25] 0.6795 ±0 .0458 0.6877 ±0 .0382 0.7274 ±0 .0492 0.8233 ±0 .0491 0.6571 ±0 .0538 0.6687 ±0 .0597 0.7073 𝟒 
+
+PAM [12] † [TMI’25] 0.6749 ±0 .0392 0.6878 ±0 .0261 0.7355 ±0 .0544 0.8198 ±0 .0374 0.6600 ±0 .0475 0.6639 ±0 .0488 0.7070 𝟓 
+
+KHiM-Mamba (Ours) †⊺ 𝟎 .𝟕𝟐𝟒𝟑 ±0 .0488 𝟎 .𝟕𝟏𝟕𝟓 ±0 .0384 𝟎 .𝟕𝟓𝟕𝟗 ±0 .0592 𝟎 .𝟖𝟓𝟕𝟕 ±0 .0489 𝟎 .𝟔𝟖𝟓𝟖 ±0 .0376 𝟎 .𝟔𝟗𝟐𝟗 ±0 .0457 𝟎 .𝟕𝟑𝟗𝟒 𝟏 
+
+† denotes Mamba-based multiple instance learning methods; 
+
+‡ Graph-based multiple instance learning methods specifically designed for survival analysis 
+
+⊺ denotes multiple-instance learning methods that incorporate language priors; among prior VLM-MIL methods, only VLSA [17] supports regression-based survival analysis. TCGA-BLCA TCGA-BRCA TCGA-LUAD TCGA-STAD 
+
+𝑝 = 1.29 ×10 !" 
+
+𝑝 = 2.32 ×10 !# 
+
+𝑝 =1.64 ×10 !$ 𝑝 = 0 .40×10 !% 
+
+𝑝 = 2.63 ×10 !" 𝑝 =3.40×10 !& 
+
+𝑝 = 4 .49×10 !' 
+
+𝑝 = 6 .67×10 !" 
+
+> GMMamba KHiM-Mamba (Ours)
+
+Figure 4: Kaplan–Meier survival curves of second-best method GMMamba [40] and our proposed KHiM-Mamba. 
+
+room for further gains. The consistent superiority of KHiM-Mamba over classical attention-based MIL approaches, existing language-informed methods, and recent Mamba-family variants highlights the effectiveness of its language-modulated selective dynamics. Overall, achieving the top rank across all three settings and all six evaluation metrics demonstrates the robustness and generalizability of KHiM-Mamba across datasets with different subtype granularities and cohort characteristics. 
+
+4.3. Results in Survival Outcome Prediction Tasks 
+
+Datasets & Evaluation Metrics. We evaluate on six TCGA subsets (BLCA, BRCA, KIRC, KIRP, LUAD, and STAD), using overall survival length as the ground-truth label fol-lowing [33]. A 5-fold cross-validation strategy with a 4:1 train/validation split is adopted to mitigate the impact of data partitioning. We report the mean cross-validated Con-cordance Index (C-Index) with std. Results on Six TCGA Subsets. As shown in Table 2, KHiM-Mamba achieves the highest mean C-Index of 0.7394 across the six TCGA co-horts, with concordance indices of 0.7243, 0.7175, 0.7579, 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 7 of 11 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis 
+
+Table 3 
+
+Domain Generalization Performance on CAMELYON16 to CAMELYON17 [6]. 
+
+Method CENTER 1 CENTER 2 CENTER 3 CENTER 4 CENTER 5 MEAN RANK 
+
+Mean-Pooling 0.6760 ±0 .1237 0.3780 ±0 .0183 0.7850 ±0 .0838 0.6758 ±0 .1063 0.6647 ±0 .0301 0.6359 𝟏𝟔 
+
+Max-Pooling 0.9210 ±0 .0164 0.7780 ±0 .1454 0.9510 ±0 .0094 0.9333 ±0 .0112 0.8330 ±0 .0200 0.8833 𝟒 
+
+ABMIL [14] [ICML’21] 0.9120 ±0 .0248 0.7450 ±0 .1344 0.9480 ±0 .0098 0.9323 ±0 .0197 0.8460 ±0 .0918 0.8767 𝟕 
+
+TransMIL [23] [NIPS’21] 0.9230 ±0 .0245 0.8450 ±0 .0880 0.9440 ±0 .0191 0.9333 ±0 .0176 0.8330 ±0 .0424 0.8957 𝟐 
+
+CLAM [19] [NAT.BME’20] 0.9020 ±0 .0252 0.7170 ±0 .1254 0.9440 ±0 .0080 0.9253 ±0 .0164 0.8080 ±0 .0583 0.8593 𝟏𝟓 
+
+ACMIL [37] [ECCV’24] 0.9020 ±0 .0312 0.7460 ±0 .1247 0.9490 ±0 .0137 0.9273 ±0 .0185 0.7930 ±0 .0880 0.8635 𝟏𝟒 
+
+ILRA-MIL [29] [ICLR’23] 0.9070 ±0 .0398 0.7680 ±0 .1408 0.9350 ±0 .0191 0.9242 ±0 .0244 0.8100 ±0 .0986 0.8688 𝟏𝟐 
+
+ViLa-MIL [24] ⊺ [CVPR’24] 0.9070 ±0 .0743 0.7720 ±0 .0695 0.9420 ±0 .0484 0.9330 ±0 .0575 0.8170 ±0 .0549 0.8742 𝟗 
+
+FOCUS [10] ⊺ [CVPR’25] 0.9140 ±0 .0579 0.7740 ±0 .0688 0.9430 ±0 .0482 0.9290 ±0 .0550 0.8280 ±0 .0398 0.8776 𝟔 
+
+TOP [21] ⊺ [NIPS’23] 0.9130 ±0 .0576 0.7680 ±0 .0499 0.9360 ±0 .0642 0.9240 ±0 .0833 0.8180 ±0 .0755 0.8718 𝟏𝟎 
+
+MOC [30] ⊺ [MICCAI’25] 0.9150 ±0 .0398 0.7630 ±0 .0469 0.9270 ±0 .0574 0.9272 ±0 .0648 0.8190 ±0 .0555 0.8702 𝟏𝟏 
+
+S4MIL [7] † [MICCAI’23] 0.9210 ±0 .0217 0.8060 ±0 .1038 0.9430 ±0 .0168 0.9354 ±0 .0164 0.8320 ±0 .0462 0.8875 𝟑 
+
+MambaMIL [33] † [MICCAI’24] 0.9200 ±0 .0358 0.7510 ±0 .1797 0.9390 ±0 .0181 0.9253 ±0 .0213 0.8400 ±0 .0755 0.8751 𝟖 
+
+GMMamba [40] † [ICCV’25] 0.9070 ±0 .0452 0.7190 ±0 .1550 0.9300 ±0 .0195 0.9303 ±0 .0178 0.8350 ±0 .0819 0.8643 𝟏𝟑 
+
+PAM [12] † [TMI’25] 0.9170 ±0 .0241 0.7500 ±0 .1579 0.9540 ±0 .0092 0.9283 ±0 .0071 0.8600 ±0 .0377 0.8819 𝟓 
+
+KHiM-Mamba (Ours) †⊺ 0.9477 ±0 .0418 0.8654 ±0 .0279 0.9560 ±0 .0722 0.9457 ±0 .0275 0.8772 ±0 .0588 0.9184 𝟏   
+
+> †denotes Mamba-based multiple instance learning methods;
+> ⊺denotes multiple-instance learning methods that incorporate language priors
+
+0.8577, 0.6858, and 0.6929 on BLCA, BRCA, KIRC, KIRP, LUAD, and STAD, respectively. This represents a 2.31% improvement over the strongest prior methods, 2DMamba (0.7163), and consistently surpasses other recent Mamba-based methods such as MambaMIL (0.7077), GMMamba (0.7073), PAM (0.7070), and M3Mamba (0.6998). The con-sistent gains over these architecturally diverse SSM variants indicate that the benefit of our language-modulated selective dynamics is complementary to, and extends beyond, purely structural enhancements to the state-space backbone. To further evaluate risk stratification quality, we present Kaplan–Meier survival curves in Fig. 4. Compared with the second-best method GMMamba [40], KHiM-Mamba yields consistently lower log-rank 𝑝 -values across all four datasets, indicating sharper separation between predicted high- and low-risk groups. The improvement is especially pronounced on TCGA-LUAD, where the 𝑝 -value drops from 
+
+4.00 × 10 −2 (GMMamba) to 2.63 × 10 −6 (KHiM-Mamba), reflecting a substantially more discriminative risk stratifi-cation. These results suggest that language-modulated slide encoding dynamics enable the model to capture survival-relevant evidence more effectively, producing risk scores that better align with actual patient outcomes. 
+
+4.4. Cross-center Generalization Evaluation 
+
+For domain generalization evaluation, all models are trained on CAMELYON16 and directly evaluated on the five independent centers of CAMELYON17 without any target-domain adaptation. Since these centers were prepared and digitized under different staining protocols and scanners, this cross-center protocol serves as a direct stress test of the diagnostically irrelevant appearance variation illustrated in Fig. 1b. As shown in Table 3, KHiM-Mamba achieves the best performance on all five target centers, with AUC scores of 0.9477, 0.8654, 0.9560, 0.9457, and 0.8772, respectively. The resulting mean AUC is 0.9184, which is the high-est among all compared methods. The strongest previous method is TransMIL with a mean AUC of 0.8957, followed by S4MIL (0.8875), PAM (0.8819), ABMIL (0.8767), and MambaMIL (0.8751). Relative to TransMIL, KHiM-Mamba improves the mean AUC by 2.27%, indicating stronger gen-eralization under cross-center distribution shifts. The supe-riority of KHiM-Mamba is also consistent across individual centers. Compared with the best competing result on each center, our method achieves gains of 2.47% on Center 1, 2.04 on Center 2, 0.20% on Center 3, 1.24% on Center 4, and 1.72% on Center 5. In particular, the improvement on Center 2 is notable, where several recent MIL and Mamba-based methods exhibit relatively lower transfer performance. Overall, these results show that KHiM-Mamba maintains stronger and more stable performance when transferred from Camelyon16 to the multi-center Camelyon17 benchmark. 
+
+4.5. Performance under Few-Shot Scenarios 
+
+To evaluate data efficiency, we conduct few-shot experi-ments on TCGA-NSCLC under 8-shot and 16-shot settings, where only a handful of labeled slides per class are available for training. Results are reported in Table 4. Under the 8-shot setting, KHiM-Mamba achieves 81.45% accuracy and 93.48% AUC, surpassing the most SoTA method MOC by 4.35% and 2.97%, respectively. Conventional MIL methods such as CLAM-SB degrade sharply in this regime (59.96% accuracy), while existing vision–language approaches like ViLa-MIL and CoOp fail to consistently outperform purely visual methods, suggesting that naively incorporating lan-guage is insufficient under severe data scarcity. When the shot count increases to 16, KHiM-Mamba continues to lead with 84.77% accuracy and 92.58% AUC. Averaged over both settings, our method attains 83.11% accuracy and 93.03% AUC with relatively low variance across runs, confirm-ing that language-modulated selective dynamics serve as a strong inductive bias that substantially alleviates the depen-dence on annotation. 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 8 of 11 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis 
+
+Table 4 
+
+Few-shot performance on the TCGA-NSCLC [28] dataset.                                                
+
+> 8-SHOT 16-SHOT MEAN Method ACC. AUC ACC. AUC ACC. AUC
+> CLAM-SB [19] 59 .96 ±9 .44 73 .68 ±6 .72 78 .52 ±4 .16 87 .03 ±3 .78 69 .11 80 .36
+> CLAM-MB [19] 66 .63 ±2 .48 79 .69 ±6 .34 73 .76 ±3 .88 88 .01 ±2 .99 70 .20 83 .85
+> TransMIL [23] 75 .82 ±7 .44 83 .69 ±7 .05 73 .88 ±2 .58 88 .53 ±3 .17 74 .85 86 .11
+> ViLa-MIL [24] 73 .51 ±9 .22 84 .20 ±7 .09 71 .28 ±3 .56 88 .30 ±4 .12 72 .40 86 .25
+> CoOp [41] 69 .48 ±5 .93 80 .11 ±5 .91 71 .81 ±4 .35 82 .10 ±3 .72 70 .65 81 .11
+> TOP [21] 71 .02 ±7 .52 79 .43 ±8 .30 79 .26 ±6 .72 86 .42 ±4 .55 75 .14 82 .93
+> MOC [30] 77 .10 ±3 .80 90 .51 ±1 .74 72 .40 ±2 .46 89 .95 ±2 .77 74 .75 90 .23
+> KHiM-Mamba 81.45 ±3 .75 93.48 ±3 .79 84.77 ±4 .69 92.58 ±3 .75 83.11 93.03
+
+Table 5 
+
+Ablations on our core Knowledge-aware Hidden-state Modu-lation (KHiM) module upon cancer sub-typing datasets, i.e. ,BRACS-7, TCGA-BRCA, and CAMELYON16 tumor region localization (patch-level classification) task. 
+
+Settings 𝚫𝐁 𝚫𝐂 BRACS-7 TCGA-BRCA CAMELYON16 
+
+Original SSM ✗ ✗ 0.8277 ±0 .0542 0.9046 ±0 .0372 0.8573 ±0 .0549  
+
+> Version 1
+
+✔ ✗ 0.8333 ±0 .0439 0.9067 ±0 .0538 0.8745 ±0 .0576  
+
+> Version 2
+
+✗ ✔ 0.8325 ±0 .0643 0.8976 ±0 .0422 0.8620 ±0 .0628 
+
+Ours ✔ ✔ 𝟎 .𝟖𝟕𝟒𝟔 ±0 .0459 𝟎 .𝟗𝟓𝟓𝟗 ±0 .0433 𝟎 .𝟗𝟎𝟕𝟓 ±0 .0482 
+
+4.6. Ablation Study 
+
+In this section, we conduct a series of ablation exper-iments to dissect the contribution of each design choice in KHiM-Mamba. Unless otherwise specified, all ablation studies are using AUC as the evaluation metric. 
+
+Effect of KHiM Components. KHiM-Mamba injects lin-guistic priors into the selective SSM by modulating the input projection matrices associated with 𝐵 𝑡 and 𝐶 𝑡 through learned low-rank residuals Δ𝐵 and Δ𝐶 . To assess their individual and joint contributions, we compare four variants: (i) Original SSM , which uses a standard Mamba backbone without language conditioning; (ii) Version 1 , which applies only Δ𝐵 ; (iii) Version 2, which applies only Δ𝐶 ; and (iv) the full KHiM-Mamba , which jointly applies both resid-uals. The results on two cancer subtyping datasets and the CAMELYON16 tumor region localization are in Table 5. Applying Δ𝐵 alone consistently improves performance over the original SSM, increasing the average score across the three tasks from 0.8632 to 0.8715. In contrast, apply-ing only Δ𝐶 yields an average score of 0.8640, which is comparable to the baseline. This observation is intuitive: modulating 𝐵 𝑡 affects what information is written into the hidden state, whereas modulating 𝐶 𝑡 adjusts how the stored information is retrieved without directly influencing its en-coding. When Δ𝐵 and Δ𝐶 are jointly activated, KHiM-Mamba achieves an average score of 0.9127, outperforming the baseline by 4.95 percentage points. Consistent improve-ments are observed across all three tasks, including BRACS-7 (0.8277 → 0.8746), TCGA-BRCA (0.9046 → 0.9559), and CAMELYON16 tumor region segmentation (0.8573 →
+
+0.9075). These results demonstrate that Δ𝐵 and Δ𝐶 are complementary: language-guided modulation of 𝐵 𝑡 enables the model to selectively encode task-relevant morphological 
+
+Table 6 
+
+Ablations on our Local-Adaptive Vocabulary Retrieval module upon cancer sub-typing datasets. 
+
+Vocabulary BRACS-7 TCGA-BRCA MEAN 
+
+Class-label 0.8466 ±0 .0451 0.9411 ±0 .0675 0.8939 
+
+VilaMIL [24] Prompt 0.8671 ±0 .0420 0.9509 ±0 .0483 0.9090 
+
+TOP [21] Prompt 0.8644 ±0 .0387 0.9521 ±0 .0576 0.9083 
+
+Ours (GPT-5.6-sol) 0.8746 ±0 .0459 0.9559 ±0 .0433 0.9153 
+
+Ours (Gemini-3-pro) 0.8710 ±0 .0279 0.9540 ±0 .0533 0.9125 
+
+Ours (LLaMA-3.1) 0.8648 ±0 .0338 0.9520 ±0 .0572 0.9084 
+
+Ours (Qwen-3.8-max) 0.8720 ±0 .0337 0.9510 ±0 .0478 0.9115 
+
+patterns, while modulation of 𝐶 𝑡 facilitates the effective retrieval of the corresponding discriminative features. 
+
+Effect of Local-Adaptive Vocabulary Retrieval Module. 
+
+We investigate how the quality and source of language priors affect language-guided modulation by comparing our local-adaptive vocabulary retrieval module with two alternative vocabulary settings: (i) raw class labels and (ii) the fixed prompt sets adopted by VilaMIL [24] and TOP [21]. We further evaluate vocabularies generated by different LLMs, including GPT-5.6-sol, Gemini-3-pro, LLaMA, and Qwen-3.8-max, to assess the robustness of our retrieval strategy to the choice of language model. As shown in Tab. 6, using only class labels yields the lowest mean AUC of 0.8939, suggesting that such coarse semantic supervision is insufficient for fine-grained feature modulation. Replacing class labels with manually designed and globally shared prompts from VilaMIL and TOP im-proves the mean AUC to 0.9090 and 0.9083, respectively, confirming that richer linguistic descriptions provide more effective guidance for slide representation learning. In contrast, our local-adaptive retrieval strategy consis-tently achieves stronger performance across all tested LLMs, with mean AUCs ranging from 0.9084 to 0.9153. Among them, GPT-5.6-sol delivers the best overall results, achieving the highest mean AUC of 0.9153, together with the best performance on both BRACS-7 (0.8746) and TCGA-BRCA (0.9559). Gemini-3-pro also performs competitively, reach-ing a mean AUC of 0.9125. Notably, the open-source model LLaMA-3.1 [27] and Qwen-3.8-max [32] remain highly competitive with the proprietary models: Qwen-3.8-max attains a mean AUC of 0.9115 and the second-best result on BRACS-7 (0.8720), while LLaMA achieves a mean AUC of 0.9084, comparable to the strongest fixed-prompt baselines. Overall, the best configuration improves over class-label supervision by 2.14 percentage points and surpasses the strongest fixed-prompt baseline by 0.63 percentage points. These results demonstrate that the proposed module can effectively leverage both proprietary and open-source LLMs to produce informative local-adaptive vocabularies, showing strong effectiveness and generalizability. 
+
+4.7. Visualization Analysis of KHiM-Mamba: 
+
+To intuitively understand how language modulation re-shapes patch representations, we visualize patch-level atten-tion heatmaps before and after the KHiM module in Fig. 5. 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 9 of 11 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis w/o KHiM w/ KhiM  Image 
+
+Figure 5: Visualization of patch attention map using patch features with and without Knowledge-aware Hidden-state Modulation (KHiM). Major tumor areas are circled in yellow. 
+
+Table 7 
+
+Efficacy evaluation with different numbers of patches per slide (i.e. , 1,000 and 5,000). Parameter counts (Params.), inference time, and throughput (Thro.) are reported in thousands (K), milliseconds (ms), and thousands of patches per second (K patches/s), respectively.                                                                    
+
+> n=1,000 n=5,000 Method Params. Time Thro. Time Thro.
+> Mean-Pooling 525 .8K0.25 ms 4.02 K0.53 ms 1.90 KMax-Pooling 525 .8K0.19 ms 5.22 K0.51 ms 1.97 KCLAM [19] [NAT.BME’20] 790 .8K0.82 ms 1.22 K0.94 ms 1.07 KABMIL [14] [ICML’21] 591 .6K0.71 ms 1.41 K0.80 ms 1.25 KDSMIL [15] [CVPR’21] 872 .7K1.48 ms 0.68 K1.95 ms 0.51 KDtfd-MIL [35] [TMI’25] 789 .3K9.81 ms 0.10 K13 .86 ms 0.07 KTransMIL [23] [NIPS’21] 2672 .2K9.47 ms 0.11 K11 .40 ms 0.09 KMHIM-MIL [26] [IJCV’26] 5344 .3K10 .51 ms 0.10 K12 .10 ms 0.08 KPAM [12] [TMI’25] 2290 .4K3.09 ms 0.32 K6.47 ms 0.16 KMambaMIL [33] [MICCAI’24] 2410 .2K2.87 ms 0.35 K4.96 ms 0.20 K2DMamba [36] [CVPR’25] 2288 .4K2.46 ms 0.41 K6.44 ms 0.16 K
+> KHiM-Mamba (ours) 2216 .7K2.50 ms 0.41 K5.79 ms 0.17 K
+
+Before modulation, attention maps exhibit diffuse, noisy activations scattered across both tumor and non-tumor areas, indicating that purely visual features struggle to identify diagnostically relevant tissue. After modulation, attention becomes markedly more concentrated: high-attention re-sponses align closely with annotated tumor regions (yel-low contours), while non-tumor areas are consistently sup-pressed. This demonstrates that language-modulated selec-tive dynamics effectively steer the model’s focus toward pathologically meaningful regions, filtering out irrelevant background and yielding more discriminative representa-tion. Moreover, the improvement in tumor region localiza-tion on the CAMELYON16 dataset (see Tab. 5) quantita-tively supports the same conclusion. 
+
+4.8. Efficacy Analysis 
+
+We further evaluate the computational efficiency of KHiM-Mamba under different sequence lengths by sam-pling 1,000 and 5,000 patches per slide. As shown in Table 7, KHiM-Mamba contains 2.22M trainable parameters, fewer than all compared Mamba-based MIL methods, includ-ing PAM (2.29M), MambaMIL (2.41M), and 2DMamba (2.29M). With 1,000 patches, our method requires only 2.50,ms for inference and achieves a throughput of 0.41K, matching 2DMamba while being faster than PAM and MambaMIL. When the sequence length increases to 5,000 patches, KHiM-Mamba maintains an inference time of 5.79,ms, outperforming PAM and 2DMamba by 10.5% and 10.1%, respectively. Although the proposed knowledge-aware modulation introduces language-conditioned opera-tions into the selective state-space layer, its low-rank for-mulation incurs only modest computational overhead and preserves the favorable efficiency of Mamba-based archi-tectures. Together with the performance gains reported in Tables 1–4, these results demonstrate that KHiM-Mamba achieves a favorable balance between predictive effective-ness, model size, and computational efficiency for large-scale WSI analysis. 
+
+5. Conclusion 
+
+In this work, we introduced Knowledge-aware Hi dden-state Modulation (KHiM-Mamba) that addresses a fun-damental limitation of existing Mamba-based WSI analy-sis: purely vision-driven state transitions can accumulate diagnostically irrelevant evidence and dilute critical cues over long patch sequences. Rather than employing language only as an external component like previous VLM-MIL methods, KHiM-Mamba directly incorporates language-derived knowledge into the selective state-space mechanism, thereby reshaping the internal slide encoding dynamics. Specifically, the proposed write-in and read-out modulation schemes regulate what visual evidence is accumulated in the evolving hidden state and what contextual information is re-trieved to enrich patch representations. Moreover, our local-adaptive vocabulary retrieval module dynamically assigns fine-grained, tissue-specific semantic descriptions to indi-vidual patches, providing precise and task-adaptive knowl-edge priors. Extensive experiments on 11 public benchmarks across four evaluation settings demonstrate that KHiM-Mamba consistently outperforms state-of-the-art methods in cancer subtyping and survival prediction, while exhibiting strong generalization under multi-center domain adaptation and few-shot learning. These results highlight the potential of explicitly regulating hidden-state evolution with diagnos-tic knowledge and provide a new perspective for designing knowledge-guided state-space models for computational pathology. 
+
+References     
+
+> [1] Amores, J., 2013. Multiple instance classification: Review, taxonomy and comparative study. Artificial intelligence 201, 81–105. [2] Brancati, N., Anniciello, A.M., Pati, P., Riccio, D., Scognamiglio, G., Jaume, G., De Pietro, G., Di Bonito, M., Foncubierta, A., Botti, G., et al., 2022. Bracs: A dataset for breast carcinoma subtyping in h&e histology images. Database 2022, baac093. [3] Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F., Jaume, G., Song, A.H., Chen, B., Zhang, A., Shao, D., Shaban, M., et al., 2024. Towards a general-purpose foundation model for computational pathology. Nature Medicine 30, 850–862. [4] Chen, R.J., Lu, M.Y., Shaban, M., Chen, C., Chen, T.Y., Williamson, D.F., Mahmood, F., 2021. Whole slide images are 2d point clouds:
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 10 of 11 KHiM-Mamba: Injecting Pathology Knowledge into Mamba via Hidden-State Modulation for Whole Slide Image Analysis 
+
+Context-aware survival prediction using patch-based graph convolu-tional networks, in: MICCAI, Springer. pp. 339–349. [5] Dao, T., Gu, A., 2024. Transformers are ssms: Generalized models and efficient algorithms through structured state space duality. arXiv .[6] Ehteshami Bejnordi, B., Veta, M., Johannes van Diest, P., van Gin-neken, B., Karssemeijer, N., Litjens, G., van der Laak, J.A.W.M., , the CAMELYON16 Consortium, 2017. Diagnostic Assessment of Deep Learning Algorithms for Detection of Lymph Node Metastases in Women With Breast Cancer. JAMA 318, 2199–2210. [7] Fillioux, L., Boyd, J., Vakalopoulou, M., Cournède, P.H., Christodoulidis, S., 2023. Structured state space models for multiple instance learning in digital pathology, in: MICCAI, Springer. pp. 594–604. [8] Gu, A., Dao, T., 2023. Mamba: Linear-time sequence modeling with selective state spaces. arXiv . [9] Gu, A., Goel, K., Ré, C., 2021. Efficiently modeling long sequences with structured state spaces. arXiv . [10] Guo, Z., Xiong, C., Ma, J., Sun, Q., Feng, L., Wang, J., Chen, H., 2025. Focus: Knowledge-enhanced adaptive visual compression for few-shot whole slide image classification, in: CVPR, pp. 15590–15600. [11] Huang, Q., Wu, S., Ou, Z., Gao, Y., 2025. Computational pathology: a comprehensive review of recent developments in digital and intelli-gent pathology. Intelligent Oncology 1, 139–159. [12] Huang, Y., Zhao, W., Fu, Y., Zhu, L., Yu, L., 2024. Unleash the power of state space model for whole slide image with local aware scanning and importance resampling. IEEE TMI . [13] Huang, Z., Bianchi, F., Yuksekgonul, M., Montine, T.J., Zou, J., 2023. A visual–language foundation model for pathology image analysis using medical twitter. Nature medicine 29, 2307–2316. [14] Ilse, M., Tomczak, J., Welling, M., 2018. Attention-based deep multiple instance learning, in: ICML, PMLR. pp. 2127–2136. [15] Li, B., Li, Y., Eliceiri, K.W., 2021. Dual-stream multiple instance learning network for whole slide image classification with self-supervised contrastive learning, in: CVPR, pp. 14318–14328. [16] Lin, T., Yu, Z., Hu, H., Xu, Y., Chen, C.W., 2023. Interventional bag multi-instance learning on whole-slide pathological images, in: CVPR, pp. 19830–19839. [17] Liu, P., Ji, L., Gou, J., Fu, B., Ye, M., 2025. Interpretable vision-language survival analysis with ordinal inductive bias for computa-tional pathology, in: International Conference on Learning Represen-tations, pp. 99062–99090. [18] Lu, M.Y., Chen, B., Williamson, D.F., Chen, R.J., Liang, I., Ding, T., Jaume, G., Odintsov, I., Le, L.P., Gerber, G., et al., 2024. A visual-language foundation model for computational pathology. Nature medicine 30, 863–874. [19] Lu, M.Y., Williamson, D.F.K., Chen, T.Y., Chen, R.J., Barbieri, M., Mahmood, F., 2020. Data efficient and weakly supervised computational pathology on whole slide images. Nature biomedical engineering . [20] Qi, L.L., Li, X., Liu, Z., Zhang, P., Liu, L., 2025. A depth-wise sep-arable residual neural network for pcdh8 status prediction in thyroid cancer pathological images. Intelligent Oncology . [21] Qu, L., Fu, K., Wang, M., Song, Z., et al., 2023. The rise of ai language pathologists: Exploring two-level prompt learning for few-shot weakly-supervised whole slide image classification. NeurIPS 36, 67551–67564. [22] Ramanathan, V., Pati, P., McNeil, M., Martel, A.L., 2024. Ensemble of prior-guided expert graph models for survival prediction in digital pathology, in: MICCAI, Springer. pp. 262–272. [23] Shao, Z., Bian, H., Chen, Y., Wang, Y., Zhang, J., Ji, X., et al., 2021. Transmil: Transformer based correlated multiple instance learning for whole slide image classification. NeurIPS 34, 2136–2147. [24] Shi, J., Li, C., Gong, T., Zheng, Y., Fu, H., 2024. Vila-mil: Dual-scale vision-language multiple instance learning for whole slide image classification, in: CVPR, pp. 11248–11258. [25] Skourti, E., 2025. A vision–language foundation model for clinical oncology. Nature Cancer 6, 226–226. [26] Tang, W., Huang, S., Fang, H., Zhou, F., Liu, B., Liu, Q., 2026. Multiple instance learning framework with masked hard instance mining for gigapixel histopathology image analysis. IJCV 134, 41. [27] Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.A., Lacroix, T., Rozière, B., Goyal, N., Hambro, E., Azhar, F., et al., 2023. Llama: Open and efficient foundation language models. arXiv preprint arXiv:2302.13971 . [28] Weinstein, J.N., Collisson, E.A., Mills, G.B., Shaw, K.R., Ozenberger, B.A., Ellrott, K., Shmulevich, I., Sander, C., Stuart, J.M., 2013. The cancer genome atlas pan-cancer analysis project. Nature genetics 45, 1113–1120. [29] Xiang, J., Zhang, J., 2023. Exploring low-rank property in multiple in-stance learning for whole slide image classification, in: The Eleventh International Conference on Learning Representations. [30] Xiang, T., Li, Y., Zhang, Q., Li, X., 2025. Moc: Meta-optimized classifier for few-shot whole slide image classification, in: MICCAI, Springer. pp. 423–432. [31] Xu, J., Huang, S., Zhang, X., Nan, Z., Dong, J., Mu, N., 2026. Muse: Harnessing precise and diverse semantics for few-shot whole slide image classification. arXiv . [32] Yang, A., Li, A., Yang, B., Zhang, B., Hui, B., Zheng, B., Yu, B., Gao, C., Huang, C., Lv, C., et al., 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 . [33] Yang, S., Wang, Y., Chen, H., 2024. Mambamil: Enhancing long se-quence modeling with sequence reordering in computational pathol-ogy, in: MICCAI, Springer. pp. 296–306. [34] Zeng, Q., Wang, Y., Yang, S., Xu, Y., Zhou, F., Ma, J., Cai, D., Zhang, Z., Qu, L., Wang, Y., et al., 2025. Mambamil+: Modeling long-term contextual patterns for gigapixel whole slide image. arXiv . [35] Zhang, H., Meng, Y., Zhao, Y., Qiao, Y., Yang, X., Coupland, S.E., Zheng, Y., 2022. Dtfd-mil: Double-tier feature distillation multiple instance learning for histopathology whole slide image classification, in: CVPR, pp. 18802–18812. [36] Zhang, J., Nguyen, A.T., Han, X., Trinh, V.Q.H., Qin, H., Samaras, D., Hosseini, M.S., 2025. 2dmamba: Efficient state space model for image representation with applications on giga-pixel whole slide image classification, in: CVPR, pp. 3583–3592. [37] Zhang, Y., Li, H., Sun, Y., Zheng, S., Zhu, C., Yang, L., 2024. Attention-challenging multiple instance learning for whole slide im-age classification, in: ECCV, Springer. pp. 125–143. [38] Zhao, Y., Yang, F., Fang, Y., Liu, H., Zhou, N., Zhang, J., Sun, J., Yang, S., Menze, B.H., Fan, X., Yao, J., 2020. Predicting lymph node metastasis using histopathological images based on multiple instance learning with deep graph convolution. CVPR , 4836–4845. [39] Zheng, T., Jiang, K., Xiao, Y., Zhao, S., Yao, H., 2025a. M3amba: Memory mamba is all you need for whole slide image classification, in: CVPR, pp. 15601–15610. [40] Zheng, T., Yao, H., Jiang, K., Xiao, Y., Zhao, S., 2025b. Gmmamba: Group masking mamba for whole slide image classification, in: ICCV, pp. 9935–9944. [41] Zhou, K., Yang, J., Loy, C.C., Liu, Z., 2022. Learning to prompt for vision-language models. International journal of computer vision 130, 2337–2348. [42] Zhu, L., Liao, B., Zhang, Q., Wang, X., Liu, W., Wang, X., 2024. Vision mamba: Efficient visual representation learning with bidirec-tional state space model. arXiv . 
+
+Q. Zhang et al.: Preprint submitted to Elsevier Page 11 of 11

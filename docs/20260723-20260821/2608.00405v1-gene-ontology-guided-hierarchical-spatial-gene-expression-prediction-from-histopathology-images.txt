@@ -1,0 +1,1057 @@
+Title: Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images
+
+URL Source: https://arxiv.org/pdf/2608.00405v1
+
+Published Time: Tue, 04 Aug 2026 00:22:40 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images 
+
+# Zhiwen Xu 
+
+National University of Defense Technology Changsha, China xuzhiwen@nudt.edu.cn 
+
+# Xiaoming Yan 
+
+National University of Defense Technology Changsha, China yanxiaomingnudt@nudt.edu.cn 
+
+# Chengkun Wu 
+
+National University of Defense Technology Changsha, China chengkun_wu@nudt.edu.cn 
+
+# Juan Chen 
+
+National University of Defense Technology Changsha, China juanchen@nudt.edu.cn 
+
+# Haoang Chi ✉
+
+National University of Defense Technology Changsha, China haoangchi618@gmail.com 
+
+# Liyang Xu ✉
+
+National University of Defense Technology Changsha, China xuliyang08@nudt.edu.cn 
+
+## Abstract 
+
+Predicting spatial gene expression from histopathology images en-ables large-scale transcriptomic profiling without the cost of direct measurement. Existing methods decode the target gene set as a flat, unstructured vector, ignoring the inter-gene dependencies arising from shared biological pathways and regulatory programs. Without explicit structural guidance, models must infer these dependencies entirely from limited paired data, constraining prediction quality. We propose MSGR (Multi-Scale Gene Refiner), which bridges this gap by incorporating the Gene Ontology (GO), a curated functional hierarchy of genes, as an explicit structural prior. MSGR organizes target genes into a four-level GO tree. Its GO-guided decoder then progressively refines predictions from coarse functional domains to fine individual genes via residual corrections under scale-weighted supervision. Operating solely on the gene side, the GO-guided de-coder serves as a seamless plug-in replacement that consistently improves existing architectures without requiring any image-side modifications. Extensive experiments on nine datasets from the HEST-1k benchmark provide empirical evidence for two central claims: GO-structured decoding consistently outperforms flat de-coding, even against a state-of-the-art generative baseline, and the gain is attributable to biological ontology structure rather than hierarchical decomposition per se, as confirmed by a +0.027 margin over a structurally equivalent random hierarchy. The source code is publicly available at https://github.com/NozomiMizore/MSGR. 
+
+## CCS Concepts 
+
+• Applied computing → Computational biology ; • Computing methodologies → Hierarchical representations .
+
+## Keywords 
+
+cross-modal learning, spatial transcriptomics, gene ontology, com-putational pathology, hierarchical decoding 
+
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> MM ’26, Rio de Janeiro, Brazil
+> © 2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2213-4/2026/11 https://doi.org/10.1145/nnnnnnn.nnnnnnn
+
+ACM Reference Format: 
+
+Zhiwen Xu, Xiaoming Yan, Chengkun Wu, Juan Chen, Haoang Chi, and Liyang Xu. 2026. Gene Ontology-Guided Hierarchical Spatial Gene Expression Pre-diction from Histopathology Images. In Proceedings of the 34th ACM Inter-national Conference on Multimedia (MM ’26), November 10–14, 2026, Rio de Janeiro, Brazil. ACM, New York, NY, USA, 17 pages. https://doi.org/10.1145/ nnnnnnn.nnnnnnn 
+
+## 1 Introduction 
+
+Spatial transcriptomics (ST) has emerged as a technology that en-ables simultaneous profiling of gene expression while preserving the spatial coordinates of measurements within tissue samples [19]. This capability provides valuable insights into the spatial organiza-tion of cells, facilitating the characterization of cellular heterogene-ity and the tumor microenvironment. Moreover, ST has demon-strated clinical relevance in elucidating disease mechanisms, discov-ering drug targets, and predicting therapeutic responses [2, 18, 40]. Although ST technologies, such as Visium [31], provide spatially resolved molecular landscapes, their clinical adoption is hindered by prohibitive costs, labor-intensive workflows, and limited sam-ple throughput [38]. In contrast, hematoxylin and eosin (H&E) staining—the standard protocol for preparing tissue sections for microscopic examination—is widely accessible, cost-effective, and already applied to archival collections in hospitals worldwide. These stained tissue sections are routinely digitized as whole slide im-ages (WSIs) for diagnostic purposes. Developing a computational strategy that bridges morphological and transcriptomic modali-ties by predicting spatial gene expression from routinely avail-able histopathology images could therefore transform existing WSI archives into a scalable source of molecular-level insights, reducing reliance on costly direct transcriptomic measurements [3, 38]. Several computational approaches have been proposed for this cross-modal prediction task. Single-magnification regression meth-ods extract histological features from spot-centered image patches at a single magnification and directly regress gene expression [10, 26, 42, 43]. Extending this paradigm, multi-magnification regres-sion methods enrich the histological signal by extracting features at multiple magnifications, jointly leveraging fine-grained cellular morphology and broader tissue context [5, 24, 39]. Retrieval-based methods learn joint image–expression embeddings via contrastive arXiv:2608.00405v1 [cs.AI] 1 Aug 2026 MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Zhiwen Xu et al. Image Encoder Histology Image Patch 
+
+> Visual Features Flat Decoder Predicted Gene Expression
+> (a) Traditional Methods: Pure Data-Driven One Step Prediction
+> One step
+
+? Biology-unaware Entangled dependencies Functional Modules               
+
+> …
+> Final Predicted Gene Expression Biological Prior Guide Disentangled dependencies
+> (b) Biological Prior-Guided Hierarchical Prediction
+> Hierar-chical Decoder Hierar-chical Decoder Hierar-chical Decoder
+> Visual Features BP MF CC TbTaTcTdTe
+> TfTgThTi
+> BP MF CC TgTfThTdTeTi
+> (c) Simplifying GO DAG into Trees GO DAG
+
+Figure 1: Traditional flat decoding vs. hierarchical decoding guided by a biological prior. (a) Flat decoder outputs all genes simultaneously as a flat vector. (b) Biological prior-guided decoder refines predictions coarse-to-fine. (c) Simplifying the complex GO DAG architecture into tractable trees. 
+
+learning and impute predictions from nearest neighbors during in-ference [41]. More recently, generative modeling approaches have formulated this problem as a conditional generation task [13, 44]. Despite their architectural diversity, existing methods share a fundamental limitation: they decode all target genes simultane-ously, reducing an inherently structured gene set to a flat output vector (Figure 1(a)). Such a design does not explicitly account for the cross-modal semantic gap between tissue-level morphological phenotypes captured by histopathology images and fine-grained molecular variation reflected in gene expression. It also requires the model to implicitly learn complex functional and expression dependencies among hundreds of genes from limited paired data. Introducing structured biological knowledge as an intermediate rep-resentation offers a natural alternative, transforming flat, one-step decoding into a coarse-to-fine prediction process that progressively narrows the semantic gap while explicitly coordinating the predic-tions of functionally related genes (Figure 1(b)). The Gene Ontology (GO) [1] provides a structured representation of biological knowledge. As a curated vocabulary, GO annotates genes through a hierarchical framework modeled as a directed acyclic graph (DAG). This framework partitions biological concepts into three top-level domains (biological process, molecular function, and cellular component), which branch into progressively more specific descendant terms. Importantly, genes sharing granular GO annotations tend to exhibit correlated expression patterns [35], pro-viding a biological foundation for structured prediction. While the native GO architecture is a complex DAG (Figure 1(c)), it can be projected into a computationally tractable tree structure [9, 20], enabling a unique ancestral path for hierarchical decoding. Un-like protein-protein interaction (PPI) networks (e.g., STRING [32]), which primarily represent non-hierarchical pairwise interactions, the GO framework provides a curated, top-down hierarchy, making it naturally suited for the hierarchical decoding paradigm. Motivated by these observations, we present MSGR (Multi-Scale 
+
+Gene Refiner), a multi-scale spatial gene prediction framework sim-plifying the GO DAG into hierarchical trees as structural priors. This approach decomposes the regression of all target genes into a sequence of biologically aligned subtasks. Instead of treating all target genes as a flat output vector, MSGR organizes them into a four-level GO tree (virtual root → GO domains → GO terms →
+
+genes) and progressively refines predictions from the coarsest level to the finest. At each non-root level, a shared Transformer back-bone predicts a residual correction to the estimate inherited from the coarser level. Concurrently, a cross-scale latent highway prop-agates latent context from coarser levels to finer ones, providing each refinement step with direct access to the broader biological context that guides its correction. By decoupling structured gene decoding from the image-feature extractor, the GO-guided decoder can be integrated into different base architectures. Extensive ex-periments on nine HEST-1k [14] datasets demonstrate that MSGR outperforms existing methods, while integrating the decoder into existing architectures yields consistent performance improvements. The main contributions of this work are as follows: 
+
+• We introduce MSGR, a novel hierarchical framework for spatial gene expression prediction. By progressively refining predic-tions across a GO-structured hierarchy, MSGR effectively bridges the cross-modal semantic gap between tissue morphology and fine-grained molecular events, transforming conventional flat decoding into a principled, coarse-to-fine prediction process. 
+
+• We propose a systematic scheme to construct a biologically aligned four-level GO hierarchy applicable to arbitrary target gene sets. This method transforms curated biological knowledge into a computationally tractable prior, enabling the model to ex-plicitly exploit functional interdependencies among genes. This design shifts the burden from purely data-driven implicit learning to knowledge-guided structured inference. 
+
+• Benchmarks on nine HEST-1k datasets show that MSGR achieves state-of-the-art performance. Importantly, the GO-guided multi-scale decoder exhibits exceptional model-agnostic versatility. As a plug-and-play enhancer, it consistently yields performance gains when integrated into various leading architectures, validating its superior capability in knowledge-guided cross-modal prediction. 
+
+## 2 Related Work 2.1 Spatial Gene Expression Prediction from Histopathology Images 
+
+Early approaches typically formulate spatial gene expression predic-tion as a supervised multi-output regression problem based on im-age features. ST-Net [10] predicts spatially resolved gene expression from convolutional neural network (CNN) features. HisToGene [26] extends this paradigm with a Vision Transformer (ViT) [7] that jointly models all spots via self-attention [36]. To model tissue struc-tures, Hist2ST [43] extracts patch features using a ConvMixer [34] module, then leverages Transformers [36] and Graph Neural Net-works (GNNs) [30] to capture global dependencies and local spatial Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+interactions. THItoGene [15] further combines dynamic convolu-tion with capsule networks [29] and Graph Attention Networks (GATs) [37] to refine predictions through spot-interaction modeling. Distinct from these direct regression architectures, EGN [42] intro-duces an “Exemplar Learning” mechanism within the regression framework. It refines intermediate visual features by retrieving and interacting with visually similar reference samples before feeding the enhanced features into the regression head. BLEEP [41] adopts a retrieval-based approach, learning a joint image–expression em-bedding via contrastive learning and imputing predictions from nearest neighbors during inference. ST-Align [21] similarly em-ploys contrastive learning to align gene and histological features at both spot and niche spatial scales, using scGPT [6] and UNI [4] to extract gene and image features, respectively. More recently, generative models have been applied to capture the stochastic nature of gene expression. Stem [44] employs a con-ditional diffusion model [11] built on a DiT [27] backbone, condi-tioning on UNI [4] features to learn the one-to-many mapping from histopathology to gene expression. STFlow [13] adopts flow match-ing [22] to model the joint distribution of gene expression across all spots within a whole slide. It further incorporates an E(2)-invariant frame averaging mechanism [28] to facilitate efficient spatial mod-eling. Existing methods across these paradigms generally retain a flat gene-decoding step: no prior is imposed on the functional relationships among genes. To the best of our knowledge, MSGR is the first method to use GO as a structural prior for coarse-to-fine spatial gene expression decoding from histopathology images. 
+
+## 2.2 Image-Side Multi-Magnification Methods 
+
+A complementary research direction enriches the histological sig-nal by processing patches at multiple magnifications. TRIPLEX [5] processes each spot at three resolutions—the spot patch, a local neighborhood, and a global tissue context patch—and fuses these representations through cross-attention. Similarly, M2OST [39] em-ploys a many-to-one Transformer architecture to jointly process patches from three magnification levels. Additionally, MMAP [24] captures fine-grained morphological details by generating high-resolution sub-patches through random cropping and fusing these multi-magnification features through cross-attention. It further in-corporates global tissue context from a slide-level prototype bank. Although these methods improve predictive performance by enrich-ing histological signals, the gene decoding process relies on a flat structure. Crucially, the proposed gene-side multi-scale hierarchy operates along a fundamentally different dimension from these image-side multi-magnification approaches: MSGR decomposes the gene output space using the GO structure, whereas the aforemen-tioned methods enrich the image input space. These two paradigms are complementary and can be effectively integrated. 
+
+## 3 Method 3.1 Problem Formulation 
+
+A tissue slide contains 𝑁 spots, each characterized by (i) a histology image patch I𝑖 ∈ R𝐻 ×𝑊 ×3, where 𝐻 and 𝑊 denote the height and width of the image patch, respectively; (ii) a spatial coordinate 
+
+C𝑖 ∈ R2; and (iii) a log1p-transformed expression vector y𝑖 ∈ R𝐺 ,where 𝐺 denotes the number of target genes. The objective is to predict y𝑖 from (I𝑖 , C𝑖 , {I𝑗 , C𝑗 }𝑗 ∈ N ( 𝑖 ) ), where N ( 𝑖 ) denotes the set of spatial neighbors of spot 𝑖 , excluding spot 𝑖 itself. 
+
+## 3.2 Overview of MSGR 
+
+An overview of the proposed MSGR is presented in Figure 2. The core idea is to decompose the prediction of hundreds of genes into a sequence of biologically aligned sub-tasks organized by the GO hierarchy, enabling the model to leverage functional relationships among genes rather than treating them as independent outputs. Histopathology patch embeddings are initially extracted by a frozen UNI encoder [4], a foundation model pre-trained on over 100,000 WSIs that provides robust and transferable visual representations. These embeddings are subsequently fed into the Condition Proces-sor, which aggregates local tissue context from neighboring spots via a Spatial Transformer and fuses the enriched representations with spatial coordinates to produce a scale-aware conditioning vector. The GO hierarchy is constructed offline by mapping target genes to the most specific GO annotations and organizing them into a four-level tree, which spans from a virtual root through GO do-mains and GO terms to individual leaf genes. The multi-scale resid-ual decoder then leverages this hierarchy as structural guidance, traversing the tree level by level and applying conditioning-driven residual corrections to progressively refine predictions from coarse functional domains to individual genes. Detailed descriptions of each component are provided in the subsequent sections. 
+
+## 3.3 Condition Acquisition & Processing 
+
+The condition acquisition and processing pipeline begins by ex-tracting per-spot patch embeddings using a frozen UNI encoder, as depicted in Figure 2(a). For each spot 𝑖 , the UNI encoder produces a histopathology embedding p𝑖 ∈ R𝐷 ℎ , which is projected to a target dimension 𝑑 via a linear layer. The embeddings of the center spot and its 𝑛 nearest spatial neighbors are then concatenated to form a token sequence of 𝑛 +1 vectors in R𝑑 . Inspired by STFlow [13], a Spatial Transformer applies 𝐿 𝑠 layers of E(2)-equivariant mes-sage passing via frame averaging [28]. Specifically, the relative coordinates of each center–neighbor pair are transformed into a canonical frame to obtain rotation-invariant geometric representa-tions. Edge features are then constructed from the frame-projected coordinates and the inter-spot distance. A learned MLP-attention mechanism uses the edge features to compute attention weights for aggregating neighboring representations (see Appendix B for the detailed architecture). The resulting center token output, hspa  
+
+> 𝑖
+
+∈ R𝑑 ,provides a spatially aware representation that captures both the histopathological content and the local tissue context. The spatially enriched representation hspa  
+
+> 𝑖
+
+and 2D coordinate C𝑖 
+
+are projected through the histopathology and coordinate branches, 
+
+𝜙 ℎ (h) = SiLU (Linear (LN (h))) and 𝜙 𝐶 (C) = SiLU (Linear (C)) , re-spectively, and fused to form the base condition: 
+
+cbase  
+
+> 𝑖
+
+= Dropout  LN  𝜙 ℎ (hspa  
+
+> 𝑖
+
+) + 𝜙 𝐶 (C𝑖 ) . (1) A learnable scale embedding is then added at each scale 𝑘 :
+
+c(𝑘 ) 
+
+> 𝑖
+
+= cbase  
+
+> 𝑖
+
++ escale  
+
+> 𝑘
+
+, escale  
+
+> 𝑘
+
+∈ R𝑑 , (2) enabling the shared conditioning representation to encode scale-specific information without duplicating conditioning parameters. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Zhiwen Xu et al. …   
+
+> Frozen
+> Foudation
+> Model
+> …
+> Histology Image Visual Features Extraction
+> Spatial Coordinates
+> 𝐶 0: (𝑥 0, 𝑦 0)𝐶 1: (𝑥 1, 𝑦 1)
+> 𝐶 2: (𝑥 2, 𝑦 2)𝐶 𝑛 : (𝑥 𝑛 , 𝑦 𝑛 )…
+> Condition
+> Processor
+
+(a) Condition Acquisition & Processing 
+
+> Gene Panel
+> Molecular
+> Function
+> Cellular
+> Component
+> Biological
+> Process
+> GO Terms
+> Supervision Targets Virtual Root
+
+(b) GO Hierarchy Construction 
+
+(c) GO-Guided Hierarchical Gene Decoding 
+
+> : target patch
+> : neighbor patch
+> : base condition
+> : scale embedding
+> Scale 0
+> Shared
+> Multi-Scale
+> Residual Decoder
+
+𝑋 (0)  
+
+> Scale-weighted
+
+𝐿 𝑚𝑠𝑒 
+
+…
+
+ො𝑦 (0)  … ො𝑦 (𝐾−1) 
+
+> Predicted
+> Gene Expression
+
+…
+
+> 𝑦 (2)
+> 𝑦 (𝐾−1)
+> 𝑦 (1)
+> 𝑦 (0)
+
++
+
+𝑐 (0) 
+
+> 𝑒 base
+
+𝑐 (1)  𝑐 (2)  𝑐 (𝐾−1)     
+
+> 𝑒 𝑘
+> 𝑦 𝑗 (𝑘) =1|𝑑𝑒𝑠𝑐(𝑗)| ෍
+> 𝑔∈𝑑𝑒𝑠𝑐(𝑗)
+> 𝑦 𝑔 (𝐾−1)
+> Scale k (k>0) Mechanism Details
+> 𝑋 (𝑘−1)
+> ො𝑦 (𝑘−1)
+> Parent Latents
+> Parent Prediction
+> Scale 𝒌
+> 𝑐 (k)
+> 𝑒 base
+> 𝑒 𝑘
+> 𝑐 (k)
+> AdaLN
+> Self-Attn
+> L
+
+×Scale 1  
+
+> Shared
+> Multi-Scale
+> Residual Decoder
+> Scale 2 Scale K-1
+> AdaLN
+> Cross-Attn
+> 𝑄 (𝑘)
+> Scale Queries
+> Output
+> Head
+> 𝑋 (𝑘)
+
++ ReLu  
+
+> Predicted Residual ∆(𝑘)
+> ො𝑦 (𝑘)
+> AdaLN
+> FFN
+> Shared
+> Multi-Scale
+> Residual Decoder
+> Shared
+> Multi-Scale
+> Residual Decoder
+
+𝑋 (1) 
+
+ො𝑦 (1)  + + +
+
+> Latent highway
+> Latent highway
+
+Figure 2: Overview of the MSGR framework. (a) Condition Acquisition & Processing: A frozen UNI encoder extracts per-spot patch embeddings, which are enriched with local neighborhood context and fused with spatial coordinates to form a scale-aware conditioning vector. (b) GO Hierarchy Construction: Target genes are organized into a four-level tree; coarser-level supervision targets are computed as the mean expression of descendant leaf genes. (c) GO-Guided Hierarchical Decoding: The decoder traverses the hierarchy from root to leaf genes. At scale 0, the cross-attention sublayer in AdaLNCrossScaleBlock attends only to the condition token, whereas at finer scales it also attends to parent-scale latent tokens through the latent highway (red line). The output head directly produces the root prediction at scale 0 and produces a residual correction at each finer scale. 
+
+## 3.4 GO Hierarchy Construction 
+
+Given a target gene set of 𝐺 genes, a four-level tree T is constructed using GO annotations, as illustrated in Figure 2(b): (1) Level 0 (Virtual root): A single node that aggregates all 𝐺 genes through its descendant nodes; (2) Level 1 (GO domains): Up to four nodes, including three GO do-main roots (biological process, molecular function, and cellular component) and an optional unannotated proxy node; (3) Level 2 (GO terms and proxy nodes): The direct children of each domain root following path compression. The total count is data-dependent (typically around 20 for 𝐺 =200). Completely unannotated genes are positioned under a Level 2 proxy node associated with the Level 1 unannotated branch; (4) Level 3 (Individual genes): 𝐺 leaf nodes, with each target gene assigned exactly once. The tree is constructed offline in four steps. (i) Annotation query: Mappings from GO terms to genes are retrieved for the target gene set using g:Profiler [16]. Each gene is assigned to its most specific annotated term (i.e., the term with the smallest term size) as its representative node. (ii) Tree projection: For each term possessing multiple parents in the GO DAG, the direct parent with the largest term size is retained. This preference for broader parent terms pre-serves greater semantic coverage at coarser hierarchy levels. Parent links are then traced upward to connect terms to their domain roots. (iii) Path compression: Intermediate nodes possessing a single child and lacking directly assigned genes are merged, keeping the term layer shallow. (iv) Proxy routing: Genes lacking a matching GO term are routed to proxy nodes, ensuring that every gene appears exactly once at Level 3. In the exported hierarchy, GO terms are flattened to a single layer beneath each domain root, while deeper descendants are aggregated into the nearest retained term or proxy node. Coarser-scale supervision targets are computed as the mean expression of descendant leaf genes: 
+
+y(𝑘 ) 
+
+> 𝑗
+
+= 1
+
+|desc ( 𝑗 )| ∑︁ 𝑔 ∈desc ( 𝑗 )
+
+y(𝐾 −1) 
+
+> 𝑔
+
+, 0 ≤ 𝑘 < 𝐾 − 1, (3) where 𝐾 = 4 denotes the total number of hierarchy levels, and desc ( 𝑗 ) represents the set of leaf genes descended from node 𝑗 .
+
+## 3.5 GO-Guided Hierarchical Decoding 
+
+As illustrated in Figure 2(c), the multi-scale residual decoder carries out the core refinement process of MSGR. Rather than predicting all 𝐺 genes simultaneously in a single step, it traverses the GO hierarchy from scale 𝑘 = 0 (virtual root) to scale 𝐾 − 1 (individual genes). At each level 𝑘 > 0, the parent-scale estimate is refined by a learned residual correction: ˆy(𝑘 ) = ReLU 
+
+
+
+ˆy(𝑘 −1) par (𝑘 )  + 𝚫 (𝑘 ) 
+
+, (4) where ˆ y(𝑘 −1) [par (𝑘 ) ] broadcasts each parent’s prediction to its chil-dren, 𝚫 (𝑘 ) denotes the residual correction learned at scale 𝑘 , and Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+ReLU enforces non-negativity. The complete formulation including the special case at 𝑘 = 0 is provided in Equation (7). This decom-position mirrors the organization of biological functions: a global root-level estimate is first obtained, then refined into GO domain-level and GO term-level activities, and ultimately into individual gene expression values. 
+
+Scale queries and shared backbone. The proposed framework utilizes 𝐾 =4 hierarchy levels, as defined in Section 3.4. Let |S 𝑘 |
+
+denote the number of nodes at scale 𝑘 . The root level |S 0 |=1 is fixed, the leaf level |S 𝐾 −1 |=𝐺 equals the number of target genes, and the intermediate levels |S 1 |, |S 2 | are determined by the GO annotations of the specific target gene set. At each scale 𝑘 , a dedicated set of learnable semantic queries Q(𝑘 ) ∈ R| S 𝑘 | × 𝑑 is introduced. These queries are processed by 𝐿 shared AdaLNCrossScaleBlocks, where 
+
+𝐿 is the number of Transformer layers: 
+
+X(𝑘 ) = DecBlock 𝐿 ◦ · · · ◦ DecBlock 1
+
+
+
+Q(𝑘 ) , c(𝑘 ) 
+
+> 𝑖
+
+, ctx (𝑘 ) 
+
+, (5) where sharing parameters across all scales provides cross-scale regularization and reduces the total parameter count. The decoder comprises four tightly coupled components: (i) per-scale learnable semantic queries Q(𝑘 ) that encode the identity of nodes at each hierarchy level; (ii) a shared AdaLNCrossScaleBlock backbone that updates these queries under histopathology conditioning; (iii) a latent highway that supplies each scale with the context of the parent scale via cross-attention; and (iv) a shared scalar output head that maps each updated token to a residual correction. 
+
+AdaLNCrossScaleBlock. Each block applies three sub-layers con-ditioned by Adaptive Layer Normalization (AdaLN) [27], where a single SiLU →Linear (𝑑, 9𝑑 ) projection of c(𝑘 ) 
+
+> 𝑖
+
+generates scale, shift, and gate parameters for each sub-layer: (1) Self-attention over the |S 𝑘 | hierarchy-node tokens, with ℓ2-normalized queries and keys for training stability; (2) Cross-attention over the context ctx (𝑘 ) (as detailed in the latent-highway formulation below); (3) SwiGLU FFN: (xW 1 ⊙ SiLU (xW 2)) W3.
+
+Latent highway with condition token injection. The cross-attention context for each scale is formulated as: ctx (𝑘 ) =
+
+(c(𝑘 ) 
+
+> 𝑖
+
+𝑘 = 0h
+
+X(𝑘 −1) ∥ c(𝑘 )
+
+> 𝑖
+
+i
+
+𝑘 > 0 , (6) where c(𝑘 ) 
+
+> 𝑖
+
+serves as the condition token. At scale 0 (which lacks a parent), the condition token alone serves as the cross-attention key/value sequence. At scales 𝑘 > 0, the parent-scale latents X(𝑘 −1)
+
+are concatenated with the condition token, providing the current scale with direct access to both the parent-scale latent context (via the latent highway) and the histopathological condition. 
+
+Residual output and ReLU non-negativity. The scalar output head, shared across scales, maps each node token in X(𝑘 ) to a scalar, collectively forming 𝚫 (𝑘 ) 
+
+> 𝑖
+
+∈ R| S 𝑘 | . At 𝑘 = 0, the single output serves as the root prediction; at finer scales, the node-wise outputs provide residual corrections to the inherited parent estimates: ˆy(𝑘 ) 
+
+> 𝑖
+
+=
+
+
+
+ReLU 
+
+
+
+𝚫 (0)
+
+> 𝑖
+
+
+
+, 𝑘 = 0,
+
+ReLU 
+
+
+
+ˆy(𝑘 −1)
+
+> 𝑖
+
+par (𝑘 )  + 𝚫 (𝑘 )
+
+> 𝑖
+
+
+
+, 𝑘 > 0, (7) where par (𝑘 ) broadcasts parent predictions to their children, and ReLU enforces non-negativity. The final prediction for spot 𝑖 is ˆ y𝑖 =
+
+ˆy(𝐾 −1) 
+
+> 𝑖
+
+∈ R𝐺 . As the decoder only replaces the final linear head, it can be integrated into diverse upstream conditioning architectures with minimal modification. 
+
+## 3.6 Training Objective 
+
+The multi-scale MSE loss with hierarchy-level supervision is for-mulated as: 
+
+L = 
+
+> 𝐾 −1
+
+∑︁ 
+
+> 𝑘 =0
+
+¯𝑤 𝑘 · MSE 
+
+
+
+ˆy(𝑘 ) , y(𝑘 ) 
+
+, ¯𝑤 𝑘 = 𝑤 𝑘 
+
+Í𝑘 ′ 𝑤 𝑘 ′
+
+, (8) where ¯ 𝑤 𝑘 denotes the normalized weight for scale 𝑘 . These weights allow the training objective to place greater emphasis on finer scales, particularly the final gene level, while downweighting coarser-scale supervision that may be relatively noisy (Appendix C.1). 
+
+## 4 Experiments 
+
+We conduct experiments on nine datasets to address the following questions: RQ1: Does MSGR outperform existing flat-decoding methods? RQ2: Can the GO-guided decoder improve existing ar-chitectures without image-side modifications? RQ3: Does MSGR faithfully recover the spatial expression patterns of cancer marker genes? RQ4: Do the proposed architectural components contribute to performance? RQ5: Are the gains attributable to the GO-derived hierarchy rather than hierarchical decomposition alone? RQ6: How sensitive is MSGR to variations in its hyperparameters? 
+
+## 4.1 Setup 
+
+4.1.1 Datasets. We evaluate MSGR and baseline methods on nine spatial transcriptomics datasets from HEST-1k [14], i.e., CCRCC, COAD, HCC, IDC, LUNG, PRAD, READ, SKCM, and KIDNEY. The detailed dataset statistics are provided in Appendix A. We apply a patient-stratified split to prevent data leakage, thereby establishing a 𝑘 -fold cross-validation setup. Each dataset contains multiple slides distributed across independent folds (2–6 folds). For each dataset, the top 200 genes are selected from the intersection of highly ex-pressed and highly variable genes for evaluation, following the preprocessing protocol introduced by Stem [44]. 
+
+4.1.2 Baselines. Comparisons are conducted against seven pub-lished methods that span four categories: 
+
+• Single-magnification regression: ST-Net [10] (CNN), EGN [42] (exemplar-guided ViT), HisToGene [26] (ViT + spatial PE); 
+
+• Retrieval-based: BLEEP [41] (contrastive embedding + 𝑘 -NN im-putation); 
+
+• Multi-magnification regression: TRIPLEX [5] (three-resolution fusion) and M2OST [39] (many-to-one Transformer); 
+
+• Generative modeling: STFlow [13] (flow matching). To reduce differences attributable to image encoders, we replace the encoders of all compatible baselines with frozen UNI [4]. ST-Net retains its native CNN due to its tightly coupled architecture. To quantify the performance gain from the encoder alone, the UNI-based baseline (frozen UNI encoder + two-layer MLP) is included. The results for plug-in variants and MSGR ablations are reported separately in Section 4.3 and Section 4.5. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Zhiwen Xu et al. 
+
+Table 1: PCC-200 results on nine HEST-1k datasets. Mean ± std across folds. Best in bold, second-best underlined. †: MSGR with GO hierarchy. UNI denotes a frozen UNI encoder followed by a two-layer MLP. OOM denotes an out-of-memory error. Dataset ST-Net UNI HisToGene BLEEP EGN TRIPLEX M2OST STFlow MSGR †
+
+CCRCC 0.311 ±0.087 0.353 ±0.077 0.337 ±0.107 0.334 ±0.070 0.365 ±0.074 0.420 ±0.081 0.409 ±0.092 0.437 ±0.056 0.430 ±0.068 
+
+COAD 0.412 ±0.047 0.440 ±0.114 0.535 ±0.073 0.527 ±0.061 0.519 ±0.084 0.528 ±0.076 0.512 ±0.054 0.538 ±0.094 0.546 ±0.104 
+
+HCC 0.164 ±0.095 0.179 ±0.004 0.188 ±0.059 0.170 ±0.013 0.242 ±0.039 0.222 ±0.002 0.295 ±0.037 0.317 ±0.066 0.338 ±0.084 
+
+IDC 0.589 ±0.161 0.649 ±0.070 OOM 0.643 ±0.073 0.673 ±0.048 0.672 ±0.051 0.691 ±0.098 0.702 ±0.056 0.705 ±0.057 
+
+LUNG 0.572 ±0.003 0.531 ±0.012 0.590 ±0.024 0.581 ±0.017 0.574 ±0.021 0.606 ±0.026 0.642 ±0.001 0.623 ±0.025 0.624 ±0.026 
+
+PRAD 0.393 ±0.010 0.352 ±0.024 0.365 ±0.020 0.349 ±0.084 0.398 ±0.021 0.441 ±0.013 0.435 ±0.028 0.444 ±0.012 0.444 ±0.002 
+
+READ 0.273 ±0.056 0.298 ±0.001 0.330 ±0.006 0.307 ±0.083 0.289 ±0.085 0.358 ±0.101 0.351 ±0.083 0.348 ±0.053 0.392 ±0.048 
+
+SKCM 0.689 ±0.121 0.652 ±0.050 0.701 ±0.011 0.673 ±0.008 0.744 ±0.000 0.773 ±0.015 0.785 ±0.035 0.780 ±0.002 0.793 ±0.016 
+
+KIDNEY 0.319 ±0.076 0.348 ±0.047 0.330 ±0.032 0.331 ±0.065 0.374 ±0.058 0.378 ±0.041 0.365 ±0.029 0.334 ±0.035 0.385 ±0.048 
+
+Avg 0.414 0.422 N/A 0.435 0.464 0.489 0.498 0.503 0.517 
+
+4.1.3 Metrics. Let {PCC 𝑔 }𝐺 𝑔 =1 denote the per-gene Pearson correla-tion coefficients sorted in descending order. The evaluation metric PCC-𝑘 is defined as PCC-𝑘 = 1
+
+> 𝑘
+
+Í𝑘 𝑔 =1 PCC 𝑔 . Results are reported for 
+
+𝑘 ∈ { 10 , 50 , 200 } in a log1p-transformed space. All values take the format mean ± standard deviation across cross-validation folds. 
+
+4.1.4 Implementation Details. The decoder of MSGR employs an embedding dimension of 𝑑 =512, 4 attention heads, and 𝐿 =2 shared Transformer layers. Both the dropout and drop-path rates are con-figured to 0.1. The Spatial Transformer encodes the neighborhood context utilizing the 𝑛 =8 nearest spatial neighbors across 𝐿 𝑠 =2 lay-ers. The training process utilizes the AdamW optimizer (with a learning rate of 10 −4 and a weight decay of 10 −4) coupled with a CosineAnnealingLR scheduler and an early stopping patience of 10 epochs. All experiments are implemented using PyTorch and run on a single NVIDIA RTX 5090 (32 GB) GPU. 
+
+## 4.2 Main Results (RQ1) 
+
+Table 1 presents the PCC-200 results across all nine datasets, and the additional PCC-10 and PCC-50 results are provided in Appendix A. The proposed MSGR achieves a mean PCC-200 of 0.517, surpassing both the generative STFlow approach (0.503 on average) and all discriminative baselines. Despite not incorporating a generative process, MSGR outperforms STFlow on eight of nine datasets. The most substantial gains are observed on KIDNEY ( +0.051), READ (+0.044), HCC ( +0.021), and SKCM ( +0.013), demonstrating that GO-based biological regularization provides robust structural guidance. STFlow retains an advantage only on CCRCC. Among discriminative methods, MSGR surpasses M2OST and TRIPLEX, both multi-magnification baselines (0 .498 and 0 .489 on av-erage), by +0.019 and +0.028, respectively, and EGN, the strongest single-magnification regression baseline (0 .464 on average), by 
+
++0.053. This gap is pronounced on HCC ( +0.116 over TRIPLEX and +0.174 over ST-Net), confirming that GO-structured decoding delivers a substantial advantage on challenging, low-signal datasets. The UNI-based baseline achieves a modest average improvement over ST-Net (0.422 vs. 0.414), indicating the benefit of the frozen foundation encoder. The full MSGR framework improves over the UNI-based MLP baseline by +0.095, demonstrating the benefit of the 
+
+Table 2: Plug-in compatibility results measured by PCC-200. The better result within each Base/+MS pair is shown in bold.                                                                                   
+
+> STFlow EGN ST-Net Dataset Base +MS ΔBase +MS ΔBase +MS Δ
+> CCRCC 0.437 0.451 +0.014 0.365 0.371 +0.006 0.311 0.319 +0.008 COAD 0.538 0.553 +0.015 0.519 0.544 +0.025 0.412 0.462 +0.050 HCC 0.317 0.337 +0.020 0.242 0.272 +0.030 0.164 0.190 +0.026 IDC 0.702 0.709 +0.007 0.673 0.692 +0.019 0.589 0.610 +0.021 LUNG 0.623 0.619 −0.004 0.574 0.615 +0.041 0.572 0.604 +0.032 PRAD 0.444 0.460 +0.016 0.398 0.363 −0.035 0.393 0.399 +0.006 READ 0.348 0.395 +0.047 0.289 0.323 +0.034 0.273 0.271 −0.002 SKCM 0.780 0.784 +0.004 0.744 0.752 +0.008 0.689 0.703 +0.014 KIDNEY 0.334 0.386 +0.052 0.374 0.400 +0.026 0.319 0.326 +0.007
+> Avg 0.503 0.522 +0.019 0.464 0.481 +0.017 0.414 0.432 +0.018
+
+proposed architecture beyond the frozen image encoder alone. His-ToGene is excluded from the overall average comparison because it encountered an out-of-memory error on the TENX99 slide of the IDC dataset, whose spot count exceeds 20,000, causing slide-level self-attention to exceed the memory capacity of a 32 GB GPU. 
+
+## 4.3 Compatibility with Existing Methods (RQ2) 
+
+To validate plug-in compatibility, the linear output heads of STFlow, EGN, and ST-Net are replaced with the proposed GO-guided de-coder, yielding STFlow+MS, EGN+MS, and ST-Net+MS, respectively. The GO hierarchy is constructed offline once per dataset and shared across all cross-validation folds. For all three base models, modifi-cations are strictly limited to: (i) replacing the linear output head with the GO-guided multi-scale decoder, and (ii) substituting the standard MSE loss with the multi-scale GO-supervised loss (Equa-tion (8)). Results are reported in Table 2. The three variants improve average PCC-200 by +0.019, +0.017, and +0.018 for STFlow, EGN, and ST-Net, respectively, and each improves on eight of nine datasets. In particular, ST-Net+MS im-proves from 0 .414 to 0 .432 on average while retaining ST-Net’s native DenseNet-121 encoder. Together, these results show that Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Ground Truth ST-Net: 0.750 UNI: 0.774 HisToGene: 0.892 BLEEP: 0.895     
+
+> EGN: 0.893 TRIPLEX: 0.903 STFlow: 0.923 MSGR: 0.935 STFlow+MS: 0.940
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Expression Level
+
+Figure 3: Predicted spatial expression of MLANA on slide TENX115 from the SKCM dataset, compared against the ground truth. Each panel title reports the per-slide PCC. The color scale encodes the normalized expression level (blue: low, red: high). 
+
+the GO-guided decoder is compatible with generative, exemplar-guided, and CNN-based architectures. Integration details and the computational overhead of the lightweight plug-in decoder are reported in Appendix E. 
+
+## 4.4 Visualization of Cancer Marker Genes (RQ3) 
+
+The MLANA gene encodes Melan-A (also known as MART-1), a melanocytic differentiation antigen commonly used as part of an immunohistochemical panel to support melanocytic lineage as-signment in surgical pathology [25]. Spatial MLANA expression therefore provides a biologically meaningful lineage-associated sig-nal in the SKCM dataset. Accordingly, we use its spatial expression to evaluate the recovery of a localized molecular pattern. As shown in Figure 3, most methods recover the broad spatial expression pattern but differ in signal dispersion, local contrast, and boundary fidelity. ST-Net (PCC = 0.750) and UNI (0 .774) produce diffuse maps, whereas HisToGene (0 .892) and EGN (0 .893) recover the dominant high-expression region but underrepresent some lo-cal intensity variations. BLEEP (0 .895) produces overly widespread high-expression signals. TRIPLEX (0 .910) and STFlow (0 .923) better capture the global pattern but still smooth out local contrast. In com-parison, MSGR more closely reproduces both the global distribution and local variation, achieving a per-slide PCC of 0 .935. STFlow+MS achieves the highest PCC of 0 .940 ( +0.017 over STFlow), with visu-ally sharper expression transitions, suggesting that the GO-guided decoder improves local spatial fidelity in this example. While this example alone does not establish GO-guided coarse-to-fine refine-ment, Appendix F.1 provides complementary evidence for the bi-ological relevance of intermediate predictions by evaluating their alignment with Hallmark pathway activities. 
+
+## 4.5 Ablation Study (RQ4, RQ5) 
+
+To validate the key design choices of MSGR, five model configura-tions are compared across all nine datasets (Table 3): the full MSGR 
+
+Table 3: Ablation study (Mean PCC-200 across nine datasets). 
+
+Δ denotes the performance difference relative to MSGR. Model Avg Δ
+
+MSGR (GO hierarchy) 0.517 —w/o latent highway 0.502 −0.015 w/o residual inheritance 0.504 −0.013 SSGT (single-scale, no hierarchy) 0.497 −0.020 MSGR-Random (random hierarchy) 0.490 −0.027 model, two variants that each remove one architectural component, the single-scale SSGT variant, and MSGR-Random. 
+
+Latent highway. The latent highway propagates latent context from the parent scale to each refinement step via cross-attention, enabling finer scales to directly access the biological context estab-lished at coarser scales. The removal of this component decreases the average PCC-200 from 0 .517 to 0 .502 ( −0.015), confirming that cross-scale latent interaction is essential for coherent coarse-to-fine refinement. Without the latent highway, finer scales no longer re-ceive parent-scale latent context through cross-attention, although they still inherit parent predictions through the residual pathway. 
+
+Residual inheritance. By default, MSGR predicts residual correc-tions relative to inherited parent-scale estimates. Replacing this mechanism with direct prediction at each scale (i.e., predicting ˆ y(𝑘 )
+
+directly without inheritance) reduces performance to 0 .504 ( −0.013). By decomposing the learning problem into smaller, GO-aligned cor-rection tasks, the residual formulation is easier to optimize than direct prediction of the full target values at every scale. 
+
+Multi-scale GO hierarchy vs. single-scale. The SSGT variant uses the same Transformer backbone as MSGR but predicts all 200 genes in a single step, without the GO hierarchy. The average PCC-200 of 0 .497 yields a difference of −0.020 relative to MSGR, confirming MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Zhiwen Xu et al. 1 4 8 16                              
+
+> n(spatial neighbors)
+> 1234
+> L (depth)
+> 0.7283 0.7429 0.7312 0.7432 0.7300 0.7494 0.7479 0.7405 0.7295 0.7385 0.7415 0.7410 0.7291 0.7441 0.7395 0.7472
+> Average PCC-50 across 5 Datasets
+> 14816
+> n(spatial neighbors)
+> 1234
+> L (depth)
+> 0.5218 0.5246 0.5273 0.5299 0.5176 0.5377 0.5384 0.5287 0.5164 0.5249 0.5331 0.5303 0.5178 0.5362 0.5346 0.5299
+> Average PCC-200 across 5 Datasets
+> 0.725 0.730 0.735 0.740 0.745 0.750
+> 0.515 0.520 0.525 0.530 0.535 0.540
+
+Figure 4: Hyperparameter sensitivity analysis of the pro-posed MSGR framework: average PCC-50 (left) and PCC-200 (right) across five datasets for all 16 (𝑛, 𝐿 ) configurations. The best-performing region for both metrics is 𝐿 =2 with 𝑛 ∈ { 4, 8}.
+
+that multi-scale hierarchical refinement contributes meaningfully beyond what the backbone architecture alone provides. 
+
+GO structure vs. random hierarchy. MSGR-Random replaces the GO tree with a randomly constructed hierarchy of identical shape while holding all other components constant. This variant achieves an average of 0 .490, trailing MSGR by 0 .027. It directly quantifies the contribution of the biologically grounded GO structure relative to a structurally equivalent but semantically arbitrary hierarchy. Appendix C.2 further compares GO against pathway, PPI, coexpres-sion, and random hierarchy priors under the same backbone. 
+
+## 4.6 Hyperparameter Sensitivity (RQ6) 
+
+Figure 4 reports the average PCC-50 and PCC-200 scores across five datasets for all 16 combinations of spatial neighborhood size 
+
+𝑛 ∈ { 1, 4, 8, 16 } and shared Transformer depth 𝐿 ∈ { 1, 2, 3, 4}. Both metrics exhibit consistent sensitivity patterns: 𝑛 =1 yields consis-tently suboptimal performance, whereas the best-performing re-gion occurs at 𝐿 =2 with 𝑛 ∈ { 4, 8}. Among the nine configurations with at least moderate spatial aggregation and Transformer depth (𝑛 ∈ { 4, 8, 16 } and 𝐿 ∈ { 2, 3, 4}), the ranges of PCC-50 and PCC-200 are only 0 .011 and 0 .014, respectively. This limited variation indi-cates that MSGR remains relatively robust within this practically relevant configuration range. Increasing 𝐿 from 1 to 2 improves both metrics for 𝑛 ∈ { 4, 8}, whereas greater depths provide no consistent additional benefit. Moreover, performance at 𝑛 =16 re-mains closer to the peak values than at 𝑛 =1, suggesting greater tolerance to overly large neighborhoods than to overly small ones. Per-dataset results are provided in Appendix D. 
+
+## 5 Discussion 
+
+Why does GO-guided decoding work? The effectiveness of MSGR stems from two complementary mechanisms. First, hierarchical su-pervision provides a coarse-to-fine decomposition: hierarchy-level targets anchor each refinement step to biologically meaningful func-tional units, constraining the prediction space from coarse func-tional targets to gene-level outputs. Second, residual refinement decomposes the learning problem into increasingly fine-grained subtasks—beginning with a root-level estimate, followed by GO domain-level and GO term-level refinement, and ending with gene-level corrections. This progression follows the coarse-to-fine orga-nization of biological concepts encoded by the GO hierarchy. 
+
+Complementarity to existing paradigms. The ablations reveal that removing either the latent highway or residual inheritance incurs comparable degradation ( −0.015 and −0.013, respectively), indicat-ing that cross-scale communication and residual correction serve complementary roles. Because the GO-guided decoder operates on the gene side independently of the image encoder, it can be integrated into diverse base models. Results from all three plug-in variants—STFlow+MS, EGN+MS, and ST-Net+MS—validate this compatibility: each improves performance on eight of nine datasets, with average PCC-200 gains of +0.019, +0.017, and +0.018, respec-tively. These results demonstrate that gene-side structural guidance complements diverse image-side modeling strategies. 
+
+Biological interpretability. Beyond predictive accuracy, the GO hierarchy enhances interpretability: predictions at intermediate scales correspond to biologically meaningful functional modules. Because clinically relevant markers frequently belong to specific pathways, the hierarchy enables the model to leverage pathway-level co-regulation, which conventional one-step decoding methods must infer implicitly from data. Quantitative alignment between intermediate GO-term predictions and pathway activities on SKCM is reported in Appendix F.1. The limitation of mean aggregation for sparse pathway signals is discussed in Appendix G.2. 
+
+Limitations and future work. 
+
+(1) GO annotations may be incomplete for less-studied genes. Con-sequently, fallback strategies such as clustering-based hierarchy construction could be employed to mitigate this limitation. (2) The framework operates at the spot level, whereas modeling cell-type heterogeneity at sub-spot resolution remains an open direction for future research. (3) The current design simplifies the GO DAG into a tree. However, preserving richer topological information, for example through ensemble decoding over multiple tree projections, may yield further improvements. 
+
+## 6 Conclusion 
+
+We present MSGR, a framework that leverages the Gene Ontology hierarchy as a biological prior for coarse-to-fine spatial gene ex-pression prediction from histopathology images. By organizing pre-diction across four GO-aligned scales with residual corrections and a shared Transformer backbone, MSGR consistently outperforms existing methods. Furthermore, the GO-guided decoder exhibits plug-in compatibility: integrating it into STFlow, EGN, and ST-Net yields average performance improvements across all three architec-tures. These results demonstrate the complementarity of GO-guided gene decoding and diverse image-side modeling strategies. Ablation studies confirm that the GO-derived hierarchy provides essential biological structure while cross-scale communication enables co-herent coarse-to-fine refinement. Beyond accuracy, the hierarchical structure enhances interpretability by aligning intermediate pre-dictions with biologically meaningful functional modules. More broadly, our findings highlight the potential of biological ontologies as structural priors for knowledge-guided biomedical prediction. Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+## Acknowledgments 
+
+This work was supported by the Hunan Provincial Natural Science Foundation of China (No. 2026JJ60213). 
+
+## References 
+
+[1] Michael Ashburner, Catherine A Ball, Judith A Blake, David Botstein, Heather Butler, J Michael Cherry, Allan P Davis, Kara Dolinski, Selina S Dwight, Janan T Eppig, et al. 2000. Gene ontology: tool for the unification of biology. Nature genetics 25, 1 (2000), 25–29. [2] Junxian Cao, Caifeng Li, Zhao Cui, Shiwen Deng, Tong Lei, Wei Liu, Hongjun Yang, and Peng Chen. 2024. Spatial transcriptomics: a powerful tool in disease understanding and drug discovery. Theranostics 14, 7 (2024), 2946. [3] Eduard Chelebian, Christophe Avenel, and Carolina Wählby. 2025. Combining spatial transcriptomics with tissue morphology. Nature Communications 16, 1 (2025), 4452. [4] Richard J Chen, Tong Ding, Ming Y Lu, Drew FK Williamson, Guillaume Jaume, Andrew H Song, Bowen Chen, Andrew Zhang, Daniel Shao, Muhammad Shaban, et al. 2024. Towards a general-purpose foundation model for computational pathology. Nature medicine 30, 3 (2024), 850–862. [5] Youngmin Chung, Ji Hun Ha, Kyeong Chan Im, and Joo Sang Lee. 2024. Accurate spatial gene expression prediction by integrating multi-resolution features. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .11591–11600. [6] Haotian Cui, Chloe Wang, Hassaan Maan, Kuan Pang, Fengning Luo, Nan Duan, and Bo Wang. 2024. scGPT: toward building a foundation model for single-cell multi-omics using generative AI. Nature methods 21, 8 (2024), 1470–1480. [7] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xi-aohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. 2020. An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 (2020). [8] Marc Gillespie, Bijay Jassal, Ralf Stephan, Marija Milacic, Karen Rothfels, Andrea Senff-Ribeiro, Johannes Griss, Cristoffer Sevilla, Lisa Matthews, Chuqiao Gong, et al. 2022. The reactome pathway knowledgebase 2022. Nucleic acids research 
+
+50, D1 (2022), D687–D692. [9] Zuguang Gu. 2024. simona: a comprehensive R package for semantic similarity analysis on bio-ontologies. BMC genomics 25, 1 (2024), 869. [10] Bryan He, Ludvig Bergenstråhle, Linnea Stenbeck, Abubakar Abid, Alma An-dersson, Åke Borg, Jonas Maaskola, Joakim Lundeberg, and James Zou. 2020. Integrating spatial gene expression and breast tumour morphology via deep learning. Nature biomedical engineering 4, 8 (2020), 827–834. [11] Jonathan Ho, Ajay Jain, and Pieter Abbeel. 2020. Denoising diffusion probabilistic models. Advances in neural information processing systems 33 (2020), 6840–6851. [12] Gao Huang, Zhuang Liu, Laurens Van Der Maaten, and Kilian Q Weinberger. 2017. Densely connected convolutional networks. In Proceedings of the IEEE conference on computer vision and pattern recognition . 4700–4708. [13] Tinglin Huang, Tianyu Liu, Mehrtash Babadi, Wengong Jin, and Zhitao Ying. 2025. Scalable Generation of Spatial Transcriptomics from Histology Images via Whole-Slide Flow Matching. In International Conference on Machine Learning .PMLR, 25550–25565. [14] Guillaume Jaume, Paul Doucet, Andrew Song, Ming Yang Lu, Cristina Alma-gro Pérez, Sophia Wagner, Anurag Vaidya, Richard Chen, Drew Williamson, Ahrong Kim, et al. 2024. Hest-1k: A dataset for spatial transcriptomics and histology image analysis. Advances in Neural Information Processing Systems 37 (2024), 53798–53833. [15] Yuran Jia, Junliang Liu, Li Chen, Tianyi Zhao, and Yadong Wang. 2024. THItoGene: a deep learning method for predicting spatial transcriptomics from histological images. Briefings in Bioinformatics 25, 1 (2024), bbad464. [16] Liis Kolberg, Uku Raudvere, Ivan Kuzmin, Priit Adler, Jaak Vilo, and Hedi Peterson. 2023. g: Profiler—interoperable web service for functional enrichment analysis and gene identifier mapping (2023 update). Nucleic acids research 51, W1 (2023), W207–W212. [17] Maxim V Kuleshov, Matthew R Jones, Andrew D Rouillard, Nicolas F Fernandez, Qiaonan Duan, Zichen Wang, Simon Koplev, Sherry L Jenkins, Kathleen M Jagodnik, Alexander Lachmann, et al. 2016. Enrichr: a comprehensive gene set enrichment analysis web server 2016 update. Nucleic acids research 44, W1 (2016), W90–W97. [18] Sabrina M Lewis, Marie-Liesse Asselin-Labat, Quan Nguyen, Jean Berthelet, Xiao Tan, Verena C Wimmer, Delphine Merino, Kelly L Rogers, and Shalin H Naik. 2021. Spatial omics and multiplexed imaging to explore cancer biology. Nature methods 18, 9 (2021), 997–1012. [19] Xinmin Li and Cun-Yu Wang. 2021. From bulk, single-cell to spatial RNA se-quencing. International journal of oral science 13, 1 (2021), 36. [20] Kun Liang, Chuanlong Du, Hankun You, and Dan Nettleton. 2018. A hidden Markov tree model for testing multiple hypotheses corresponding to Gene On-tology gene sets. BMC bioinformatics 19, 1 (2018), 107. [21] Yuxiang Lin, Ling Luo, Ying Chen, Xushi Zhang, Zihui Wang, Wenxian Yang, Mengsha Tong, and Rongshan Yu. 2024. St-align: A multimodal foundation model for image-gene alignment in spatial transcriptomics. arXiv preprint arXiv:2411.16793 (2024). [22] Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. 2022. Flow matching for generative modeling. arXiv preprint arXiv:2210.02747 
+
+(2022). [23] Cancer Genome Atlas Network et al. 2015. Genomic classification of cutaneous melanoma. Cell 161, 7 (2015), 1681. [24] Hai Dang Nguyen, Nguyen Dang Huy Pham, The Minh Duc Nguyen, Dac Thai Nguyen, Hang Thi Nguyen, and Duong M Nguyen. 2025. MMAP: A Multi-Magnification and Prototype-Aware Architecture for Predicting Spatial Gene Ex-pression. In Pacific Rim International Conference on Artificial Intelligence . Springer, 381–395. [25] Steven J Ohsie, G Peter Sarantopoulos, Alistair J Cochran, and Scott W Binder. 2008. Immunohistochemical characteristics of melanoma. Journal of cutaneous pathology 35, 5 (2008), 433–444. [26] Minxing Pang, Kenong Su, and Mingyao Li. 2021. Leveraging information in spatial transcriptomics to predict super-resolution gene expression from histology images in tumors. BioRxiv (2021), 2021–11. [27] William Peebles and Saining Xie. 2023. Scalable diffusion models with transform-ers. In Proceedings of the IEEE/CVF international conference on computer vision .4195–4205. [28] Omri Puny, Matan Atzmon, Heli Ben-Hamu, Ishan Misra, Aditya Grover, Edward J Smith, and Yaron Lipman. 2021. Frame averaging for invariant and equivariant network design. arXiv preprint arXiv:2110.03336 (2021). [29] Sara Sabour, Nicholas Frosst, and Geoffrey E Hinton. 2017. Dynamic routing between capsules. Advances in neural information processing systems 30 (2017). [30] Franco Scarselli, Marco Gori, Ah Chung Tsoi, Markus Hagenbuchner, and Gabriele Monfardini. 2008. The graph neural network model. IEEE transactions on neural networks 20, 1 (2008), 61–80. [31] Patrik L Ståhl, Fredrik Salmén, Sanja Vickovic, Anna Lundmark, José Fernández Navarro, Jens Magnusson, Stefania Giacomello, Michaela Asp, Jakub O Westholm, Mikael Huss, et al. 2016. Visualization and analysis of gene expression in tissue sections by spatial transcriptomics. Science 353, 6294 (2016), 78–82. [32] Damian Szklarczyk, Katerina Nastou, Mikaela Koutrouli, Rebecca Kirsch, Farrokh Mehryary, Radja Hachilif, Dewei Hu, Matteo E Peluso, Qingyao Huang, Tao Fang, et al. 2025. The STRING database in 2025: protein networks with directionality of regulation. Nucleic acids research 53, D1 (2025), D730–D737. [33] Yaqi Tang, Simon Durand, Stéphane Dalle, and Julie Caramel. 2020. EMT-Inducing Transcription Factors, Drivers of Melanoma Phenotype Switching, and Resistance to Treatment. Cancers 12, 8 (2020), 2154. [34] Asher Trockman and J Zico Kolter. 2022. Patches are all you need? arXiv preprint arXiv:2201.09792 (2022). [35] Sipko Van Dam, Urmo Vosa, Adriaan Van der Graaf, Lude Franke, and Joao Pedro de Magalhaes. 2018. Gene co-expression analysis for functional classification and gene–disease predictions. Briefings in bioinformatics 19, 4 (2018), 575–592. [36] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. Advances in neural information processing systems 30 (2017). [37] Petar Veličković, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Lio, and Yoshua Bengio. 2017. Graph attention networks. arXiv preprint arXiv:1710.10903 (2017). [38] Chuhan Wang, Adam S Chan, Xiaohang Fu, Shila Ghazanfar, Jinman Kim, Ellis Patrick, and Jean YH Yang. 2025. Benchmarking the translational potential of spatial gene expression prediction from histology. Nature Communications 16, 1 (2025), 1544. [39] Hongyi Wang, Xiuju Du, Jing Liu, Shuyi Ouyang, Yen-Wei Chen, and Lanfen Lin. 2025. M2ost: Many-to-one regression for predicting spatial transcriptomics from digital pathology images. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 39. 7709–7717. [40] Cameron G Williams, Hyun Jae Lee, Takahiro Asatsuma, Roser Vento-Tormo, and Ashraful Haque. 2022. An introduction to spatial transcriptomics for biomedical research. Genome medicine 14, 1 (2022), 68. [41] Ronald Xie, Kuan Pang, Sai Chung, Catia Perciani, Sonya MacParland, Bo Wang, and Gary Bader. 2023. Spatially resolved gene expression prediction from histol-ogy images via bi-modal contrastive learning. Advances in Neural Information Processing Systems 36 (2023), 70626–70637. [42] Yan Yang, Md Zakir Hossain, Eric A Stone, and Shafin Rahman. 2023. Exemplar guided deep neural network for spatial transcriptomics analysis of gene expres-sion prediction. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision . 5039–5048. [43] Yuansong Zeng, Zhuoyi Wei, Weijiang Yu, Rui Yin, Yuchen Yuan, Bingling Li, Zhonghui Tang, Yutong Lu, and Yuedong Yang. 2022. Spatial transcriptomics prediction from histology jointly through transformer and graph neural networks. 
+
+Briefings in Bioinformatics 23, 5 (2022), bbac297. [44] Sichen Zhu, Yuchen Zhu, Molei Tao, and Peng Qiu. 2025. Diffusion generative modeling for spatially resolved gene expression inference from histology images. 
+
+arXiv preprint arXiv:2501.15598 (2025). MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Zhiwen Xu et al. 
+
+## A Full Main Results 
+
+Table 5 summarizes the statistics of the nine spatial transcriptomics benchmarks utilized in this study. Table 6 and Table 7 report the PCC-10 and PCC-50 metrics across all methods and datasets. These metrics evaluate the performance on the top-10 and top-50 genes, complementing the primary PCC-200 metric reported in the main paper. Table 8 provides a comprehensive comparison of all meth-ods across five evaluation metrics. HisToGene is excluded from Table 8 because it encountered out-of-memory errors on IDC (slide TENX99 exceeds 20,000 spots, which overflowed the slide-level self-attention on a 32 GB GPU), thereby preventing the computation of the average across datasets. 
+
+Evaluation metrics. We adopt five metrics to comprehensively evaluate the quality of predictions, where 𝑁 denotes the number of spots, 𝐺 indicates the number of target genes, and 𝑘 represents the size of the gene subset. All metrics are computed between the predicted and ground-truth expression vectors for each test slide and are subsequently averaged across the cross-validation folds. (i) PCC-𝑘 . Let {PCC 𝑔 }𝐺 𝑔 =1 denote the per-gene Pearson corre-lation coefficients sorted in descending order. PCC-𝑘 is defined as: PCC-𝑘 = 1
+
+𝑘 
+
+> 𝑘
+
+∑︁ 
+
+> 𝑔 =1
+
+PCC 𝑔 , (9) where the per-gene Pearson correlation is: PCC 𝑔 =
+
+Í𝑠 (𝑦 𝑠,𝑔 − ¯𝑦 𝑔 )( ˆ𝑦 𝑠,𝑔 − ¯ˆ𝑦 𝑔 )√︃ Í𝑠 (𝑦 𝑠,𝑔 − ¯𝑦 𝑔 )2 Í𝑠 ( ˆ𝑦 𝑠,𝑔 − ¯ˆ𝑦 𝑔 )2
+
+, (10) and 𝑦 𝑠,𝑔 , ˆ 𝑦 𝑠,𝑔 represent the ground-truth and predicted expression levels of gene 𝑔 at spot 𝑠 . We report PCC-10, PCC-50, and PCC-200. (ii) MSE (Mean Squared Error) measures the average squared de-viation between the predicted and ground-truth expressions across all genes and spots within the log1p space: MSE = 1
+
+𝑁𝐺 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑠 =1
+> 𝐺
+
+∑︁ 
+
+> 𝑔 =1
+
+(𝑦 𝑠,𝑔 − ˆ𝑦 𝑠,𝑔 )2. (11) (iii) MAE (Mean Absolute Error) provides an interpretable mea-sure of error that is less sensitive to outliers: MAE = 1
+
+𝑁𝐺 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑠 =1
+> 𝐺
+
+∑︁ 
+
+> 𝑔 =1
+
+|𝑦 𝑠,𝑔 − ˆ𝑦 𝑠,𝑔 |. (12) For both MSE and MAE, lower values indicate superior prediction accuracy. 
+
+PCC-10 and PCC-50 analysis. Tables 6 and 7 reveal a consistent hierarchy of performance across gene subsets. Regarding PCC-10, MSGR achieves the highest average (0 .776), surpassing both TRIPLEX (0 .763) and STFlow (0 .763) by +0.013. Regarding PCC-50, MSGR (0 .710) extends the margin over STFlow (0 .694) to +0.016. The margin remains substantial at PCC-200 ( +0.014 over STFlow), confirming that decoding structured by GO provides consistent benefits across gene subsets of varying size, particularly on chal-lenging datasets with low signals (HCC: +0.036 over STFlow on PCC-50, READ: +0.029). Notably, MSGR achieves the highest rank on five of the nine datasets for both PCC-10 and PCC-50 (excluding HisToGene, which encounters out-of-memory errors on IDC). 
+
+Comprehensive metric comparison. Table 8 provides a holistic view across all five metrics. MSGR achieves the best PCC-10, PCC-50, PCC-200, and MAE (0 .865), while STFlow attains the lowest MSE (1 .309). The MSE of MSGR (1 .348) is marginally higher than that of STFlow (1 .309), which we attribute to the multi-scale supervision that regularizes intermediate predictions rather than optimizing solely for the MSE at the leaf level. This trade-off is favorable: the correlation gains ( +0.014 in PCC-200) substantially outweigh the marginal increase in MSE ( +0.039), as downstream biological analyses primarily rely on relative expression patterns rather than absolute magnitudes. Layer Norm Spatial Attention FFN     
+
+> 𝐡 𝑖 spa ∈ ℝ 𝒅
+> Representation Spatially-aware Representation Coordinates MLP —
+> fF
+> MLP
+> 𝐏 ∈ ℝ 𝑵×𝒅
+> 𝐂 ∈ ℝ 𝑵×𝟐
+> ΣΣ
+> PCA
+> || Σ
+> PQPKPV
+> MLP
+> ||
+> MLP
+> P
+> (a) Spaital Transformer (b) E(2)-Invariant Spatial Attention
+
+Figure 5: Spatial Transformer architecture. (a) Overall archi-tecture. (b) The E(2)-invariant spatial attention. 
+
+## B Spatial Transformer Architecture 
+
+Figure 5 illustrates the Spatial Transformer utilized within MSGR to encode context from the neighborhood. This module builds upon the transformer backbone of STFlow [13]. Given the UNI embed-dings of a center spot and its 𝑛 nearest spatial neighbors, the module applies 𝐿 𝑠 Transformer layers to aggregate information from the neighborhood while preserving spatial equivariance. 
+
+E(2)-equivariant frame averaging. To ensure that the spatial en-coding is invariant to rotations and reflections of the tissue struc-ture, we employ E(2)-equivariant frame averaging [28]. For each center spot 𝑖 and its neighbor 𝑗 , we compute the relative coordinate 
+
+r𝑖 𝑗 = c𝑗 − c𝑖 and construct a local covariance matrix: 
+
+Σ𝑖 =∑︁   
+
+> 𝑗 ∈ N ( 𝑖 )
+
+r𝑖 𝑗 r⊤ 
+
+> 𝑖 𝑗
+
+. (13) Eigendecomposing Σ𝑖 yields an orthonormal basis: 
+
+Σ𝑖 = 𝑈 Λ𝑈 ⊤, (14) where 𝑈 ∈ R𝑑 ×𝑑 is the matrix of eigenvectors. By further enumer-ating sign flips across all 2 𝑑 = 4 axis combinations (for 𝑑 =2 spatial dimensions), we obtain a complete set of frames: 
+
+𝑅 𝑔 = 𝑈 · diag (𝑠 𝑔 ), 𝑠 𝑔 ∈ {− 1, +1}𝑑 , 𝑔 = 1, . . . , 4, (15) Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+that cover all rotations and reflections. For each frame 𝑅 𝑔 , the edge embedding is computed as: 
+
+e(𝑔 ) 
+
+> 𝑖 𝑗
+
+= 𝜙  𝑅 𝑔 r𝑖 𝑗 , ∥r𝑖 𝑗 ∥, (16) where 𝜙 is an MLP encoding the rotated relative coordinates and the inter-spot distance. The final edge embedding is obtained by averaging across all frames: 
+
+e𝑖 𝑗 = 14
+
+> 4
+
+∑︁ 
+
+> 𝑔 =1
+
+e(𝑔 ) 
+
+> 𝑖 𝑗
+
+. (17) This frame averaging guarantees exact E(2)-equivariance of the spatial encoding. 
+
+MLP-based spatial attention. Unlike dot-product attention, our spatial attention employs a Multilayer Perceptron (MLP) to compute attention weights from concatenated query, key, and edge features. Specifically, for a center spot 𝑖 with neighbor 𝑗 , the attention input comprises: (i) the query embedding q𝑖 , (ii) the key embedding k𝑗 ,and (iii) the edge embedding e𝑖 𝑗 derived from the frame-averaged relative coordinates and the distance between spots. A shared MLP maps this concatenated feature to a scalar attention logit: 
+
+𝛼 𝑖 𝑗 = exp  𝑓 (q𝑖 ∥ k𝑗 ∥ e𝑖 𝑗 )Í𝑗 ′ ∈ N ( 𝑖 ) exp  𝑓 (q𝑖 ∥ k𝑗 ′ ∥ e𝑖 𝑗 ′ ) , (18) where 𝑓 denotes the shared MLP, ∥ indicates concatenation, and 
+
+N ( 𝑖 ) is the set of 𝑛 nearest neighbors of spot 𝑖 . The aggregated representation is then computed by separately weighting the value and edge streams, concatenating, and passing through an output MLP: 
+
+hspa  
+
+> 𝑖
+
+= MLP 𝑜 
+
+∑︁   
+
+> 𝑗 ∈ N ( 𝑖 )
+
+𝛼 𝑖 𝑗 v𝑗 
+
+ ∑︁   
+
+> 𝑗 ∈ N ( 𝑖 )
+
+𝛼 𝑖 𝑗 e𝑖 𝑗 
+
+
+
+, (19) where v𝑗 is the value projection of neighbor 𝑗 and MLP 𝑜 is the output projection. This design allows the attention mechanism to explicitly condition on geometric relationships while remaining efficient in terms of parameters. 
+
+## C Extended Ablation Studies C.1 Multi-Scale Loss Weights Ablation 
+
+To validate the design of multi-scale loss weights within the archi-tecture of MSGR, we conducted targeted experiments on five core datasets (COAD, HCC, READ, LUNG, SKCM). Table 9 reports the results relative to the adopted configuration. Uniform weighting across all scales (loss=[1,1,1,1]) degrades the performance by −0.0144, confirming that treating all levels of the hi-erarchy equally is suboptimal. Adding progressive weighting while retaining supervision at the root (loss=[1,1,2,4]) slightly narrows the performance gap to −0.0137 compared to uniform weighting, in-dicating that progressive emphasis on finer scales provides limited benefit when noise at the root level remains. Further amplifying the progressive weighting (loss=[1,2,4,8]) implicitly suppresses root supervision by assigning it the smallest weight relative to finer scales, substantially reducing the gap ( −0.0057). This demonstrates that the virtual root node aggregates all 𝐺 genes into a single noisy target of global mean, and its gradient signal conflicts with ob-jectives at finer scales. The optimal configuration loss=[0,1,2,4] eliminates this noisy supervision at the root while preserving the progressive emphasis toward predictions at the gene level, thereby achieving the optimal balance between multi-scale regularization and the signal-to-noise ratio. Notably, the entire performance vari-ation across all tested configurations is only 0 .0144 in PCC-200, demonstrating that MSGR is robust to the specific choice of loss weights while still benefiting from removing supervision at the virtual root and progressively emphasizing finer scales. 
+
+## C.2 Biological-Prior Ablation 
+
+To isolate the contribution of different biological priors within the same backbone of MSGR, we compare five strategies for hierarchy construction: GO (default), Random , Pathway , PPI , and Coexp .
+
+Construction logic of the four alternative priors. All four alter-natives are built from the same 200 target genes per dataset and are subsequently converted into hierarchical supervision targets: (i) Random : replaces the GO-derived tree with a randomly con-structed hierarchy of identical shape while maintaining all other components as constant, thereby removing biological semantics while preserving the multi-scale decoding interface. (ii) Pathway :gene sets are sourced from the Reactome pathway database [8] via Enrichr [17], filtered and selected by coverage; each gene is assigned to one representative set; unmatched genes are placed in an isolated set, yielding a compact three-level structure (root →set →gene). (iii) PPI : we construct a weighted gene graph from STRING [32] interactions, split it by connected components, and then partition each component into modules via community detection (with the merging of small modules). (iv) Coexp : correlations between genes are computed from ST expression profiles in the training set, edges are sparsified by per-gene top-𝑘 neighbor selection combined with a correlation threshold, and then the same component and module partitioning is applied with a fallback for isolated genes. 
+
+Quantitative comparison. Table 10 reports the averages across nine datasets. GO achieves the best results across all five metrics, confirming its effectiveness as a biological prior. Among the three biological alternatives, Pathway achieves the highest rank on PCC-200 (0 .506) while Coexp attains the lowest MSE (1 .394); all three are closely matched on PCC-10 (0 .762–0 .768) and PCC-50 (0 .695–0 .699). At the per-dataset level (PCC-200), GO ranks first on six of the nine datasets, Pathway on two of the nine, and PPI on one of the nine (Random and Coexp: 0/9). Importantly, MSGR-RANDOM performs worse than MSGR-GO by 0 .027 on average for PCC-200, supporting the claim that improvements derive from the biological ontology structure rather than the hierarchy decomposition alone. 
+
+## D Per-Dataset Hyperparameter Sensitivity 
+
+Figure 6 shows the full 4 ×4 (𝑛, 𝐿 ) sensitivity grid for each of the five evaluation datasets alongside the average: panel (a) reports PCC-50 and panel (b) reports PCC-200. 
+
+PCC-50 (Figure 6(a)). The PCC-50 grid reveals amplified dynamic ranges on the most challenging datasets. HCC exhibits the widest range (0 .101), with the optimal configuration at (𝑛 =4, 𝐿 =2) extend-ing the margin over the 𝑛 =1 column by +0.063. READ similarly shows a wide range of 0 .085, with the optimal configuration at 
+
+(𝑛 =16 , 𝐿 =2). In contrast, LUNG remains highly stable (range 0 .014). The average PCC-50 peaks at (𝑛 =4, 𝐿 =2) with 0 .749. 
+
+PCC-200 (Figure 6(b)). HCC and READ exhibit the widest dynamic ranges (0 .057 and 0 .065, respectively): their optimal configurations MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Zhiwen Xu et al. 
+
+reside in the plateau ( 𝑛 ∈ { 4, 8}, 𝐿 =2) while the 𝑛 =1 column drops sharply. LUNG is the most stable tissue, which is consistent with its spatially homogeneous expression patterns. Three of the five datasets (HCC, READ, SKCM) have their lowest column mean at 
+
+𝑛 =1; COAD and LUNG show comparable values at 𝑛 =1 and 𝑛 =4(within 0 .004), indicating that the benefit of aggregating spatial information is smaller for tissues with an already high baseline PCC or spatially uniform expression. The average PCC-200 peaks at (𝑛 =8, 𝐿 =2) with 0 .538. The distinct average optima align with the observation in the main text that predicting fewer genes benefits from a more restricted spatial focus while larger gene sets require a broader context. 
+
+## E Details of Integrating the GO-Guided Decoder into Existing Methods 
+
+The GO-guided decoder is designed as a model-agnostic module that can be integrated into existing architectures with minimal modifications. For STFlow [13], EGN [42], and ST-Net [10], the integration follows a consistent pattern: (i) the original linear output head is replaced with the hierarchical decoder, and (ii) the standard MSE loss is substituted with the multi-scale GO-supervised loss. The GO hierarchy is constructed offline once per dataset and is shared across all cross-validation folds, introducing no additional data preprocessing overhead during training. 
+
+Architecture-specific integration. While the pattern of integra-tion is consistent, the specific architectural context differs across methods. For STFlow, the decoder replaces the final linear head of the flow-matching denoiser while preserving the E(2)-equivariant spatial encoder. For EGN, the decoder substitutes the output pro-jection after the exemplar-guided Transformer, maintaining the cross-attention mechanism for interaction with reference samples. For ST-Net, the hierarchical decoder directly follows the DenseNet-121 backbone [12], replacing the original single-layer output head. This architectural diversity, spanning generative flow-matching, exemplar-guided regression, and CNN-based encoding, demon-strates that the GO-guided decoder operates orthogonally to the paradigm of image-side feature extraction. Notably, the plug-in gains are consistent across image encoders: under ST-Net’s native DenseNet-121 encoder the GO-guided decoder improves PCC-200 by +0.018 on average (Table 2), matching the +0.017 and +0.019 gains obtained under the frozen UNI encoder for EGN and STFlow. This indicates that the benefit of the GO-guided decoder is largely encoder-agnostic. 
+
+Lightweight MLP-based decoder. To ensure efficiency in parame-ters when integrating with existing methods, we employ a light-weight variant of the GO-guided decoder based on MLP layers rather than the full Transformer backbone used in MSGR. Specif-ically, each scale uses a two-layer MLP with SiLU activation for residual prediction, and cross-scale context is propagated via simple concatenation rather than cross-attention. This design maintains a minimal parameter overhead while still utilizing the structure of the GO hierarchy. Despite its reduced capacity, the lightweight decoder consistently improves the performance across base architectures, demonstrating that the gain primarily stems from the biological prior rather than an increased capacity of the model. 
+
+Computational overhead. For the lightweight MLP-based decoder used in the plug-in variants, Table 4 compares the GO-guided head with the original flat MLP head. Across EGN and ST-Net, the GO-guided decoder adds 0.25%–0.30% FLOPs, 5.7%–6.0% training time per step, and 1.5%–6.2% GPU memory. The GO hierarchy itself is constructed offline once per dataset and introduces no additional runtime preprocessing cost during training. 
+
+## F Additional Experiments F.1 Quantitative Validation of Intermediate-Scale Interpretability 
+
+MSGR exposes predictions for named GO terms at intermediate lev-els. To quantify pathway-level signals captured by these predictions, we evaluate their alignment with MSigDB Hallmark pathway activ-ities on SKCM. A GO-term activity is defined as MSGR’s prediction for the corresponding node, whereas a Hallmark pathway activity is the mean ground-truth expression of pathway genes overlapping the 200-gene panel. We match GO terms to Hallmark pathways by Jaccard similarity, retaining pairs with at least two overlapping genes and the top three pathways per GO term. Pearson correlation is then computed across all spots for each matched pair. This procedure yields 20 matched pairs with a mean correlation of 𝑟 =0.896. Table 11 reports the top 10 pairs, together with their biological implications in SKCM. The gene sets used to form each pair differ substantially in size, with a median overlap ratio of 13.2% across all 20 pairs. All top-matched pathways are cancer-related; for example, EMT reflects the phenotype switching that drives invasion and metastasis in SKCM [33], and KRAS Signaling Up reflects RAS/MAPK activation, a central oncogenic driver of melanoma [23]. These results indicate that the intermediate GO-term predictions are aligned with biologically meaningful pathway-level variation beyond individual gene outputs. 
+
+## F.2 Single-Parent versus Multi-Parent GO Projection 
+
+The default hierarchy assigns each gene to its most specific GO term, yielding a single-parent tree. We compare this design with a multi-parent averaging variant (MSGR-MP), in which each gene inherits the average prediction of all of its GO-annotated parent terms before its residual correction is added. Other components are held fixed. Table 12 shows that the single-parent tree outperforms the multi-parent averaging variant on all nine datasets, with an average PCC-200 difference of −0.017 for MSGR-MP. This experiment restores only multi-parent gene-to-term annotations; it neither retains nor restores the additional term-to-term connectivity of the native GO DAG. Thus, it evaluates uniform averaging over alternative parent-term predictions rather than a full DAG-aware decoder. The lower performance is consistent with such averaging diluting the more specific functional signal selected by the default projection: in the native GO DAG, multi-parent genes are annotated to between 2 and 14 terms (7.3 on average), and uniform averaging over these alternative parent terms can attenuate the discriminative signal carried by the most specific term. 
+
+## F.3 Structure of the Constructed GO Hierarchy 
+
+To make the constructed hierarchy concrete, Figure 7 visualizes the tree built for the IDC dataset. Consistent with the four-level design Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+in Section 3.4, the hierarchy contains one virtual root, four Level-1 domain nodes—molecular function (MF), cellular component (CC), biological process (BP), and an unannotated proxy (UN)—and 20 Level-2 GO terms, with the 200 target genes distributed across these terms according to GO annotation specificity. A small number of Level-2 GO terms are singletons that annotate only one gene (3 of 20 in IDC; for instance, the term “chylomicron remodeling” is associated with a single gene). For such nodes the residual-correction mechanism has a naturally limited role, since the parent target and its single child carry nearly identical informa-tion. These singleton terms correspond to highly specific biological functions, and the path-compression strategy (Section 3.4) already removes longer single-child chains, so they do not introduce addi-tional depth into the hierarchy. 
+
+## G Methodological Clarifications G.1 Residual Inheritance and the Zero-Sum Property 
+
+Residual inheritance does not impose an explicit zero-sum con-straint on the predicted corrections. Consider a parent node 𝑝 with children 𝑐 ∈ C( 𝑝 ) and let 𝑛 𝑐 = |desc (𝑐 )| denote the number of descendant leaf genes. Because each parent target is the mean of its descendant leaf targets, the targets satisfy ∑︁   
+
+> 𝑐 ∈ C ( 𝑝 )
+
+𝑛 𝑐 
+
+ y𝑐 − y𝑝 
+
+ = 0. (20) Consequently, if the parent and child targets are fitted exactly and the ReLU activation does not clip the output, the ideal child corrections obey a subtree-size-weighted relation. This differs from the unweighted condition Í𝑐 𝚫 𝑐 = 0 and is not enforced by either the architecture or the loss. During training, each scale minimizes its own MSE objective, while parent predictions and child corrections are jointly optimized; therefore, no zero-sum equality is imposed on the predicted corrections. Moreover, self-attention operates jointly over all nodes at a scale before the shared output head produces residuals, allowing sibling representations to coordinate. The main-paper residual-inheritance ablation decreases PCC-200 by 0 .013, empirically supporting this refinement mechanism. 
+
+## G.2 Mean Aggregation of Descendant Genes 
+
+The coarse-scale target is the mean expression of a node’s descen-dant genes. This aggregation can attenuate a pathway signal driven by only a small subset of its genes, and it is therefore not intended to preserve every sparse gene-specific effect at the intermediate scale. Instead, it supplies a biologically aligned auxiliary target, while the leaf level receives the largest loss weight ( 𝑤 3 = 4) and remains individually supervised. The quantitative analysis in Section F.1 pro-vides empirical support that dominant pathway-level variation is retained: intermediate GO-term predictions align with independent MSigDB Hallmark activities on SKCM. More selective aggregation functions, such as variance-weighted or attention-based pooling, remain a direction for future work. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Zhiwen Xu et al. 
+
+Table 4: Computational overhead of the lightweight GO-guided decoder relative to a flat MLP head. FLOPs (M) Training Time (ms/step) GPU Memory (MB) Model Flat GO-guided Flat GO-guided Flat GO-guided 
+
+EGN 3500.3 3509.0 ( +0.25%) 52.8 56.0 ( +6.0%) 5145 5465 ( +6.2%) ST-Net 2864.7 2873.4 ( +0.30%) 81.9 86.6 ( +5.7%) 8870 9005 ( +1.5%) 
+
+Table 5: Dataset statistics for the nine spatial transcriptomics benchmarks. All datasets are sourced from HEST-1k [14]. IDC PRAD SKCM COAD READ CCRCC HCC LUNG KIDNEY 
+
+Organ Breast Prostate Skin Colon Rectum KIDNEY Liver Lung KIDNEY Technology Xenium Visium Xenium Xenium Visium Visium Visium Xenium Visium #Slides 4 23 2 4 4 24 2 2 23 #Patients 4 2 2 2 2 24 2 2 22 #Splits 4 2 2 2 2 6 2 2 4Avg. spots 8884 2717 1517 3913 2102 3093 2098 2603 1122 
+
+Table 6: PCC-10 on 9 HEST-1k datasets. Mean across folds. Best in bold, second-best underlined. OOM denotes an out-of-memory error. †: MSGR with GO hierarchy. Dataset ST-Net UNI HisToGene BLEEP EGN TRIPLEX STFlow MSGR †
+
+CCRCC 0.621 0.637 0.626 0.626 0.671 0.746 0.716 0.719 COAD 0.729 0.792 0.897 0.879 0.888 0.865 0.880 0.888 HCC 0.465 0.474 0.450 0.442 0.591 0.523 0.655 0.679 
+
+IDC 0.815 0.857 OOM 0.878 0.890 0.882 0.904 0.909 
+
+LUNG 0.869 0.804 0.857 0.860 0.882 0.901 0.887 0.893 PRAD 0.591 0.552 0.547 0.561 0.606 0.671 0.651 0.640 READ 0.529 0.592 0.574 0.595 0.620 0.654 0.641 0.663 
+
+SKCM 0.891 0.877 0.906 0.894 0.924 0.926 0.938 0.945 
+
+KIDNEY 0.591 0.604 0.524 0.580 0.624 0.695 0.591 0.650 
+
+Avg 0.678 0.688 / 0.702 0.744 0.763 0.763 0.776 Table 7: PCC-50 on 9 HEST-1k datasets. Mean across folds. Best in bold, second-best underlined. OOM denotes an out-of-memory error. †: MSGR with GO hierarchy. Dataset ST-Net UNI HisToGene BLEEP EGN TRIPLEX STFlow MSGR †
+
+CCRCC 0.532 0.550 0.536 0.533 0.577 0.655 0.634 0.636 COAD 0.648 0.700 0.826 0.806 0.814 0.795 0.816 0.822 HCC 0.340 0.361 0.375 0.358 0.475 0.414 0.551 0.587 
+
+IDC 0.778 0.817 OOM 0.843 0.858 0.854 0.876 0.880 
+
+LUNG 0.799 0.747 0.801 0.798 0.822 0.832 0.828 0.831 PRAD 0.537 0.496 0.498 0.494 0.543 0.607 0.593 0.585 READ 0.443 0.490 0.491 0.496 0.522 0.563 0.550 0.579 
+
+SKCM 0.863 0.831 0.873 0.855 0.897 0.899 0.912 0.922 
+
+KIDNEY 0.482 0.503 0.449 0.478 0.531 0.562 0.484 0.547 
+
+Avg 0.602 0.611 N/A 0.629 0.671 0.687 0.694 0.710 Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil (a) Hyperparameter Sensitivity for PCC-50 across Datasets 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.8174 0.8127 0.8126 0.8283 0.8076 0.8088 0.8219 0.8225 0.8218 0.8306 0.8318 0.8271 0.8235 0.8144 0.8230 0.8126 
+
+COAD 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.5407 0.5818 0.5279 0.5792 0.5747 0.6160 0.5865 0.5145 0.5570 0.5692 0.5643 0.5509 0.5412 0.5913 0.5426 0.5945 
+
+HCC 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.5368 0.5799 0.5739 0.5625 0.5287 0.5934 0.5788 0.6134 0.5325 0.5671 0.5668 0.5889 0.5530 0.5729 0.5926 0.5793 
+
+READ 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.8282 0.8255 0.8274 0.8284 0.8289 0.8172 0.8307 0.8295 0.8313 0.8241 0.8304 0.8263 0.8311 0.8248 0.8271 0.8279 
+
+LUNG 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.9183 0.9149 0.9144 0.9175 0.9102 0.9116 0.9217 0.9223 0.9051 0.9015 0.9144 0.9118 0.8966 0.9170 0.9119 0.9214 
+
+SKCM 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.7283 0.7429 0.7312 0.7432 0.7300 0.7494 0.7479 0.7405 0.7295 0.7385 0.7415 0.7410 0.7291 0.7441 0.7395 0.7472 
+
+Average 
+
+0.805 0.810 0.815 0.820 0.825 0.830 0.835 
+
+0.52 0.54 0.56 0.58 0.60 0.62 
+
+0.54 0.56 0.58 0.60 
+
+0.815 0.820 0.825 0.830 0.835 
+
+0.895 0.900 0.905 0.910 0.915 0.920 0.925 
+
+0.725 0.730 0.735 0.740 0.745 0.750 
+
+## (b) Hyperparameter Sensitivity for PCC-200 across Datasets 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.5470 0.5361 0.5338 0.5525 0.5260 0.5324 0.5456 0.5520 0.5504 0.5500 0.5508 0.5552 0.5465 0.5454 0.5510 0.5490 
+
+COAD 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.3060 0.3165 0.3001 0.3336 0.3318 0.3535 0.3378 0.2962 0.3022 0.3236 0.3275 0.3257 0.3093 0.3353 0.3179 0.3308 
+
+HCC 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.3401 0.3608 0.3882 0.3512 0.3312 0.3965 0.3916 0.3753 0.3375 0.3561 0.3737 0.3673 0.3421 0.3847 0.3934 0.3492 
+
+READ 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.6281 0.6215 0.6237 0.6248 0.6222 0.6167 0.6240 0.6259 0.6249 0.6202 0.6295 0.6264 0.6218 0.6231 0.6259 0.6254 
+
+LUNG 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.7876 0.7882 0.7907 0.7874 0.7767 0.7893 0.7931 0.7940 0.7670 0.7746 0.7841 0.7770 0.7694 0.7924 0.7846 0.7951 
+
+SKCM 
+
+1 4 8 16 
+
+n (spatial neighbors) 
+
+1234
+
+> L (depth)
+
+0.5218 0.5246 0.5273 0.5299 0.5176 0.5377 0.5384 0.5287 0.5164 0.5249 0.5331 0.5303 0.5178 0.5362 0.5346 0.5299 
+
+Average 
+
+0.525 0.530 0.535 0.540 0.545 0.550 0.555 0.560 
+
+0.30 0.31 0.32 0.33 0.34 0.35 
+
+0.33 0.34 0.35 0.36 0.37 0.38 0.39 0.40 
+
+0.615 0.620 0.625 0.630 
+
+0.765 0.770 0.775 0.780 0.785 0.790 0.795 0.800 
+
+0.515 0.520 0.525 0.530 0.535 0.540 
+
+Figure 6: Per-dataset hyperparameter sensitivity across five evaluation datasets. Full 4×4 grids over spatial neighborhood size 𝑛 and Transformer depth 𝐿 , with the average shown in the final panel. (a) PCC-50. (b) PCC-200. Cell values report the corresponding score, and each dataset uses an independent color scale. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Zhiwen Xu et al. MF 55 1
+
+> ABC-type bile acid..
+> 2
+> Cargo Receptor
+> 3
+> Struct. Molecule
+> 4
+> TM Transporter
+> 9
+> Signaling Rcpt.
+> 19
+> Catalytic Act.
+> 17
+> Binding
+> CC 35 5
+> Protein Complex
+> 30
+> Cell. Anat. Struct.
+> BP 103 1
+> Chylomicron Remod.
+> 1
+> Virion Attachment
+> 13
+> Immune Sys. Proc.
+> 2
+> Localizatio n
+> 2
+> Neg. Reg. Biol. Proc.
+> 10
+> Develop. Process
+> 9
+> Multicell. Process
+> 10
+> Resp. to Stimulus
+> 3
+> Biol. Regulation
+> 52
+> Cell. Process
+> UN 77
+> Unannotated
+> Root 200
+> Molecular Function Cellular Component Biological Process Unannotated
+
+Figure 7: GO hierarchy constructed for the IDC dataset. Node size is proportional to the number of annotated genes. Four Level-1 domains (MF, CC, BP, and an unannotated proxy UN) contain 20 Level-2 GO terms, with 200 leaf genes distributed according to annotation specificity. Table 8: Comprehensive comparison of all methods on 9 HEST-1k datasets. Mean PCC-10, PCC-50, PCC-200, MSE, and MAE across all 9 datasets. Best in bold, second-best underlined. †: MSGR with GO hierarchy. Method PCC-10 PCC-50 PCC-200 MSE ↓ MAE ↓
+
+ST-Net 0.678 0.602 0.414 1.583 0.946 UNI 0.688 0.611 0.422 1.463 0.920 BLEEP 0.702 0.629 0.435 1.466 0.910 EGN 0.744 0.671 0.464 1.460 0.904 TRIPLEX 0.763 0.687 0.489 1.338 0.876 STFlow 0.763 0.694 0.503 1.309 0.867 
+
+MSGR † 0.776 0.710 0.517 1.348 0.865 Table 9: Ablation results on loss weight design (5-dataset mean PCC-200). [0,1,2,4] (bold) is the adopted configuration. Δ =difference from the adopted configuration. Configuration Avg Δ
+
+loss=[0,1,2,4] 0.5384 —loss=[1,1,1,1] 0.5240 −0.0144 loss=[1,1,2,4] 0.5247 −0.0137 loss=[1,2,4,8] 0.5327 −0.0057 
+
+Table 10: Biological-prior ablation under the same MSGR backbone (9-dataset average). All variants share the identical model architecture and training protocol, differing only in the hierarchy construction strategy. Δ columns report the difference relative to MSGR-GO. “PCC-200 Wins” counts the number of datasets on which each variant achieves the highest PCC-200. Method PCC-10 PCC-50 PCC-200 MSE ↓ MAE ↓ ΔPCC-200 ΔMSE PCC-200 Wins 
+
+MSGR-GO 0.776 0.710 0.517 1.348 0.865 – – 6/9 
+
+MSGR-Pathway 0.762 0.696 0.506 1.418 0.887 -0.011 +0.070 2/9 MSGR-PPI 0.768 0.699 0.503 1.402 0.879 -0.014 +0.054 1/9 MSGR-Coexp 0.764 0.695 0.500 1.394 0.880 -0.017 +0.046 0/9 MSGR-Random 0.753 0.685 0.490 1.432 0.887 -0.027 +0.084 0/9 Gene Ontology-Guided Hierarchical Spatial Gene Expression Prediction from Histopathology Images MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+Table 11: Top 10 GO term–MSigDB Hallmark pathway correlations on SKCM, sorted by gene overlap. GO Term (MSGR) MSigDB Hallmark Overlap Pearson 𝑟 Biological Implication in SKCM 
+
+cellular process EMT 8 0.940 Phenotype switching and metastasis cellular process KRAS Signaling Up 7 0.923 RAS/MAPK pathway activation cellular process G2/M Checkpoint 5 0.924 Cell-cycle progression cellular anatomical structure Apical Junction 4 0.947 Reduced adhesion and enhanced invasiveness developmental process EMT 3 0.939 Phenotype switching and metastasis cellular anatomical structure Mitotic Spindle 3 0.925 Active mitosis protein-containing complex G2/M Checkpoint 3 0.922 Cell-cycle progression cellular anatomical structure Hypoxia 3 0.907 Tumor hypoxia and angiogenesis protein-containing complex TNF 𝛼 via NF-𝜅 B 3 0.895 Pro-inflammatory and survival signaling catalytic activity Xenobiotic Metabolism 3 0.855 Metabolic adaptation and detoxification 
+
+Mean Pearson 𝑟 of 10 shown pairs = 0.918 Mean Pearson 𝑟 of all 20 pairs = 0.896 Table 12: Single-parent tree (MSGR) versus multi-parent averaging (MSGR-MP) on nine HEST-1k datasets (PCC-200). 
+
+SKCM HCC LUNG READ COAD IDC PRAD KIDNEY CCRCC Avg MSGR 0.793 0.338 0.624 0.392 0.546 0.705 0.444 0.385 0.430 0.517 
+
+MSGR-MP 0.789 0.289 0.622 0.348 0.544 0.698 0.409 0.379 0.423 0.500 
+
+Δ −0.004 −0.049 −0.002 −0.044 −0.002 −0.007 −0.035 −0.006 −0.007 −0.017
