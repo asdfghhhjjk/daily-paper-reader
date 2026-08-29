@@ -1,0 +1,917 @@
+Title: A Multimodal Foundation Model for Longitudinal Patient Representation and Scalable Insight Generation in Oncology
+
+URL Source: https://arxiv.org/pdf/2608.24688v1
+
+Published Time: Wed, 26 Aug 2026 01:19:01 GMT
+
+Number of Pages: 36
+
+Markdown Content:
+# A Multimodal Foundation Model for Longitudinal Patient Representation and Scalable Insight Generation in Oncology 
+
+Eugene Vorontsov *, Yi Kan Wang *, Alican Bozkurt *, Adam Casson *, Ludmila Tydlitátová *, Michal Zelechowski *, Ezra E. W. Cohen, Jyoti D. Patel, Max Banaszak, Caitlin McWilliams, Shane Colley, Kate Sasser, Ryan Fukushima, Eric Lefkofsky, Razik Yousfi, Siqi Liu *,† 
+
+Tempus AI, Inc., Chicago, IL, USA 
+
+> *
+
+These authors contributed equally to this work. 
+
+> †
+
+Corresponding author. 
+
+Abstract 
+
+Precision oncology necessitates a longitudinal model of patient state that captures cancer evolution and treatment over time, integrating multimodal observations. We introduce the oFM, a foundation model developed on a real-world oncology cohort of 1.67 million cancer patients that integrates clinical trajectories with DNA, RNA, and H&E pathology. Patient-level partitions were reserved for training, validation, and testing, with over one million patients used for training. The oFM encodes daily clinical and molecular episodes and, along with pathology images, integrates them over time to produce a patient state embedding. We evaluate frozen oFM embeddings against expert-curated clinical and molecular baseline features. In prognostic benchmarks, the oFM improved AUC for treatment response, progression-free survival, and overall survival (0.774 vs. 0.563 for overall survival). Across 11 comparative-treatment cohorts, the oFM embeddings achieved a three-fold higher pooled and scale-normalized treatment-benefit AUTOC than baseline features with improved benefit ranking in 9 of 11 cohorts, and provided stronger prognostic discrimination within both treatment arms. We also evaluated a mechanism discovery framework that interprets downstream models built on oFM embeddings by linking their predicted outcomes to clinically and biologically grounded mechanisms through an evidence-grounded temporal graph, enabling evaluation in clinical and drug-development applications. 
+
+> This is a living preprint describing preliminary work and will be updated as more analyses and results mature.
+
+1arXiv:2608.24688v1 [cs.LG] 25 Aug 2026 1 Introduction 
+
+Oncology is a longitudinal study. Treatment must adapt to evolving patient states [Murphy, 2003, Chakraborty and Murphy, 2014, Strobl et al., 2023]. However, routine clinical decision systems using clinical variables and biomarkers remain static snapshots that ignore the dynamic cancer behavior that drives metastatic potential, treatment response or resistance, and toxicity burden. Furthermore, while foundation models have revolutionized representation learning within individual biomedical modalities, including pathology [Vorontsov et al., 2024, Chen et al., 2024, Zimmermann et al., 2024, Vorontsov et al., 2026], genomics [Brixi et al., 2026, Theodoris et al., 2023], clinical text [Yang et al., 2022], and structured electronic health records (EHR) [Guo et al., 2024], sim-ply assembling modality-specific encoders fails to capture how biology and health evolve over time and across interventions. A foundation model for precision oncology must handle longitudinal data and support the development of predictive biomarkers, not only prognostic biomarkers. Predictive biomarkers quantify differential treatment benefit whereas prognostic biomarkers estimate risk in-dependent of treatment and may identify patients with aggressive disease without revealing which treatment could alter their trajectory [Ballman, 2015]. We introduce the oFM, a longitudinal multimodal foundation model for oncology (Figure 1). The oFM integrates Tempus-curated longitudinal records with patient-linked molecular profiles and H&E pathology embeddings. Diverse clinical and molecular events such as laboratory measurements, diagnoses, procedures, treatments, and DNA and RNA biomarkers, are decomposed into atomic facts. Facts are aggregated into daily episodes, embedded with a finetuned language model. Atransformer-based trajectory encoder then integrates these episode-level and pathology embeddings to produce a patient trajectory embedding. These embeddings support multimodal patient subtyp-ing, novel biomarker discovery, and scalable AI-enabled diagnostic development. We show that oFM embeddings significantly improve prognostic prediction and the prediction of treatment benefit over traditional clinical features and biomarkers in real-world comparative cohorts. Finally, we explore a mechanism-discovery framework that decomposes model predictions into attributed clinical and molecular features, sparse latent concepts, and evidence-grounded temporal relationships. By com-bining latent-space intervention with retrieval from biomedical knowledge sources, the framework organizes these signals into an interpretable temporal graph, providing additional oncology insights. 
+
+## 2 Related Work 
+
+Multimodal Cancer Survival Models MultiSurv [Vale-Silva and Rohr, 2021], MCAT [Chen et al., 2021], and PORPOISE [Chen et al., 2022] integrate clinical, histopathologic, and molecular data at a single time point. In contrast, the oFM models multimodal observations longitudinally capturing changing patient trajectories. 
+
+Longitudinal patient and EHR foundation models. BEHRT and Med-BERT use masked language modeling on sequences of structured EHR codes [Li et al., 2020, Rasmy et al., 2021], while CEHR-BERT introduced time encoding between events [Pang et al., 2021]. CLMBR, ETHOS, Foresight, and CoMET used an autoregressive objective which implies time progression [Steinberg 2a Multimodal real-world oncology data 
+
+Clinical EHR 
+
+diagnoses · labs · vitals · meds · 
+
+path reports · ECOG · encounters 
+
+Molecular NGS (DNA + RNA) 
+
+somatic + germline variants, 
+
+CNV · fusions · RNA expression 
+
+H&E pathology 
+
+whole-slide imaging → 
+
+PRISM2 slide embeddings 
+
+Per-patient 
+
+longitudinal record 
+
+t0  t* 
+
+day-ordered episodes 
+
+(anchored at t0, offsets T+N) 
+
+b Pretraining corpus — composition by tumor type 
+
+1.67M  patients · real-world oncology cohort 
+
+primary site assigned for 1,464,884 · each bar split train / val / test as in d 
+
+Breast  25.3% 
+
+Lung  12.5% 
+
+Colorectal  10.3% 
+
+Prostate  10.2% 
+
+Skin  5.9% 
+
+Pancreatic  3.3% 
+
+Gastroesoph.  2.9% 
+
+Head & Neck  2.5% 
+
+Kidney  2.2% 
+
+Uterus  2.1% 
+
+Other sites  22.7% 
+
+c Modality coverage 
+
+cumulative subsets, one scale · each bar split train / val / test as in d 
+
+All patients  100%  1,672,203 
+
++ DNA (NGS)  23.0%  385,060 
+
++ DNA & RNA  16.1%  269,303 
+
++ H&E slides  14.8%  247,061 
+
+Deaths observed 445,804 · patients with ≥1 intervention 704,273 
+
+d Patient-level train / val / test split 
+
+partitioned by patient-ID hash · frozen across benchmarks 
+
+Train 62.5%  Val  Test 25% 
+
+1,045,011  209,169  418,023 
+
+Full cohort  1,672,203  patients · held-out for evaluation. 
+
+Same split in pretraining and evaluation — no train→test leakage. 
+
+e Model inputs — one clinical episode (a single day) 
+
+raw episode text (angle-bracket tags) 
+
+>>>T+0  <observation>  NSCLC adeno · stage IIIB 
+
+Hemoglobin= <NUM>[11.2]  · ECOG  <NUM>[1] 
+
+>>>T+8  <observation>  <BIOSPECIMEN>…</> 
+
+KRAS G12V  · PD-L1= <NUM>[45] %
+
+>>>T+30  <intervention>  pembrolizumab + chemo 
+
+line of therapy:1 
+
+<SCAN>  RUL lesion 3.4 cm  </SCAN> 
+
+<NUM>[v] numeric markup · <BIOSPECIMEN> couples molecular + H&E 
+
+Atomic facts inside one episode 
+
+Diagnosis  · NSCLC adeno, stage IIIB 
+
+Biomarker  · KRAS G12V · PD-L1 45% 
+
+Lab  · Hemoglobin 11.2 · LDH 280 
+
+Medication  · pembrolizumab + chemo 
+
+Imaging  · RUL lesion 3.4 cm 
+
+clinical text + molecular blueprint (DNA+RNA), 
+
+merged into the episode's atomic facts 
+
+H&E whole-slide image 
+
+Virchow2 tiles → PRISM2 
+
+8192-d · [diagnostic, 
+
+base, prognostic] 
+
+f Episode encoder — one embedding per day 
+
+tokenized episode 
+
+NSCLC  stage  KRAS 
+
+NUM[11.2]  NUM[45] 
+
+numeric values → FoNE 
+
+Fourier embedding (by magnitude) 
+
+GatorTron-base-2k 
+
+clinical language model 
+
+text + numeric · ≤2048 tokens 
+
+episode embedding 
+
+eᵢ · 1024-d 
+
+H&E path (parallel) 
+
+PRISM2 8192-d 
+
+whole-slide 
+
+projector→1024 
+
+H&E token 
+
+g Temporal encoder — transformer over the time-ordered episodes 
+
+input sequence (one token per episode + inserted H&E token): 
+
+[CLS]  e·T+0  e·T+8  H&E·T+8  e·T+30  … e·T+now 
+
+position encodes the day offset (rotary) · each token tagged by modality (episode text / H&E) 
+
+Transformer over episodes 
+
+2 layers · 16 heads · rotary positions 
+
+self-attention across the whole trajectory (no episode cap) 
+
+read at anchor t*  h(t*) 
+
+universal patient embedding 
+
+1024-d 
+
+Downstream tasks 
+
+prognosis · treatment-benefit 
+
+◆ t* — a clinically meaningful moment (e.g. the start of a line of therapy) Figure 1: oFM data and architecture. (a) Longitudinal patient records integrate clinical records (EHR and concepts curated from free-text reports), molecular NGS, IHC and ISH, and H&E pathology data. (b-d) 
+
+The pretraining cohort is summarized by tumor type, modality coverage, and patient-level data partition. 
+
+(e-f ) Daily clinical and molecular facts are encoded as episode embeddings, while pathology embeddings are projected into the shared latent space. (g) A temporal Transformer integrates date-stamped, modality-tagged tokens to produce the patient representation h(t∗) for downstream prognostic and treatment-benefit modeling. 
+
+3et al., 2020, Renc et al., 2024, Kraljevic et al., 2024, Waxler et al., 2025]. Delphi-2M and MOTOR introduced time-to-event objectives [Shmatko et al., 2025, Steinberg et al., 2023], while SMB-v1 pre-dicts future latent states [Adam et al., 2026]. Beyond structured EHR data, APOLLO integrates unstructured clinical text embeddings and medical image embeddings covering whole-slide H&E pathology images, hematology blood smears, and electron microscopy [Zhang et al., 2026]. Whereas APOLLO uses masked language modeling over patient trajectories, the oFM handles future predic-tion via treatment-conditioned latent space prediction and demonstrates oncology-focused treatment benefit stratification on real world data. 
+
+Clinical-text and pathology foundation encoders. The oFM uses GatorTron [Yang et al., 2022] to encode clinical and molecular text and PRISM2 [Vorontsov et al., 2026] to encode slide-level H&E embeddings. This modular design allows the oFM to benefit from continued improvements in modality encoders. 
+
+Combining pathology and molecular modalities. THREADS [Vaidya et al., 2025] and mSTAR [Xu et al., 2025] combine pathology images with molecular signal for a single specimen. OmniScreen predicts DNA biomarkers directly from H&E images [Wang et al., 2024]. However, these models operate at a single time point and do not support longitudinal patient trajectories. 
+
+Genomic foundation models. Sequence and cancer-genomics foundation models such as DNABERT, DNABERT-2 [Ji et al., 2021, Zhou et al., 2024], Nucleotide Transformer [Dalla-Torre et al., 2025], HyenaDNA [Nguyen et al., 2023], and Enformer [Avsec et al., 2021] learn reusable molecular rep-resentations. Related single-cell models such as Geneformer and scGPT provide complementary representations at the expression level [Theodoris et al., 2023, Cui et al., 2024]. The oFM integrates molecular inputs over time by ingesting variant and expression summary text alongside other clin-ical and pathology inputs. The choice of alternative molecular input encoding in the oFM will be explored in further work. 
+
+## 3 The oFM Model Architecture 
+
+The oncology foundation model (oFM) is a multimodal Transformer that models a cancer patient’s evolving clinical state. Given patient history observed up to time t∗, the oFM produces a patient embedding h(t∗) ∈ R1024 . The hierarchical architecture uses an episode encoder to summarize clinical and molecular information in a day as an episode and a temporal encoder to integrate these episode and pathology embeddings over time. See Figure 1 for an overview. 
+
+3.1 Episode Encoder 
+
+An episode contains Tempus-curated clinical facts and molecular measurements (see Appendix A.1 for data curation) attributed to a single day. One or more facts form a time-stamped event. Events 4are indexed by the number of elapsed days from the first observed event in the patient trajectory. Demographic information forms a separate episode at the beginning of the patient trajectory. Clini-cal facts include patient demographics, diagnoses, metastases, laboratory measurements, vital signs, performance status, receptor status, treatments, procedures, responses, progression, and follow-up events. Molecular findings per biospecimen include DNA alterations, copy-number variants, fu-sions, RNA expression abnormalities, splice events, and IHC or NGS biomarkers. All clinical and molecular events are input as text to the episode encoder. The episode encoder is a finetuned GatorTron-base-2k, a clinical BERT model with hidden dimen-sion 1,024 and a maximum input length of 2,048 tokens [Yang et al., 2022]. The final-layer CLS representation is used as the episode embedding. To preserve measurement magnitudes, we aug-ment the language encoder with a Fourier Number Embedding (FoNE) pathway [Zhou et al., 2026]. Each value is first transformed using its signed log-magnitude and then represented using sine and cosine features at 32 frequencies spanning 0.1 to 10.0. A learned multi-layer perceptron (MLP) and layer normalization (LayerNorm) project these features into the 1,024-dimensional token space. The resulting representation is added to the token embedding at the corresponding [NUM] position, enabling the episode encoder to model both semantic context and magnitude. H&E whole slide images (WSIs) are embedded alongside episode embeddings as one embedding per biospecimen. We tokenize each WSI with Virchow2 [Zimmermann et al., 2024] and produce a single biospecimen embedding of one or more WSIs with PRISM2 [Vorontsov et al., 2026]. This single embedding is a concatenation of the PRISM2 Base, Diagnostic, and Survival embeddings into a single 8,192-dimensional vector. To map this vector into the trajectory latent space, we train a LayerNorm and linear projection mapping from 8,192 to 1,024 dimensions. 
+
+3.2 Trajectory Encoder 
+
+The episode and pathology embeddings are aggregated by a Transformer-based multimodal tra-jectory encoder in a shared 1,024-dimensional latent space. The encoder consists of two Trans-former layers (16 attention heads, 4,096-dimensional feed-forward layer, dropout probability 0.1, and FlashAttention). A learned modality encoding mk ∈ R1024 , k ∈ { e, p} is added to each token to distinguish episode embeddings from pathology embeddings. Relative time is represented using rotary positional embeddings (RoPE) [Su et al., 2021]. A single day may contain up to one episode token and any number of pathology tokens. Thus a day i containing both an episode embedding xe
+
+and a biospecimen-level embedding xp of pathology whole slide images produces a set of tokens: 
+
+di = [ xe + me, xp + mp] . (1) For a sequence of D observed days, the trajectory encoder observes as a sequence: 
+
+HD = [ c, d1, . . . , dD] , (2) where c ∈ R1024 is a learned CLS token. When there is no observed input for a calendar day, it is 5excluded from the sequence. All tokens attend to each other bidirectionally. The output CLS token of the trajectory encoder is used as the trajectory embedding h at time t∗:
+
+h(t∗) = TemporalEncoder CLS (Hτ : τ ≤ t∗) ∈ R1024 . (3) Evaluating h at different clinical anchor points enables longitudinal comparison. 
+
+## 4 Training the oFM (a)  Stage I         
+
+> [CLS] stage PIK3CA [NUM] [SEP]
+> delete 60%
+> [CLS] stage [SEP]
+> Episode encoder training
+> Decoder discarded
+
+(b)  Stage II   
+
+> Episode
+> frozen
+> PRISM2
+> frozen
+> Temporal encoder training
+> Heads and projector training
+
+(c)  Stage III   
+
+> Episode
+> training
+> PRISM2
+> frozen
+> Temporal encoder training
+> Heads and projector training
+
+(d)  Anchor-conditioned views 
+
+> student context
+> teacher target view
+> t1
+> t2
+> Δt
+> anchor day
+> conditions the predictor
+
+(e)  Latent prediction       
+
+> student context
+> encoders
+> zt1
+> predictor
+> ẑt2
+> teacher target view
+> EMA encoders
+> z̄ t2
+> stop-gradient
+> Lpred
+> episode H&E anchor target anchor trainable frozen discarded
+
+Figure 2: oFM training curriculum. (a) Stage I pretrains the episode encoder by reconstructing missing tokens in per-day episodes. (b) Stage II freezes the episode and PRISM2 encoders while training the temporal encoder, prediction heads, and projectors. (c) Stage III unfreezes the episode encoder. (d) Anchor-conditioned training compares a student view to a later teacher view, with pre-diction conditioned on the anchor-day intervention and elapsed time. (e) The student predicts the stop-gradient representation produced by the exponential-moving-average teacher in latent space. 6The oFM is trained using a three-stage curriculum (Figure 2). Stage I pretrains the episode encoder using token- and numerical-reconstruction objectives. Stage II freezes the episode encoder and trains the trajectory encoder. Stage III unfreezes the episode encoder for joint end-to-end training. Stage II and III use full patient trajectory inputs and combine masked episode reconstruction, self-supervised future latent prediction, and a supervised survival objective that encourages the patient trajectory representation to retain outcome-relevant information. Stage I pretrains the episode encoder on individual episodes using Transformer-based Sequential Denoising Auto-Encoding (TSDAE) [Wang et al., 2021]. For each episode, input tokens (exclud-ing [CLS] and [SEP] ) are randomly dropped with a 60% probability and the model is trained to reconstruct the complete uncorrupted episode from the output CLS token. This reconstruction is performed by an autoregressive Transformer-based decoder that shares the same depth, self-attention, feed-forward, and layer-normalization parameters, while adding cross-attention to the CLS token. FoNE is trained jointly for numerical values. In addition to token reconstruction, a decoder-side regression head reconstructs numerical values from the decoder hidden states at [NUM] 
+
+positions. Numerical values v are transformed using the signed log-magnitude, sign( v) log(1 + |v|),and regressed with a smooth-L1 loss. The complete Stage I objective is 
+
+LStage I = Ltoken + Lnum , (4) where Ltoken is the autoregressive token-reconstruction loss and Lnum is the numerical reconstruction loss. This pretrains the episode encoder, tokenizer, and FoNE while the decoder is discarded. Stages II and III train the trajectory encoder and restrict the training cohort to patients with recorded treatment information. Episodes are grouped into whole per-patient trajectory inputs. The pretrained episode encoder is kept frozen in Stage II and is unfrozen in stage III. The linear projection of episode and pathology embeddings to the trajectory encoder input is trained in both stages. Input trajectories are truncated at strategically sampled anchor points and training is supervised by masked episode reconstruction, joint-embedding trajectory prediction (JEPA), and survival risk supervision. 
+
+Masked episode reconstruction. Each episode or linearly projected pathology embedding is independently randomly masked with probability 0.7 by replacing its content representation with a learned episode- or pathology-specific mask embedding, retaining its temporal encoding. The trajectory encoder reconstructs the masked episodes and full pre-projection masked pathology em-beddings using modality-specific reconstruction heads. Reconstruction is optimized with the mean squared error loss and, in the case of pathology embeddings, a cosine distance loss. The masked reconstruction loss is thus: 7Lrec = Le + Lp
+
+Le = 1
+
+De|M e|
+
+X
+
+> i∈M e
+
+fe(zi) − xe,i 22
+
+Lp = 1
+
+Dp|M p|
+
+X
+
+> i∈M p
+
+fp(zi) − xp,i 22 + λcos 
+
+|M p|
+
+X
+
+> i∈M p
+
+
+
+1 − cos  fp(zi), xp,i 
+
+ (5) where Me and Mp are the sets of masked episode and pathology token indices, zi ∈ R1024 is the trajectory encoder’s output for masked token i, xe,i ∈ RDe (De = 1024 ) is the unmasked episode embedding, xp,i ∈ RDp (Dp = 8192 ) is the pre-projection pathology embedding, fe and fp are the modality-specific heads, and λcos = 1 .
+
+Anchor pair sampling. For each patient trajectory containing a sequence of episodes, we identify anchor episodes and sample a pair of anchors (t1, t 2) to predict outcome or patient state at t1
+
+given a patient state near t1. An episode that contains an <intervention> line (treatment start, treatment end, or surgery) or a <transition> line (metastasis, progression, response assessment, last-known vital status) acts as an anchor. In a random pair, t1 contains an intervention and t2 is any intervention or transition after t1.
+
+Joint-embedding trajectory prediction. Following I-JEPA, we use a student-teacher setup with a predictor network that predicts a future patient state, as encoded by the teacher, from the student’s corrupted patient state [Assran et al., 2023]. Let gθ and hθ denote the student episode and trajectory encoders with parameters θ and write fθ = hθ ◦gθ; the teacher f¯θ is an exponential moving average of the student with parameters ¯θ. The student and the teacher see two different views of the same trajectory, determined by the sampled anchor pair (t1, t 2). Because t1 includes an intervention, the student context H<t 1 contains all episode and pathology embeddings strictly before the anchor day t1 to ensure that no information about the intervention leaks into the context. Instead, the episode embedding on the day of the intervention ( xe,t 1 ) conditions the predicted future state at 
+
+t2. The teacher target view Htgt  
+
+> ≤t2
+
+extends the trajectory through the target anchor: it contains all episode and pathology embeddings up to and including day t2 when t2 is a <transition> anchor, so that the target representation reflects the observed outcome, and up to but not including day 
+
+t2 when t2 is an <intervention> anchor, applying the same no-leak rule as at t1. The residual predictor ∆ϕ thus maps the student’s corrupted context state to the teacher’s future patient state: 
+
+zt1 = fθ
+
+ eH<t 1
+
+
+
+,
+
+¯zt2 = f¯θ
+
+
+
+Htgt 
+
+> ≤t2
+
+
+
+,
+
+bzt2 = zt1 + ∆ ϕ(zt1 , xe,t 1 , ψ (∆ t)) ,
+
+(6) where all three vectors lie in R1024 , ∆t = t2 − t1, and ψ is a sinusoidal embedding of elapsed time refined by a two-layer MLP. ∆ϕ is a two-layer MLP whose input and hidden activations are FiLM-modulated by [xe,t 1 ; ψ(∆ t)] [Perez et al., 2018]. The teacher target view is encoded without 8masking. The corrupted student context eH<t 1 is obtained from H<t 1 using the same mask as the masked episode reconstruction objective: each token is replaced by the learned modality-specific mask embedding with probability 0.7.The predictive loss is Lpred = 11024 bzt2 − sg[¯ zt2 ] 22, averaged over the minibatch, with sg[ ·] the stop-gradient. The teacher receives no gradient and is updated after each optimizer step as ¯θ ←
+
+m¯θ + (1 − m)θ with momentum m = 0 .999 , following BYOL and I-JEPA [Grill et al., 2020, Assran et al., 2023]. Both the ∆ϕ state predictor and the teacher are discarded after training. To prevent representational collapse we add VICReg’s variance and covariance terms ( Lvar and 
+
+Lcov ) on bzt2 [Bardes et al., 2022]: a hinge holding each dimension’s standard deviation at or above 
+
+γ = 1 , weighted λvar = 1 , and the mean squared off-diagonal covariance, weighted λcov = 0 .04 .
+
+Pathology dropout. To improve robustness to missing pathology data, each pathology embed-ding is randomly removed with probability 0.3 during training. A removed embedding is dropped simultaneously for both the student and the teacher networks. Dropped embeddings are excluded entirely from the trajectory and are not treated as masked-reconstruction targets. 
+
+Survival supervision. Trajectory training is supervised by overall survival prediction. A survival head predicts a risk score from the patient state embedding h(H<t 1 ), up to but not including the anchor day t1, concatenated with the episode embedding xe,t 1 at t1. Survival time is measured from the anchor day to death or to the last recorded event (right-censoring), and the model is optimized using the Cox partial-likelihood loss LCox with Efron handling of tied event times. Risk sets are constructed over the globally gathered distributed minibatch. The complete trajectory-level objective in stages II and III is: 
+
+Ltrajectory = Lrec + Lpred + Lvar + 0 .04 Lcov + LCox , (7) with all loss terms weighted equally except the covariance regularizer. Both stages are optimized with AdamW ( β1 = 0 .9, β2 = 0 .999 ) at bfloat16 mixed precision with gradient clipping at a maximum norm of 1.0. Trajectory components (trajectory encoder, predictor, time embedding, projection and reconstruction heads, and survival head) train at a learning rate of 
+
+10 −4 with weight decay 0.01. A 1000-step linear warmup is used for the trajectory encoder. Stage III unfreezes the pretrained episode encoder and trains it with a 10 −4 learning rate with weight decay 0.01 ( 10 −5 for the token-embedding matrix, without weight decay). 
+
+## 5 Data 
+
+The oFM was developed within a 1,672,203 patient cohort of the Tempus de-identified multimodal real-world oncology corpus (Fig. 1). Of these, 1,045,011 patients were used for training the episode 9encoder (stage I), a subset of 386,382 patients (109,938 with pathology H&E images), all with recorded treatment events, were used to train the temporal encoder (stage II), and a subset of 92,567 information-rich patients with both paired DNA and RNA records were used for final end-to-end finetuning (stage III). Patient records were structured as longitudinal sequences anchored at the earliest observed event, indexing subsequent events by elapsed calendar days to preserve irregular clinical intervals. All test set patients in evaluation tasks were excluded from model training. The data used to train and evaluate the oFM is distinct and non-overlapping with the data used to train Virchow2 and PRISM2. The longitudinal record integrates clinical events, molecular blueprints, and digitized H&E pathol-ogy over time. Clinical information spans demographics, encounters, vitals, labs, diagnoses, treat-ments, procedures, and outcomes. These data are organized into observations, interventions, and disease-state transitions. Observations describe measured or recorded patient characteristics. In-terventions include treatments and procedures. Transitions represent clinically relevant changes such as new metastasis, tumor progression, treatment response, or last-known follow-up. Molecular findings for each tumor biospecimen were consolidated into a standardized textual record termed a molecular blueprint . These include DNA sequencing, whole-transcriptome RNA sequencing, im-munohistochemistry (IHC), and in situ hybridization (ISH). See Appendix A.2 for more details. 
+
+## 6 Downstream Evaluation 
+
+The downstream benchmarks evaluate the relative quality of the learned patient trajectory embed-dings. Despite the challenges related to retrospective real-world data (e.g., confounding, censoring), we demonstrate that the oFM provides a prognostic and predictive advantage over a strong task-specific baseline. Specifically, there is a substantial and statistically significant improvement in aggregate performance across benchmarks. In comparison to the oFM embeddings, we evaluate a strong curated-feature baseline that selects from 7520 candidate curated clinical and molecular features (NGS: DNA and RNA; IHC) using the feature selection process described in Appendix A.4. All prognostic and predictive evaluation was performed using the two-stage convex UV-Cox method presented in Appendix A.6. 
+
+6.1 Prognostic Classification 
+
+We perform binary linear probing on three endpoint measures to evaluate outcome-prognostic per-formance of oFM embeddings encoded just prior to the initiation of first-line therapy: (i) Treatment response groups: Responder (Complete or Partial, CR/PR) versus others (sta-ble or progressive, SD/PD), using the latest assessment between 14 and 365 days after first-line treatment initiation and prior to the second line. (ii) Progression-free survival (PFS) groups: Sustained progression-free status vs early pro-gression. Positive if PFS above 60th percentile; negative if below 30th percentile. 10 (iii) Overall survival (OS) groups: Long-term vs short-term survival. Positive OS above 60th percentile; negative if below 30th percentile. For each task, we train a logistic-regression probe on frozen patient embeddings extracted just before first-line initiation (see Appendix A.6 for method). To reduce prognostic confounding by tumor type and therapy class, we stratify test-set performance by tumor type × therapy-class into 39 / 38 / 40 strata for OS / PFS / treatment-response, retaining at least 20 patients per stratum, and compute the mean (see Appendix Tab. A1 for strata). a Average performance (tumor × therapy class strata, ≥20 patients)               
+
+> 0.5 0.6 0.7 0.8
+> chance
+> 0.4 0.5 0.6 0.7 0.8 0.9
+> OS 0.774
+> Δ+0.212 0.563
+> 0.879
+> Δ+0.126 0.754
+> PFS 0.688
+> Δ+0.144 0.544
+> 0.841
+> Δ+0.087 0.754
+> Response 0.585
+> Δ+0.072 0.513
+> 0.520
+> Δ+0.090 0.430
+> AUC Average precision
+> oFM (frozen embedding) clinical + DNA + RNA baseline positive prevalence (AP chance)
+
+b Stratum-wise summary (tumor × therapy class)    
+
+> 0.00
+> 0.00
+> 0.25
+> 0.25
+> 0.50
+> 0.50
+> 0.75
+> 0.75
+> 1.00
+> 1.00
+> OS
+> oFM wins 95%
+> of strata
+> 0.00
+> 0.00
+> 0.25
+> 0.25
+> 0.50
+> 0.50
+> 0.75
+> 0.75
+> 1.00
+> 1.00
+> PFS
+> oFM wins 95%
+> of strata
+> 0.00
+> 0.00
+> 0.25
+> 0.25
+> 0.50
+> 0.50
+> 0.75
+> 0.75
+> 1.00
+> 1.00
+> Response
+> oFM wins 78%
+> of strata
+> baseline AUC
+> oFM AUC
+> oFM higher baseline higher
+> patients per stratum
+> 20 100 500
+
+Figure 3: Prognostic classification (tumor × therapy stratified). (a) Stratified summary (macro-mean AUC and AP) for response, PFS group, and OS group, comparing a frozen-embedding probe (oFM) to an engineered-feature baseline under an identical probe. (b) Per-stratum AUC comparison (one point per tumor × therapy stratum; point area proportional to patients) showing that gains are broad-based and concentrated in larger strata. As shown in Fig. 3, linear probing on the oFM embeddings outperforms baseline features on all three endpoints, achieving 0.774 mean AUC for OS, 0.688 for PFS, and 0.585 for treatment response 11 (CR/PR vs SD/PD), compared with 0.563, 0.544, and 0.513 for the baseline, respectively. The oFM performance beat the baseline on 95% of OS and PFS strata and 78% of treatment response strata. 
+
+6.2 Predictive Benchmarks: Treatment Benefit 
+
+We evaluate the oFM on benchmark cohorts spanning breast, colorectal, non-small-cell lung (NSCLC), renal-cell, prostate, and pan-cancer disease settings via Cox-based linear probing (using the UV-Cox method presented in Appendix A.6). Each benchmark poses a clinical question noted per cohort in Appendix Tab. A3. In the predictive setting, two treatment arms are compared in each cohort for differential treatment benefit. We use inverse-propensity weighting for predictive benchmarking to reduce data imbalance across arms inherent in real-world data (see Appendix A.5). As shown in Fig. 4, the oFM ranks treatment benefit and discriminates the baseline risk better than the curated-feature baseline. Fig. 4a reports the tAUTOC /SD , the pooled AUTOC/SD normalized by 
+
+SE AUTOC , which measures how consistently nonzero the treatment benefit effect is across cohorts, and the pooled HRR (Paule-Mandel random effects; metrics detailed in Appendix A.7). The oFM achieves significant (p = 0.0003) treatment benefit ranking at tAUTOC /SD = 4 .61 compared to the baseline at 1.38 which does not clear its permutation null of 1.85 (see Appendix A.7 for definition); while the baseline does extract treatment benefit signal, it is not a consistently large effect. Fig. 4b shows per-cohort wins: the oFM wins over the baseline in 9 of 11 cohorts. Fig. 5 shows per-arm prognostic performance. As shown in Fig. 5a, the oFM embeddings produce better prognostic risk ordering (Uno’s IPCW C-index, pooled with Paule-Mandel random effects) per arm than baseline features. In Fig. 5b, the oFM outperforms the baseline on 10 and 9 of 11 tasks in control and experimental arms, respectively. That the gain in C-index is similar in both the control and experimental arms is evidence that the signal is prognostic rather than a treatment effect leaking into the score. 12 a Performance pooled across 11 cohorts 
+
+Treatment-benefit ranking 
+
+(higher is better) 
+
+Benefit-ordering direction 
+
+(lower is better)             
+
+> -2 -1 012345
+> no signal
+> 0.6 0.7 0.8 0.9 1.0
+> no benefit
+> tAUTOC/SD =+4.61
+> p=0.0003
+> tAUTOC/SD =+1.38
+> 0.671
+> p=0.0100 0.949
+
+tAUTOC/SD  HRR   
+
+> oFM (frozen embedding) curated-feature baseline 5% permutation null
+
+b Cohort-wise summary 
+
+> -0.1
+> -0.1
+> +0.0
+> +0.0
+> +0.1
+> +0.1
+> oFM wins 9/11
+> 94% of information
+
+baseline AUTOC/SD   
+
+> oFM AUTOC/SD
+> oFM higher
+> baseline higher
+> oFM effect significant (p<0.05)
+> standard error (SE)
+> 0.02 0.05 0.10
+
+Figure 4: Predictive evaluation. oFM frozen embeddings against the curated-feature baseline. 
+
+(a) Metrics pooled across tasks by Paule-Mandel random effects: (left) tAUTOC /SD is the pooled AUTOC/SD normalized by SE AUTOC and measures how consistently nonzero the treatment benefit effect is across cohorts and (right) the pooled HRR. The yellow bands are the 5% permutation nulls, about zero (no signal) for the AUTOC/SD ranking and about one (no benefit) for the HRR; p values are computed with respect to each null. (b) Per-cohort AUTOC/SD, oFM against baseline. Area is proportional to 1/SE 2; points above the diagonal favor oFM and a bold outline marks p < 0.05 .13 a C-index pooled over 11 cohorts     
+
+> 0.50 0.55 0.60 0.65 0.70
+> chance
+
+Control arm  0.647 
+
+> p=0.0005
+> 0.609
+
+Experimental arm  0.676 
+
+> p=0.0012
+> 0.622
+
+pooled c-index 
+
+oFM (frozen embedding)  curated-feature baseline  indistinguishable from baseline 
+
+b Cohort-wise summary 
+
+> 0.5
+> 0.5
+> 0.6
+> 0.6
+> 0.7
+> 0.7
+> 0.8
+> 0.8
+
+Control arm 
+
+> oFM wins 10/11
+> 99% of information
+> 0.5
+> 0.5
+> 0.6
+> 0.6
+> 0.7
+> 0.7
+> 0.8
+> 0.8
+
+Experimental arm 
+
+> oFM wins 9/11
+> 95% of information
+
+baseline c-index  baseline c-index 
+
+> oFM c-index
+
+oFM higher 
+
+baseline higher 
+
+standard error (SE)   
+
+> 0.02 0.04 0.08
+
+Figure 5: Prognostic discrimination. Uno’s C-index computed within the control arm (left) and the experimental arm (right), for oFM against the curated-feature baseline. (a) Pooled across cohorts by Paule–Mandel random effects: baseline C-index (grey) and oFM (blue) with p the sig-nificance of the difference via two-sided Student t-test. The yellow band shows the range indistin-guishable from the baseline. (b) One point per cohort and arm for baseline or oFM, whichever scores better; area proportional to 1/SE 2. Points above the diagonal favor oFM. 14 7 Mechanism Discovery 
+
+Beyond measuring predictive performance, we seek to make downstream models built on oFM em-beddings biologically and clinically interpretable by identifying human-interpretable mechanisms that drive their predictions. Mechanism discovery relies on finding sparse directions in embedding space that: (i) are differentially active between high- and low-scored patients, (ii) semantically map to external clinical and biological concepts, (iii) causally alter downstream predictions under acti-vation steering, and (iv) assemble into a temporally ordered graph connecting concepts to outcomes via statistically tested precedence. Because the oFM jointly represents longitudinal clinical history with patient-linked DNA and RNA profiles, this framework enables downstream predictions to be interrogated in terms of observed clinical and tumor-biological factors, including molecular mecha-nisms associated with prognosis, treatment response, and resistance. These mechanisms can then be evaluated in downstream clinical and drug-development applications. The mechanism discovery pipeline is applied per evaluation cohort on frozen oFM embeddings h(t∗) and a fitted predictor 
+
+s(h) in seven stages (Figure 6): 1. Fact attribution: Atomic facts (diagnoses, biomarkers, agents, lab values) are iteratively removed from a patient trajectory. We recompute the embedding and record the resulting score shift ∆s. Within-patient normalization by total absolute attribution yields a signed, length-comparable metric for each fact. 2. Sparse feature: A Sparse Autoencoder (SAE) [Cunningham et al., 2024] projects embedding 
+
+h into an overcomplete latent space z under an L1 sparsity constraint. The linear decoder yields sparse feature directions that facilitate downstream intervention in stage 5, while en-abling near-lossless score reconstruction ( ˆh ≈ h). 3. Differential activation testing and clustering: Patients are partitioned by the population median of score s(h). SAE latents are screened for differential activation between high- and low-score groups of patients using Mann–Whitney rank tests and Cohen’s d, adjusted via Benjamini–Hochberg FDR control [Benjamini and Hochberg, 1995]. Co-activating latents are grouped into interpretable mechanisms via clustering with a hybrid Jaccard-cosine metric. 4. Attribution-weighted concept labelling : Mechanisms are labeled by scaling per-concept attribution strengths (see stage 1) with cohort-wide inverse document frequency (IDF). This filters ubiquitous administrative events and highlights disproportionately attributed clinical concepts. Near-synonym concepts are normalized. 5. Causal steering: To evaluate causality, mechanism latents are ablated (zeroed) or amplified (clamped to the 95th percentile) prior to decoding and re-scoring. Observed score shifts and class-assignment flips categorize mechanisms as drivers, suppressors, or amplifiable. All vali-dated cluster latents are simultaneously ablated and re-scored, yielding a variance-explained statistic VE = 1 − Var( sablated )/ Var( soriginal ). A coverage decomposition separates clustered from unclustered contributions and reports a concentration ratio (per-feature VE of clustered versus unclustered latents) to distinguish concentrated from diffuse mechanisms. 6. Retrieval-grounded mechanistic reasoning: A local domain language model (MedGemma 4B [Sel-lergren et al., 2026]) queries an offline FAISS index [Douze et al., 2024] containing ten pub-lic biomedical knowledge bases, namely CIViC [Griffith et al., 2017], OncoKB [Chakravarty 15 Figure 6: Mechanism-discovery pipeline. Seven steps decompose a frozen embedding h(t∗)
+
+and fitted head s(h) into interpretable mechanisms: (1) leave-one-out fact attribution; (2) sparse-autoencoder dictionary learning; (3) differential activation and clustering; (4) IDF-enriched concept labelling; (5) causal steering via latent-space ablation/amplification; (6) composition analysis and retrieval-grounded reasoning; (7) temporal-precedence mechanism graph with curated knowledge overlay and chain distillation. All steps run on frozen embeddings without fine-tuning. et al., 2017], DrugBank [Wishart et al., 2018] , PharmGKB [Whirl-Carrillo et al., 2021], Re-actome [Milacic et al., 2024], GO [The Gene Ontology Consortium et al., 2023, Ashburner et al., 2000], MSigDB [Liberzon et al., 2015], String [Szklarczyk et al., 2023], PubMed [Say-ers et al., 2026], and ClinicalTrials [Zarin et al., 2011], embedded with BioLORD-2023 [Remy et al., 2024]. The offline model outputs structured phenotype/hypothesis/evidence records and citation-grounded subject/relation/object triplets via retrieval-augmented generation [Lewis et al., 2020], supplying the hypothesized-edge layer of the mechanism graph (see stage 7). 7. Graph Assembly: temporal precedence and knowledge overlay: To structure can-didate concepts into a temporally ordered narrative, flat concept table entries are assem-bled into a directed acyclic graph (DAG; Figure 7), connecting concepts to the outcome via statistically-tested precedence. Temporal edges ( A → B) are retained for concept pairs co-occurring in ≥ nmin patients where A precedes B in > 60% of cases (one-sided sign test, BH-FDR q ≤ 0.05 ). This temporal backbone is enriched with three multi-layer edge types: curated biological interactions (CIViC, STRING, MSigDB), external correlational associations (|ρ| ≥ 0.3, FDR-controlled), and the RAG-generated triplets from stage 6. Finally, the DAG is distilled into concise, domain-interpretable narrative chains (length 2-4 concepts to outcome) ranked by path weight and terminal concept diversity. The SAE acts as a discovery engine to identify, cluster, and test latent concepts, while the Mechanism Graph temporally orders these concepts across patient histories and links them to outcomes via established or novel candidate biological pathways. Designed as a generalizable mechanism discovery framework, the pipeline supports generating and evaluating biological hypotheses both for prognostic risk strata and for differential treatment benefit. 16 To demonstrate its utility, we evaluated overall survival predictions in a multi-tumor cohort (metastatic breast cancer, non-small cell lung cancer [NSCLC], and gastroesophageal cancer) treated with trastuzumab deruxtecan (T-DXd) versus physician’s choice chemotherapy in later-line settings. Re-flecting real-world clinical practice and data completeness, patient eligibility was relaxed from HER2-positive status to include HER2-low, HER2-mutant, and HER2-unknown or unrecorded cases. In these cases, T-DXd demonstrates clinical activity via its potent bystander effect or is commonly pre-scribed in routine clinical practice. The pipeline recovered mechanisms consistent with established disease biology while generating plausible exploratory hypotheses for clinical follow-up (Figure 7). Specifically, high-benefit outcomes are associated with features reflecting both prior antibody-drug conjugate (ADC) vulnerability and chemotherapy resistance. Across all three histologies, high benefit is associated with PD-L1-negative status ( < 1% ), a population that traditionally derives limited response from conventional immune checkpoint inhibitors. In the breast cancer subgroup, higher therapeutic benefit is associated with baseline core needle biopsy profiling and prior carbo-platin/gemcitabine failure. Additionally, the pipeline surfaced metabolic signatures such as APOB 
+
+overexpression, which likely reflects site-specific liver biopsy context requiring further experimental isolation. Within the NSCLC cohort, high benefit correlated with pronounced intratumoral het-erogeneity, a phenotype that could be consistent with sensitivity to the bystander killing effect of T-DXd. Conversely, low-benefit clusters are characterized by compromised drug delivery, reduced target anti-gen availability, or aggressive multi-drug resistance phenotypes. For example, breast cancer cases fre-quently presented with brain metastases, which may limit large-molecule delivery across the blood-brain barrier. Mechanistically, this low-benefit cluster aligns with a low copy-number variant (CNV) burden (Gain CN3-4 fraction 0.1-0.3, Amplification CN5-7 fraction < 0.1), indicating a reduced like-lihood of the HER2 genomic alterations required for effective ADC target engagement. Furthermore, these NSCLC patients frequently had prior exposure to carboplatin/pembrolizumab/pemetrexed triple-therapy, which may reflect prior treatment selection for resistant tumor subclones. In the gastroesophageal cancer subset, the low-benefit phenotype was enriched for lineage-associated ge-nomic features such as GATA4 overexpression; this may act as a tissue confounder rather than a response modifier, separating the two requires prospective work. Steering the feature clusters shifts the model’s predicted risk score, so the mechanism graph provides an interpretable, directed framework mapping upstream clinical and genomic input events to predicted patient outcomes. 17 95% +565d 82% +167d 92% +17d 96% +372d 100% +124d 100% +284d 93% +15d 78% +20d 90% +109d 100% +26d 91% +120d 100% +599d 100% +236d 100% +2296d 100% +1252d 100% +371d 100% +615d 100% +30d 87% +32d 100% +34d 100% +32d 92% +35d 100% +662d 100% +359d 100% +26d 
+
+SAE mechanism chains temporal precedence (concept concept benefit) 
+
+Breast cancer biopsy liver core needle biopsy benefit 
+
+NSCLC SNV < 10 High heterogeneity polyclonal Gain CN3-4 fraction 0.1 0.3 
+
+benefit 
+
+APOB Overexpression Amplification CN5-7 fraction < 0.1 peritoneum Gastroesophageal cancer GATA4 Overexpression TP53 somatic snv PD-L1 < 1% IFNL3 Overexpression PIK3CA somatic snv carboplatin + gemcitabine capecitabine brain stereotactic radiosurgery carboplatin + paclitaxel + pembro 
+
+carboplatin + pembrolizumab + pem 
+
+cyclophosphamide + d 
+
+biomarker treatment (observed) metastasis diagnosis procedure expression correlate (probing, | | .3, FDR) 
+
+CIViC actionability (sensitive/resistant; hyp = cross-indication) 
+
+PGx toxicity/dosing (PharmGKB) 
+
+hypothesized (LLM): [N]=numbered reference below; [model]=uncited lead 
+
+alt. agent branch (dotted): upstream treatment concept 
+
+outcome: worse (benefit red) 
+
+outcome: better (benefit green) 
+
+edge X% / +Nd: precede-fraction (FDR-sig) / median day-gap 
+
+confers resistance 
+
+to Chemotherapy [17] 
+
+GSTP1+ SERPINB3+ SERPINB4+ NKX2_1+ 
+
+PIK3R3 [C6] 
+
+NKX2_1+ SOX2+ HAS3+ ATP7B TP63+ [C3] 
+
+associated with [ 
+
+low-level subject 
+
+effect may be opposite] lower TMB [14] confers resistance to 
+
+carboplatin + pembrolizumab + pem [model] 
+
+confers resistance to 
+
+carboplatin + pembrolizumab + pem [model] 
+
+NKX2_1 SOX2 PIK3R3+ CUX1 IDH2+ [C1] 
+
+sensitive to: Doxorubicin · sensitive 
+
+to [hyp] (Colorect/Gastric): Chemotherapy, Capecitabine, Cetuximab [9,10,11] 
+
+associated with 
+
+Chemotherapy [17,18,10] 
+
+unlikely to respond to [inferred] 
+
+(Lung/Melanoma): Pembrolizumab, Nivolumab, Atezolizumab, Avelumab [4,5] 
+
+confers resistance to [ 
+
+low-level subject effect 
+
+may be opposite] carboplatin + pembrolizumab + pem [4] 
+
+interferons (efficacy), peginterferon 
+
+alfa-2a (efficacy) +2 [12] sensitive to: Fulvestrant, Alpelisib, 
+
+Capivasertib, Palbociclib [6,7,8] 
+
+confers resistance 
+
+to Chemotherapy [17]     
+
+> 94% +36d 85% +220d 90% +333d 100% +1379d
+
+Figure 7: Mechanism graph. Illustrative mechanism graph depicting feature interactions associated with treatment benefit in second-line or later (2L+) patients treated with trastuzumab deruxtecan (T-DXd) versus physician’s choice chemotherapy in a multi-tumor cohort. Directed chains are distilled from the temporal-precedence directed acyclic graph (DAG). Concept nodes are color-coded by category (genomic biomarkers, treatment, diagnosis, procedure, metastatic site); temporal edges are labeled with precede-fraction and median day gap (in days); annotation chips mark curated gene-drug actionability (CIViC), RNA expression correlates derived via probing analysis, and LLM-hypothesized relations with their retrieved citations listed in Table 1. 18 Table 1: Numbered references for the mechanism-chain (Figure 7). Sources: PubMed entries in author/journal form; CIViC, PharmGKB and trial records in accession form. CIViC tiering includes cross-indication evidence. 
+
+# Reference 1 CIViC evidence EID993: KRAS Exon 2 Mutation in Colorectal Cancer (Predictive, level A). 2 CIViC evidence EID2998: KRAS Mutation in Lung Non-small Cell Carcinoma (Predictive, level A). 3 CIViC evidence EID5345: KRAS Mutation in Colorectal Cancer (Predictive, level A). 4 CIViC evidence EID704: CD274 Expression in Melanoma (Predictive, level B). 5 CIViC evidence EID1167: CD274 Expression in Lung Non-small Cell Carcinoma (Predictive, level B). 6 CIViC evidence EID7313: PIK3CA Mutation in Breast Cancer (Predictive, level A). 7 CIViC evidence EID12020: PIK3CA Mutation OR PTEN Mutation OR AKT1 Mutation in Breast Cancer (Predictive, level A). 8 CIViC evidence EID12533: PIK3CA H1047R OR PIK3CA H1047Y OR PIK3CA H1047L OR PIK3CA H1047D OR PIK3CA H1047I OR PIK3CA H1047N OR PIK3CA H1047P OR PIK3CA H1047Q OR PIK3CA H1047T in Breast Cancer (Predictive, level A). 9 CIViC evidence EID399: TP53 R249 in Breast Cancer (Predictive, level B). 10 CIViC evidence EID850: TP53 Mutation in Gastric Adenocarcinoma (Predictive, level B). 11 CIViC evidence EID875: TP53 Wildtype in Colorectal Cancer (Predictive, level B). 12 PharmGKB: IFNL3–interferons;peginterferon alfa-2a;peginterferon alfa-2b;ribavirin (Efficacy, level 1B). 13 Bellini MF et al. Alterations of the TP53 gene in gastric and esophageal carcinogenesis. J Biomed Biotechnol. 2012;2012:891961. PMID 22919278. 14 Kumar D et al. Revisiting the Association of ECOG Performance Status With Clinical Outcomes in Diverse Patients With Cancer. J Natl Compr Canc Netw. 2024;22(2 D). PMID 38653321. 15 Xing AY et al. p53 Missense Mutation is Associated with Immune Cell PD-L1 Expression in Triple-Negative Breast Cancer. Cancer Invest. 2022;40(10):879-888. PMID 35980253. 16 Li X et al. Molecular Landscape of TP53/RB1 Co-Altered Tumors Uncovers Emerging Ther-apeutic Vulnerabilities. Genes Chromosomes Cancer. 2026;65(1):e70100. PMID 41562186. 17 Kim T et al. Linking p53 immunostaining to TP53 mutation status in patients with non-small cell lung cancer. Pathology. 2025;57(7):881-889. PMID 40835511. 18 Bharathiraja P et al. Solasodine targets NF-κB signaling to overcome P-glycoprotein medi-ated multidrug resistance in cancer. Exp Cell Res. 2024;441(1):114153. PMID 39013486. 
+
+19 8 Conclusion 
+
+We introduced the oFM, a multimodal foundation model that integrates longitudinal clinical history with patient-linked DNA and RNA findings and H&E pathology embeddings. Across prognostic and comparative-treatment benchmarks, frozen oFM embeddings consistently outperformed strong baselines based on expert-curated clinical and molecular features, suggesting that the model cap-tures information not readily recovered from conventional static features. The mechanism-discovery framework further provides an interpretable layer for downstream models built on oFM embeddings by linking their predictions to attributed clinical and molecular events, sparse latent features, and evidence-grounded temporal hypotheses. By jointly representing longitudinal clinical context with observed tumor biology, including DNA and RNA profiles, this framework enables downstream predictions to be interrogated in terms of biological and clinical factors associated with prognosis, treatment response, and resistance. These retrospective real-world evaluations are intended to com-pare representation quality rather than establish clinically validated biomarkers, treatment effects, or definitive biological mechanisms. External and prospective validation will be required, but the results support longitudinal multimodal modeling as a shared foundation for scalable, interpretable applications in oncology diagnostics and therapeutic development. 
+
+## Acknowledgments 
+
+We thank Arpita Saha, Gabriel Altay, Hongru Hu, Rohan Prakash Joshi, Sam Heilbroner, Sujoy Ganguly, Rafi Pelossof, Simona Cristea, Jiajie Xiao, and Fan Zhang for contributions to prelimi-nary work underlying this project, including early knowledge transfer, development of the initial codebase and data-processing pipelines, and valuable discussions that informed the model training and evaluation protocols. We thank Joe Oakley, MD, for valuable feedback and guidance on model interpretability and clinical use case formulation. We thank Ryan Godart, Anirban Nandi, Daniel Cohn, and Evan Czyzycki for building and sup-porting the compute cluster that enabled large-scale model development and experimentation. We also thank Jonathan Wills, Maria Berezina, and Allison Maresca for organizing the data curation and delivery that enabled this work. Finally, we thank Or Yaacov and Ben Terdich for contributions to the initial design of the benchmark task suite and for helping establish the benchmark evaluation protocol. 
+
+## References 
+
+Irsyad Adam, Zekai Chen, David Laprade, Shaun Porwal, David Laub, Erik Reinertsen, Arda Pekis, and Kevin Brown. The patient is not a moving document: A world model training paradigm for longitudinal electronic health records. arXiv preprint arXiv:2601.22128 , 2026. 20 P. K. Andersen, J. P. Klein, and S. Rosthøj. Generalised linear models for correlated pseudo-observations, with applications to multi-state models. Biometrika , 90(1):15–27, 2003. Michael Ashburner, Catherine A Ball, Judith A Blake, David Botstein, Heather Butler, J Michael Cherry, Allan P Davis, Kara Dolinski, Sanya S Dwight, Janan T Eppig, Michael A Harris, David P Hill, Laurie Issel-Tarver, Andrew Kasarskis, Suzanna Lewis, John C Matese, Joel E Richardson, Martin Ringwald, Gerald M Rubin, and Gavin Sherlock. Gene ontology: tool for the unification of biology. Nature Genetics , 25(1):25–29, 2000. doi: 10.1038/75556. Mahmoud Assran, Quentin Duval, Ishan Misra, Piotr Bojanowski, Pascal Vincent, Michael Rabbat, Yann LeCun, and Nicolas Ballas. Self-supervised learning from images with ajoint-embedding predictive architecture. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 15619–15629, June 2023. URL https: //openaccess.thecvf.com/content/CVPR2023/html/Assran_Self-Supervised_Learning_ From_Images_With_a_Joint-Embedding_Predictive_Architecture_CVPR_2023_paper.html .Peter C. Austin and Elizabeth A. Stuart. Moving towards best practice when using inverse proba-bility of treatment weighting (iptw). Statistics in Medicine , 34(28):3661–3679, 2015. Žiga Avsec, Vikram Agarwal, Daniel Visentin, et al. Effective gene expression prediction from sequence by integrating long-range interactions. Nature Methods , 18:1196–1203, 2021. doi: 10. 1038/s41592-021-01252-x. Karla V. Ballman. Biomarker: Predictive or prognostic? Journal of Clinical Oncology , 33(33): 3968–3971, 2015. doi: 10.1200/JCO.2015.63.3651. Adrien Bardes, Jean Ponce, and Yann LeCun. Vicreg: Variance-invariance-covariance regularization for self-supervised learning. In International Conference on Learning Representations , 2022. Yoav Benjamini and Yosef Hochberg. Controlling the false discovery rate: A practical and powerful approach to multiple testing. Journal of the Royal Statistical Society: Series B (Methodological) ,57(1):289–300, 1995. doi: 10.1111/j.2517-6161.1995.tb02031.x. URL https://doi.org/10.1111/ j.2517-6161.1995.tb02031.x .Garyk Brixi, Matthew G Durrant, Jerome Ku, Mohsen Naghipourfar, Michael Poli, Gwanggyu Sun, Greg Brockman, Daniel Chang, Alison Fanton, Gabriel A Gonzalez, et al. Genome modelling and design across all domains of life with evo 2. Nature , 652(8112):1349–1361, 2026. Bibhas Chakraborty and Susan A. Murphy. Dynamic treatment regimes. Annual Review of Statistics and Its Application , 1:447–464, 2014. doi: 10.1146/annurev-statistics-022513-115553. Debyani Chakravarty, Jianjiong Gao, Sarah M Phillips, Ritika Kundra, Hongxin Zhang, Jack Wang, Julia E Rudolph, Rona Yaeger, David Soumerai, David B Nissan, et al. Oncokb: A precision oncology knowledge base. JCO Precision Oncology , 2017(1):1–16, 2017. doi: 10.1200/PO.17. 00011. Richard J. Chen, Ming Y. Lu, Wei-Hung Weng, Tiffany Y. Chen, Drew F. K. Williamson, Trevor Manz, Maha Shady, and Faisal Mahmood. Multimodal co-attention transformer for survival pre-diction in gigapixel whole slide images. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 4015–4025, 2021. 21 Richard J. Chen, Ming Y. Lu, Drew F. K. Williamson, Tiffany Y. Chen, Jana Lipkova, Zahra Noor, Muhammad Shaban, Maha Shady, Mane Williams, Bumjin Joo, and Faisal Mahmood. Pan-cancer integrative histology-genomic analysis via multimodal deep learning. Cancer Cell , 40 (8):865–878.e6, 2022. doi: 10.1016/j.ccell.2022.07.004. Richard J. Chen et al. Towards a general-purpose foundation model for computational pathology (UNI). Nature Medicine , 2024. doi: 10.1038/s41591-024-02857-3. URL https://www.nature. com/articles/s41591-024-02857-3 .D. R. Cox. Regression models and life-tables. Journal of the Royal Statistical Society: Series B , 34 (2):187–220, 1972. Haotian Cui et al. scGPT: toward building a foundation model for single-cell multi-omics using generative ai. Nature Methods , 2024. doi: 10.1038/s41592-024-02201-0. Hoagy Cunningham, Aidan Ewart, Logan Riggs, Robert Huben, and Lee Sharkey. Sparse au-toencoders find highly interpretable features in language models. In The Twelfth International Conference on Learning Representations , 2024. URL https://arxiv.org/abs/2309.08600 .Hugo Dalla-Torre et al. Nucleotide transformer: building and evaluating robust foundation models for human genomics. Nature Methods , 22(2):287–297, 2025. doi: 10.1038/s41592-024-02523-z. Matthijs Douze, Alexandr Guzhva, Chengqi Deng, Hervé Jégou, Jeff Johnson, Mathilde Lucas, Guillaume Mazaré, Maria Mohamed, Ni Ni, Andrea Vedaldi, et al. The faiss library. arXiv preprint arXiv:2401.08281 , 2024. Malachi Griffith, Nicholas C Spies, Kilannin Krysiak, Joshua F McMichael, Adam C Coffman, Arpad M Danos, Benjamin J Ainscough, Cody A Ramirez, Damian T Rieke, Lynzey Kujan, et al. Civic is a community knowledgebase for expert crowdsourcing the clinical interpretation of variants in cancer. Nature genetics , 49(2):170–174, 2017. Jean-Bastien Grill, Florian Strub, Florent Altché, Corentin Tallec, Pierre H. Richemond, Elena Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Daniel Guo, Mohammad Gheshlaghi Azar, Bilal Piot, Koray Kavukcuoglu, Rémi Munos, and Michal Valko. Bootstrap your own latent: A new approach to self-supervised learning. In Advances in Neural Information Processing Sys-tems , volume 33, pages 21271–21284. Curran Associates, Inc., 2020. URL https://proceedings. neurips.cc/paper/2020/hash/f3ada80d5c4ee70142b17b8192b2958e-Abstract.html .Lin Lawrence Guo, Jason Fries, Ethan Steinberg, Scott Lanyon Fleming, Keith Morse, Catherine Aftandilian, Jose Posada, Nigam Shah, and Lillian Sung. A multi-center study on the adaptability of a shared foundation model for electronic health records. npj Digital Medicine , 7:171, 2024. doi: 10.1038/s41746-024-01166-w. Alexia Iasonos, Paul B. Chapman, and Jaya M. Satagopan. Quantifying treatment benefit in molecular subgroups to assess a predictive biomarker. Clinical Cancer Research , 22(9):2114–2120, 2016. doi: 10.1158/1078-0432.CCR-15-2517. Yanrong Ji, Zhihan Zhou, Han Liu, and Ramana V. Davuluri. DNABERT: pre-trained bidirectional encoder representations from transformers model for DNA-language in genome. Bioinformatics ,37(15):2112–2120, 2021. doi: 10.1093/bioinformatics/btab083. John P. Klein and Melvin L. Moeschberger. Survival Analysis: Techniques for Censored and Trun-cated Data . Springer, 2003. 22 Zeljko Kraljevic, Dan Bean, Anthony Shek, Rebecca Bendayan, Harry Hemingway, Joshua Au Ye-ung, Alexander Deng, Alfred Baston, Jack Ross, Esther Idowu, James T. Teo, and Richard J. B. Dobson. Foresight: A generative pretrained transformer for modelling of patient timelines us-ing electronic health records: A retrospective modelling study. The Lancet Digital Health , 6(4): e281–e290, 2024. doi: 10.1016/S2589-7500(24)00025-6. Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, et al. Retrieval-augmented gener-ation for knowledge-intensive nlp tasks. Advances in neural information processing systems , 33: 9459–9474, 2020. Yikuan Li, Shishir Rao, José Roberto Ayala Solares, Abdelaali Hassaine, Rema Ramakrishnan, Dex-ter Canoy, Yajie Zhu, Kazem Rahimi, and Gholamreza Salimi-Khorshidi. BEHRT: Transformer for electronic health records. Scientific Reports , 10:7155, 2020. doi: 10.1038/s41598-020-62922-y. Arthur Liberzon, Chet Birger, Helga Thorvaldsdóttir, Mahmoud Ghandi, Jill P Mesirov, and Pablo Tamayo. The molecular signatures database (msigdb) hallmark gene set collection. Cell Systems ,1(6):417–425, 2015. doi: 10.1016/j.cels.2015.12.004. Marija Milacic, Deidre Beavers, Patrick Conley, Chuqiao Gong, Marc Gillespie, Johannes Griss, Robin Haw, Bijay Jassal, Lisa Matthews, Bruce May, Robert Petryszak, Eliot Ragueneau, Karen Rothfels, Cristoffer Sevilla, Veronica Shamovsky, Ralf Stephan, Krishna Tiwari, Thawfeek Varu-sai, Joel Weiser, Adam Wright, Guanming Wu, Lincoln Stein, Henning Hermjakob, and Peter D’Eustachio. The reactome pathway knowledgebase 2024. Nucleic Acids Research , 52(D1):D672– D678, 2024. doi: 10.1093/nar/gkad1025. Susan A. Murphy. Optimal dynamic treatment regimes. Journal of the Royal Statistical Society Series B: Statistical Methodology , 65(2):331–355, 2003. doi: 10.1111/1467-9868.00389. Eric Nguyen, Michael Poli, Marjan Faizi, Armin Thomas, Callum Birch-Sykes, Michael Wornow, Aman Patel, Clayton Rabideau, Stefano Massaroli, Yoshua Bengio, Stefano Ermon, Stephen A. Baccus, and Christopher Ré. HyenaDNA: Long-range genomic sequence modeling at single nu-cleotide resolution. In Advances in Neural Information Processing Systems , volume 36, 2023. Chao Pang, Xinzhuo Jiang, Krishna S. Kalluri, Matthew Spotnitz, RuiJun Chen, Adler Perotte, and Karthik Natarajan. CEHR-BERT: Incorporating temporal information from structured electronic health record data to improve prediction tasks. arXiv preprint arXiv:2111.08585 , 2021. Robert C. Paule and John Mandel. Consensus values and weighting factors. Journal of Research of the National Bureau of Standards , 87(5):377–385, 1982. doi: 10.6028/jres.087.022. Ethan Perez, Florian Strub, Harm de Vries, Vincent Dumoulin, and Aaron Courville. FiLM: Visual reasoning with a general conditioning layer. In Proceedings of the Thirty-Second AAAI Conference on Artificial Intelligence , pages 3942–3951. AAAI Press, 2018. doi: 10.1609/aaai.v32i1.11671. URL https://ojs.aaai.org/index.php/AAAI/article/view/11671 .Laila Rasmy, Yang Xiang, Ziqian Xie, Cui Tao, and Degui Zhi. Med-BERT: Pretrained contextu-alized embeddings on large-scale structured electronic health records for disease prediction. npj Digital Medicine , 4:86, 2021. doi: 10.1038/s41746-021-00455-y. François Remy, Kris Demuynck, and Thomas Demeester. Biolord-2023: semantic textual repre-sentations fusing large language models and clinical knowledge graph insights. Journal of the American Medical Informatics Association , 31(9):1844–1855, 2024. 23 Pawel Renc, Yugang Jia, Anthony E. Samir, Jaroslaw Was, Quanzheng Li, David W. Bates, and Arkadiusz Sitek. Zero shot health trajectory prediction using transformer. npj Digital Medicine ,7:256, 2024. doi: 10.1038/s41746-024-01235-0. James M Robins, Andrea Rotnitzky, and Lue Ping Zhao. Estimation of regression coefficients when some regressors are not always observed. Journal of the American statistical Association , 89(427): 846–866, 1994. James M. Robins, Miguel A. Hernán, and Babette Brumback. Marginal structural models and causal inference in epidemiology. Epidemiology , 11(5):550–560, 2000. Patrick Royston and Mahesh K. B. Parmar. Restricted mean survival time: an alternative to the hazard ratio for the design and analysis of randomized trials with a time-to-event outcome. BMC Medical Research Methodology , 13:152, 2013. Eric W Sayers, Evan E Bolton, Anna M Fine, Christopher Kelly, Sunghwan Kim, Melissa Landrum, Stacy Lathrop, Adriana Malheiro, Terence D Murphy, Lon Phan, Shashikant Pujar, Barton W Trawick, Valerie A Schneider, and Kim D Pruitt. Database resources of the national center for biotechnology information in 2026. Nucleic Acids Research , 54(D1):D20–D27, 2026. doi: 10.1093/nar/gkaf1060. Andrew B. Sellergren, Chufan Gao, Fereshteh Mahvar, Timo Kohlberger, Fayaz Jamil, Madeleine Traverse, Alberto Tono, Bashir Sadjad, Lin Yang, Charles Lau, Liron Yatziv, Tiffany Chen, Bram Sterling, Kenneth Philbrick, Richa Tiwari, Yun Liu, Madhuram Jajoo, Chandrashekar Sankarapu, Swapnil Vispute, Harshad Purandare, Abhishek Bijay Mishra, Sam Schmidgall, et al. Medgemma 1.5 technical report, 2026. URL https://arxiv.org/abs/2604.05081 .Artem Shmatko, Alexander Wolfgang Jung, Kumar Gaurav, Søren Brunak, Laust Hvas Mortensen, Ewan Birney, Tom Fitzgerald, and Moritz Gerstung. Learning the natural history of hu-man disease with generative transformers. Nature , 647(8088):248–256, 2025. doi: 10.1038/ s41586-025-09529-3. Ethan Steinberg, Kenneth Jung, Jason A. Fries, Conor K. Corbin, Stephen R. Pfohl, and Nigam H. Shah. Language models are an effective patient representation learning technique for electronic health record data. arXiv preprint arXiv:2001.05295 , 2020. Ethan Steinberg, Jason Fries, Yizhe Xu, and Nigam Shah. MOTOR: A time-to-event foundation model for structured medical records. arXiv preprint arXiv:2301.03150 , 2023. Maximilian A. R. Strobl, Jill Gallaher, Mark Robertson-Tessi, Jeffrey West, and Alexander R. A. Anderson. Treatment of evolving cancers will require dynamic decision support. Annals of On-cology , 34(10):867–884, 2023. doi: 10.1016/j.annonc.2023.08.008. Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha, Bo Wen, and Yunfeng Liu. Roformer: En-hanced transformer with rotary position embedding, 2021. Damian Szklarczyk, Rebecca Kirsch, Maria Koutrouli, Katerina Nastou, John Fan, Nadezhda Malt-sev, Anders Krogh, Milan Simonovic, Nadezhda T Doncheva, John H Morris, Peer Bork, Lars Juhl Jensen, and Christian von Mering. The string database in 2023: protein–protein association net-works and functional enrichment analyses for any sequenced genome of interest. Nucleic Acids Research , 51(D1):D638–D646, 2023. doi: 10.1093/nar/gkac1000. 24 The Gene Ontology Consortium, Shur V Aleksander, Jim Balhoff, Seth Carbon, J Michael Cherry, Harold J Drabkin, Douglas Ebert, Lars Feuerbach, Michael Frampton, Christopher MA Harris, et al. The gene ontology knowledgebase in 2023. Genetics , 224(1):iyad031, 2023. doi: 10.1093/ genetics/iyad031. Christina V. Theodoris, Ling Xiao, Anant Chopra, Mark D. Chaffin, Zeina R. Al Sayed, Matthew C. Hill, Helene Mantineo, Elizabeth M. Brydon, Zexian Zeng, X. Shirley Liu, and Patrick T. Ellinor. Transfer learning enables predictions in network biology. Nature , 618:616–624, 2023. doi: 10. 1038/s41586-023-06139-9. Hajime Uno, Tianxi Cai, Michael J. Pencina, Ralph B. D’Agostino, and L. J. Wei. On the c-statistics for evaluating overall adequacy of risk prediction procedures with censored survival data. Statistics in Medicine , 30(10):1105–1117, 2011. doi: 10.1002/sim.4154. Anurag Vaidya et al. Molecular-driven foundation model for oncologic pathology (THREADS), 2025. URL https://arxiv.org/abs/2501.16652 .Luís A. Vale-Silva and Karl Rohr. Long-term cancer survival prediction using multimodal deep learning. Scientific Reports , 11:13505, 2021. doi: 10.1038/s41598-021-92799-4. Eugene Vorontsov, Alican Bozkurt, Adam Casson, George Shaikovski, Michal Zelechowski, Kristen Severson, Eric Zimmermann, James Hall, Neil Tenenholtz, Nicolo Fusi, Ellen Yang, Philippe Mathieu, Alexander van Eck, Donghun Lee, Julian Viret, Eric Robert, Yi Kan Wang, Jeremy D. Kunz, Matthew C. H. Lee, Jan H. Bernhard, Ran A. Godrich, Gerard Oakley, Ewan Millar, Matthew Hanna, Hannah Wen, Juan A. Retamero, William A. Moye, Razik Yousfi, Christopher Kanan, David S. Klimstra, Brandon Rothrock, Siqi Liu, and Thomas J. Fuchs. A foundation model for clinical-grade computational pathology and rare cancers detection. Nature Medicine ,30(10):2924–2935, 2024. doi: 10.1038/s41591-024-03141-0. Eugene Vorontsov, George Shaikovski, Adam Casson, Julian Viret, Eric Zimmermann, Neil Tenen-holtz, Yi Kan Wang, Jan H. Bernhard, Ran A. Godrich, Juan A. Retamero, Jinru Shia, Mithat Gonen, Martin R. Weiser, David S. Klimstra, Razik Yousfi, Nicolò Fusi, Thomas J. Fuchs, Kristen Severson, and Siqi Liu. End-to-end multimodal pathology foundation model with clinical dialogue. Nature Medicine , 2026. doi: 10.1038/s41591-026-04521-4. URL https: //www.nature.com/articles/s41591-026-04521-4 .Kexin Wang, Nils Reimers, and Iryna Gurevych. TSDAE: Using transformer-based sequential de-noising auto-encoder for unsupervised sentence embedding learning. In Findings of the Association for Computational Linguistics: EMNLP 2021 , pages 671–688, Punta Cana, Dominican Republic, 2021. Association for Computational Linguistics. doi: 10.18653/v1/2021.findings-emnlp.59. URL 
+
+https://aclanthology.org/2021.findings-emnlp.59/ .Yi Kan Wang, Ludmila Tydlitatova, Jeremy D. Kunz, Gerard Oakley, Bonnie Kar Bo Chow, Ran A. Godrich, Matthew C. H. Lee, Hamed Aghdam, Alican Bozkurt, Michal Zelechowski, Chad Vanderbilt, Christopher Kanan, Juan A. Retamero, Peter Hamilton, Razik Yousfi, Thomas J. Fuchs, David S. Klimstra, and Siqi Liu. Screen them all: High-throughput pan-cancer ge-netic and phenotypic biomarker screening from h&e whole slide images, 2024. URL https: //arxiv.org/abs/2408.09554 .Shane Waxler, Paul Blazek, Davis White, Daniel Sneider, Kevin Chung, Mani Nagarathnam, Patrick Williams, Hank Voeller, Karen Wong, Matthew Swanhorst, Sheng Zhang, Naoto Usuyama, Cliff 25 Wong, Tristan Naumann, Hoifung Poon, Andrew Loza, Daniella Meeker, Seth Hain, and Rahul Shah. Generative medical event models improve with scale. arXiv preprint arXiv:2508.12104 ,2025. M Whirl-Carrillo, R Huddart, L Gong, K Sangkuhl, CF Thorn, R Whaley, and TE Klein. An evidence-based framework for evaluating pharmacogenomics knowledge for personalized medicine. 
+
+Clinical Pharmacology & Therapeutics , 110(3):563–572, 2021. doi: 10.1002/cpt.2350. David S Wishart, Yannick D Feunang, An C Guo, Elvis J Lo, Ana Marcu, Jason R Grant, Tanvir Sajed, Daniel Johnson, Carin Li, Zinat Sayeeda, et al. Drugbank 5.0: a major update to the drugbank database for 2018. Nucleic acids research , 46(D1):D1074–D1082, 2018. S. Xu, C. Ross, M. A. Raebel, S. Shetterly, C. Blanchette, and D. Smith. Use of stabilized inverse propensity scores as weights to directly estimate relative risk and its confidence intervals. Value in Health , 13(2):273–277, 2010. Yingxue Xu, Yihui Wang, Fengtao Zhou, Jiabo Ma, Cheng Jin, Shu Yang, Jinbang Li, Zhengyu Zhang, et al. A multimodal knowledge-enhanced whole-slide pathology foundation model (mSTAR). Nature Communications , 2025. doi: 10.1038/s41467-025-66220-x. URL https: //www.nature.com/articles/s41467-025-66220-x .Steve Yadlowsky, Scott Fleming, Nigam Shah, Emma Brunskill, and Stefan Wager. Evaluating treatment prioritization rules via rank-weighted average treatment effects. Journal of the Amer-ican Statistical Association , 120(549), 2025. doi: 10.1080/01621459.2024.2393466. Xi Yang, Aokun Chen, Nima PourNejatian, Hoo Chang Shin, Kaleb E. Smith, Christopher Parisien, Colin Compas, Cheryl Martin, Anthony B. Costa, Mona G. Flores, Ying Zhang, Tanja Magoc, Christopher A. Harle, Gloria Lipori, Duane A. Mitchell, William R. Hogan, Elizabeth A. Shenkman, Jiang Bian, and Yonghui Wu. A large language model for electronic health records. 
+
+npj Digital Medicine , 5:194, 2022. doi: 10.1038/s41746-022-00742-2. Deborah A Zarin, Tony Tse, Rebecca J Williams, Robert M Califf, and Nicholas C Ide. The clinicaltrials.gov results database—update and key issues. New England Journal of Medicine , 364 (9):852–860, 2011. doi: 10.1056/NEJMsa1012065. Andrew Zhang, Tong Ding, Sophia J. Wagner, Caiwei Tian, Ming Y. Lu, Rowland Pettit, Joshua E. Lewis, Alexandre Misrahi, Dandan Mo, Long Phi Le, and Faisal Mahmood. A multimodal and temporal foundation model for virtual patient representations at healthcare system scale. arXiv preprint arXiv:2604.18570 , 2026. T. Zhou, D. Fu, M. Soltanolkotabi, R. Jia, and V. Sharan. Fone: Precise single-token number embeddings via fourier features. In International Conference on Learning Representations , 2026. Zhihan Zhou, Yanrong Ji, Weijian Li, Pratik Dutta, Ramana V. Davuluri, and Han Liu. DNABERT-2: Efficient foundation model and benchmark for multi-species genome. In International Confer-ence on Learning Representations , 2024. Eric Zimmermann, Eugene Vorontsov, Julian Viret, Adam Casson, Michal Zelechowski, George Shaikovski, Neil Tenenholtz, James Hall, David Klimstra, Razik Yousfi, et al. Virchow2: Scaling self-supervised mixed magnification models in pathology. arXiv preprint arXiv:2408.00738 , 2024. 26 A Appendix 
+
+A.1 Data Sources 
+
+To build the patient trajectories, we used data from the Tempus Data Model (TDM), a multimodal oncology data platform that integrates clinical and molecular data from multiple sources, as detailed below. 
+
+Clinical Data 
+
+• Curated. Structured clinical data manually abstracted by trained experts from patient med-ical records, including progress notes, pathology reports, and treatment plans. Abstraction followed standardized guidelines to capture diagnosis, treatment (including care plans, reg-imens, and lines of therapy), response assessments, disease progression, and other clinical endpoints. • Native. Structured data from electronic health records (EHRs) transmitted directly from partner healthcare institutions, including medication administrations and orders, laboratory results, vital signs, encounters, performance status, and smoking status. • Pathology. Diagnosis and histology information derived from Tempus pathologist review of biopsy specimens. • Third-party. Supplementary data from external sources, including claims-based mortality data, used to augment vital status and last-known-alive dates. • Derived. Algorithmically computed variables, including BMI calculated from height and weight measurements, and lines of therapy derived from curated care plan data. In the case where a clinical concept is captured by both curated and native data (e.g., antineo-plastic medications), records were harmonized to maximize completeness and date precision, with the source of each record tracked via a row_source indicator. 
+
+Molecular Data 
+
+• Tempus-generated molecular data. Results from Tempus next-generation sequencing (NGS) assays (xT, xF, xE, RS), including single nucleotide variants (SNVs), insertions/deletions (indels), copy number variants (CNVs), structural variants (SVs), RNA gene expression, mi-crosatellite instability (MSI), tumor mutational burden (TMB), homologous recombination deficiency (HRD), HLA genotyping, immune infiltration, immune repertoire, neoepitope pre-dictions, and microorganism detection. • Third-party reported molecular data. Results from molecular tests performed by exter-nal laboratories, including NGS, PCR, immunohistochemistry (IHC), and fluorescence in situ hybridization (FISH), capturing biomarker results such as hormone receptor status (ER, PR, HER2), MSI, mismatch repair (MMR), and gene-level alterations. 27 • Reference laboratory data : Results from Tempus partner reference laboratories (e.g., min-imal residual disease [MRD] testing, IHC/FISH). 
+
+De-identification 
+
+All data were de-identified using HIPAA-compliant statistical de-identification (Expert Determina-tion) methods. Dates were shifted uniformly per patient (within a range of 0 − 30 days) to preserve temporal relationships between clinical events while protecting patient identity. 
+
+A.2 Molecular blueprint 
+
+For each biospecimen, a molecular blueprint was assembled from DNA, RNA, IHC, and ISH, inte-grating ten categories: • Biospecimen metadata detailing histology and anatomical site, • IHC biomarkers including PD-L1 TPS, minimal residual disease (MRD), and HER2 status, • Genomic instability indicators encompassing MSI/dMMR status, tumor mutational burden (TMB-H ≥ 10 mutations/Mb), homologous recombination deficiency (HRD), HLA loss of heterozygosity (LOH), and clonal heterogeneity, • Host immune descriptors comprising TIL phenotype, CD8/CD4 dominance, immune likeli-hood, and 20 HLA single-allele hotspots plus 9 multi-locus haplotypes across Class I and II loci, • High-confidence pathogen calls, • Disruption in five canonical oncogenic signaling pathways (mTOR, TGF-β, RTK, HRD, DDR), • Pathogenic or likely pathogenic SNVs/indels with complete genomic and protein annotations, • Copy-number alterations and fraction of genome altered, • Structural variants or fusions, and • RNA-level expression abnormalities alongside 11 actionable splicing events (e.g., MET exon 14 skipping, AR-V7 , EGFRvIII ). 
+
+A.3 Prognostic classification: cohort stratification (tumor × therapy) 
+
+Cohort stratification. Strata are defined as general_tumor_type × therapy_class_group ,restricted to a whitelist of valid pairs; a stratum is dropped only if (a) it has zero embedded patients, or (b) it contains a single class (all positive or all negative). The reported metric is the 28 unweighted macro-mean of per-stratum AUCs. This stratification tests whether performance is consistent across clinically comparable tumor–therapy combinations rather than being driven by a few high-prevalence cohorts. Because the macro-mean weights each scored stratum equally, results are sensitive to small strata; Table A1 provides the per-stratum sample sizes used for each task. Table A1: Per-stratum composition by tumor type and therapy group, for the strata entering the prognostic-classification analysis (minimum 20 patients per stratum, as in the figure). Values are patients, n (positive cases). An em dash indicates the stratum did not enter that task: fewer than 20 patients, a single outcome class, or no available embeddings. 
+
+Tumor type Therapy group OS 
+
+n (pos) PFS 
+
+n (pos) Response 
+
+n (pos) 
+
+Colorectal cancer Biologic + chemotherapy 383 (285) 355 (280) 451 (196) NSCLC Chemotherapy + IO/ICI 325 (207) 327 (214) 450 (181) Breast cancer Hormone + targeted (SM) 239 (203) 279 (214) 277 (94) Colorectal cancer Chemotherapy 282 (226) 248 (199) 240 (100) Pancreatic cancer Chemotherapy 274 (148) 205 (122) 281 (62) Prostate cancer Hormone 299 (290) 326 (287) 100 (44) Ovarian/fallopian tube/peritoneal cancer Chemotherapy 201 (193) 199 (189) 114 (79) NSCLC IO/ICI 114 (67) 103 (68) 113 (41) NSCLC TKI 99 (74) 102 (74) 115 (50) Tumor of unknown origin Chemotherapy 114 (63) 98 (56) 83 (29) Breast cancer Chemotherapy 100 (65) 96 (55) 92 (31) Melanoma IO/ICI 82 (61) 94 (71) 90 (32) Gastroesophageal cancer Chemotherapy 96 (39) 63 (37) 97 (32) NSCLC Chemotherapy 107 (68) 83 (57) 65 (23) Prostate cancer Hormone + other 88 (81) 95 (84) 55 (27) Gastroesophageal cancer Chemotherapy + IO/ICI 67 (44) 65 (41) 84 (27) Tumor of unknown origin Chemotherapy + IO/ICI 60 (32) 63 (34) 78 (23) Prostate cancer Chemotherapy + hormone 64 (59) 71 (60) 52 (25) Ovarian/fallopian tube/peritoneal cancer Chemotherapy + targeted (SM) 49 (45) 61 (52) 66 (50) Breast cancer Hormone 66 (52) 62 (49) 31 (16) Urinary tract cancer Chemotherapy 52 (29) 49 (25) 53 (20) Endometrial cancer Chemotherapy 54 (41) 54 (45) 39 (25) SCLC Chemotherapy + IO/ICI 37 (19) 30 (13) 77 (31) Kidney cancer IO/ICI 42 (33) 52 (39) 48 (13) Ovarian/fallopian tube/peritoneal cancer Biologic + chemotherapy 51 (44) 50 (47) 41 (24) Lung cancer Chemotherapy + IO/ICI 36 (14) 35 (18) 53 (15) Kidney cancer IO/ICI + TKI 35 (28) 39 (29) 48 (19) Breast cancer Biologic + chemotherapy 32 (28) 42 (35) 36 (20) Breast cancer Chemotherapy + IO/ICI 29 (20) 31 (24) 44 (12) Colorectal cancer IO/ICI 36 (30) 35 (30) 32 (16) Urinary tract cancer ADC + IO/ICI 34 (27) 33 (29) 33 (14) Gallbladder/biliary tract cancer Chemotherapy 27 (12) 25 (13) 43 (12) Gallbladder/biliary tract cancer Chemotherapy + IO/ICI 34 (25) 28 (18) 29 (6) Endometrial cancer Chemotherapy + IO/ICI 25 (18) 29 (24) 31 (14) Urinary tract cancer IO/ICI 26 (14) 24 (13) 31 (8) 
+
+Continued on the next page 
+
+29 Table A1 continued from the previous page                             
+
+> Tumor type Therapy group OS
+> n(pos) PFS
+> n(pos) Response
+> n(pos)
+> Gastroesophageal cancer Biologic + chemotherapy 23 (16) 21 (16) 27 (10) Gastroesophageal cancer Biologic + chemotherapy + IO/ICI 20 (14) 22 (15) 29 (11) Head and neck SCC Chemotherapy + IO/ICI 24 (13) —37 (6) Prostate cancer Chemotherapy + hormone + other 20 (19) 23 (20) —Urinary tract cancer Chemotherapy + IO/ICI ——39 (11) Ovarian/fallopian tube/peritoneal cancer Biologic + chemotherapy + targeted (SM) ——21 (15)
+> Abbreviations: ADC, antibody-drug conjugate; ICI, immune checkpoint inhibitor; IO, immuno-oncology; SM, small molecule; TKI, tyrosine kinase inhibitor.
+
+A.4 Baseline Feature Selection 
+
+7520 candidate features were drawn from a versioned catalogue of standardized, category-annotated clinical and molecular features. Treatment intent labels (adjuvant, neoadjuvant, induction, consoli-dation, conditioning, and maintenance) were excluded across all configurations to prevent treatment assignment leakage. Feature selection was performed independently for each cohort/task using only the training and validation data; test data were strictly withheld. Candidate features passed through three successive selection stages: 1. Variance filtering: Features with zero variance or falling below the 70th percentile of candidate variance were removed. 2. Univariate screening: Remaining candidates were evaluated in individual penalized Cox proportional-hazards models (penalty = 0.01, elastic-net mixing = 0.9) incorporating delayed entry. Fea-tures were retained if the concordance index exceeded 0.5 and the Wald p-value was below 0.05. For cohorts exceeding 10,000 patients, median concordance indices and p-values across 10 fixed-seed subsamples of 10,000 patients were used to stabilize estimates. 3. Multivariate selection: Retained candidates were fit jointly in a single penalized Cox model; features with absolute coefficients below 0.01 were discarded. A core set of base clinical features was retained across all baselines regardless of statistical signifi-cance, subject only to variance filtering, to preserve cross-cohort comparability: ECOG performance status (0–5), four age bands, female sex, tumor grade (1–4), and stage (0–IV). Missing or constant levels within a cohort were dropped. Continuous variables were normalized with canonical stan-dardization (mean, standard deviation on the training set) and were imputed to zero. Combining the selected candidate features with these base features yields the final compact, cohort-specific feature set. Tab. A2 shows the number of features selected per predictive cohort. 30 Cohort Selected features Breast HR+/HER2 − CDK4/6 and aromatase inhibitor (AI) comb. vs. AI alone, 1L 104 CRC RAS WT anti-EGFR vs. anti-VEGF, 1L 197 NSCLC pembro–chemo combo vs. chemo, 1L 94 NSCLC pembro–chemo combo vs. pembro alone, 1L 90 NSCLC dual IO vs. IO–chemo combo, 1L 81 mRCC dual IO vs. IO–TKI, 1L 160 HSPC ADT doublet vs. triplet, 1L 114 Enriched multi-tumor Enhertu vs. chemo, 2L+ 162 Pancancer Enhertu vs. chemo, 2L+ 149 Pancancer IO–chemo vs. IO alone, 1L 165 Pancancer HRR+ PARPi vs. chemo, 2L+ 111 Table A2: Number of selected baseline features per predictive evaluation cohort. 
+
+A.5 Inverse-Propensity Weighting 
+
+We use stabilized inverse-propensity weighting to correct treatment selection bias in the observa-tional cohorts [Robins et al., 2000, Austin and Stuart, 2015]. The propensity model is trained on a set of always-included features and a subset of the features selected as described in Appendix A.4. The always-included features are one-hot ECOG performance status ( 0–5), age band ( ≤30, 30–50, 50–75, >75), gender, tumor grade ( 1–4), and tumor stage ( 0–4). Selected features may include IHC biomarkers, tumor type, surgical pathology outcomes, smoking status, and biopsy vs resection. Treatment information is dropped. A logistic model on this feature set estimates the propensity 
+
+e(xi) = ˆP (Wi = 1 | xi), clipped to [0 .01 , 0.99] , and the stabilized weights [Xu et al., 2010] are calculated from propensity scores 
+
+wi =
+
+( ˆP (W = 1) / e (xi) Wi = 1 ,
+
+ˆP (W = 0) /  1 − e(xi) Wi = 0 , (8) where ˆP (W = 1) is the treated fraction of the cohort and ˆP (W = 0) = 1 − ˆP (W = 1) . These weights enter the Cox partial log-likelihood when training the UV-Cox estimator (Appendix A.6). The propensity scores are reused with augmented inverse-propensity weighting (AIPW) during evaluation [Robins et al., 1994]. 
+
+A.6 Two-Stage UV-Cox Predictive Evaluation Design 
+
+To evaluate treatment benefit in our benchmarks, we set up and fit a convex, linear Cox [Cox, 1972] model that represents the residual treatment-dependent risk beyond treatment-independent prognostic risk. Let Wi ∈ { 0, 1} be the treatment assignment. For xi ∈ Rp, a representation of patient i (the oFM embedding h(t∗), or the selected features for the baseline), we split the linear predictor ηi into a prognostic term and a treatment-modifying term: 31 ηi = u(xi) + Wi v(xi),λ(t | xi, W i) = λ0(t) exp  u(xi) + Wi v(xi), (9) where λ measures patient risk and λ0 defines baseline risk. Here u is the prognostic head which carries the risk present in both arms and v is the predictive head which carries the residual treatment-dependent risk. The treatment-benefit score is τ (xi) = −v(xi), so v(xi) < 0 predicts a lower hazard under treatment. Both heads are linear with feature-weights β, and bv modeling the main treatment effect in the treatment head: 
+
+u(xi) = β⊤ 
+
+> u
+
+˜xi,v(xi) = β⊤ 
+
+> v
+
+˜xi + bv. (10) Features are z-scored with moments computed on training and validation data, not the test set. Both heads are fit by minimizing a weighted negative log partial likelihood with L2 regularization, 
+
+ℓ(η) = − 1
+
+P  
+
+> j:δj=1
+
+wj
+
+X
+
+> i:δi=1
+
+wi
+
+ηi − log X
+
+> j∈R(Ti)
+
+wj eηj
+
+ , R(t) = { j : Lj < t ≤ Tj }, (11) where δi ∈ { 0, 1} is the event indicator and the risk set R(t) enforces delayed entry, so a patient contributes only after the left-truncation entry time Li [Klein and Moeschberger, 2003]. To avoid leaking prognostic signal into the predictive head, fitting is done in two stages. With the predictive head v is initialized to zero, stage 1 fits only the prognostic head u. Stage 2 then freezes the prognostic head u and fits the predictive head v.Each stage is optimized with full-batch L-BFGS. The L2 penalty is selected with 5-fold cross-validation over the union of the training and validation sets. In stage 1, L2 is selected over a 22-point logarithmic grid on [10 −4, 10 3]. The model is refit on the full train + validation set at the selected L2 penalty. In stage 2, the same L2 penalty is used, as lowering it risks leaking prognostic signal into v and raising it shrinks v, reducing treatment-dependent signal. 
+
+A.7 Evaluation Metrics 
+
+We evaluate predictive performance of oFM embeddings or baseline features with AUTOC and HRR and prognostic performance with C-index. 
+
+AUTOC. When ranking patients by predicted treatment benefit, the area under the targeting operator characteristic (AUTOC) is the average additional benefit compared to the cohort as a whole, computed over all possible top percentiles of patients. It is zero when the ranking carries no information about who benefits. The treatment benefit score −v(xi) is estimated by the UV-Cox method (see Appendix A.6). However, ground truth benefit is never observed per patient as patients 32 only ever occur in one arm and observation is right-censored. To estimate it, a pseudo-outcome θi
+
+is first computed per-patient using the restricted mean survival time (RMST) which is the average event-free time within a horizon L [Royston and Parmar, 2013, Andersen et al., 2003]. We set L to the 80 th percentile of observed follow-up, or the administrative censoring time where one is defined. Each patient’s ground truth treatment benefit ψi is then estimated from the pseudo-outcome θi with a doubly robust AIPW score [Robins et al., 1994], combining the propensity e of Appendix A.5 with arm-specific ridge outcome models fit on train +validation and applied to the test patients. Ranking patients by estimated benefit, the targeting operator characteristic (TOC) and its integral are 
+
+TOC( q) = 1
+
+⌈qn ⌉
+
+X  
+
+> i∈top-q
+
+ψi − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ψi, AUTOC = 
+
+Z 10
+
+TOC( q) dq, (12) which weights the ranking uniformly [Yadlowsky et al., 2025]. AUTOC is measured in time and the scale of AUTOC depends on the RMST and observational horizon of each cohort. We normalize AUTOC by SD where SD is the unweighted standard deviation of θ, representing the relative scale of each cohort. Statistical significance is computed against a permutation null that randomly reshuffles treatment assignment within propensity-score bins; the 
+
+p-value is the fraction of replicates whose AUTOC meets or exceeds the observed value. 
+
+Hazard ratio and hazard-ratio ratio. Whereas a hazard ratio (HR) measures how much treat-ment helps a group of patients, the hazard-ratio ratio (HRR) divides the hazard ratio of the es-timated high-benefit patients by that of the estimated low-benefit patients. An HRR below one indicates correct separation according to treatment effect and an HRR above one indicates the ranking is inverted [Iasonos et al., 2016]. Test patients are split into low- and high-benefit groups at the median benefit score, and a newly fit Cox model on the treatment indicator alone gives each stratum’s HR using the IPW of Appendix A.5. Statistical significance is computed by a two-sided Wald test of log HRR = 0 .
+
+Prognostic discrimination. We report Uno’s IPCW concordance index (C-index) [Uno et al., 2011] of the prognostic score u(xi). Across all patient pairs, it weights each pair to correct for right censoring and keeps only those that delayed entry leaves comparable. It is computed within each treatment arm so that it reflects baseline risk rather than treatment effect. Unlike in the predictive setting, the prognostic-only model is fit on both arms pooled without IPW, which is needed only in the predictive setting to correct treatment selection bias. The C-index is then computed within each arm so that it reflects baseline risk rather than treatment effect. C-index 0.5 and 1 indicate random chance and correct ordering, respectively. The 95% bootstrap confidence interval is computed over 1,000 iterations. 
+
+Pooling across cohorts. Per-cohort effects yi with standard errors ei are combined by Paule-Mandel random-effects meta-analysis [Paule and Mandel, 1982], which weights cohort i by 1/(e2 
+
+> i
+
++τ 2)
+
+for a between-cohort variance τ 2 estimated from the data, so noisier cohorts are weighted less. 
+
+μAUTOC is the pooled AUTOC/SD. Dividing it by its standard error SE AUTOC gives tAUTOC /SD ,33 which measures both effect size (since SE AUTOC grows with per-cohort noise) and consistency across cohorts (since SE AUTOC grows with disagreement between cohorts). HRR is pooled on the log scale and transformed back and C-index is pooled on logits. The significance of pooled AUTOC/SD and HRR results is tested against their permutation nulls where the per-patient treatment arm assignment (i.e. control v.s. treatment.) is randomly permuted. The statistical significance of the difference between the oFM and baseline pooled C-index values is computed with a Student t-test. 
+
+A.8 Survival benchmark cohorts 
+
+Table A3: Survival-benchmark cohorts. Two-arm comparative cohorts evaluated for differential treatment benefit on overall survival. Each row gives the cohort (with line-of-therapy and clinical-use-case tags), the experimental vs. control regimens, the clinical question (condensed to its primary clause), and the number of experimental / control patients in the combined train+validation (model-development) and held-out test splits. Patient counts are for the genomic (DNA+RNA) subset. 
+
+Cohort Experimental / Control arm Clinical question Train+val (exp / ctrl) Test (exp / ctrl) Breast HR+/HER2-CDK4/6 and Aromatase inhibitors (AI) comb vs AI alone 1L Exp: CDK4/6 inhibitor plus aromatase inhibitor (AI) 
+
+Ctrl: aromatase inhibitor alone Does adding a CDK4/6 inhibitor (ribociclib, palbociclib, or abemaciclib) to first-line aromatase inhibitor therapy improve progression-free and overall survival in HR+/HER2-metastatic breast cancer? 814 / 146 291 / 63 
+
+CRC RAS WT anti-EGFR vs anti-VEGF 1L Exp: anti-EGFR antibody (cetuximab or panitumumab) combined with FOLFOX or FOLFIRI chemotherapy 
+
+Ctrl: bevacizumab combined with FOLFOX In RAS wild-type metastatic colorectal cancer, does first-line anti-EGFR antibody plus chemotherapy improve overall survival versus bevacizumab plus chemotherapy? 204 / 427 72 / 144 
+
+NSCLC Pembro Chemo combo vs Chemo 1L Exp: pembrolizumab plus platinum (carboplatin or cisplatin) plus pemetrexed 
+
+Ctrl: platinum plus pemetrexed (chemotherapy only) In driver-negative metastatic NSCLC, does adding pembrolizumab to platinum plus pemetrexed improve overall survival versus chemotherapy alone, and across PD-L1 subgroups ( <1%, 1–49%, 
+
+≥50%), which patients derive the greatest incremental benefit? 1034 / 113 323 / 30 
+
+NSCLC Pembro Chemo combo vs Pembro alone 1L Exp: pembrolizumab plus platinum-based chemotherapy 
+
+Ctrl: pembrolizumab monotherapy In PD-L1 ≥50% driver-negative metastatic NSCLC, does adding chemotherapy to first-line pembrolizumab improve outcomes versus pembrolizumab monotherapy? 259 / 311 87 / 101 
+
+Continued on next page 
+
+34 Table A3 – continued from previous page 
+
+Cohort Experimental / Control arm Clinical question Train+val (exp / ctrl) Test (exp / ctrl) NSCLC dual IO vs IO Chemo combo 1L Exp: chemo-immunotherapy with pembrolizumab plus platinum plus pemetrexed or paclitaxel (KEYNOTE-189 style) 
+
+Ctrl: dual checkpoint immunotherapy with ipilimumab plus nivolumab, with or without chemotherapy (CheckMate-227 style) In driver-negative metastatic NSCLC, does first-line chemo-immunotherapy (pembrolizumab-based) outperform dual checkpoint blockade (ipilimumab plus nivolumab)? 1231 / 111 398 / 54 
+
+mRCC dual IO vs IO-TKI 1L Exp: IO-TKI combinations (pembrolizumab plus axitinib, lenvatinib plus pembrolizumab, cabozantinib plus nivolumab, or avelumab plus axitinib) 
+
+Ctrl: dual checkpoint immunotherapy (ipilimumab plus nivolumab) In metastatic renal cell carcinoma, does first-line IO-TKI combination therapy improve outcomes versus dual checkpoint immunotherapy (ipilimumab plus nivolumab)? 269 / 191 81 / 74 
+
+HSPC ADT doublet vs triplet 1L Exp: ADT plus androgen receptor pathway inhibitor (ARPi) plus docetaxel (triplet therapy) 
+
+Ctrl: ADT plus ARPi (doublet therapy) In metastatic hormone-sensitive prostate cancer, does adding docetaxel to ADT plus ARPi (triplet intensification) improve overall survival versus ADT plus ARPi alone (doublet)? 278 / 1180 105 / 373 
+
+Enriched multi-tumor Enhertu vs Chemo 2L+ Exp: T-DXd (Enhertu) 
+
+Ctrl: standard chemotherapy Across breast, gastric, and NSCLC cancers previously treated with trastuzumab and a taxane, does T-DXd improve progression-free and overall survival versus standard chemotherapy? 231 / 447 55 / 148 
+
+Pancancer Enhertu vs Chemo 2L+ Exp: T-DXd (Enhertu / trastuzumab deruxtecan) 
+
+Ctrl: standard chemotherapy (irinotecan, capecitabine, eribulin, gemcitabine, or paclitaxel) Across metastatic cancers previously treated with trastuzumab and a taxane, does T-DXd improve progression-free and overall survival versus standard chemotherapy? 310 / 2125 82 / 702 
+
+Pancancer IO Chemo vs IO alone 1L Exp: immune checkpoint inhibitor (ICI) plus chemotherapy 
+
+Ctrl: ICI alone Across metastatic cancers, does adding chemotherapy to first-line immune checkpoint inhibitor therapy improve outcomes versus ICI monotherapy? 3620 / 1877 1229 / 657 
+
+Continued on next page 
+
+35 Table A3 – continued from previous page      
+
+> Cohort Experimental / Control arm Clinical question Train+val (exp / ctrl) Test (exp / ctrl) Pancancer HRR+ PARPi vs Chemo 2L+ Exp: PARP inhibitor (olaparib, niraparib, rucaparib, or talazoparib)
+> Ctrl: chemotherapy (docetaxel, paclitaxel, or platinum) Across metastatic cancers with a homologous-recombination-repair (HRR) mutation or HRD, second-line or later, does a PARP inhibitor improve overall survival versus chemotherapy? 224 / 532 82 / 200
+
+A.9 Model parameter counts 
+
+Component Parameters 
+
+Trained parameters: oFM 
+
+Episode encoder (GatorTron-base-2k + FoNE) 358M transformer layers 303M token-embedding matrix ( 50 ,102 × 1024 ) 51.3M position/type embeddings + LayerNorm 2.1M FoNE numeric embedder 1.1M Trajectory encoder (2-layer, RoPE) 25.2M Heads and projectors 38.1M predictor (FiLM residual MLP) 10.5M pathology projector ( 8192 → 1024 ) 8.0M pathology reconstruction head 8.4M episode reconstruction head 8.4M time embedding 1.3M survival head 1.0M Total trained 421M 
+
+Frozen parameters: pathology encoder 
+
+PRISM2 slide encoder 5.1B Virchow2 tile encoder 632M Perceiver + attention pooler (base/prognostic slide encoder) 620M Phi-3-Mini (diagnostic slide encoder) 3.8B Table A4: Parameter counts for different components in the oFM model. 36

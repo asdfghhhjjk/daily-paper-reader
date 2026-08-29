@@ -41,7 +41,7 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-26</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-29</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
     <strong class="dpr-home-dashboard-count">共 2 篇</strong>
@@ -51,7 +51,7 @@
     <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>0</dd></div>
     <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>2</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-26 22:16:46 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-29 03:43:59 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -63,7 +63,7 @@
   </div>
   <div class="dpr-home-dashboard-body">
 <p>今日共生成 2 篇推荐（精读 0 篇，速读 2 篇）</p>
-<p>速读：《Regularized Subjective-Surface Flow with Monotone Reaction: Global Classical Well-Posedness and Stability》（6.0/10）, 《LUCAID: Agentic Multimodal AI for Lung Cancer Precision Pathology》（6.0/10）</p>
+<p>速读：《A Multimodal Foundation Model for Longitudinal Patient Representation and Scalable Insight Generation in Oncology》（7.0/10）, 《An end-to-end-trained vision-language model for native-language prostate pathology report generation》（6.0/10）</p>
 <p>这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。</p>
   </div>
 </section>
@@ -89,9 +89,9 @@
     <strong class="dpr-home-dashboard-count">2 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Regularized Subjective-Surface Flow with Monotone Reaction: Global Classical Well-Posedness and Stability">Regularized Subjective-Surface Flow with Monotone Reaction: Global Classical Well-Posedness and Stability</span></li><li><span class="dpr-home-dashboard-paper-title" title="LUCAID: Agentic Multimodal AI for Lung Cancer Precision Pathology">LUCAID: Agentic Multimodal AI for Lung Cancer Precision Pathology</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="A Multimodal Foundation Model for Longitudinal Patient Representation and Scalable Insight Generation in Oncology">A Multimodal Foundation Model for Longitudinal Patient Representation and Scalable Insight Generation in Oncology</span></li><li><span class="dpr-home-dashboard-paper-title" title="An end-to-end-trained vision-language model for native-language prostate pathology report generation">An end-to-end-trained vision-language model for native-language prostate pathology report generation</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">cell-graph <strong>1</strong></span><span class="dpr-home-dashboard-tag">cell-path <strong>1</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">cell-path <strong>2</strong></span></div>
 </section>
 </div>
 
