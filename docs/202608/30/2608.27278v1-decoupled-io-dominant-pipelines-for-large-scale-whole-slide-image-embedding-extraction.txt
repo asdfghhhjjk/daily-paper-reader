@@ -1,0 +1,399 @@
+Title: Decoupled I/O-Dominant Pipelines for Large-Scale Whole-Slide Image Embedding Extraction
+
+URL Source: https://arxiv.org/pdf/2608.27278v1
+
+Published Time: Fri, 28 Aug 2026 01:29:14 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Decoupled I/O-Dominant Pipelines for Large-Scale Whole-Slide Image Embedding Extraction 
+
+Mayanka Chandrashekar 
+
+Oak Ridge National Laboratory 
+
+Xi Zhang 
+
+Oak Ridge National Laboratory 
+
+Ethan Seefried 
+
+Oak Ridge National Laboratory 
+
+Tirthankar Ghosal 
+
+Oak Ridge National Laboratory 
+
+John Gounley 
+
+Oak Ridge National Laboratory 
+
+Heidi Hanson 
+
+Oak Ridge National Laboratory 
+
+Abstract —Whole-slide images (WSIs) are central to computa-tional pathology but are prohibitively large, making patch-based processing the practical unit for foundation model inference. At scale, however, generating and handling massive numbers of patches on quickly introduces significant I/O and orchestration overhead, often dominating end-to-end performance. We present a decoupled, I/O-aware pipeline for large-scale WSI embedding extraction that decomposes the workflow into three stages: (1) patch generation and staging, (2) embarrassingly parallel embedding inference, and (3) sharded vector database ingestion. This design isolates data movement from compute, enabling efficient patch delivery, scalable multi-node inference with mini-mal communication. The resulting system produces a distributed vector database where embeddings are persistently coupled with rich metadata (e.g., patient, slide, and patch attributes), enabling efficient filtering, retrieval, and downstream reuse. This representation database is compact and reusable for tasks such as retrieval, classification, and few-shot learning, particularly benefiting low-resource environments. We show that decoupling I/O, computation, and ingestion enables high-throughput WSI embedding extraction at scale. By characterizing the scaling en-velope, we demonstrate that storage dominates beyond moderate concurrency, reframing WSI embedding extraction as a data-centric systems problem rather than a purely compute-bound workload. 
+
+I. I NTRODUCTION 
+
+Whole-slide images (WSIs) are a cornerstone of compu-tational pathology, enabling high-resolution analysis of tis-sue at gigapixel scale. The emergence of foundation models has further increased the demand for large-scale embedding extraction from WSIs, supporting downstream tasks such as retrieval, classification, and cohort-level analysis. However, the sheer size of WSIs—often exceeding tens of gigapixels per im-age—makes direct processing infeasible, necessitating patch-based decomposition as the fundamental unit of computation. 
+
+Notice: Office of Science of the U.S. Department of Energy. This manuscript has been authored by UT-Battelle, LLC, under contract DE-AC05-00OR22725 with the US Department of Energy (DOE). The US government retains and the publisher, by accepting the article for publication, acknowledges that the US government retains a nonexclusive, paid-up, irre-vocable, worldwide license to publish or reproduce the published form of this manuscript, or allow others to do so, for US government purposes. DOE will provide public access to these results of federally sponsored research in ac-cordance with the DOE Public Access Plan (http://energy.gov/downloads/doe-public-access-plan). 
+
+While patching enables scalable model inference, it also fundamentally reshapes the systems problem. At moderate scale, patches can be generated and processed on demand with acceptable overhead. At large scale, the need to generate, move, and process millions of patches introduces significant data orchestration challenges. In particular, patch generation from large WSIs, coordination of data movement across stor-age and compute nodes, and efficient handling of intermediate representations can dominate runtime, shifting the bottleneck away from accelerator throughput toward I/O and pipeline design. Existing WSI pipelines are typically designed as tightly coupled workflows in which patch generation, model infer-ence, and output handling are interleaved. While such designs simplify implementation, they often lead to inefficient resource utilization, increased contention on shared storage systems, and limited scalability. Furthermore, these pipelines frequently treat embedding outputs as transient artifacts, missing the opportunity to store reusable embeddings that can be used for downstream applications and reduce the cost of future large-scale computation. We define an I/O-dominated workload as an end-to-end run-time governed by data movement and storage system behavior rather than compute throughput or communication overhead. By data-centric, we refer to workloads where performance is determined primarily by data orchestration—generation, movement, and persistence—rather than computation or com-munication. Large-scale WSI embedding extraction is an I/O-dominated, data-centric workload in which performance is governed by data movement and storage system behavior rather than compute or communication. In this work, we show the utility of treating large-scale WSI embedding extraction as a data-centric systems problem, rather than a purely compute-driven workload. To this end, we present a decoupled pipeline architecture that separates the workflow into three stages: (1) patch generation and I/O-aware data staging, (2) massively parallel embedding inference, and (3) sharded vector database ingestion. This decomposition enables each stage to be optimized independently according to its dominant constraints—storage throughput, compute par-allelism, and data management—while minimizing cross-stage interference. arXiv:2608.27278v1 [cs.DC] 27 Aug 2026 A central aspect of our design is the treatment of the vector database as a reusable resource to be shared with the scientific and medical communities. Rather than producing embeddings as temporary files used for a specific project, our pipeline directly ingests them into a distributed, sharded vector database, with rich metadata (e.g., patient, slide, and patch-level attributes) persistently associated with each embedding. This creates a shared resource that supports efficient index-ing, filtering, and retrieval, converting the output of large-scale computation into a reusable, queryable, and energy-efficient resource that accelerates downstream analyses. A stored embedding resource is also particularly valuable in low-resource environments, where extracting embeddings from a large number of WSIs is impractical. We implemented our pipeline on Oak Ridge Leadership Computing - Frontier Exascale System [1] and evaluated it on a large-scale WSI dataset. Our results show that decoupling patch orchestration, inference, and ingestion enables high throughput, scalability, and resource efficiency. More broadly, our work demonstrates that aligning pipeline structure with data movement characteristics is necessary for scaling data-intensive AI workloads. This paper makes the following contributions:  
+
+> •
+
+We identify and characterize WSI embedding extraction as an I/O- and orchestration-dominated workload at large scale.  
+
+> •
+
+We design and implement a three-stage decoupled pipeline that separates patch generation, parallel infer-ence, and sharded vector database ingestion.  
+
+> •
+
+We introduce the construction of metadata-aware vector databases as a reusable resource for large-scale WSI processing pipelines.  
+
+> •
+
+We demonstrate improved scalable execution and charac-terize resource bottlenecks on supercomputing infrastruc-ture. II. B ACKGROUND , M OTIVATION AND RELATED WORK 
+
+Recent advances in computational pathology have been driven by large-scale representation learning for WSIs. Early approaches relied on weak supervision and multiple-instance learning to aggregate patch-level features into slide-level pre-dictions [14], [15]. Subsequent work introduced self-supervised learning and vision transformer-based approaches that improved represen-tation quality and generalizability [16]. Hierarchical archi-tectures such as HIPT further model multi-scale structure, capturing both cellular and tissue-level context [2]. More recently, whole-slide foundation models have emerged as the dominant paradigm. Models such as Virchow and H-Optimus-0 leverage large-scale pretraining on histopathology datasets to achieve strong performance across tasks [3], [4]. Multimodal extensions (e.g., TITAN, mSTAR) integrate WSIs with clinical reports and molecular data, enabling retrieval, pathology report generation, and cross-modal reasoning [17], [18]. Despite these advances, prior work largely focuses on improving model accuracy and do not address computational bottlenecks that slow large scale deployment. On the systems side, WSI pipelines are typically imple-mented as tightly coupled workflows in which patch gener-ation, model inference, and output handling are interleaved. While such designs simplify implementation, they limit scala-bility due to shared I/O contention and prevent independent optimization of pipeline stages. As noted in our pipeline formulation, WSI processing naturally decomposes into patch generation, embedding inference, and data management stages with distinct resource characteristics . In parallel, the HPC community has extensively studied data movement bottlenecks in large-scale workflows. Prior work highlights that I/O and data orchestration increasingly dom-inate runtime and proposes techniques such as burst buffers, hierarchical storage, and workflow decoupling [9], [10], [8]. However, these approaches are designed for workloads that in-volve large contiguous datasets and structured communication patterns. In contrast, WSI pipelines generate massive numbers of small, independent data objects and exhibit embarrassingly parallel computation with minimal communication, creating a mismatch with existing HPC assumptions. Recent HPC efforts have begun to explore WSI-scale work-loads. Systems such as GEMS demonstrate distributed training for high-resolution pathology images [6], and subsequent work investigates scalable pipelines for gigapixel WSI processing on leadership-class systems [7]. However, these approaches primarily focus on training or preprocessing and do not address embedding extraction pipelines or their I/O-dominant behavior. On the data systems side, vector databases such as FAISS and Milvus enable scalable indexing and retrieval over large embedding collections [11], [12]. Emerging WSI ecosystems such as LazySlide emphasize interoperability and integra-tion with downstream multimodal workflows [13]. However, these systems remain decoupled from upstream embedding pipelines, and embeddings are typically treated as transient outputs rather than reusable resources. What is missing is a system that treats WSI embedding ex-traction itself as an I/O-dominant pipeline, rather than assum-ing patch access is cheap. WSI models focus on representation learning, HPC systems address data movement under different assumptions, and vector databases operate independently of data generation pipelines. No prior work jointly addresses I/O-dominant embedding extraction, pipeline decoupling, and embedding reuse in large-scale WSI processing. III. WSI P IPELINE AND PARALLEL EXECUTION MODEL 
+
+Our pipeline (Figure 1) is organized as three decoupled stages: patch generation, embedding inference, and vector-database ingestion. The key systems design choice is that each stage is parallelized according to its dominant bottleneck rather than forcing a single end-to-end execution strategy. In the current implementation, Stage 1 uses MPI-based spatial decomposition over patch coordinates, Stage 2 uses SPMD (Single Program Multiple Data) rank-parallel inference with Category Model / System Learning Type Data Scale Key Strength Pipeline Coupling I/O Aware-ness Scalability Embedding Reuse                                                                     
+
+> WSI Representation Models Used in This Work
+> Hierarchical HIPT [2] Hierarchical SSL 10,678 WSIs Multi-scale tissue modeling N/A ×N/A Partial Foundation Model Virchow /Virchow2 [3] Large-scale SSL 1.5M–3.1M+ H&E slides Strong general-purpose features N/A ×N/A Partial Foundation Model H-Optimus /H-Optimus-0 [4] Pathology FM Large-scale histopathology corpus Pathology-specialized representation learning N/A ×N/A Partial
+> WSI and HPC Pipelines
+> Traditional Pipelines OpenSlide-based workflows [5] Patch extraction + inference Variable Simple and widely used Tight ×Limited ×
+> HPC Pipelines GEMS [6], scalable WSI HPC pipeline [7] Distributed training /preprocessing Large-scale WSI workloads Demonstrates HPC viability for WSI-scale data Partial Partial High ×
+> HPC and Data Systems
+> HPC Workflows Pegasus [8] Workflow DAGs Large-scale science Decoupled execution Decoupled ✓High N/A I/O-Aware Systems Burst buffers, I/O studies [9], [10] Storage optimization HPC workloads Data movement opti-mization Decoupled ✓High N/A Vector Databases FAISS /Milvus [11], [12] ANN indexing Billion-scale vectors Fast retrieval Separate ✓High ✓
+> WSI Tooling LazySlide [13] Interoperable WSI software Large-scale WSI analysis Integration with downstream multimodal workflows Partial Partial Moderate ✓
+> This Work
+> Decoupled WSI Pipeline Ours Multi-stage pipeline 100M+ patches I/O-dominant scaling with reusable em-beddings
+> Fully de-coupled
+> ✓High (embar-rassingly parallel)
+> ✓
+> (persistent + metadata)
+
+TABLE I: Comparison of representative WSI models, WSI/HPC pipelines, and data systems. Modern pathology models improve representation quality but generally assume efficient data access. Our work targets the orthogonal systems problem: scalable, I/O-aware embedding extraction with persistent reuse. one data shard per task/GPU, and Stage 3 uses shard-parallel database construction. This decoupling is central to making the workflow HPC-ready because it isolates I/O-heavy expansion, accelerator-heavy inference, and write-heavy persistence into independently scalable components. 
+
+Stage 1: Patch Generation (MPI Spatial Decomposition) 
+
+Patch generation is implemented as an MPI program over a single WSI at a specified pyramid level. All ranks in-dependently construct the same global grid of valid patch coordinates. Work is distributed using deterministic cyclic par-titioning , where rank r processes indices r, r + R, r + 2 R, . . . ,with R denoting the total number of MPI ranks. For each assigned coordinate (xL, y L) at level L, the rank maps to level-0 coordinates using the slide downsampling factor, reads the corresponding patch via read_region ,computes a white-background fraction, and writes the patch to a rank-local directory. Metadata including spatial coordinates, centroid, and patch path are stored locally. No communication occurs in the steady-state extraction loop. Synchronization is limited to a single barrier, after which rank 0 gathers metadata from all ranks and writes a global index.csv . This design avoids communication in the critical path, but introduces significant filesystem pressure due to large-scale small-file writes. This stage exhibits spatial data parallelism over the WSI coordinate space. The cyclic partitioning ensures balanced work distribution even under irregular tissue layouts, while avoiding synchronization during extraction. However, perfor-mance is dominated by small-file I/O and filesystem contention rather than compute. 
+
+Stage 2: Embedding Inference (SPMD Data Parallelism) 
+
+Embedding extraction is executed in Single Program, Multiple Data (SPMD) fashion across distributed tasks, typically with one task per GPU. Each task independently loads the same patch index and constructs an identical dataset abstraction. Work is partitioned using strided indexing , where task r
+
+processes dataset entries r, r + R, r + 2 R, . . . .Each rank processes its subset using a local DataLoader ,performing batched inference with a foundation model (e.g., HIPT, Virchow, H-Optimus-0). Depending on model capabil-ities, embeddings and attention tensors are extracted either in a single forward pass or in separate passes. No collective communication (e.g., all-reduce) is used dur-ing inference. Instead, each rank accumulates results locally Fig. 1: Decoupled WSI embedding pipeline. The workflow is organized into three stages: (1) MPI-based patch generation and staging, (2) embarrassingly parallel embedding inference across GPUs, and (3) shard-parallel vector database ingestion. Each stage is parallelized according to its dominant constraint—storage, compute, and write throughput—enabling independent scaling. The pipeline produces a persistent, metadata-aware embedding database for downstream reuse. 
+
+Algorithm 1 Distributed Patch Generation with Cyclic Coor-dinate Partitioning 
+
+Require: WSI S, level L, patch size p, stride s, ranks 
+
+0, . . . , R − 1 
+
+> 1:
+
+Each rank opens S 
+
+> 2:
+
+G ← grid_coords (S, L, p, s ) 
+
+> 3:
+
+Gr ← {G [i] | i mod R = r} 
+
+> 4:
+
+for all (i, j, x L, y L) ∈ G r do  
+
+> 5:
+
+d ← level downsample factor  
+
+> 6:
+
+(x0, y 0) ← (round( xL · d), round( yL · d))  
+
+> 7:
+
+P ← read_region (S, (x0, y 0), L, (p, p ))  
+
+> 8:
+
+ω ← white fraction of P 
+
+> 9:
+
+Save P to rank-local storage  
+
+> 10:
+
+Record metadata (x0, y 0, x L, y L, ω, path ) 
+
+> 11:
+
+end for  
+
+> 12:
+
+MPI Barrier  
+
+> 13:
+
+Rank 0 gathers metadata and writes index.csv 
+
+and serializes them to disk. Synchronization is deferred to a final consolidation step, where rank 0 gathers all rank outputs via file-based coordination, merges them, sorts patches by spatial coordinates, and writes per-WSI embedding files. This stage exhibits embarrassingly parallel data paral-lelism . Each rank operates independently with no communi-cation in the critical path. Unlike traditional distributed deep learning, there is no parameter synchronization or gradient ex-change. The only coordination occurs at the end of execution, where outputs are merged via file-based aggregation. 
+
+Stage 3: Vector Database Ingestion (Write-Parallel Shard-ing) 
+
+The final stage aggregates embeddings into a persistent vec-tor database, enabling downstream retrieval and analytics. This stage is constrained primarily by write throughput and index-ing overhead rather than compute. The shards are partitioned at file granularity to reduce coordination overhead. Vector database ingestion is implemented as streaming ingestion with batched inserts. We also have file-level checkpointing for fault tolerance. This design exposes shard-level parallelism and can scale with the number of shards until limited by filesystem through-put while preserving spatial and metadata relationships. The embedding and metadata in vector database becomes a per-sistent resource rather than transient outputs, allowing down-stream tasks to operate directly on stored representations without repeatedly accessing raw WSIs. IV. E XPERIMENTAL SETUP 
+
+A. Dataset 
+
+We evaluate the proposed pipeline on 4,185 hematoxylin and eosin (H&E) whole-slide images from the Childhood Cancer Data Initiative Molecular Characterization Initiative, obtained via the National Cancer Institute Imaging Data Com-mons (CCDI MCI). The dataset spans a wide range of slide sizes and tissue content, yielding multi-resolution workloads Algorithm 2 SPMD Embedding Extraction with Rank-Local Shards 
+
+Require: Patch index I, model fθ , ranks 0, . . . , R − 1 
+
+> 1:
+
+Each rank loads I and constructs dataset D 
+
+> 2:
+
+Dr ← {D [i] | i mod R = r} 
+
+> 3:
+
+Initialize DataLoader over Dr 
+
+> 4:
+
+for all mini-batch B ⊂ D r do  
+
+> 5:
+
+Load patches and coordinates  
+
+> 6:
+
+Apply preprocessing  
+
+> 7:
+
+if model supports joint extraction then  
+
+> 8:
+
+(E, A ) ← fθ (B) 
+
+> 9:
+
+else  
+
+> 10:
+
+E ← f embed  
+
+> θ
+
+(B) 
+
+> 11:
+
+if attention supported then  
+
+> 12:
+
+A ← f attn  
+
+> θ
+
+(B) 
+
+> 13:
+
+end if  
+
+> 14:
+
+end if  
+
+> 15:
+
+Append (E, A, coords ) to local buffers  
+
+> 16:
+
+end for  
+
+> 17:
+
+Serialize local results to rank-specific file  
+
+> 18:
+
+Write completion marker  
+
+> 19:
+
+Rank 0 loads all rank outputs, merges and sorts by coordinates  
+
+> 20:
+
+Write final embedding (and attention) files 
+
+Algorithm 3 Sharded Vector Database Ingestion 
+
+Require: Embedding File set E, metadata M, shards K 
+
+> 1:
+
+for all rank r ∈ { 1, . . . , K } in parallel do  
+
+> 2:
+
+Initialize shard database Dr 
+
+> 3:
+
+Assign subset (Er , Mr ) 
+
+> 4:
+
+for all (ei, m i) ∈ (Er , Mr ) do  
+
+> 5:
+
+Insert (ei, m i) into Dr 
+
+> 6:
+
+end for  
+
+> 7:
+
+Build local index on Dr 
+
+> 8:
+
+end for  
+
+> 9:
+
+Parallel query across shards at application level or indi-vidual shard can also be queried. from tens to more than 10 5 patches per WSI. This diversity enables evaluation across both small- and large-scale regimes and captures variability representative of real-world pathology cohorts.      
+
+> CCDI Dataset No. of Tissue Samples 4185 No. of Patients 4054 No. of DICOMS 19,603 No. of Patches (256x256) 414M No. of Non-White Patches 170M
+
+TABLE II: CCDI Dataset Statistics 
+
+B. Models 
+
+We consider three representative foundation models—HIPT, H-Optimus-0, and Virchow2—which differ in patch resolution, embedding dimensionality, and computational characteristics. This variation allows us to evaluate whether observed system behavior is consistent across models with different compute intensity and output sizes. 
+
+C. System and Hardware 
+
+All experiments are conducted on the Frontier system at Oak Ridge National Laboratory. Each compute node consists of a single 64-core AMD EPYC CPU paired with 8 AMD Instinct MI250X GPUs, interconnected via the Slingshot high-speed network. The system is backed by the Orion parallel filesystem, a Lustre-based storage system designed for exascale workloads. Orion provides high aggregate bandwidth but is subject to metadata and small-file access constraints under high concur-rency. These characteristics are particularly relevant for our workload, which generates and accesses millions of small patch files concurrently across nodes. This hardware configuration directly influences observed performance behavior: while GPU compute capacity is abun-dant, effective throughput is governed by filesystem bandwidth and metadata scalability. As a result, the experiments capture realistic system-level bottlenecks encountered in data-intensive workloads on leadership-class HPC systems. 
+
+D. Experimental Methodology 
+
+The evaluation covers all three stages of the pipeline. Patch generation is executed using MPI-based CPU parallelism over spatial coordinates, producing large collections of small files and exposing filesystem-level scaling behavior. Embedding extraction is evaluated under both multi-node distributed ex-ecution (for large workloads) and single-GPU per-WSI ex-ecution (for small workloads), enabling comparison across parallelization regimes. The vector database ingestion stage is evaluated using shard-parallel insertion into a distributed vector database, capturing write-intensive behavior at scale. To isolate system bottlenecks in the embedding stage, we organize experiments into four setups. Setup A varies patch count for a fixed WSI and hardware configuration to characterize the transition from compute-bound to I/O-dominated execution. Setup B performs strong-scaling analysis by increasing GPU count for a fixed workload, revealing the impact of storage contention on parallel efficiency. Setup C uses kernel-level profiling to verify that GPU execution re-mains efficient and that end-to-end limitations arise from data movement rather than compute. Setup D evaluates production-scale behavior across thousands of WSIs, capturing variability in workload size, runtime, and scheduling dynamics. Across all stages, we measure runtime, throughput, speedup, and efficiency to distinguish compute scaling from storage-limited behavior. Stage-specific metrics include file counts, output size, average file size, and write throughput for patch generation; GPU utilization, I/O fraction, and per-WSI runtime for embedding extraction; and insertion rate, total runtime, and memory footprint for vector database ingestion. V. R ESULTS 
+
+We evaluate the proposed pipeline to understand how per-formance evolves with scale and to identify the dominant bottlenecks at each stages. Across all experiments, a consistent pattern emerges: although each stage is embarrassingly parallel in isolation, end-to-end performance is ultimately limited by data movement and storage system behavior rather than compute or communication. 
+
+A. Patch Generation Scaling 
+
+Table II shows patch-generation performance on a single node (56 MPI ranks). Increasing patch size from 224 to 256 reduces file count while keeping total output size nearly con-stant, resulting in consistently lower runtime and higher write throughput. For example, reducing file count by 25% yields proportional throughput improvements, despite a negligible change in total bytes written. This shows that performance is driven by the number of files (metadata overhead), not data volume . Strong scaling results shown in Table III further support the conclusions that performance is bound by the number of files. Increasing ranks from 56 to 224 yields a 1.69× speedup (42.3% efficiency), while aggregate throughput increases sublinearly. Despite the absence of communication, scaling degrades due to shared filesystem contention. These results show that patch generation transitions from communication-free overhead to I/O-dominated performance as parallelism increases, with additional resources increasing storage pressure rather than improving performance. 
+
+B. Embedding Inference Analysis 
+
+Setup A: Patch Sweep — Identifying I/O-Dominated Behavior 
+
+Figure 2 evaluates performance as patch count increases for a fixed WSI and hardware configuration. At small scales, throughput increases with workload size and execution re-mains compute-dominated. As patch count increases, through-put plateaus while I/O wait-time increases, indicating that the movement of the data becomes the limiting factor (Fig-ure 2b,Figure 2c). GPU utilization remains modest at all scales (Figure 2a), despite sufficient computing capacity. This confirms that accel-erators are underutilized due to input data latency rather than insufficient compute. As workload size increases, throughput flattens, I/O wait grows, and GPU utilization stays modest, in-dicating a transition to I/O-dominated execution even without communication overhead. 
+
+Setup B: Strong Scaling — From Communication-Free to I/O-Dominated 
+
+Figure 3 shows strong scaling behavior across HIPT, H-Optimus-0, and Virchow2. Throughput increases with GPU count, but scaling is not linear, with efficiency dropping below 30–50% at higher concurrency. This degradation occurs despite fully independent execution without collective commu-nication. The key result is that communication-free execution (in critical path) does not guarantee scalability. Instead, perfor-mance is limited by shared storage bandwidth and metadata contention as all workers concurrently load patch data. Increas-ing parallelism saturates the I/O path, leading to diminishing returns and early efficiency collapse. 
+
+Setup C: Kernel-Level Analysis — Not Compute-Bound 
+
+Kernel-level profiling (Fig. 4a) shows that model execution op-erates in compute-efficient regions relative to hardware limits. Across models, kernels achieve high arithmetic intensity and do not approach memory-bound ceilings, indicating that GPU execution itself is efficient. However, kernel durations are short (Fig. 4b), exposing latency between batches. As a result, GPUs stall waiting for data despite efficient kernel execution. This confirms that the embedding stage is not compute-bound in practice, and that performance limitations arise from upstream data delivery rather than model inefficiency. 
+
+Setup D: Production-Scale Behavior — Orchestration and Variability 
+
+Production-scale results across 4,185 WSIs (Fig. 5a) show that throughput increases with patch count due to amortization of fixed overheads. However, significant variance remains across runs, reflecting storage contention and heterogeneous slide characteristics. Larger WSIs benefit from better amorti-zation, while smaller WSIs suffer from disproportionate I/O costs. Per-worker completion times (Fig. 5b) reveal substantial spread, with stragglers determining overall runtime. This vari-ability highlights the importance of orchestration and load balancing in large-scale deployments. These results confirm that I/O-dominated behavior persists at production scale and is amplified by workload heterogeneity and system-level con-tention. 
+
+C. Vector Database Ingestion Analysis 
+
+Table VII shows strong scaling for VDB ingestion. Throughput increases from 22K to 188K rows/s (8.5× speedup), but efficiency peaks at intermediate scale (86.7% at 4 nodes) and declines at higher concurrency. This non-monotonic behavior reflects the balance between parallelism and filesystem contention. At low concurrency, available bandwidth is underutilized; at high concurrency, metadata and read contention dominate. Importantly, VDB ingestion remains I/O-bound, with perfor-mance determined by read bandwidth and write amplification during indexing rather than compute. This mirrors behavior observed in earlier stages. Notably, the ingestion stage is embarrassingly parallel from a compute perspective: each rank independently processes a subset of embedding files and writes to a separate shard without coordination. However, all ranks share the underlying storage system, making I/O the dominant bottleneck. As con-currency increases, contention for read bandwidth and meta-data access limits scalability, leading to diminishing returns. Slide Patch Size Nodes MPI Ranks Runtime (s) Files Created Output Size (GB) Avg File Size (KB) Write Throughput (MB/s) 
+
+ff93fcc3 224 1 56 19.82 93,696 2.42 25.8 116.22 
+
+ff93fcc3 256 1 56 17.21 71,773 2.40 33.4 133.03 
+
+d47c2741 224 1 56 40.67 184,785 6.75 36.5 158.20 
+
+d47c2741 256 1 56 34.11 141,561 6.71 47.4 187.60 
+
+ca6e4e7a 224 1 56 47.24 224,133 9.94 44.4 200.67 
+
+ca6e4e7a 256 1 56 42.02 171,702 9.88 57.5 224.27 
+
+TABLE III: Stage 1 patch-generation performance for three representative slides at 56 MPI ranks using patch sizes 224 and 256. The selected slides span smaller, medium, and larger output footprints in the benchmark set. Increasing patch size reduces the number of generated files while increasing average file size and effective write throughput. 
+
+Patch Size Nodes MPI Ranks Runtime (s) Speedup Efficiency (%) Files Created Write Throughput (MB/s) 
+
+224 1 56 22.39 1.00 × 100.0 93,696 102.66 224 2 112 18.85 1.19 × 59.4 93,696 122.99 224 4 224 13.22 1.69 × 42.3 93,696 177.50 256 1 56 16.89 1.00 × 100.0 71,773 135.46 256 2 112 13.41 1.26 × 63.0 71,773 171.57 256 4 224 9.56 1.77 × 44.2 71,773 244.02 
+
+TABLE IV: Stage 1 strong-scaling results for one representative slide (ID ff93fcc3-7bc2-4656-8e2d-e379180fa042 )using patch sizes 224 and 256 across 56, 112, and 224 MPI ranks. Speedup and parallel efficiency are computed relative to the 56-rank baseline for each patch size. The sublinear scaling and rising write throughput are consistent with the I/O-dominated behavior                                                                                                
+
+> Model GPUs Throughput Speedup Efficiency I/O % h-optimus-0 1110.7 1.00x 100.0% 1.8 h-optimus-0 2187.7 1.70x 84.8% 2.5 h-optimus-0 4284.0 2.57x 64.1% 3.5 h-optimus-0 8362.5 3.27x 40.9% 6.5 h-optimus-0 16 600.3 5.42x 33.9% 10.7 h-optimus-0 40 855.8 7.73x 19.3% 15.5 hipt 1153.7 1.00x 100.0% 35.4 hipt 2224.8 1.46x 73.1% 25.7 hipt 4352.9 2.30x 57.4% 20.3 hipt 8407.1 2.65x 33.1% 9.5 hipt 16 719.3 4.68x 29.2% 10.2 hipt 40 1104.1 7.18x 18.0% 15.0 virchow2 169.8 1.00x 100.0% 1.2 virchow2 2125.5 1.80x 89.9% 1.8 virchow2 4210.5 3.02x 75.4% 2.3 virchow2 8318.9 4.57x 57.1% 5.1 virchow2 16 555.6 7.96x 49.7% 6.6 virchow2 40 826.9 11.85x 29.6% 12.9
+
+TABLE V: Strong scaling of embedding inference across models. Throughput increases with GPU count, but efficiency degrades and I/O fraction rises with concurrency. This indi-cates that scaling is limited by shared storage bandwidth rather than compute or communication. Memory usage remains stable across configurations (ap-proximately 0.6 GB per rank), confirming that the ingestion process follows a streaming design without significant in-memory accumulation. This indicates that performance lim-itations arise from external I/O constraints rather than internal resource pressure. Overall, these results demonstrate that vector database in-gestion, like earlier pipeline stages, is fundamentally I/O-bound. While shard-level parallelism enables substantial throughput gains, scalability is ultimately constrained by shared filesystem behavior. The 4-node configuration repre-sents a practical operating point, balancing parallelism with manageable storage contention. VI. D ISCUSSION 
+
+Our results consistently show that large-scale WSI embed-ding extraction deviates from classical compute-bound scal-ing assumptions and instead exhibits I/O-dominated behavior across all pipeline stages. While each stage (patch generation, embedding inference, and vector database ingestion) exhibits ideal parallel complexity in isolation, end-to-end performance is governed by data movement and storage system constraints. From a scaling perspective, patch generation nominally fol-lows O(N/R ) work distribution across ranks, but in practice incurs significant per-patch overhead due to small-file creation and metadata operations. As shown in Tables III, IV, increas-ing parallelism yields sublinear speedup despite the absence of communication, indicating that filesystem contention—not computation—limits scalability. This behavior is driven by the expansion of WSIs into millions of independent patches, where metadata overhead becomes comparable to data movement. A similar pattern emerges in the embedding stage. Although model inference is computationally efficient—as confirmed by kernel-level analysis (Fig 4); GPU utilization remains modest and throughput plateaus as patch counts increase (Fig 2). The limiting factor is not compute capacity, but (a) Mean GPU utilization. (b) Throughput vs patch count. 
+
+> (c) Extraction-time breakdown by phase.
+
+Fig. 2: Setup A (Patch Sweep). As patch count increases, throughput plateaus while I/O wait grows and GPU utilization remains modest, indicating a transition from compute-bound to I/O-dominated (storage-limited) execution. This shows that increasing workload size does not improve accelerator utilization when data delivery becomes the bottleneck.                             
+
+> Model Total Rows Avg Rate Max Rate Files Mean File Time (s) Total Time (min) RSS Max (GB) HIPT 6,143,506 2628.88 2775 14,499 4.27 1032.18 0.62 Optimus 2,298,630 258.71 321 4,052 55.59 3754.24 1.68 Virchow2 5,413,012 131.86 155 11,726 116.52 22772.80 2.74
+
+TABLE VI: Performance comparison of large-scale VDB ingestion of embedding across three foundation models. Rows are sorted by average ingestion throughput (rows/sec), highlighting substantial performance differences across embedding backbones. HIPT achieves the highest throughput and lowest per-file processing time, while Virchow2 exhibits significantly slower ingestion despite processing a comparable number of rows. We also observe increased memory footprint and total runtime for larger embedding sizes (e.g., Virchow2), emphasizing the importance of model efficiency in distributed vector database construction. input data latency: GPUs stall between batches waiting for patch delivery. Strong-scaling results (Fig. 3) further rein-force this point—performance degrades with increasing GPU count despite fully independent execution, demonstrating that communication-free designs do not eliminate scaling bottle-necks when storage bandwidth is shared. Vector database ingestion exhibits the same fundamental constraint. While shard-parallel insertion enables throughput improvements (Table VII), efficiency peaks at intermediate scale and declines under higher concurrency due to read contention and write amplification. This confirms that even downstream stages, which are conceptually independent, re-main bounded by storage system behavior. These observations can be summarized by a simple perfor-mance model: 
+
+T (R) = max 
+
+ NR , N · B
+
+BW storage 
+
+
+
+where N is the total number of patches to process, R is the effective compute processing rate, B is the average number of bytes transferred per patch, and BW storage is the effective storage bandwidth. Increasing compute capacity reduces the compute term, N/R , but does not reduce the data-transfer term, N B/ BW storage . This explains the observed plateau in Fig. 3: Setup B. Strong-scaling efficiency versus GPU count across models. Despite fully independent execution with no collective communication in the critical path, scaling deviates from linear and efficiency drops at higher concurrency. This demonstrates that performance is limited by shared storage bandwidth rather than communication overhead.                          
+
+> Nodes Agg. Rate (rows/s) Wall Time (min) Speedup Efficiency (%) RSS Max (GB) 122,216 ∗127.9 ∗1.00 ×100.0 0.58 240,694 83.84 1.53 ×76.3 0.59 486,099 36.90 3.47 ×86.7 0.60 8188,020 20.79 6.15 ×76.9 0.59
+
+TABLE VII: Strong scaling ablation for HIPT embedding VDB ingestion on Frontier. Each configuration ingests the same 
+
+∼170 M embedding rows into Milvus; we vary the number of nodes (16 ranks each) and report aggregate throughput, wall-clock time, speedup, and parallel efficiency (speedup /N ). ∗Extrapolated from observed rate; the 1-node run did not complete within the 2-hour allocation. The 4-node configuration achieves the highest parallel efficiency ( 86 .7% ) and corresponds to the production run in Table VI. throughput and collapse in parallel efficiency beyond moderate scale. Importantly, this I/O-dominated behavior is not merely a systems artifact but a direct consequence of the biomedical workload structure. WSIs are inherently high-resolution and large-scale, and meaningful analysis requires preserving patch-level granularity. This transforms compact slide data into massive collections of small, independently processed objects, making data movement unavoidable. In addition, embeddings must remain linked to their originating patches and spatial metadata to support interpretability and downstream clinical use. As a result, eliminating data movement is neither feasible nor desirable. Instead, our results suggest a shift in system design pri-orities: optimizing compute alone is insufficient. Scalable WSI pipelines must explicitly account for data orchestration, storage access patterns, and intermediate data representation. The decoupled pipeline design proposed in this work addresses this requirement by isolating I/O-heavy, compute-heavy, and write-heavy stages, enabling independent optimization and reducing cross-stage interference. Overall, our findings reposition large-scale WSI embedding extraction as a data-centric systems problem, where perfor-mance is governed not by accelerator throughput or commu-nication, but by the ability to efficiently generate, move, and persist massive intermediate datasets. VII. C ONCLUSION 
+
+We presented a decoupled, I/O-aware pipeline for large-scale whole-slide image embedding extraction that separates patch generation and staging, embarrassingly parallel infer-ence, and sharded vector database ingestion. Across controlled benchmarks and production-scale runs, we showed that this workload is fundamentally constrained by data movement and orchestration, rather than by collective communication or peak accelerator throughput. Throughput plateaus, modest GPU utilization, rising I/O fractions under scaling, and substantial VDB ingestion costs all point to the same conclusion: large-scale WSI embedding extraction is best understood as a data-centric systems problem. Finally, the pipeline produces a persistent vector database in which embeddings are stored together with their associ-ated metadata, including spatial and slide-level context. This representation allows downstream tasks to operate directly on embeddings without repeatedly accessing raw WSIs, avoiding redundant patch extraction and reducing I/O overhead. As a result, embedding extraction becomes a one-time data gen-eration stage whose outputs can be reused across analyses. This is particularly important at scale, where data movement dominates runtime and repeated access to raw images is costly. (a) Roofline positioning of model kernels against hardware compute/bandwidth ceilings. We include this to distinguish kernel-local limits from system-level limits. Even when kernels operate in compute-favorable regions, the overall pipeline can remain data-movement-bound due to upstream patch delivery constraints. 
+
+(b) Kernel-category time composition (e.g., GEMM, convolution, elementwise) by model. We include this to explain model-dependent I/O sensitivity through internal compute structure: kernels may be efficient yet short enough that filesystem latency becomes exposed between batches. 
+
+Fig. 4: Setup C (Kernel-level analysis) VIII. A CKNOWLEDGMENTS 
+
+OLCF: This research used resources of the Oak Ridge Leadership Computing Facility, which is a US Department of Energy (DOE) Office of Science User Facility supported un-der Contract DE-AC05-00OR22725. RADIANCE: This work has been supported by DOE’s Office of Science, Office of Advanced Scientific Computing under award number DE-SC-KJ0403010. UT Battelle: This research has been au-thored by UT-Battelle LLC under contract number DE-AC05-00OR22725 with the DOE. REFERENCES [1] S. Atchley, C. Zimmer, J. Lange, D. Bernholdt, V. Melesse Vergara, T. Beck, M. Brim, R. Budiardja, S. Chandrasekaran, M. Eisenbach, T. Evans, M. Ezell, N. Frontiere, A. Georgiadou, J. Glenski, P. Grete, S. Hamilton, J. Holmen, A. Huebl, D. Jacobson, W. Joubert, K. Mcmahon, E. Merzari, S. Moore, A. Myers, S. Nichols, S. Oral, T. Papatheodore, D. Perez, D. M. Rogers, E. Schneider, J.-L. Vay, and P. K. Yeung, “Frontier: Exploring exascale,” in Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis , ser. SC ’23. New York, NY, USA: Association for Computing Machinery, 2023. [Online]. Available: https://doi.org/10.1145/3581784.3607089 [2] R. J. Chen, M. Y. Lu, M. T. Shaban, T. Y. Chen, D. F. Williamson, and F. Mahmood, “Scaling vision transformers to gigapixel images via hierarchical self-supervised learning,” in Proceedings of CVPR , 2022. [Online]. Available: https://doi.org/10.48550/arXiv.2206.02647 [3] G. Jaume et al. , “A foundation model for clinical-grade computational pathology and rare cancers detection,” Nature Medicine , 2024. [Online]. Available: https://doi.org/10.1038/s41591-024-03141-0 [4] C. Saillard, R. Jenatton, F. Llinares-L´ opez, Z. Mariet, D. Cahan´ e, E. Durand, and J.-P. Vert, “H-optimus-0,” 2024. [Online]. Available: https://github.com/bioptimus/releases/tree/main/models/h-optimus/v0 [5] A. Goode, B. Gilbert, J. Harkes, D. Jukic, and M. Satyanarayanan, “Openslide: A vendor-neutral software foundation for digital pathology,” 
+
+Journal of Pathology Informatics , vol. 4, 2013. [Online]. Available: https://doi.org/10.4103/2153-3539.119005 (a) Setup D. Throughput versus WSI patch count across production levels. We include this to test generalization beyond controlled sweeps. Larger WSIs amortize fixed overheads better, while residual variance captures storage jitter/contention and heterogeneous slide complexity seen in real deployments. 
+
+(b) Setup D. Per-worker completion-time variance for representative runs. We include this because wall-clock stage time is determined by stragglers. Large spreads indicate non-trivial idle tails and motivate work-stealing and better load balancing for I/O-sensitive model settings. 
+
+Fig. 5: Setup D (Production Scale Behavior) 
+
+[6] S. Mohanty et al. , “Gems: Gpu-enabled memory-aware model-parallelism system for distributed dnn training,” in SC Conference ,2020. [Online]. Available: https://doi.org/10.1109/SC41405.2020.00049 [7] S. Dash, B. Hern´ andez, A. Tsaris, F. T. Alamudun, H.-J. Yoon, and F. Wang, “A scalable pipeline for gigapixel whole slide imaging analysis on leadership class hpc systems,” in 2022 IEEE International Parallel and Distributed Processing Symposium Workshops (IPDPSW) ,2022, pp. 1266–1274. [Online]. Available: https://doi.org/10.1109/ IPDPSW55747.2022.00223 [8] E. Deelman, K. Vahi, G. Juve, M. Rynge, S. Callaghan, P. J. Maechling, R. Mayani, W. Chen, R. F. da Silva, M. Livny, and K. Wenger, “Pegasus: A workflow management system for science automation,” Future Generation Computer Systems , vol. 46, pp. 17–35, 2015. [Online]. Available: https://doi.org/10.1016/j.future.2014.10.008 [9] H. Shan, K. Antypas, and J. Shalf, “Characterizing and predicting the i/o performance of hpc applications using a parameterized synthetic benchmark,” in Proceedings of the 2008 ACM/IEEE Conference on Supercomputing , ser. SC ’08. IEEE Press, 2008. [10] N. Liu, J. Cope, P. Carns, C. Carothers, R. Ross, G. Grider, A. Crume, and C. Maltzahn, “On the role of burst buffers in leadership-class storage systems,” in 2012 IEEE 28th Symposium on Mass Storage Systems and Technologies (MSST) , 2012, pp. 1–11. [Online]. Available: https://doi.org/10.1109/MSST.2012.6232369 [11] J. Johnson, M. Douze, and H. J´ egou, “Billion-scale similarity search with gpus,” IEEE Transactions on Big Data , vol. 7, no. 3, pp. 535–547, 2019. [Online]. Available: https://doi.org/10.1109/TBDATA.2019.2921572 [12] J. Wang, X. Yi, R. Guo, H. Jin, P. Xu, S. Li, X. Wang, X. Guo, C. Li, X. Xu et al. , “Milvus: A purpose-built vector data management system,” in Proceedings of the 2021 International Conference on Management of Data (SIGMOD ’21) . New York, NY, USA: Association for Computing Machinery, 2021, pp. 2614–2627. [Online]. Available: https://doi.org/10.1145/3448016.3457550 [13] Y. Zheng, E. Abila, E. Chrenkov´ a, I. Buljan, J. Winkler, and A. F. Rendeiro, “Lazyslide: accessible and interoperable whole-slide image analysis,” Nature Methods , pp. 1–4, 2026. [Online]. Available: https://doi.org/10.1038/s41592-026-03044-7 [14] G. Campanella, M. G. Hanna, L. Geneslaw, A. Miraflor, V. Silva, K. J. Busam, E. Brogi, V. E. Reuter, D. S. Klimstra, and T. J. Fuchs, “Clinical-grade computational pathology using weakly supervised deep learning on whole slide images,” Nature Medicine , vol. 25, no. 8, pp. 1301–1309, 2019. [Online]. Available: 10.1038/s41591-019-0508-1 [15] M. Y. Lu, D. F. Williamson, T. Y. Chen, R. J. Chen, M. Barbieri, and F. Mahmood, “Data-efficient and weakly supervised computational pathology on whole-slide images,” Nature Biomedical Engineering ,vol. 5, no. 6, pp. 555–570, 2021. [Online]. Available: https: //doi.org/10.1038/s41551-020-00682-w [16] M. Oquab, T. Darcet, T. Moutakanni, H. V. Vo, M. Szafraniec, V. Khalidov, P. Fernandez, D. Haziza, F. Massa, A. El-Nouby, M. Assran, N. Ballas, W. Galuba, R. Howes, P.-Y. Huang, S.-W. Li, I. Misra, M. Rabbat, V. Sharma, G. Synnaeve, H. Xu, H. Jegou, J. Mairal, P. Labatut, A. Joulin, and P. Bojanowski, “Dinov2: Learning robust visual features without supervision,” arXiv preprint arXiv:2304.07193 ,2023. [Online]. Available: https://doi.org/10.48550/arXiv.2304.07193 [17] T. Ding, S. J. Wagner, A. H. Song, R. J. Chen, M. Y. Lu, A. Zhang, A. J. Vaidya, G. Jaume, M. Shaban, A. Kim et al. , “A multimodal whole-slide foundation model for pathology,” Nature medicine , pp. 1–13, 2025. [Online]. Available: https://doi.org/10.1038/s41591-025-03982-3 [18] Y. Xu, Y. Wang, F. Zhou, J. Ma, C. Jin, S. Yang, J. Li, Z. Zhang, C. Zhao, H. Zhou et al. , “A multimodal knowledge-enhanced whole-slide pathology foundation model,” Nature Communications , 2025. [Online]. Available: https://doi.org/10.1038/s41467-025-66220-x
