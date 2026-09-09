@@ -1,0 +1,630 @@
+Title: CAR-MIL: Counterfactual Attention Regularization for Multiple Instance Learning
+
+URL Source: https://arxiv.org/pdf/2609.08419v1
+
+Published Time: Wed, 09 Sep 2026 03:30:54 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# CAR-MIL: Counterfactual Attention Regularization for Multiple Instance Learning 
+
+Imane Chraki 1,2, Pierre Marza 1,2, Stergios Christodoulidis 1,2, and Maria Vakalopoulou 1,2 
+
+> 1
+
+Université Paris-Saclay, CentraleSupélec, Gustave Roussy, INSERM, IHU PRISM, Cancer Data Science Unit, France  
+
+> 2
+
+Université Paris-Saclay, CentraleSupélec, MICS Laboratory, France 
+
+Abstract. Multiple Instance Learning (MIL) is widely used for weakly supervised learning, particularly in digital pathology, where fine-grained annotations are costly. Most MIL methods aggregate instance features via attention mechanisms. However, attention weights do not always faithfully reflect instance importance and may focus on spuriously cor-related regions. In this work, we propose CAR-MIL, a framework that explicitly guides attention learning through a counterfactual attention regularization objective inspired by counterfactual explanations. Built on a standard attention-based MIL architecture, our approach intro-duces a lightweight counterfactual attention branch trained to produce an alternative prediction while remaining close to the factual attention distribution. This encourages prediction changes to arise from minimal, structured redistributions of attention, leading to more informative evi-dence allocation. The resulting factual and counterfactual attention maps capture complementary evidence: the former highlights regions support-ing the prediction, while the latter reveals regions whose reweighting would challenge it. We evaluate our method on synthetic MIL bench-marks with instance-level ground truth enabling controlled analysis of attention behavior and on five digital pathology datasets across four tasks. CAR-MIL maintains competitive classification performance, with the largest gains observed on more challenging tasks, while improving attention reliability, demonstrating the benefits of integrating counter-factual explainability reasoning into attention learning. Code is available at: https://github.com/ImaneCR/CAR-MIL/ .
+
+## 1 Introduction 
+
+Multiple Instance Learning (MIL) addresses learning from weakly-annotated data, where samples are organized into bags of instances, and labels are assigned only at the bag level [12, 26]. Attention-based MIL methods [17, 23, 38] address this challenge by learn-ing a weighted aggregation of instance features into a bag representation, and achieve high predictive performance. Despite recent progress, two major limi-tations remain. First, as shown in recent studies [13, 16, 19, 41], MIL attention arXiv:2609.08419v1 [cs.CV] 8 Sep 2026 2 I.Chraki et al. Slide label : DCIS    
+
+> Factual Counterfactual
+> Prediction : DCIS Prediction : Benign
+> (a) Dropping highly-attended instances (BRCA) (b) Qualitative visualisation of attention maps (BRACS)
+
+Fig. 1: CAR-MIL is a multiple instance learning method to model complex interac-tions between relevant regions using counterfactual explanation. (a) Dropping highly-attended instances for CAR-MIL leads to a higher performance drop than ABMIL on the TCGA-BRCA dataset. (b) Qualitative example from the BRACS dataset: the factual attention correctly focuses on the Ductal Carcinoma In Situ (DCIS ) areas and predicts the correct slide-level label, whereas the counterfactual attention reallocates evidence and predicts the Benign class. 
+
+may highlight irrelevant or spuriously-correlated regions, both degrading per-formance and interpretability. Such an issue can arise from training instability, with the attention collapsing and highlighting only a small set of regions [34,42]. Secondly, current methods only emphasize evidence supporting the predicted class while providing little insight into evidence that contradicts the decision, limiting both their reliability and their explanatory capacity. This is for exam-ple problematic in medical applications, where attention maps are often used to justify automated decisions. These observations suggest that attention should not be treated merely as a by-product of optimization but its training should be guided to reflect how evidence supporting or contradicting a prediction is allocated across instances. A natural framework for reasoning about such evidence is provided by coun-terfactual explanations (CE) [37], which characterize predictions through mini-mal changes to the input of a model that would alter its output. This counterfac-tual perspective distinguishes evidence supporting a decision from evidence that challenges it. Importantly, existing CE methods provide post-hoc interpretabil-ity, as they are applied to a trained model to better understand its decision-making process. However, as showcased earlier, in the case of MIL, evidence reasoning should be performed at training time. We thus propose two main adaptations to this framework: (i) integrating CE at training time to guide the learning of attention, (ii) performing perturbations in attention instead of in-put space as it is more adapted to MIL. To the best of our knowledge, such an adaptation of CE to MIL training has not been studied in previous work. Recent methods begin to incorporate counterfactual interventions into the training of attention [9,31] but this is different from what we propose. Indeed, the latter rely on random attention perturbations while we believe learning such perturbations is beneficial. In this work, we introduce CAR-MIL (Figure 1), a method trained to pro-vide a factual and counterfactual attentions following CE principles. The coun-CAR-MIL 3
+
+terfactual attention is constrained to remain close to the factual attention while producing a different prediction, encouraging changes to arise from selective re-distributions of attention across instances. We propose a double-branch design yielding complementary attention maps: the factual attention highlights regions supporting the prediction, while the counterfactual attention reveals regions re-futing it. Our framework introduces a new learning paradigm where the model learns how reallocating attention across instances affects the predicted outcome and therefore providing a contrastive training signal that guides attention learn-ing dynamics. The counterfactual branch is implemented as a lightweight atten-tion module sharing the encoder and classifier with the factual branch, therefore introducing minimal computational overhead and requiring no additional super-vision. We evaluate CAR-MIL on synthetic MIL benchmarks designed to assess interaction modelling [16], as well as on five digital pathology datasets across four tasks. Across all settings, our method consistently maintains a competitive classification performance, with the largest performance gains observed on the more challenging tasks, while producing more reliable attention distributions, as confirmed by both quantitative metrics and qualitative analysis. Our contributions can be summarized as follows: (i) We introduce for the first time counterfactual attention regularization for MIL, enforcing prediction divergence under minimal attention perturbations. (ii) We learn complementary factual and counterfactual attention distributions that reveal supporting and refuting evidence within attention maps. (iii) We demonstrate that explicitly guiding attention during training maintains or improves both predictive accuracy and interpretability in attention-based MIL models. 
+
+## 2 Related Work 
+
+Attention-based embedding-level MIL — Such MIL models aggregate in-stance embeddings into a global bag representation through an attention mech-anism. The standard attention MIL (ABMIL) method [17] infers weights from instance features to aggregate them accordingly. Numerous variants have then been proposed to improve the attention mod-ule [22, 24, 30, 32, 34, 41, 42]. Many of these MIL variants aim to improve the attention learning process, for example, by incorporating self-attention mecha-nisms [40], enforcing consistency between attention weights and instance feature representations [24], constraining attention through negative bag supervision in the case of binary classification [30], or mitigating problems caused by hard instances by introducing masking modules [34]. However, modifying only the attention mechanism, without evaluating the impact of the applied techniques on the model’s predictions, might not guarantee achieving the desired predictive outcome [31]. 
+
+Interpretability of MIL Models — Attention-based MIL models rely on attention scores to provide a localization map of regions of interest. However, raw attention maps inherent to these models often do not guarantee reliabil-ity [16, 19, 41]. On the other hand, fully additive models such as [19] seek to 4 I.Chraki et al. 
+
+disentangle and sum individual contributions explicitly. Post-hoc explainabil-ity strategies have also been proposed [1, 3, 4, 16, 20, 28, 29, 33, 39], including perturbation-based methods that modify instance subsets within bags and ob-serve prediction changes [13, 16]. Despite progress, many of these methods are constrained by computational cost, limited scalability to large bags [7, 19, 27] or limited explanatory capacity: they typically highlight instances that support the predicted class, but do not reveal evidence that contradicts or challenges the decision [16]. 
+
+Counterfactual Reasoning for Explanation and Attention Learning —We can consider two main frameworks with different objectives: (i) Counterfac-tual Explainability (CE) tries to understand the inner mechanisms of a trained model, while (ii) Counterfactual Attention Learning (CAL) aims at improving the quality of attention at training time. CE was introduced by [37] as a post-hoc interpretability framework that explains a model’s prediction by identifying minimal changes to the input that would alter its decision. The core idea is to characterize predictions through contrast: what needs to change for the outcome to differ. CE methods therefore operate after training and focus on generating alternative inputs that provide insight into decision boundaries. On the other hand, CAL [9, 31] incorporates counterfactual reasoning into training by veri-fying that the learned attention is meaningfully better than controlled alterna-tives. In particular, CIA-MIL [9] introduces a counterfactual causal intervention on attention, evaluating whether the learned attention contributes meaningfully to prediction compared to a controlled random attention. A main drawback of such approaches is the lack of control on the applied perturbations. Indeed, by comparing the learned attention with a random counterpart, they primarily use counterfactual perturbations as a diagnostic tool and do not explicitly structure how evidence should be redistributed across instances during training. To ad-dress this, we incorporate CE at training time, and we have the flexibility to learn what perturbations would impact the final prediction. 
+
+## 3 Methods 
+
+3.1 Preliminaries Multiple Instance Learning — In Multiple Instance Learning (MIL), a sam-ple is defined as a set of instances named a bag Bi = {xi, 1, . . . , x i,N i }, where 
+
+Ni denotes the number of instances in bag i. Importantly, in MIL, the super-vision is only available at the bag level, i.e. each bag is associated with a label 
+
+yi ∈ { 1, . . . , K } for a K-class classification task. Instance-level labels are unob-served. We focus on embedding-level attention-based MIL models. 
+
+Standard Attention-Based MIL — Each instance xi,j is independently en-coded using a feature extractor E as : zi,j = E(xi,j ) ∈ Rd. For clarity, we drop the bag index and denote a bag of embeddings as {zj }Nj=1 . An attention module 
+
+ψ produces an attention logit uj for each instance: 
+
+uj = ψ(zj ), a = softmax( u), (1) CAR-MIL 5
+
+where u = ( u1, . . . , u N ) ∈ RN denotes the vector of attention logits and a =(a1, . . . , a N ) ∈ RN the corresponding normalized attention weights. We denote the bag-level classifier by φ. The bag representation ˆZ, class logits 
+
+F (u) and probabilities ˆy(u) are then obtained as: 
+
+ˆZ =
+
+> N
+
+X
+
+> j=1
+
+aj zj , F (u) = φ( ˆZ) ∈ RK , ˆy(u) = softmax( F (u)) . (2) 
+
+3.2 Counterfactual Attention Regularization Factual and Counterfactual Branches — Our method follows a two-branch setting (Figure 2) with a factual and counterfactual branches. Both have the same ABMIL [17] architecture, but different weights that are optimized concur-rently. The encoder E and downstream classifier φ are not part of the branches and are thus shared between both. The difference between CAR-MIL and AB-MIL lies in the additional lightweight counterfactual branch, introducing min-imal computational overhead. Differences in predictions thus arise solely from attention weighting differences between the two branches. The attention mod-ules for the factual and counterfactual branches are respectively denoted as ψ
+
+and ψcf , and similarly to eq. 1, 2, we have the following for the counterfactual branch: 
+
+ucf  
+
+> j
+
+= ψcf (zj ), acf = softmax( ucf ), ˆZcf =
+
+> N
+
+X
+
+> j=1
+
+acf  
+
+> j
+
+zj , F (ucf ) = φ( ˆZcf ). (3) 
+
+Evidence Differential — We define the counterfactual evidence differential in logit space as: 
+
+∆F (u, u cf ) = F (u) − F (ucf ) ∈ RK (4) It quantifies the difference between the predicted logits of factual and counter-factual attention logits. For a specific class y ∈ { 1, . . . , K }, ∆F y represents the element in ∆F corresponding to class y. A large ∆F y indicates that the logit predicted from the factual attention is higher than from its counterfactual coun-terpart. This would suggest that the factual branch attention provides stronger class-y evidence than the counterfactual branch. 
+
+3.3 Training Objective 
+
+we add to the main classification loss of the model an additional composite loss term constraining the two branches attentions to be close yet their predictions to be different. Therefore, prediction shifts are encouraged to arise from small but structured differences of the attention logits. The proposed CAR-MIL framework is therefore optimized using three complementary loss terms: 6 I.Chraki et al. WSI Feature Extraction CAR-MIL 
+
+Fig. 2: CAR-MIL Overview. CAR-MIL is a two-branch attention MIL architecture trained with an explainable proximity-evidence constraint. Both branches operate on the same instance embeddings and share the downstream classifier. During training, a joint loss encourages (i) accurate bag-level predictions from the main(factual) branch, (ii) label-consistent evidence separation between main and counterfactual branches via the evidence differential, and (iii) meaningful differences between their attention vectors w.r.t the prediction shift. 
+
+– Classification loss: Standard cross entropy loss on the factual branch pre-diction. This main loss ensures accurate bag-level prediction from the main (factual) branch: 
+
+Lcls = CE(ˆ y(u), y ) (5) 
+
+– Counterfactual evidence differential loss: Encourages the evidence differential ∆F to favor difference between the two branches predictions on the ground-truth class, enforcing label-consistent separation between factual and counterfactual predictions: 
+
+Ldiff = CE  softmax( ∆F ), y  = log 
+
+1 + X 
+
+> k̸=y
+
+e∆F k −∆F y
+
+ (6) In particular, if Ldiff ≤ ε, then for all k̸ = y,
+
+∆F y − ∆F k ≥ − log( eε − 1)  (7) Thus, minimizing Ldiff explicitly encourages the two branches to differ pri-marily on the ground-truth class. 
+
+– Attention-logit proximity regularization: Constrains the counterfac-tual attention logits to remain close to the factual attention logits, ensuring that prediction differences arise from minimal and controlled weighting up-dates of attention: 
+
+Ldiv = D(u, u cf ), (8) where D(·, ·) denotes a distance metric in logit space. In practice, D(·, ·) can be instantiated using a normalized L1 distance or a cosine-based dissimilar-ity. The L1 formulation, 
+
+Ldiv = DL1 (u, u cf ) = 1
+
+N
+
+> N
+
+X
+
+> j=1
+
+uj − ucf  
+
+> j
+
+, (9) CAR-MIL 7
+
+penalizes absolute deviations in a sparse and interpretable manner, encour-aging the counterfactual branch to modify the raw attention values of only a small subset of influential instances. This property aligns with the intuition that counterfactual evidence should emerge from minimal attention changes. Alternatively, a cosine-based distance, 
+
+Ldiv = Dcos (u, u cf ) = 1 −
+
+PNj=1 uj ucf 
+
+> j
+
+∥u∥2 ∥ucf ∥2
+
+, (10) captures directional disagreement between the two attention patterns, en-couraging the counterfactual head to orient its attention toward different subsets of instances while remaining scale-invariant. This is particularly use-ful when the magnitude of the logits is less important than their relative orientation across instances. 
+
+Overall Objective — The full training objective implements a counterfactual attention regularization principle to guide the learning dynamics of attentions. It encourages solutions where factual and counterfactual attentions remain close but induce label-consistent prediction differences. As a result, the factual at-tention is encouraged to highlight supporting evidence for the predicted class compared to the counterfactual branch. The final loss is given as follows, 
+
+L = Lcls + αLdiff + λLdiv , α, λ ≥ 0, (11) where α and λ are hyperparameters controlling the contribution of each loss in the final objective. In Sect.A.4 of the supplementary material, we provide additional analytical results that explain why the CAR module increases fac-tual attention on instances supporting the class prediction, while decreasing CF attention on those instances and increasing it on non-supportive ones. 
+
+## 4 Experiments and Results 
+
+We conducted experiments on both synthetic and histopathological datasets. In the following sections, we summarize the datasets used, along with their imple-mentation details, the comparison methods, and the evaluation strategy. 
+
+4.1 Experiments on MNIST-bags Synthetic Data Datasets — We leverage the recent MIL classification datasets from [16] de-rived from MNIST [11]. In this synthetic setting, instance-level annotations are available to indicate whether an instance provides supporting or refuting evi-dence for the bag label according to the dataset construction rule. We consider two dataset variants: 4-bags : Class 1 if the bag contains an 8, class 2 if it contains a 9, class 3 if it contains both 8 and 9, and class 0 otherwise. This setting eval-uates the model’s ability to capture interactions between instances that jointly determine the bag label. Adjacent Pairs : a bag is class 1 if it contains any pair 8 I.Chraki et al. 
+
+Table 1: Comparison of Baseline and Counterfactual MIL Models on the MNIST-bags Synthetic Datasets. Results are reported for binary ( Adjacent Pairs )and multi-class ( Four Bags ) classification tasks. Bag AUC measures slide-level predic-tive performance, while Instance AUPRC + and AUPRC ± assess alignment between attention scores and instance-level evidence supporting or refuting the bag label. CAR-MIL substantially improves instance-level performance, indicating better discriminative evidence of the attention, while maintaining strong bag-level performance.                                                 
+
+> Adjacent Pairs Four Bags Model Evidence AUC (↑)AUPRC +(↑)AUPRC ±(↑)AUC (↑)AUPRC +(↑)AUPRC ±(↑)ABMIL [17] attention 85.7 ± 5.9 76.9 ± 6.1 61.5 ± 0.9 99.1 ± 0.1 86.8 ± 0.2 53.1 ± 0.1 AddMIL [19] attention 81.0 ± 2.2 64.3 ± 4.8 63.5 ± 1.2 97.0 ± 2.7 82.1 ± 12.1 53.4 ± 0.8 patch-scores N/A 66.7 ± 7.4 67.6 ± 6.6 N/A 76.4 ± 15.0 76.8 ± 14.6 TransMIL [32] attention 94.6 ± 4.4 81.5 ± 6.9 61.7 ± 2.1 99.5 ± 0.1 81.6 ± 6.3 51.9 ± 0.8 CAR-MIL attention 94.1 ± 5.9 85.7 ± 6.5 84.6 ± 5.2 99.6 ± 0.1 86.8 ± 0.6 89.7 ± 0.9
+
+of consecutive digits between 0 and 4; otherwise, the bag corresponds to class 0. In this setting, the evidential role of an instance depends on the presence of other instances in the bag, making the prediction inherently contextual. This setup therefore evaluates whether models correctly capture context-dependent evidence relationships between instances. 
+
+Implementation Details — Feature extraction is performed for the MNIST images using ResNet18 [15] model pre-trained on ImageNet [10] from the TorchVi-sion library [25]. Experiments were repeated 10 times with a learning rate of 0.0002 and the SGD optimizer. We compare our proposed strategy against MIL pooling baselines, reporting means and standard deviations across repetitions of performance in terms of area under the curve (AUC) at the bag level, as well as area under the precision-recall curve of attention prediction of instances’ positive evidence label (AUPRC +) and a two-class (positive and negative evi-dence classes) averaged area under the precision-recall curve (AUPRC ±). More details are to be found in Sects.A.5 and A.6 of our supplementary material. We evaluate our method using the L1 distance as the metric to measure the simi-larity between factual and counterfactual attentions. We present the considered baselines along with the method used to extract instance scores in parenthe-ses: ABMIL [17] (raw attention scores), TransMIL [32] (attention rollout [18]), AddMIL [19] (patch-level scores). In all models, the attention is interpreted as representing positive evidence 
+
+(instances that support the predicted label) while reverse attention is used to represent negative evidence . In our proposed approach, counterfactual attention serves as an estimation of negative evidence, explicitly modelling instance-level factors that contradict the predicted outcome. 
+
+Counterfactual Reasoning Improves Attention — The synthetic bench-mark provides a controlled setting to evaluate both downstream classification performance and the alignment between attention distributions and instance-level evidence. For the Adjacent Pairs binary classification task, the model must be aware of the contextual influence of individual instances to achieve accu-CAR-MIL 9
+
+rate predictions. As reported in Table 1, CAR-MIL outperforms the ABMIL and AddMIL, and reaches performance comparable to TransMIL at the bag level (94.1 vs. 94.6 AUC). More importantly, our method yields substantially higher instance-level performance (AUPRC +=85.7 and AUPRC ±=84.6), indi-cating that the learned attention more faithfully reflects discriminative evidence. As for the Four Bags multi-class task, our method improves both performance at the bag-level and attention reliability to reflect the evidence provided by in-stances that support or refute the bag label. These synthetic experiments suggest that counterfactual reasoning applied at the attention level promotes a tighter correspondence between attention allocation and instance-level evidence. As a result, more faithful attention leads to improved predictive performance. 
+
+4.2 Experiments on Histopathology Data Datasets — We conduct our experiments on multiple public whole-slide im-age (WSI) datasets from TCGA [36]: TCGA-NSCLC (Non–Small Cell Lung Cancer) and TCGA-BRCA (Breast Invasive Carcinoma) for binary cancer sub-typing, TCGA-LUAD (Lung Adenocarcinoma) for TP53 mutation prediction, 
+
+CAMELYON16 [5] for binary metastasis detection in breast lymph node, and 
+
+BRACS [6](BreAst Cancer Subtyping), a breast cancer dataset for multiclass tissue classification between normal , benign , and malignant categories.. CAME-LYON16 and BRACS contain instance-level annotations, with the latter having only sparse labels. 
+
+Implementation Details — Slides were processed using the standard ap-proach as in [24] to obtain patches of size 256x256 at 20X magnification. We use pre-extracted features with UNI-V1 [8] foundation model. Please note that any other encoder could be integrated into our method. Experiments were con-ducted under five cross-validation settings for TCGA-NSCLC , TCGA-BRCA ,and TCGA-LUAD using a learning rate of 0.0002. We used the originally pub-lished train-val-test split for BRACS in three runs with a learning rate of 0.0001, and similarly the train-test split for CAMELYON16 in three runs with a learning rate of 0.0002. All experiments were conducted using the Adam [21] optimizer. Additional details to be found in Sects.A.5 and A.6 of our supplementary mate-rial. We challenge CAR-MIL against several popular MIL frameworks includ-ing: baseline approaches that do not use attention (Mean-Max MIL), classical attention-based MIL (ABMIL [17]) and attention-focused architectures such as CLAM [24], ACMIL [42], DSMIL [22], TransMIL [32], AddMIL [19], and CIA-MIL [9]. We report performance metrics in terms of AUC or balanced accuracy and F1 score. For CAMELYON16 , we report the AUPRC +, the area under the precision recall curve for attention as a prediction of instance labels. Scores are reported in terms of the average ± standard deviation. In the proposed framework, the proximity regularization constrains the coun-terfactual attention logits to remain close to the factual attention logits. We ex-periment with both L1 and cosine distances as attention similarity measures for 10 I.Chraki et al. 
+
+Table 2: Performance Comparison of CAR-MIL Against State-of-the-Art MIL Models on Histopathology Classification Tasks. Results are reported for BRCA and NSCLC cancer subtyping, TP53 mutation prediction in LUAD, BRACS tissue subtyping, and CAMELYON16 metastasis detection. Metrics include AUC, F1-score, and balanced accuracy. CAR-MIL consistently improves or matches the best baseline performance across datasets using UNI features.                                                                                                                                             
+
+> BRCA NSCLC LUAD BRACS CAMELYON16 Model AUC (↑)F1 (↑)AUC (↑)F1 (↑)AUC (↑)F1 (↑)BACC (↑)F1 (↑)AUC (↑)AUPRC +(↑)Meanmil 93.2±2.4 85.1±2.4 96.9±1.3 94.0±1.0 74.5±6.3 71.1±7.4 33.2±1.8 28.2±2.1 62.5±4.8 N/A MaxMIL 95.4±1.5 88.0±1.1 97.5±1.0 94.6±1.9 76.0±5.4 71.8±4.9 32.3±7.1 29.4±8.6 98.3±0.4 N/A CLAM [24] 94.5±2.3 87.6±1.7 97.9±0.8 94.1±1.7 74.0±3.0 70.6±1.8 40.4±5.5 38.0±4.9 99.7±0.3 94.4±0.3 AddMIL [19] 93.7±2.6 86.0±3.3 94.6±3.0 91.9±2.7 73.3±3.9 71.5±4.0 38.3±9.6 35.7±11.6 98.2±1.4 93.4±1.2 DSMIL [22] 94.1±1.6 85.3±2.3 97.4±1.1 94.0±2.6 66.9±4.7 64.8±5.1 42.3±2.0 40.0±2.0 98.9±1.1 80.6±11.2 TransMIL [32] 93.2±2.7 87.7±0.8 97.8±0.6 94.8±2.0 71.7±5.4 68.8±4.4 40.0±3.6 37.6±3.8 99.9±0.1 28.2±3.6 ACMIL [42] 94.4±2.9 88.7±2.2 97.9±0.8 93.9±2.5 75.5±7.4 72.0±6.6 41.2±1.4 38.5±2.4 99.4±0.5 95.4±0.5
+> RRT-MIL [35] 93.7±1.2 84.6±3.4 97.3±1.8 93.7±2.9 75.1±5.2 71.8±4.0 39.3± 4.8 34.5±5.2 99.6±0.5 94.4±1.1 CIA-MIL [9] 94.5±1.2 87.3±2.7 96.5±1.6 93.0±2.5 77.5±2.5 71.1±5.6 37.6±2.1 35.0±1.6 99.2±0.5 92.9±1.5 ABMIL [17] 95.3±1.7 88.9±1.3 97.6±1.0 94.2±1.2 74.0±4.3 72.1±5.4 38.2±4.1 36.0±4.5 98.7±0.3 93.2±1.2 CAR-MIL (L1) 95.5±2.2 87.9±1.5 98.0±0.5 94.4±1.7 76.4±4.9 72.4±3.8 40.8±2.5 38.1±2.5 99.9±0.1 94.8±1.0 CAR-MIL (COS) 95.0±1.7 89.6±1.4 97.5±0.9 95.0±1.8 78.1±4.1 72.6±4.5 43.1±2.0 40.4±2.4 99.3±0.7 91.7±0.6
+
+our method. Evaluating both variants allows us to study how different proximity geometries affect the redistribution of evidence and predictive performance. 
+
+CAR-MIL Achieves Competitive Downstream Performance — Ta-ble 2 summarizes the performance of CAR-MIL across five histopathology tasks. Overall, CAR-MIL achieves performance comparable to or better than strong MIL baselines, while paired statistical t-tests show that no attention-based MIL method significantly outperforms CAR-MIL on any dataset. Performance gains are more pronounced on the more challenging LUAD and BRACS tasks, sug-gesting that explicitly guiding attention during training is particularly beneficial in more challenging settings. In particular, the cosine variant of CAR-MIL tends to perform better on the more challenging LUAD and BRACS tasks, while the 
+
+L1 formulation remains competitive on binary subtyping tasks such as BRCA and NSCLC. On CAMELYON16, where patch-level tumor annotations are well defined and available, CAR-MIL maintains competitive patch-level performance (AUPRC +) indicating that redistributing attention through the counterfactual branch does not cause the model to deviate from diagnostically-relevant regions. 
+
+## 5 Analysis of Counterfactual Attention Regularization 
+
+Hyperparameter Sensitivity — Fig. 3 analyzes the sensitivity to hyperpa-rameters α controlling the evidence differential loss Ldiff , and λ controlling the attention logit proximity loss Ldiv . We report the AUC obtained for both the cosine and L1 variants of a run of CAR-MIL on the BRCA and LUAD datasets for different combinations of these weights. The explored configurations include values {0.2, 0.8, 1.0}, together with the baseline ABMIL setting without coun-terfactual regularization ( α = λ = 0 ). On BRCA, the baseline AUC of 94 .5CAR-MIL 11 
+
+Table 3: Ablation with Respect to MIL Settings. Integrating the proposed counterfactual attention regularization (CAR) into more attention-based MIL architec-tures, including DSMIL, and TransMIL. Performance comparaison is assessed between the original baselines versus their CAR-augmented variants across five datasets. CAR generally improves or maintains performance across most metrics, showing that the proposed regularization can be integrated into diverse MIL attention architectures.                                                                                
+
+> BRCA NSCLC LUAD BRACS CAMELYON16 Model AUC (↑)F1 (↑)AUC (↑)F1 (↑)AUC (↑)F1 (↑)BACC (↑)F1 (↑)AUC (↑)AUPRC +(↑)ABMIL [17] 95.3±1.7 88.9±1.3 97.6±1.0 94.2±1.2 74.0±4.3 72.1±5.4 38.2±4.1 36.0±4.5 98.7±0.3 93.2±1.2 CAR-MIL 95.0±1.7 89.6±1.4 98.0±0.5 94.4±1.7 78.1±4.1 72.6±4.5 43.1±2.0 40.4±2.4 99.9±0.1 94.8±1.0
+> DSMIL [22] 94.1±1.6 85.3±2.3 97.4±1.1 94.0±2.6 66.9±4.7 64.8±5.1 42.3±2.0 40.0±2.0 98.9±1.1 80.6±11.2 CAR-DSMIL 94.5±2.2 85.6±2.7 97.8±1.0 94.0±2.3 71.2±4.1 67.8±3.4 42.5±5.1 39.8±2.0 99.0±0.6 87.8±2.9 TransMIL [32] 93.2±2.7 87.7±0.8 97.8±0.6 94.8±2.0 71.7±5.4 68.8±4.4 40.0±3.6 37.6±3.8 99.9±0.1 28.2±3.6 CAR-TransMIL 94.0±1.3 87.2±4.3 97.6±1.4 94.3±2.0 73.6±4.4 69.8±4.0 42.6±6.1 39.4±6.2 99.7±0.1 32.6±0.3
+
+improves to values between 95 .3 and 96 .0 depending on the configuration, with the best performance obtained for moderate counterfactual regularization. On LUAD, where the task is more challenging, the baseline AUC of 81 .3 increases to values up to 84 .2–84 .4. While improvements are observed on both datasets, the effect of the hyperparameter choices is more visible on LUAD than on BRCA. This difference likely reflects the relative difficulty of the tasks: when baseline performance is already high, as on BRCA, performance differences across con-figurations remain relatively small, whereas on the more challenging LUAD task the influence of the regularization weights becomes more visible. Across settings, the cosine variant exhibits smoother trends across configurations, while the L1 variant shows slightly larger variability depending on the choice of weights. 
+
+MIL Setting — Table 3 evaluates the effect of integrating our counterfactual attention regularization (CAR) into different MIL settings: ABMIL [17] (already presented in Table 2, but reported for comparison with other MIL methods), DSMIL [22] and TransMIL [32]. We provide in Sect.A.7 of our supplementary material more technical details on the integration of CAR following the dif-ferent attention formulations. For each setting, we report the best-performing distance variant (either L1 or cosine) in order to focus on the contribution of the proposed CAR mechanism rather than the choice of distance metric. Across architectures, the proposed regularization consistently improves or maintains performance compared to the original models. In particular, the gains are most visible for the ABMIL backbone. Similar trends are observed when integrating the method into DSMIL and TransMIL, where CAR variants improve mutation prediction LUAD and BRACS classification performance while preserving strong results on easier tasks. Overall, these results indicate that counterfactual atten-tion regularization can be effectively combined with different MIL aggregation mechanisms to improve slide-level prediction. 
+
+Feature Extractor — Table 4 reports an analysis with respect to the feature encoder. Using pretrained ResNet50 [15] on ImageNet [10,25] features, CAR-MIL consistently improves performance over the ABMIL baseline across all datasets. 12 I.Chraki et al. 
+
+Fig. 3: Hyperparameters Sensitivity. Sensitivity to hyperparameters α and λ is evaluated on BRCA and LUAD for the Cosine and L1 divergence variants on a single run. Cosine variant tends to have more consistent trends than the L1 variant. 
+
+Table 4: Ablation on the Feature Encoder Using ResNet50 Features . Com-parison between ABMIL and CAR-MIL across three TCGA datasets – BR.: BRCA, NS.: NSCLC, LU.: LUAD. CAR-MIL consistently improves AUC and F1 over the baseline ABMIL indicating that the proposed CAR remains effec-tive even when using standard convolutional features.           
+
+> Model AUC (↑)F1 (↑)
+> BR.
+> ABMIL [17] 89.2±2.6 79.7±3.9 CAR-MIL 90.3±2.1 81.9±5.0
+> NS.  ABMIL [17] 93.4±1.7 88.2±1.6 CAR-MIL 94.3±1.2 88.9±1.3
+> LU.  ABMIL [17] 68.2±5.6 66.3±4.8 CAR-MIL 70.4±6.1 68.4±5.1
+
+As expected, absolute performance remains lower than with UNI features re-ported in the main experiments, reflecting the stronger representational capac-ity of pathology-specific foundation models. Nevertheless, the consistent gains demonstrate that the proposed counterfactual attention regularization is not tied to a specific encoder and can improve MIL aggregation even with stan-dard convolutional features. In fact the gains are even more pronounced with out-of-domain features as the ones from ResNet50 compared to UNI features, highlighting the positive impact of guiding the learning dynamics of attention under generic features representations. 
+
+Multi-class Setting — We investigate the counterfactual branch predicted class logit under the multi-class setting. We find that the class whose CF logit increases most varies with the ground-truth class. On Four Bags, class 1 shifts toward class 3 (100% of bags) while class 3 shifts toward class 1 (62%), reflecting the dataset evidence structure. On BRACS, redistribution is diffuse across all 7 classes with no dominant competitor, consistent with higher semantic ambiguity. 
+
+## 6 Attention Analysis 
+
+Counterfactual Attention Regularization for Interpretability — We as-sess how much the proposed counterfactual attention regularization contributes to bridging the gap between predictive performance and interpretability rel-evance in MIL frameworks. Using the synthetic benchmark, we compare the attention from our method with the raw attention from ABMIL and atten-tion maps generated from two baselines: (i) a Random assignment of attention CAR-MIL 13 0 20 40 60 80 100 
+
+> % Dropped instances (Most to least attended)
+> 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> Target Class Probability
+> ABMIL CLAM AddMIL DSMIL TransMIL ACMIL RRT CIA-MIL CAR-MIL
+
+Fig. 4: Effect of Removing Highly At-tended Instances on the Prediction Con-fidence. Removing attention according to top-ranked instances shows that CAR-MIL yields a smooth, monotonic drop in confidence, indicat-ing faithful instance importance, whereas AB-MIL exhibits non-monotonic behavior. 
+
+Table 5: Attention as Inter-pretability Proxy on MNIST-bags. Evaluation of attention as a proxy for instance-level evi-dence on synthetic MIL datasets with ground-truth evidence labels. CAR-MIL attention is reliable as an interpretability signal, outper-forming ABMIL raw attention and perturbation evidence attribution for explaining ABMIL. – Rand.: Random, Att.: Attention, Pert.: Perturbation, Adj. P.: Adjacent Pairs, Four B: Four Bags.                   
+
+> Model Evid. AUPRC +)AUPRC ±
+> Adj. P.  Rand. 54.2 ± 0.9 54.2 ± 0.9 ABMIL [17] Att. 76.9 ± 6.1 61.5 ± 0.9 Pert. 78.5 ± 1.0 78.5 ± 1.0 CAR-MIL Att. 85.7 ± 6.5 84.6 ± 5.2 Four B.  Rand. 30.6 ± 0.2 31.2 ± 0.2 ABMIL [17] Att. 86.8 ± 0.2 53.1 ± 0.1 Pert. 87.9 ± 1.6 87.7 ± 2.1 CAR-MIL Att. 86.8 ± 0.6 89.7 ± 0.9
+
+weights to instances, serving as a lower bound, and (ii) a post-hoc explainabil-ity method, Perturbation Single [14, 16], which estimates instance importance by measuring prediction sensitivity to perturbations, by passing bags of single instances through the model ("single"). We then assess the interpretability of the inherent learned attention in CAR-MIL counterfactual variant. As shown in Table 5, counterfactual-guided attention learning substantially improves the alignment between attention and instance-level evidence compared to both AB-MIL and the perturbation-based explanation. In particular, CAR-MIL achieves the highest AUPRC + and AUPRC ± scores on both tasks. 
+
+Faithfulness Evaluation via Perturbation Analysis — To further assess the faithfulness of attention, we perform a MORF (Most Relevant First) per-turbation test [13, 16], where instances in correctly-predicted bags are removed in order of decreasing attention importance. For CAR-MIL, importance is com-puted from the discrepancy between factual and counterfactual attention scores. A faithful attention mechanism is expected to produce a monotonic decrease 
+
+in the model’s confidence, since removing the most relevant instances should consistently degrade predictive performance. In Figure 4, our proposed CAR-MIL model exhibits a smooth and monotonic drop in prediction probability as a function of the percentage of removed patches, suggesting that learned attentions align closely with true predictive importance. In contrast, models such as ABMIL show non-monotonic or convex response curves, suggesting that their attention weights may not reliably capture relevant evidence among instances. Interest-ingly, CAR-MIL showcases a similar trend as the recent CIA-MIL method that 14 I.Chraki et al. WSI  ABMIL  Ours (F)  Ours (CF) 
+
+> Slide ( DCIS )DCIS 1
+> DCIS 1
+> DCIS 2
+> Benign
+> DCIS 2 Benign
+
+Fig. 5: Comparisons Between the Attentions of ABMIL and the Two CAR-MIL Attention Branches (F: Factual, CF: Counterfactual). Qualitative com-parison of attention maps on a DCIS WSI from the BRACS dataset. ABMIL highlights broad regions within the annotated DCIS area but produces a diffuse attention pat-tern. Our model (factual attention) concentrates attention on more precise subregions that correspond closely to the annotated malignant ducts. The counterfactual branch highlights benign or non-malignant areas, providing a complementary view of “nega-tive evidence”. Together, the two branches provide a more structured and interpretable separation between supporting and refuting regions. 
+
+focuses on causally aligning attention with predictions at the cost of a trade-off between performance and explainability. As shown in Table 2, CAR-MIL out-performs CIA-MIL in terms of downstream performance. Indeed, by improving solely explainability through counterfactual intervention, CIA-MIL can lead to a drop in performance compared with CAR-MIL. 
+
+WSI Heatmaps — To qualitatively illustrate the differences between atten-tions, we visualize attention maps for a representative WSI from the BRACS 
+
+dataset labeled as DCIS (Ductal Carcinoma In Situ ). Figure 5 displays the at-tentions obtained with ABMIL, CAR-MIL factual attention (F), and CAR-MIL counterfactual (CF) branch. Although ABMIL broadly highlights areas contain-ing annotated DCIS regions, its attention is spatially diffuse. In contrast, CAR-MIL produces more localized and concentrated attention regions. The coun-terfactual head provides further informative signal: its highest value occurs in CAR-MIL 15 
+
+benign or non-neoplastic areas, i.e., regions whose removal would weaken the model’s confidence in the positive class. This complementary pattern aligns with our design goal: factual attention captures supporting evidence, while counter-factual attention highlights refuting or neutral evidence. More quantitatively, the factual branch does not simply reproduce ABMIL localization (Spearman r=0 .67 
+
+on the representative example in Figure 5 between attention vectors), while the factual and counterfactual branches attend to distinct regions ( r=0 .29 ). Across BRACS slides, factual attention remains only moderately correlated with AB-MIL (L1: r=0 .69 ±0.05 ; Cosine: r=0 .69 ±0.03 ), whereas factual and counterfac-tual attentions are strongly anti-correlated under L1 ( r=−0.67 ±0.02 ) and weakly correlated under cosine ( r=0 .20 ±0.63 ). Our supplementary material Figs.A.1, A.2 further illustrate this behavior and show that CAR-MIL concentrates atten-tion on DCIS regions while suppressing benign tissue compared with ABMIL, DSMIL, AddMIL, and CLAM. 
+
+## 7 Conclusion 
+
+In this work, we introduce CAR-MIL, a counterfactual attention regulariza-tion framework designed to jointly improve the performance and reliability of attention-based MIL models. Motivated by the observation that attention plays a dual role, as both the mechanism that aggregates instance information and the most commonly used proxy for MIL interpretability, we propose a double-branch (factual-counterfactual) architecture and a training strategy that explic-itly guides attention using learned counterfactual perturbations. By encouraging the counterfactual branch to induce prediction changes while remaining close to the main attention distribution, CAR-MIL reveals informative regions that stan-dard attention may overlook. Through experiments on synthetic datasets and multiple whole-slide image benchmarks, we demonstrate that CAR-MIL main-tains or improves downstream performance while producing attention maps that better align with instance-level evidence. These results suggest that integrating counterfactual explainability reasoning into the attention optimization process offers a promising direction for designing MIL models that are not only more accurate but also more interpretable. Future work could explore how the learned counterfactual attentions can be leveraged beyond training, for instance as aux-iliary supervisory signals or for downstream tasks such as improving weak su-pervision, guiding active learning strategies, supporting model debugging, and facilitating deeper analysis of model behavior and decision-making processes. 
+
+## Acknowledgements 
+
+This work has benefited from state financial aid, managed by the Agence Na-tionale de Recherche under the investment program integrated into France 2030, project references ANR-21-RHUS-0003, ANR-21-CE45-0007, ANR-23-CE45-0029, ANR-23-IAHU-0002, and ANR-23-IACL-0003 – DATAIA CLUSTER (as part of IA CLUSTER program). This project has partily received funding from 16 I.Chraki et al. 
+
+the European Union’s Horizon Europe research and innovation programme un-der grant agreement No 101156771. Views and opinions expressed are however those of the authors only and do not necessarily reflect those of the Euro-pean Union. The European Union cannot be held responsible for them. Experi-ments have been conducted using HPC resources from the Mésocentre comput-ing center of CentraleSupélec and École Normale Supérieure Paris-Saclay, sup-ported by CNRS and Région Île-de-France, and resources from GENCI–IDRIS (Grant 2025-AD011015828, 2026-AD011015828R1). The results shown in this paper are part based upon data generated by the TCGA Research Network: https://www.cancer.gov/tcga. 
+
+## References 
+
+1. Adebayo, J., Gilmer, J., Muelly, M., Goodfellow, I., Hardt, M., Kim, B.: Sanity checks for saliency maps. Advances in neural information processing systems 31 
+
+(2018) 2. Alber, M., Lapuschkin, S., Seegerer, P., Hägele, M., Schütt, K.T., Montavon, G., Samek, W., Müller, K.R., Dähne, S., Kindermans, P.J.: innvestigate neural net-works! Journal of machine learning research 20 (93), 1–8 (2019) 3. Bach, S., Binder, A., Montavon, G., Klauschen, F., Müller, K.R., Samek, W.: On pixel-wise explanations for non-linear classifier decisions by layer-wise relevance propagation. PloS one 10 (7), e0130140 (2015) 4. Baehrens, D., Schroeter, T., Harmeling, S., Kawanabe, M., Hansen, K., Müller, K.R.: How to explain individual classification decisions. The Journal of Machine Learning Research 11 , 1803–1831 (2010) 5. Bejnordi, B.E., Veta, M., Van Diest, P.J., Van Ginneken, B., Karssemeijer, N., Litjens, G., Van Der Laak, J.A., Hermsen, M., Manson, Q.F., Balkenhol, M., et al.: Diagnostic assessment of deep learning algorithms for detection of lymph node metastases in women with breast cancer. Jama 318 (22), 2199–2210 (2017) 6. Brancati, N., Anniciello, A.M., Pati, P., Riccio, D., Scognamiglio, G., Jaume, G., Pietro, G.D., Bonito, M.D., Foncubierta, A., Botti, G., Gabrani, M., Feroce, F., Frucci, M.: Bracs: A dataset for breast carcinoma subtyping in h&e histology im-ages (2021) 7. Van den Broeck, G., Lykov, A., Schleich, M., Suciu, D.: On the tractability of shap explanations. Journal of Artificial Intelligence Research 74 , 851–886 (2022) 8. Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F., Jaume, G., Song, A.H., Chen, B., Zhang, A., Shao, D., Shaban, M., et al.: Towards a general-purpose foundation model for computational pathology. Nature medicine 30 (3), 850–862 (2024) 9. Chraki, I., Marza, P., Christodoulidis, S., Vakalopoulou, M.: Counterfactual inter-vention in attention multiple instance learning for digital pathology. In: Medical Imaging with Deep Learning (2026) 10. Deng, J., Dong, W., Socher, R., Li, L.J., Li, K., Fei-Fei, L.: Imagenet: A large-scale hierarchical image database. In: 2009 IEEE conference on computer vision and pattern recognition. pp. 248–255. Ieee (2009) 11. Deng, L.: The mnist database of handwritten digit images for machine learning research [best of the web]. IEEE Signal Processing Magazine 29 (6), 141–142 (2012) 12. Dietterich, T.G., Lathrop, R.H., Lozano-Pérez, T.: Solving the multiple instance problem with axis-parallel rectangles. Artificial intelligence 89 (1-2), 31–71 (1997) CAR-MIL 17 13. Early, J., Cheung, G.K., Cutajar, K., Xie, H., Kandola, J., Twomey, N.: Inherently interpretable time series classification via multiple instance learning. arXiv preprint arXiv:2311.10049 (2023) 14. Early, J., Evers, C., Ramchurn, S.: Model agnostic interpretability for multiple instance learning. arXiv preprint arXiv:2201.11701 (2022) 15. He, K., Zhang, X., Ren, S., Sun, J.: Deep residual learning for image recognition. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 770–778 (2016) 16. Hense, J., Jamshidi Idaji, M., Eberle, O., Schnake, T., Dippel, J., Ciernik, L., Buchstab, O., Mock, A., Klauschen, F., Müller, K.R.: Xmil: Insightful explanations for multiple instance learning in histopathology. Advances in Neural Information Processing Systems 37 , 8300–8328 (2024) 17. Ilse, M., Tomczak, J., Welling, M.: Attention-based deep multiple instance learning. In: International conference on machine learning. pp. 2127–2136. PMLR (2018) 18. Jacovi, A., Goldberg, Y.: Towards faithfully interpretable nlp systems: How should we define and evaluate faithfulness? arXiv preprint arXiv:2004.03685 (2020) 19. Javed, S.A., Juyal, D., Padigela, H., Taylor-Weiner, A., Yu, L., Prakash, A.: Ad-ditive mil: Intrinsically interpretable multiple instance learning for pathology. Ad-vances in Neural Information Processing Systems 35 , 20689–20702 (2022) 20. Kindermans, P.J., Hooker, S., Adebayo, J., Alber, M., Schütt, K.T., Dähne, S., Erhan, D., Kim, B.: The (un) reliability of saliency methods. In: Explainable AI: Interpreting, explaining and visualizing deep learning, pp. 267–280. Springer (2019) 21. Kingma, D.P.: Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 (2014) 22. Li, B., Li, Y., Eliceiri, K.W.: Dual-stream multiple instance learning network for whole slide image classification with self-supervised contrastive learning. In: Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 14318–14328 (2021) 23. Lu, M.Y., Chen, T.Y., Williamson, D.F., Zhao, M., Shady, M., Lipkova, J., Mah-mood, F.: Ai-based pathology predicts origins for cancers of unknown primary. Nature 594 (7861), 106–110 (2021) 24. Lu, M.Y., Williamson, D.F., Chen, T.Y., Chen, R.J., Barbieri, M., Mahmood, F.: Data-efficient and weakly supervised computational pathology on whole-slide images. Nature biomedical engineering 5(6), 555–570 (2021) 25. Maintainers, T., contributors, A.: Torchvision: Pytorch’s computer vision library. GitHub repository (2016) 26. Maron, O., Lozano-Pérez, T.: A framework for multiple-instance learning. Ad-vances in neural information processing systems 10 (1997) 27. Molnar, C., König, G., Herbinger, J., Freiesleben, T., Dandl, S., Scholbeck, C.A., Casalicchio, G., Grosse-Wentrup, M., Bischl, B.: General pitfalls of model-agnostic interpretation methods for machine learning models. In: International Workshop on Extending Explainable AI Beyond Deep Models and Classifiers. pp. 39–68. Springer (2020) 28. Montavon, G., Binder, A., Lapuschkin, S., Samek, W., Müller, K.R.: Layer-wise relevance propagation: an overview. Explainable AI: interpreting, explaining and visualizing deep learning pp. 193–209 (2019) 29. Pirovano, A., Heuberger, H., Berlemont, S., Ladjal, S., Bloch, I.: Improving inter-pretability for computer-aided diagnosis tools on whole slide imaging with multiple instance learning and gradient-based explanations. In: International Workshop on Interpretability of Machine Intelligence in Medical Image Computing. pp. 43–53. Springer (2020) 18 I.Chraki et al. 30. Qu, L., Wang, M., Song, Z., et al.: Bi-directional weakly supervised knowledge distillation for whole slide image classification. Advances in Neural Information Processing Systems 35 , 15368–15381 (2022) 31. Rao, Y., Chen, G., Lu, J., Zhou, J.: Counterfactual attention learning for fine-grained visual categorization and re-identification. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 1025–1034 (2021) 32. Shao, Z., Bian, H., Chen, Y., Wang, Y., Zhang, J., Ji, X., et al.: Transmil: Trans-former based correlated multiple instance learning for whole slide image classifica-tion. Advances in neural information processing systems 34 , 2136–2147 (2021) 33. Shrikumar, A., Greenside, P., Kundaje, A.: Learning important features through propagating activation differences. In: International conference on machine learn-ing. pp. 3145–3153. PMLR (2017) 34. Tang, W., Huang, S., Zhang, X., Zhou, F., Zhang, Y., Liu, B.: Multiple instance learning framework with masked hard instance mining for whole slide image clas-sification. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 4078–4087 (2023) 35. Tang, W., Zhou, F., Huang, S., Zhu, X., Zhang, Y., Liu, B.: Feature re-embedding: Towards foundation model-level performance in computational pathology. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion (CVPR). pp. 11343–11352 (June 2024) 36. Tomczak, K., Czerwińska, P., Wiznerowicz, M.: Review the cancer genome atlas (tcga): an immeasurable source of knowledge. Contemporary Oncol-ogy/Współczesna Onkologia 2015 (1), 68–77 (2015) 37. Wachter, S., Mittelstadt, B., Russell, C.: Counterfactual explanations without opening the black box: Automated decisions and the gdpr. Harv. JL & Tech. 31 ,841 (2017) 38. Wagner, S.J., Reisenbüchler, D., West, N.P., Niehues, J.M., Zhu, J., Foersch, S., Veldhuizen, G.P., Quirke, P., Grabsch, H.I., van den Brandt, P.A., et al.: Transformer-based biomarker prediction from colorectal cancer histology: A large-scale multicentric study. Cancer cell 41 (9), 1650–1661 (2023) 39. Wang, X., Wang, D., Yao, Z., Xin, B., Wang, B., Lan, C., Qin, Y., Xu, S., He, D., Liu, Y.: Machine learning models for multiparametric glioma grading with quantitative result interpretations. Frontiers in neuroscience 12 , 1046 (2019) 40. Xiong, Y., Zeng, Z., Chakraborty, R., Tan, M., Fung, G., Li, Y., Singh, V.: Nys-trömformer: A nyström-based algorithm for approximating self-attention. In: Pro-ceedings of the AAAI conference on artificial intelligence. vol. 35, pp. 14138–14148 (2021) 41. Zhang, H., Meng, Y., Zhao, Y., Qiao, Y., Yang, X., Coupland, S.E., Zheng, Y.: Dtfd-mil: Double-tier feature distillation multiple instance learning for histopathol-ogy whole slide image classification. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 18802–18812 (2022) 42. Zhang, Y., Li, H., Sun, Y., Zheng, S., Zhu, C., Yang, L.: Attention-challenging mul-tiple instance learning for whole slide image classification. In: European conference on computer vision. pp. 125–143. Springer (2024) CAR-MIL 19 
+
+# Supplementary Material 
+
+## A.1 Background on Counterfactual Explanations 
+
+Counterfactual explanations are a conceptual framework for machine learning interpretability. According to [27], a counterfactual explanation of a prediction describes the smallest change to the input values that shifts the prediction to a predefined output . This type of reasoning has its roots in social sciences, describ-ing individuals imagining hypothetical scenarios contradicting factual reality, that would have changed the outcome of a certain situation. [27, 37]. Searching for a counterfactual close enough to the factual inputs but yielding different outcomes can result in many possible options. According to [27], the counterfactual choice should take into consideration its likelihood in real world. However in our work we operate at the level of attention over bags’ instances. Given that there is no access to a ground truth of a likely attention distribu-tion, our counterfactual regularization mainly builds upon the Wachter et al [37] formulation of the counterfactual cost function as it was first introduced for in-terpretability. Given a sample x, the goal is to find a counterfactual xcf whose prediction is close to a desired target ycf while staying as close as possible to the original input. Wachter et al. propose minimizing the following cost function: 
+
+L(x, xcf , y cf , λ ) = α · ℓ f (xcf ), y cf  + d(x, xcf ) (12) where f (·) is the prediction model, ℓ(·) is a loss function penalizing deviation from the desired output ycf , and d(x, xcf ) is the distance between the counter-factual and the original input. In this work, instead of operating in the input space (e.g. image pixels), we target the attention module. 
+
+## A.2 Comparison with Weakly Supervised Knowledge Distillation 
+
+WENO [30] proposes a weakly supervised knowledge distillation framework that combines an attention-based MIL bag classifier with an instance classifier. In this approach, attention scores produced by the bag classifier are interpreted as soft pseudo-labels used to supervise the instance classifier, which in turn performs hard positive instance mining to refine the bag classifier. Although WENO and our approach both rely on attention-based MIL ar-chitectures, their objectives differ. WENO assumes that attention scores can approximate class-specific supervision at the instance level, effectively learning patch-level predictions from slide-level labels in digital histopathology datasets. This assumption is well aligned with binary MIL tasks such as CAMELYON16 metastasis detection, where positive regions correspond to localized tumor areas that can be reasonably associated with instance-level labels. In contrast, our framework does not attempt to assign class labels to indi-vidual instances. Instead, CAR-MIL analyzes how instances support or refute 20 I.Chraki et al.                
+
+> Table A.1: Comparison between WENO and CAR-MIL on representative datasets.
+> LUAD CAMELYON16 Method AUC (↑)F1 (↑)AUC (↑)AUPRC +(↑)ABMIL [17] 74.0±4.3 72.1±5.4 98.7±0.3 93.2±1.2 WENO [30] 55.5±10.7 58.6±8.6 99.3±0.5 90.6±2.9 CAR-MIL (ours, L1) 76.4±4.9 72.4±3.8 99.9±0.1 94.8±1.0
+
+the bag-level prediction through counterfactual attention contrast. This design avoids tying evidence to explicit patch-level class assignments and therefore gen-eralizes naturally to multi-class classification tasks, where defining instance-level labels as positive or negative becomes more ambiguous. To provide a representative comparison, we evaluated WENO on two datasets used in our experiments. We report AUC and F1 for LUAD and AUC together with AUPRC + for CAMELYON16. While WENO performs strongly on the bi-nary CAMELYON16 metastasis detection task, its performance on LUAD muta-tion prediction is substantially lower. Mutation prediction tasks typically rely on subtle morphological signals that may be spatially diffuse across the slide rather than localized to specific patches. In such settings, enforcing patch-level pseudo-labels can introduce noisy supervision. By contrast, CAR-MIL models prediction evidence through factual vs counterfactual attention allocation without requiring explicit patch-level supervision, which leads to more stable performance across tasks. 
+
+## A.3 Visualisations and Attention Study 
+
+Attention Distance Metric Choice — To better understand the effect of the distance metric choice on the behaviour of the main (F) and counterfactual (CF) attention branches, we perform a qualitative analysis on a representative BRACS slide containing ductal carcinoma in situ (DCIS) regions annotated by expert pathologists. For this slide, we compare the attention maps (F and CF) produced by CAR-MIL under L1 setting, and cosine setting, together with the baseline ABMIL attention map. For consistency, all attention maps are derived from the unormalised attention scores , followed by Min–Max scaling to the range [0 , 1] .We additionally extract a high-resolution zoom around the annotated DCIS region to examine how the different attention mechanisms highlight diagnosti-cally relevant structures. As shown in figure A.1, across both distance metrics choices, the F and CF attentions exhibit complementary behaviour with main factual attention focusing on regions that support the predicted bag label, while the counterfactual attention tends to emphasise areas deviating from these re-gions. In particular, under L1 distance, the factual attention (F) most closely resembles the ABMIL attention, producing smooth attention that extend into CAR-MIL 21     
+
+> Fig. A.1: Comparison of attention maps across ABMIL and CAR-MIL under
+> L1and cosine divergences. Right Bottom: Pearson correlation heatmaps measuring similarity between ABMIL, F, and CF attention maps for each attention distance metric choice for CAR-MIL. Under both L1and cosine, the F head resembles ABMIL closely, while CF exhibits inverse behaviour. Under cosine dissimilarity, F is more concentrated and sharply focused on DCIS regions. All attention maps use Min-Max scaling applied to unormalised attentions.
+
+the surrounding tissue. In contrast, the cosine-based model produces a more con-centrated fatual attention, with sharper and more localized focus around DCIS structures and reduced spread into neighbouring regions. The counterfactual attention display the opposite trend in each case. 
+
+Baselines Comparison — We further compare the behaviour of our main attention (F) with several MIL baselines, including ABMIL, CLAM, AddMIL, and DSMIL. Figure A.2 shows WSI attention maps for a representative BRACS slide labelled as DCIS, together with two high-resolution zooms: one centred on the annotated DCIS region and another on a benign area within the same slide. 
+
+## A.4 Theoretical Analysis 
+
+This section provides additional theoretical analysis of the proposed counter-factual attention regularization framework. We adopt the same notation as in 22 I.Chraki et al. 
+
+the main paper, and references to equations numbered in the main paper are explicitly indicated. Intuitively, the proposed regularization encourages the factual and counter-factual attention branches to produce different prediction scores while remaining close in attention-logit space. The analysis below studies how small perturbations of the attention logits affect the relative prediction scores of different classes. Our goal is therefore to analyze how perturbations of the attention logits influence the counterfactual evidence differential introduced in the main paper. To make the analysis tractable, we consider the pairwise difference between the evidence differentials of the ground-truth class y and a competing class k, which measures how the perturbation changes their relative prediction scores. We proceed in three steps. First, we analyze the local behavior of this pairwise difference under small perturbations of the attention logits. Second, under a linear classifier assumption, we derive the sensitivity of the class logits with respect to the attention logits. Finally, we characterize the perturbations that maximize this quantity under the L1 proximity constraint used in the proposed regularization. 
+
+A.4.1 Local Analysis of the Evidence Margin 
+
+Recall from Sec. 3.2 of the main paper that the counterfactual evidence differ-ential is defined as 
+
+∆F (u, u cf ) = F (u) − F (ucf ), (13) where ∆F c(u, u cf ) denotes the component corresponding to class c.In the main paper, the loss Ldiff = CE(softmax( ∆F ), y ) encourages the evidence differential of the ground-truth class y to exceed those of competing classes. To analyze the local behavior of this objective, we consider the pairwise evidence margin between the ground-truth class y and a competing class k:
+
+my,k (u, u cf ) := ∆F y (u, u cf ) − ∆F k(u, u cf ) (14) Although Ldiff simultaneously enforces ∆F y > ∆F k for all competing classes k̸ =
+
+y, the cross-entropy objective can be written as Ldiff = log 
+
+
+
+1 + P  
+
+> k̸=y
+
+e−my,k 
+
+
+
+,and thus is primarily influenced by the most competitive class, i.e., the class with the largest ∆F k. Consequently, the optimization dynamics can be understood by analyzing the pairwise margin my,k for a representative competing class. The following analysis therefore focuses on the local behavior of my,k .Let 
+
+δ = ucf − u (15) denote a perturbation of the attention logits. In practice, δ quantifies the amount that must be injected into or removed from the instance attention logits in order to transform u into ucf . Assuming that the class logits F (u) are differentiable with respect to u, and let c ∈ { 1, . . . , K } denote a class index. A first-order Taylor expansion for sufficiently small δ yields: 
+
+∆F c(u, u + δ) = Fc(u) − Fc(u + δ) ≈ −∇ uFc(u)⊤δ (16) CAR-MIL 23 
+
+Therefore the local variation of the evidence margin satisfies: 
+
+my,k (u, u + δ) ≈ − (∇uFy (u) − ∇ uFk(u)) ⊤δ (17) Defining the margin sensitivity vector: 
+
+gy,k (u) := ∇uFy (u) − ∇ uFk(u) (18) we obtain therefore: 
+
+my,k (u, u + δ) ≈ − gy,k (u)⊤δ (19) This expression shows that the margin variation is governed by the sensitivity vector gy,k (u). In particular, perturbations aligned with −gy,k (u) increase the evidence margin, whereas perturbations aligned with gy,k (u) decrease it. 
+
+A.4.2 Attention Sensitivity under Linear Classifiers 
+
+We now derive the explicit form of ∇uFc(u) when the classifier φ is linear with respect to the aggregated bag representation. Let zj ∈ Rd denote the embedding of instance j, and let wc ∈ Rd denote the classifier weights associated with class c. Assuming a linear classifier, the class-c
+
+logit is: 
+
+Fc(u) = w⊤ 
+
+> c
+
+ˆZ (20) Using the bag representation defined in Eq. (2) of the main paper, 
+
+ˆZ =
+
+> N
+
+X
+
+> j=1
+
+aj zj ⇒ Fc(u) = 
+
+> N
+
+X
+
+> j=1
+
+aj w⊤ 
+
+> c
+
+zj (21) For convenience, we define sc,j in Eq. (22) which can be interpreted as the class-c
+
+logit that would be obtained if the bag contained only instance j. Substituting 
+
+sc,j into Eq. (21), the bag logit can be written as an attention-weighted average of instance-level logits: 
+
+sc,j := w⊤ 
+
+> c
+
+zj ⇒ Fc(u) = 
+
+> N
+
+X
+
+> j=1
+
+aj sc,j  (22) For convenience, we define in Eq. (23) the quantity μc, representing the attention-weighted average class alignment. Differentiating Fc(u) with respect to the at-tention logits gives: 
+
+μc := 
+
+> N
+
+X
+
+> j=1
+
+aj sc,j , ∂F c
+
+∂u j
+
+= aj (sc,j − μc). (23) Thus, the influence of instance j on the class-c logit depends on both its attention weight aj and the deviation of its instance-level logit (evidence) sc,j from the bag-level average μc.24 I.Chraki et al. 
+
+A.4.3 Margin Sensitivity 
+
+Using the class-wise attention sensitivity ∂F c 
+
+> ∂u j
+
+from Eq. (23) and substituting it into Eq. (18), the margin sensitivity along instance j becomes: 
+
+gy,k,j (u) = aj
+
+(sy,j − sk,j ) − (μy − μk) (24) The term (sy,j − sk,j ) measures how strongly instance j supports class y relative to class k, while (μy − μk) represents the corresponding average evidence differ-ence across the bag. Therefore, (sy,j − sk,j ) − (μy − μk) measures how unusually discriminative instance j is relative to the average evidence in the bag. Instances for which this quantity has large magnitude exert the strongest influence on the evidence margin. 
+
+A.4.4 Optimal Perturbations under L1 Distance 
+
+We now analyze which perturbations of the attention logits maximize the evi-dence margin under an L1 proximity constraint: ∥δ∥1 ≤ ε. Recall the first-order approximation above my,k (u, u + δ) ≈ − gy,k (u)⊤δ. So maximizing the margin reduces to: 
+
+max  
+
+> ∥δ∥1≤ε
+
+−gy,k (u)⊤δ (25) This optimization follows from the dual relationship between the L1 and L∞
+
+norms: 
+
+max  
+
+> ∥δ∥1≤ε
+
+g⊤δ = ε∥g∥∞ (26) Hence the optimal perturbation concentrates on instances with maximal absolute margin sensitivity. Let: 
+
+M = max  
+
+> j
+
+|gy,k,j (u)|, S = {j : |gy,k,j (u)| = M } (27) Any optimal perturbation δ⋆ must satisfy: 
+
+supp( δ⋆) ⊆ S, ∥δ⋆∥1 = ε, sign( δ⋆j ) = −sign( gy,k,j (u)) for j ∈ S (28) Thus the optimal perturbation primarily modifies the attention logits of the most discriminative instances. In particular, instances strongly supporting the ground-truth class yield positive margin sensitivity and therefore receive negative perturbations, reducing their attention in the counterfactual branch, whereas in-stances with negative margin sensitivity receive positive perturbations. In the implementation used in the main paper, the L1 proximity term is normalized by the bag size: Ldiv = 1 
+
+> N
+
+∥u − ucf ∥1, which corresponds to the L1
+
+formulation in Eq.(9) of the main paper. This normalization keeps the scale of the regularization comparable across bags of different sizes, preventing large bags from inducing disproportionately large penalties and thereby improving training CAR-MIL 25 
+
+stability. Overall, this analysis suggests that meaningful counterfactual explanations arise from small but structured redistributions of attention logits targeting in-stances with maximal margin sensitivity. This directly motivates the design of the training objective in the main paper: Ldiff encourages prediction differences between factual and counterfactual branches, while Ldiv constrains their atten-tion logits to remain close. Although the analysis above focuses on the L1 case, the same principle also motivates the cosine-based proximity used in the main paper, which promotes directional differences between attention patterns while preserving their overall scale. 
+
+## A.5 Dataset Descriptions 
+
+A.5.1 WSI Datasets 
+
+Tab. A.2 presents in more details the description of the different datasets used in our study. Details about the number of samples and classes are included, together with a small description of each of the digital pathology whole slide image data. More details can be identified in the original papers. 
+
+A.5.2 Synthetic Datasets 
+
+For the synthetic experiments, we reproduce the settings introduced in [16], including the Four Bags and Adjacent Pairs datasets. Each dataset is defined through an evidence function εj (c), which assigns to each instance xj and each class c ∈ { 1, .., K } where K is the number of classes, a value in {− 1, 0, 1},indicating whether the instance provides negative (εj (c) = −1), neutral (εj (c) = 0), or positive (εj (c) = 1 ) evidence for class c.
+
+Four Bags dataset — Digits 8 and 9 provide opposite evidence for different classes. For an instance xj , the evidence assignments are: 
+
+xj ∼ 8 : εj (c) = 
+
+(
+
+1 c ∈ { 1, 3},
+
+−1 c ∈ { 0, 2} (29) 
+
+xj ∼ 9 : εj (c) = 
+
+(
+
+1 c ∈ { 2, 3},
+
+−1 c ∈ { 0, 1} (30) Otherwise : 
+
+εj (c) = 0 ∀c ∈ { 0, 1, 2, 3} (31) 
+
+Adjacent Pairs dataset — Digits provide evidence only when specific pairs co-occur. Digit 4 supports class 1 and refutes class 0 only if digit 3 is present in the same bag :26 I.Chraki et al. 
+
+Table A.2: Overview of Whole-Slide Image (WSI) datasets used in this study. For each cohort, we report the data source, clinical or diagnostic task, number of slides, and the distribution of labels. 
+
+Cohort Description # Slides Labels with # TCGA [36] BRCA WSIs from TCGA-BRCA. Used for histological subtype classifi-cation between invasive ductal carcinoma (IDC) and invasive lobular carcinoma (ILC). 977 IDC: 779 ILC: 198 NSCLC WSIs from TCGA-LUAD and TCGA-LUSC. Used for distinguishing between lung adenocarcinoma (LUAD) and lung squamous cell carcinoma (LUSC). 956 LUAD: 478 LUSC: 478 LUAD (TP53) TCGA-LUAD dataset for TP53 mutation prediction directly from H&E WSIs. Labels cor-respond to mutation status (mutated vs wild-type). 427 TP53 WT: 199 TP53 Mut: 228 
+
+BRACS (BACH Challenge) [6] BRACS (7 classes) Breast biopsy WSIs with de-tailed, fine-grained categories (7 diagnostic classes). 546 Class 0: 44 Class 1: 147 Class 2: 73 Class 3: 48 Class 4: 41 Class 5: 61 Class 6: 132 
+
+Camelyon 16 Challenge [5] Camelyon16 (Train) Lymph node metastasis detec-tion dataset. Training subset of whole-slide images (H&E) anno-tated for the presence of tumor metastasis. 270 Normal: 159 Tumor: 111 Camelyon16 (Test) Official test subset from the Camelyon16 challenge. 129 Normal: 80 Tumor: 49 
+
+xj ∼ 4 : εj (c) = 
+
+
+
+1 if c = 1 & digit 3 is in the bag ,
+
+−1 if c = 0 & digit 3 is in the bag ,
+
+0 otherwise .
+
+(32) Evidence for other digits follows [16]. 
+
+## A.6 Evaluation Details 
+
+A.6.1 Evaluation Metrics: AUPRC + and AUPRC ±
+
+Given a bag B = {xj }Nj=1 and class c ∈ { 1, .., K }, let the ground-truth evidence vector be: CAR-MIL 27 
+
+e(c) = {εj (c)}Nj=1  (33) In most real-world histopathology datasets, such instance-level evidence is un-available. However, for certain binary tasks such as metastasis detection on CAMELYON16 [5] (Sec. 4 main paper), pixel-level tumor annotations allow patch-level labels to be derived. In this setting, the presence of tumor patches directly determines the bag label, making patch labels a well-defined proxy for positive evidence supporting the prediction. We define the explanation score vector as: 
+
+s(c) = {sj (c)}Nj=1  (34) where each score is computed as the sigmoid of the raw / non normalized atten-tion value: 
+
+sj (c) = σ(uj ) (35) To evaluate the explanation quality, we define binary targets for positive and negative evidence: 
+
+
+
+e(c) 
+
+> pos
+
+= 1[εj (c) = 1] 
+
+e(c) 
+
+> neg
+
+= 1[εj (c) = −1]  (36) We compute the corresponding one-vs-all AUPRC scores: 
+
+
+
+AUPRC + = AUPRC 
+
+
+
+e(c)
+
+> pos
+
+, s (c)
+
+AUPRC − = AUPRC 
+
+
+
+e(c)
+
+> neg
+
+, −s(c) (37) We average these two values to obtain the AUPRC-2 metric: 
+
+AUPRC ± = 12
+
+ AUPRC( e(c)
+
+> pos
+
+, s (c))+ AUPRC( e(c)
+
+> neg
+
+, −s(c)).
+
+(38) 
+
+A.6.2 Perturbation Curves 
+
+We qualitatively assess the quality of MIL models’ attention as an interpretabil-ity proxy, following the region perturbation strategy used in [2, 16]. For a bag B
+
+containing N patches, we sort instances by decreasing attention scores and par-tition them into 100 disjoint groups r1, . . . , r 100 , each containing 1% of the most relevant instances according to attention values ( r1 contains the top-1% most relevant patches, r2 the next most relevant 1% , and so on). We construct per-turbed versions of the bag by progressively removing the most relevant groups. Let B(0) = B denote the original slide. At step k, we drop the top k% most relevant patches and define the perturbed bag: 28 I.Chraki et al. 
+
+
+
+B(k) = P (B, k ) = 
+
+> 100
+
+[
+
+> i=k+1
+
+ri, k = 0 , 1, . . . , 99 
+
+B(100) = 0
+
+(39) 
+
+## A.7 Implementation Details Across Different MIL Settings 
+
+Our framework regularizes the pre-softmax attention scores that determine how instance features are aggregated into a bag representation. For any MIL archi-tecture exposing such scores, we introduce factual and counterfactual attention mechanisms producing logits u and ucf . The two branches share the feature ex-tractor and classifier, and the counterfactual objective is applied directly at the level of these raw attention scores. Table A.3 reports the profiled computational complexity of baseline MIL architectures and their CAR-MIL variants. Complexity was measured with a dummy input of shape 1×10000 ×1024 , corresponding to a single bag containing 
+
+10000 instances with 1024 -dimensional features. We report multiply-accumulate operations (MACs) in billions and the number of learnable parameters in mil-lions. Overall, the additional cost remains small for attention-based MIL models and moderate for transformer-based models, which is expected given the higher computational cost of transformer-based architectures.               
+
+> Table A.3: Model complexity comparison between baseline MIL architectures and their CAR-MIL counterparts. The reported MACs quantify the cost of one forward pass whereas the parameter count reflects model size independently of the input. Model MACs (G) Params (M) ABMIL 5.899 0.657 CAR-ABMIL 5.901 0.657 DSMIL 5.318 0.594 CAR-DSMIL 5.908 0.659 TransMIL 24.796 2.672 CAR-TransMIL 34.653 3.722
+
+ABMIL — In the standard attention-based MIL setting (ABMIL) [17], the model already produces a vector of pre-softmax instance scores. CAR-MIL there-fore only introduces a parallel attention branch generating ucf , while the encoder and classifier remain shared. Since the aggregation mechanism is unchanged, the additional parameters correspond only to the extra attention projection, result-ing in negligible computational overhead ( Tab. A.3). CAR-MIL 29 
+
+DSMIL — DSMIL [22] computes an instance-to-class attention matrix prior to softmax normalization. Let 
+
+Uj,c = q(zj )⊤q(zmc ) (40) denote the attention score between instance j and the class-specific critical in-stance zmc . CAR-MIL introduces a second query projection producing counter-factual scores 
+
+U cf  
+
+> j,c
+
+= qcf (zj )⊤qcf (zmc ). (41) Given the predicted bag class ˆy, we extract the corresponding column 
+
+u = U:,ˆy , ucf = U cf :,ˆy (42) and apply the counterfactual objective to these vectors. Architecturally, this requires duplicating only the query projection used in the DSMIL bag classi-fier, leaving the remaining components unchanged. Consequently, the parameter increase is small and the computational overhead remains modest (Table A.3). 
+
+TransMIL — Transformer-based MIL models such as TransMIL [32] compute attention through self-attention layers. In a standard transformer, attention de-rives from the pre-softmax query–key affinities 
+
+u = QK ⊤
+
+√d , (43) which would naturally align with our regularization. However, TransMIL em-ploys Nyström attention [40], which approximates the full attention matrix using landmark tokens and does not expose the exact pre-softmax attention logits governing bag aggregation. To integrate CAR-MIL, we therefore intro-duce a counterfactual transformer block parallel to the final attention layer and extract class-token attention maps as a surrogate attention signal. The fac-tual and counterfactual predictions are then obtained from the two transformer branches. Because Nyström attention approximates full attention, the resulting attention maps should be interpreted as approximate proxies rather than ex-act pre-softmax logits. This modification duplicates only the final transformer block, leading to a moderate increase in parameters and computation compared to ABMIL and DSMIL, as reflected in Table A.3. 30 I.Chraki et al. 
+
+Fig. A.2: Comparison of attention maps across MIL baselines (ABMIL, CLAM, AddMIL, DSMIL) and CAR-MIL (F). For a BRACS WSI labelled as DCIS, we compare overall WSI attention maps and two zoomed regions: an expert-annotated DCIS region (middle) and a benign region (right). Baseline methods tend to distribute attention broadly and often allocate non-negligible weight to benign struc-tures. In contrast, CAR-MIL produces a more concentrated and selective attention pattern, focusing sharply on the DCIS lesion while suppressing attention in benign tissue. All attention maps are derived from Min–Max scaled unnormalised attentions
