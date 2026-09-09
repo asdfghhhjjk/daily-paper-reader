@@ -1,0 +1,1682 @@
+Learning Interpretable Tumor Microenvironment Representations
+by Fitting Pan-Cancer Cell State–Niche Correlation
+Xiao Xiao*1, Jiashu He2, Shiyang Zhang1, and Meiyi Mao3
+1Yale University
+2University of Pennsylvania
+3University of Michigan, Ann Arbor
+Abstract
+In the tumor microenvironment, cell’s state is influenced by cell–cell interactions (CCIs) with neigh-
+boring cells in its niches. Identifying dysregulated CCIs that are associated with pathogenic process
+pinpoints targets for drug discovery. Imaging-based spatial transcriptomics and single-cell RNA se-
+quencing provide, respectively, single-cell spatial information and transcriptome-wide measurements
+needed to study CCIs, but neither modality provides both. Existing spatial transcriptomics founda-
+tion models also cannot effectively learn from spatially resolved single-cell data with full-transcriptome
+coverage, explicitly infer the CCI mechanisms driving cell state–niche associations, or interpretable
+enough to support direct biological interpretations. Here, we present GITIII-scale, a hierarchical, in-
+terpretable pan-cancer spatial transcriptomics foundation model for TME representation learning that
+investigates cell state–niche associations and their underlying ligand–receptor (LR) signaling pathways.
+GITIII-scale uses transformers to model interactions between pairs of cells at defined spatial distances,
+an interpretable single-layer graph transformer without a feed-forward network to decompose how each
+gene in a receiver cell is influenced by each neighboring sender cell, and a graph transformer to generate
+cellular-neighborhood embeddings. Trained on our assembled pan-cancer database of specimen-matched
+scRNA-seq and imaging-based spatial transcriptomics datasets, GITIII-scale generated TME embed-
+dings that recovered niche-associated state changes more accurately than existing spatial transcriptomics
+foundation models in cancer types unseen during training. A case study of an unseen breast cancer
+dataset further demonstrated the model’s interpretability by identifying potentially drug-targetable LR
+pathways associated with endothelial overgrowth and tumorigenesis.
+1
+Introduction
+Cells coordinate their behavior through cell–cell interactions within their local microenvironment. A CCI
+depends jointly on ligand–receptor (LR) signaling, the physical distance between the two cells, and the
+downstream regulatory network of the receiver, producing a context-dependent mapping from a cell’s niche
+(neighboring cells) to its state. We refer to this mapping as the cell state–niche correlation: how much of a
+cell’s deviation from the mean expression level of its cell type is attributable to the cells around it. In tumors
+this quantity is crucial for disease: different arrangements of malignant, immune, stromal, and endothelial
+cells induce distinct pathological programs (Hanahan, 2022; de Visser and Joyce, 2023). For instance,
+tumor-derived vascular endothelial growth factor (VEGF) acts on receptors on neighboring endothelial cells
+*Corresponding author.
+1
+arXiv:2608.26208v1  [q-bio.GN]  26 Aug 2026
+
+
+to drive their proliferation and sprouting, and the resulting angiogenesis supplies the growing tumor (Ferrara
+et al., 2003).
+Quantifying cell state–niche correlations and identifying the specific LR pathways that drive them are
+therefore crucial for understanding cancer dynamics and developing targeted therapies. For example, the
+endothelial overgrowth state was found to correlate with malignant cells in the niche through VEGF sig-
+naling, which led to the development of VEGF-targeted drugs such as bevacizumab (Ferrara et al., 2004)
+that suppress tumor growth by inhibiting tumorigenesis induced by VEGF signaling. Learning cell state–
+niche correlation across cancer types can further distinguish conserved microenvironmental programs from
+cancer-specific interactions, prioritize robust therapeutic targets, support drug repurposing, and reveal the
+cellular contexts in which a target is most likely to be effective.
+Comprehensively modeling the tumor microenvironment (TME) requires spatial context and
+transcriptome-wide measurement at once, and no single assay provides both. Single-cell RNA sequenc-
+ing (scRNA-seq) reads full transcriptomes but dissociates the tissue and discards position. Imaging-based
+spatial transcriptomics (IST) preserves single-cell position but measures a targeted panel — 312 to 6,175
+genes across the platforms used here (Chen et al., 2015; Janesick et al., 2023). Neither technique alone
+captures both the niche and the state it induces — but profiling the same specimen with both does, which is
+the resource we build here, with the two modalities integrated by SpaIM (Li et al., 2025).
+Spatial transcriptomics foundation models (Blampey et al., 2025; Tejada-Lapuerta et al., 2025; Madhu
+et al., 2025; Wang et al., 2025, 2026; Birk et al., 2026) have recently demonstrated that large-scale pre-
+training captures transferable patterns of tissue organization and cellular context. Their objectives, however,
+target tissue architecture, spatial domains, cell identity, or expression similarity, none of which reveals cell
+state–niche correlation: different cell types may occur within the same domain, and cells with different
+niches and different states may also occur within the same domain. A model can therefore be perfectly
+domain-discriminative while carrying no information about how the niche shifted the receiver’s state, and
+its TME representation cannot be decomposed into directional CCIs or the pathways that would make it
+useful for target discovery. Existing foundation models are also trained on data that carries partial biological
+measurement: either on spot-level data, where several cells per spot blur the correlation, or on IST data with-
+out transcriptome-wide measurement, so only a panel-sized slice of the biology is visible (Hu et al., 2021;
+Long et al., 2023; Madhu et al., 2025; Blampey et al., 2025) — a dilemma that paired IST and scRNA-seq
+on one specimen removes. Finally, previous deep learning-based CCI analysis methods such as (Xiao et al.,
+2025; Li et al., 2023a; Fischer et al., 2022) are designed to be dataset-specific models and have not being
+scaled up or trained in a large corpus to learn generalizable CCI features.
+To this end, we introduce GITIII-scale (graph inductive bias transformer for intercellular interaction
+investigation—scale), a hierarchical interpretable pan-cancer foundation model for TME representation
+learning to investigate cell state–niche correlation and its underlying LR pathways (Figure 1). At the first
+level, sender and receiver cells and intercellular distances are tokenized; the cross-attention module then
+models directional interaction, and an interpretable single-layer graph inductive-bias transformer takes the
+interaction tokens and estimates the influence of each sender cell on each gene of the receiver. These influ-
+ences are additive, so the summed contributions of a receiver’s senders constitute its predicted state and every
+prediction decomposes exactly by sender and by gene. At the second level, a multi-layer graph transformer
+takes the resulting sender-receiver pair interaction representations to model higher-order cell state–niche
+correlation and produces an embedding of the niche as a whole. GITIII-scale is self-supervised pretrained
+on biological sample-matched scRNA-seq and IST data comprising 4,254,069 spatial cells, imputed to a
+common 20,000-gene vocabulary (Section 2.5), and is evaluated on held-out cancer types and platforms
+to test whether its TME embeddings recover cell state–niche correlation under biological distribution shift.
+Overall, we propose GITIII-scale and make the following contributions:
+• Foundation model for CCI representation learning in TME. GITIII-scale is the first interpretable
+2
+
+
+foundation model to learn how cell states are influenced by a cell’s niche, enabling CCI modeling and
+representation learning. We assemble and release a pan-cancer corpus of sample-matched imaging-
+based spatial transcriptomics and scRNA-seq from the same biological specimens, enabling the model
+to learn richer information from imputed full transcriptomics at single-cell resolution compared to
+previous models that either lose single-cell resolution or full transcriptomics measurement.
+• Pan-cancer pretraining for cell state–niche representations. Pretrained to model how cellular
+niches shape receiver-cell states across cancer types, GITIII-scale can generate TME embeddings that
+recover niche-associated state changes more accurately than existing spatial transcriptomics founda-
+tion models on cancer types unseen during training.
+• Interpretable foundation model for biological findings. Our model’s interpretable architecture
+decomposes each predicted receiver-cell state into gene-level contributions from individual neighbor-
+ing cells. This goes beyond conventional CCI analysis, which typically identifies candidate ligand–
+receptor events but does not model their downstream transcriptional consequences at single-cell level.
+GITIII-scale also enables statistical testing of which ligand–receptor axes and which cell types are as-
+sociated with specific gene programs in a receiver cell type, supporting potential biological discovery
+and therapeutic-target prioritization.
+2
+Method
+2.1
+Data preprocessing
+Cell type / cell state split and graph construction.
+Let µc denote the mean expression profile of cell type
+c within a sample. We decompose each measured profile xi into a cell type component µt(i), representing
+the average expression for cells of the same cell type, and a cell state component zi, representing the cell’s
+deviation from its cell type average level,
+xi = µt(i) + zi,
+zi = xi −µt(i),
+(1)
+We then construct a k-nearest-neighbor graph and a Delaunay triangulation over the cell centroids P . The
+Delaunay triangulation indicates the neighboring cells that directly contact with the central cell. The cellular
+neighborhood Ni of a receiver cell i comprises itself and its k = 49 nearest cells together with their types,
+states, and relative geometry, and the Delaunay graph identifies which of them are in direct physical contact
+with i.
+2.2
+Method training and evaluation
+Same-type masking.
+Neighboring cells of the same type tend to be in similar states simply because they
+share similar niche features, and a model given access to neighboring cells of the same cell type as the
+central cell to predict could reach high accuracy by copying them, thus learning nothing about cell–cell
+communication (Xiao et al., 2025). As a result, for cells within Ni that share the receiver’s type, including
+the receiver itself, their expressions are masked as µt with their state removed in training.
+Tokenizing cells and distances.
+Treating genes as tokens, as language-inspired single-cell models do,
+yields sequences of tens of thousands of elements per cell and makes a neighborhood of fifty cells computa-
+tionally prohibitive; it also places the attention mechanism between genes, when the relationships of interest
+here are between cells. GITIII-scale therefore treats cells as tokens: two multi-layer perceptrons (MLPs),
+one for sender cells and one for the receiver cell, map a G-dimensional gene expression profile to T = 32
+3
+
+
+Receiver cell
+Sender cell
+Tokenizer
+Distance
+0/1 
+direct 
+contact
+SAB ✕ L
+Attention-based pooling
+Mask cell 
+state 
+expression
+MLP
+Predict cell 
+state expression
++
+Influence 
+tensor for 
+a receiver 
+cell 
+SAB (with CLS) ✕ L
+Receiver 
+cell 
+tokens
+TME 
+embedding
+# target genes
+# neighbors
+# cells in the slide
+CCI strength decay with distance trend
+Cell
+Weight
+0
+0.25
+0.75
+1.0
+20
+A
+B
+C
+D
+How much variance of cell's gene 
+expression is explained by CCI?
+Full influence tensor
+Ligand-receptor 
+database
+#receiver cells
+# LR pairs
+Received signal 
+strength in each cell
+# cells (receiver)
+Target gene 
+expression
+Weighted 
+LASSO
+Which LRs are 
+correlated with the 
+expression of cell-
+state gene X in 
+receiver cell type Y?
+a
+b
+c
+Pan-cancer specimen paired 
+IST and scRNA-seq
+Figure 1: GITIII-scale model architecture. a. GITIII-scale treats the gene expression of receiver and sender
+cells, the distance, and direct contact features between one sender and one receiver cell as tokens, and use
+transformer blocks to model them. b. GITIII-scale utilizes a single-layer graph transformer block without
+feed-forward network to retain interpretability and estimate additive CCI’s influence from different sender
+cells to the receiver cell, then use a multi-layer transformer block to generate TME embedding and estimate
+higher-order CCI’s influence from different sender cells to the receiver cell. c. The interpretability analysis
+pipeline of GITIII-scale. A LASSO regression is used to identify the LR pair(s) whose signaling strength is
+correlated with target gene expression in receiver cells. LR signaling strength is estimated by modeling the
+decay of interaction strength with distance and integrating information from the LR database, with receiver
+cells weighted by their cell-state prediction accuracy in the regression.
+tokens of width d = 256, so that a cell is represented differently depending on whether it is sending or
+receiving:
+Sj = reshape
+ MLPsnd(xj)
+
+,
+Ri = reshape
+ MLPrec(xi)
+
+∈RT×d,
+T = 32, d = 256.
+(2)
+The two roles are kept separate because the biology is asymmetric: the genes that matter for sending signal
+are ligand genes, while those that matter for receiving it are receptors and downstream regulatory genes, and
+a shared encoder would not project them to different spaces.
+The pairwise spatial distance dij is expanded into a small set of decay features spanning contact-range
+to diffusive length scales (Appendix S5) and mapped by an MLP to a single distance token uij ∈Rd,
+while a contact token cij ∈Rd embeds whether two cells are in direct contact according to the Delaunay
+triangulation.
+The sender cell tokens, distance token, and the direct contact token of one sender-receiver pair are then
+processed through self-attention blocks (SAB), and the resulting token set is concatenated with the receiver
+cell tokens and processed by another stack of SABs (Figure 1a). The outputs of the SABs are then pooled
+by a multi-head cross-attention block (MCAB) (Jaegle et al., 2021), in which L = 4 learned latent queries
+4
+
+
+attend to the tokens and return a fixed-size, permutation-invariant summary that is flattened and projected:
+˜Sij = SAB
+ [ Sj; uij; cij ]
+
+∈R(T+2)×d,
+(3)
+Hij = SAB
+ [ ˜Sij; Ri; uij; cij ]
+
+∈R(2T+4)×d,
+(4)
+eij = Wc flatten
+ MCAB(Hij)
+
+,
+MCAB(·) ∈RL×d, eij ∈R256,
+(5)
+with three SAB blocks at each stage.
+2.3
+Prediction heads and pretraining
+Level one: an interpretable additive graph inductive-bias transformer.
+Both prediction heads take the
+sender, receiver, distance, direct contact tokens produced above (Figure 1b) as inputs. For the first head,
+similar to the interpretability analysis in GITIII (Xiao et al., 2025), two MLPs each map eij to a per-gene
+attention logit and a per-gene value, and attention scores are normalized across senders, independently for
+each gene. Then we multiply the value by attention scores and sum them up to directly predict the cell state
+expression:
+α(g)
+ij =
+exp
+ WA(eij)(g)
+P
+j′ exp
+ WA(eij′)(g),
+I(g)
+ij
+= α(g)
+ij WV (eij)(g),
+ˆz(1)(g)
+i
+=
+k
+X
+j=1
+I(g)
+ij .
+(6)
+Equation 6 is where the interpretability of the model is established: (1) each entry of the influence tensor
+I ∈RN×k×G, is computed from the features of cells i and j and their distance using a one-layer aggregation,
+so no multi-layer graph neural network (GNN) can distort it; (2) Pk
+j=1 I(g)
+ij
+directly predicts the cell-state
+expression target, which is not distorted by non-linear transform that would destroy interpretability. As a
+result, each entry I(g)
+ij
+states how much of the receiver cell i’s gene g’s predicted cell state (gene expression
+deviation from its cell type average expression) is attributable to its neighbor j.
+Level two: higher-order effects and the TME embedding.
+Additivity makes the first head interpretable,
+but also limits it. A sum of influence from all sender cells of a receiver cell cannot express the effect that
+requires a combination of neighbors, such as a signal that acts only when a second cell type is co-present,
+or a suppression that happens only in the absence of another type of cell. Rather than sacrifice the additive
+decomposition, we add a second head that reads the same tokens as the level-one head and makes them
+attend to each other before pooling:
+hi = flatten
+
+MCAB
+ SAB([ Wpei1, . . . , Wpeik; Ri ])
+
+∈RL·d = R1024,
+ˆz(2)
+i
+= Wout hi,
+(7)
+with four SAB blocks. The pooled representation hi is the TME embedding.
+Self-supervised objective.
+We wish to know whether a gene’s variation across cells in the same cell type
+is correlated with variation in their neighborhoods. The absolute scale of the cell state expression is largely
+governed by panel sensitivity and batch effects, which differ across platforms and would make the mean
+squared error loss reflect assay properties rather than biology. We therefore optimize per-gene Pearson
+correlation computed across cells within a gene in the same cell type, which directly measures cell state–
+niche correlation. Over a set B of receiver cells of the same receiver cell type in the same sample,
+ρ(g) = corri∈B
+ ˆz(g)
+i
+, z(g)
+i
+
+,
+LB =
+X
+g
+w(g)h 1 −ρ(g)
++ λ
+˜ˆz(g) −˜z(g)2i
+,
+(8)
+5
+
+
+where the weights w(g) ∝stdi∈B(z(g)
+i
+), normalized to mean one to make genes with more intra-cell-type
+variance contribute more in the training. The second term is a mean squared error between z-scored pre-
+dictions and targets with λ = 0.05 to stabilize the training. The training loss sums Equation 8 over the two
+heads.
+Pretraining.
+GITIII-scale has 2,296,747,232 (∼2.3B) parameters and is pretrained on the 4,254,069 spa-
+tial cells of Table S5: 10 samples spanning 4 tumor contexts and 2 imaging platforms. We use AdamW at a
+constant learning rate of 10−4 and batch size 344 for 2 epochs on a single NVIDIA B200 GPU, reshuffling
+dataset order each epoch, and select the checkpoint with the best macro-averaged validation correlation. The
+model is trained for 23 hours.
+2.4
+Pathway attribution from the influence tensor
+The influence tensor identifies the cell state of the receiver cell that is related to its niche features, but it does
+not point out the signaling axis through which the effect was mediated, and related data-driven methods are
+lacking. Bridging that gap requires external knowledge of ligand–receptor biochemistry, and the following
+procedure utilizes the curated LR database (Jin et al., 2021; Zhao et al., 2023) to infer which LR is correlated
+with the influence. Given a receiver cell type c and a target gene g∗, we recover the responsible axes in the
+following steps (Figure 1c).
+(1) Distance scaler. A monotone spline between the estimated influence from a sender cell to a receiver
+cell targeting one gene and the distance between the sender and the receiver cell is fitted to form the distance
+scaler sc,g∗(d). It is estimated separately for each (receiver type, target gene) combination, because signal
+strength decay trend is different for the correlated LR targeting each (receiver type, target gene) combination:
+the LR that influences target gene A in receiver type X may be a contact-dependent program, while the LR
+that influences target gene B in receiver type Y may be a cytokine-driven program with another distance
+decay trend. Thus sc,g∗is the model’s own learned interaction range for that specific readout, not a global
+assumption that fits all of them.
+(2) Cell weights. A cell whose cell state expression cannot be explained by the model is likely to carry
+less information about how CCI influences cell state and may contain more noise, so it should be weighted
+less in the analysis. We therefore weight each receiver by the fidelity of its own prediction,
+ωi = exp
+ −|z(g∗)
+i
+−ˆz(g∗)
+i
+| / max
+i′
+|z(g∗) −ˆz(g∗)|
+
+,
+(9)
+so that cells whose expression is well explained by their neighbors contribute most.
+(3) LR signal strength. For each LR pair (ℓ, r), we scale the ligand expression of every sender by the
+distance scaler calculated from the distance between the sender and the receiver cell, then sum them over
+the receiver cell’s neighboring sender cells, and multiply by the receiver’s own receptor expression to form
+the received signaling strength by the receiver cell:
+S(ℓ,r)
+i
+=
+ P
+j∈Ni sc,g∗(dij) gm
+ x(ℓ)
+j
+
+· gm
+ x(r)
+i
+
+,
+(10)
+where gm(·) denotes the geometric mean over the subunits of a multimeric ligand or receptor, so that a com-
+plex scores highly only when all of its components are present. The product form encodes the requirement
+that signaling needs both an available ligand nearby and a receptor on the receiving cell. The LR pairs are
+extracted from CellChat (Jin et al., 2021) and NeuronChat (Zhao et al., 2023).
+(4) Sparse selection. The measured target z(g∗) is regressed on all candidate S(ℓ,r) by weighted LASSO,
+with the penalty α selected by cross-validated mean squared error and cells weighted by ωi. Sparsity is
+essential here: several thousand LR pairs are tested against one gene, many of them collinear through
+6
+
+
+shared subunits, and an unregularized fit would distribute the signal across all of them. Axes with nonzero
+coefficients are retained and ranked by coefficient magnitude to select the most correlated LR.
+(5) Stability. The selection is repeated five times, and only axes that are top-ranked across all repeats
+are reported.
+2.5
+Pretraining corpus
+Table S5 of the supplementary material summarizes the samples used, together with their per-sample ac-
+cessions and download links: four liver (HCC/iCCA) CosMx samples (Liu et al., 2026) and matched
+CosMx/Xenium pairs of colon adenocarcinoma, hepatocellular carcinoma, and ovarian cancer (Ren et al.,
+2025). Cell type annotations are taken from each dataset’s original study release. Every IST sample is
+paired with scRNA-seq from the same specimen, which is what makes it possible to impute the measured
+panel onto the shared 20,000-gene vocabulary. The scRNA-seq and IST integration and gene imputation are
+performed with the state-of-the-art SpaIM (Li et al., 2025) model. The breast sample used in the case study
+in Section 3.5 is held out from pretraining.
+3
+Experiments
+3.1
+Dataset
+We evaluate on three held-out samples with specimen matched IST and scRNA-seq data spanning two plat-
+forms and three cancer types: the breast cancer Xenium FFPE sample (Janesick et al., 2023) (103,209 cells,
+a 312-gene panel, 18 annotated cell types), and colorectal carcinoma and melanoma MERFISH samples
+(Zhang et al., 2026). All three are withheld from GITIII-scale pretraining in their entirety: neither breast
+cancer nor the melanoma cancer type appears in the training corpus, and the MERFISH platform is also ab-
+sent from the training data. The comparison on the breast cancer dataset is conservative for us and favorable
+to the baselines: these samples belong to the pretraining corpora of both Novae (Blampey et al., 2025) and
+HEIST (Madhu et al., 2025), so their embeddings are in-distribution here while ours are not.
+For each cell we build a cellular neighborhood as described in Section 2.1, and every neighboring sender
+cell sharing the receiver’s cell type, the receiver included, has its expression replaced by that type’s mean
+µt(i). The mask is intended to make a fair comparison between methods and to truly evaluate whether differ-
+ent models can encode cell state–niche correlations. As discussed above, cell state is spatially autocorrelated
+within a type, so a probe with access to the unmasked states of nearby same-type cells can score well by
+interpolating from them. As a result, the comparison does not reward the embedding that preserves cell’s
+own expression most faithfully. The same masked neighborhoods are supplied to every model with different
+data preprocessing procedure in the comparison.
+3.2
+Metrics
+Spatial foundation models differ in architecture, in pretraining corpus, and in the downstream interfaces
+their authors provide, they do not enable zero-shot prediction of cell state–niche correlations either, which
+makes end-to-end comparison ambiguous. To enable comparison, we compare all foundation models as
+frozen encoders under a single downstream probe and train all dataset-specifc models on each dataset in-
+dividually, so that differences in performance reflect what a representation encodes about cell state–niche
+correlation. Each model produces a TME embedding hi per cell from the same cell type expression masked
+neighborhood, with per-model extraction details given in Appendix S6. A two-layer MLP then predicts the
+cell’s state from that embedding together with its cell-type identity,
+ˆzi = MLP
+ [ hi; Emb(t(i)) ]
+
+,
+(11)
+7
+
+
+using a 128-dimensional cell-type embedding and a 1024-unit hidden layer. We also repeated the exper-
+iments using a similar MLP with a 256-unit hidden layer to remove the influence of different embedding
+size. Supplying the cell type explicitly means the probe need not recover it from the embedding, so the
+measurement isolates the niche information a representation adds beyond identity. Cells are randomly split
+into training, validation, and test sets with ratio 0.7/0.15/0.15; the probe is trained on the training split,
+early-stopped on the validation split, and all reported numbers are computed on the test split over five seeds.
+Architecture, split, and optimizer are held identical across models, so that the embedding source is the only
+variable.
+The two metrics focus on how much each model’s output TME representation encodes the cell state–
+niche correlation. The first metric is the cell-state Pearson correlation coefficient (PCC):
+PCC = 1
+|G|
+X
+g∈G
+corri∈test
+ ˆz(g)
+i
+, z(g)
+i
+
+,
+(12)
+The second is variance explained, which is also used by NCEM (Fischer et al., 2022),
+R2 = 1
+|G|
+X
+g∈G
+ 
+1 −
+P
+i∈test
+ z(g)
+i
+−ˆz(g)
+i
+2
+P
+i∈test
+ z(g)
+i
+−¯z(g)2
+!
+,
+¯z(g) =
+1
+|test|
+X
+i∈test
+z(g)
+i
+,
+(13)
+In the benchmarking, we calculated the above-mentioned metrics in observed gene’s expression (Measured)
+and all genes’ (observed and imputed) expression (All). Both metrics are computed per gene across test
+cells and then averaged over the genes with nonzero variance.
+3.3
+Results
+We compare against three groups of baselines: pretrained spatial foundation models that produce niche
+embeddings — TERRA (Birk et al., 2026), HEIST (Madhu et al., 2025), Novae (Blampey et al., 2025), and
+SpatialFormer (Wang et al., 2026) — non-pretrained graph models trained directly on each target dataset,
+and a probe built from neighborhood cell-type composition alone (Appendix S2). For pretrained spatial
+foundation models, the input is the same cellular neighborhood with same cell type masking followed by
+each method’s specific data preprocessing pipelines.
+As shown in Figure 2, GITIII-scale achieves the best variance explained and the best mean PCC on all
+three held-out samples (numeric values in Tables S1 and S2). Which baseline is the strongest varies by
+sample — TERRA (Birk et al., 2026) on breast and melanoma, HEIST (Madhu et al., 2025) on colorectal
+— whereas the ordering of GITIII-scale is stable across cancer types and across both platforms. NCEM
+with the graph convolutional network (NCEM-GCN) (Fischer et al., 2022) and the graph attention network
+(GAT) (Veliˇckovi´c et al., 2018) are not foundation models and are trained with random initialization directly
+on each dataset’s train/val/test split. The k-NN cell-type proportion probe, MLP(cell-type embedding, niche
+cell-type proportion), measures how much of the signal is available from neighborhood composition alone; it
+recovers between 28% and 54% of GITIII-scale’s variance explained depending on sample and k. To test the
+influence of different MLP probes, we repeat the above-mentioned 10 methods × 3 datasets × 5 replicates
+= 150 experiments on an MLP with a smaller hidden layer, whereas the results show that GITIII-scale still
+performs the best (Table S2).
+3.4
+Ablation studies
+Four ablations, all evaluated on the held-out breast sample, were performed to evaluate whether data scaling,
+model scaling, model hyperparameter changes, and architecture ablations would lead to decreased model
+performance (Figure 2, bottom row). More training cells improves variance explained monotonically from
+8
+
+
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.05
+0.10
+0.15
+Variance explained
+Xenium Breast
+Measured
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.15
+0.30
+PCC
+Measured
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.06
+0.12
+0.18
+Variance explained
+All
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.15
+0.30
+0.45
+PCC
+All
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.02
+0.04
+0.06
+Variance explained
+MERFISH CRC
+Measured
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.08
+0.16
+0.24
+PCC
+Measured
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.02
+0.04
+0.06
+Variance explained
+All
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.08
+0.16
+0.24
+PCC
+All
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.04
+0.08
+0.12
+Variance explained
+MERFISH Melanoma
+Measured
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.0
+0.1
+0.2
+0.3
+PCC
+Measured
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.00
+0.04
+0.08
+0.12
+Variance explained
+All
+GITIII-scale
+TERRA
+heist
+novae
+NCEM-GCN
+GAT
+spatialformer
+k49
+k25
+k10
+0.0
+0.1
+0.2
+0.3
+PCC
+All
+Original
+k=35
+k=25
+k=10
+0.00
+0.05
+0.10
+0.15
+Variance explained
+Ablation
+Number of neighbors
+Original (2B)
+width/2 (0.9B)
+width/4 (0.4B)
+0.00
+0.05
+0.10
+0.15
+Variance explained
+Number of parameters
+0.00
+0.05
+0.10
+0.15
+Variance explained
+Original
+No direct contact
+embedding
+No distance
+embedding
+Component ablation
+2,347,589
+3,043,399
+4,254,069
+Original
+0.00
+0.05
+0.10
+0.15
+Variance explained
+Cumulative training cells
+Figure 2: The benchmarking and ablation study results.
+0.1290 at 2.35M cells to 0.1684 at 4.25M. Since the steps are matched, the gain is attributable to corpus size
+and diversity rather than to additional optimization. Halving and quartering the model width degrades its
+performance from 0.1684 at 2B parameters to 0.1577 and 0.1489, showing the model scales with capacity.
+Shrinking the neighborhood is the most damaging ablation of the four: k = 35, 25, and 10 give 0.1603,
+0.1398, and 0.1022, the last a 39% relative loss, indicating that the signal extends well beyond the immedi-
+ately adjacent cells. Removing the geometry inputs is the next most damaging — dropping the direct-contact
+embedding gives 0.1529 and dropping the distance embedding 0.1236, a 27% relative loss — confirming
+that spatial information is crucial in the cell-state–niche correlation. In addition, we trained the GITIII-scale
+model purely on the three evaluation datasets with the same cross-validation and found the model cannot
+converge on a single dataset. As an ablation study, we also trained GITIII on the three evaluation datasets
+and found that the dataset-specific training leads to about 4% to 9% variance explained decrease in the three
+datasets (Table S6).
+The two prediction heads also let us quantify the cost of interpretability directly. Across the same runs,
+the additive head 1, whose predictions decompose exactly into the influence tensor, reaches an average gene
+PCC within 2% of the graph-transformer head 2 (0.1902 vs. 0.1934 at the selected checkpoint; 0.3702 vs.
+0.3726 on the training corpus). Exact decomposability therefore costs almost nothing in accuracy.
+3.5
+Case study: an interpretable endothelial proliferation axis
+To demonstrate our model’s interpretability, we asked which signaling axis is most correlated with expres-
+sion of MKI67 (Ki-67), a proliferation marker whose expression level is routinely used for tumor grading
+9
+
+
+Observed MKI67 in endothelial
+DL-predicted
+Distance scaler
+a
+b
+c
+Figure 3: Interpretability case study in the held-out breast sample. (a) Observed and predicted MKI67 in
+endothelial cells. (b) Fitted distance scaler for this (receiver type, target gene) pair. (c) Received KDR-axis
+signal strength versus measured MKI67 in receiver endothelial cells.
+and prognosis (Davey et al., 2021). The model reproduces the spatial pattern of MKI67 in this cell type
+(Figure 3a) with similar spatial expression patterns between the observed and predicted. The fitted distance
+scaler (Figure 3b) decays sharply within ∼20–50 µm and then plateaus, aligning with expected ligand diffu-
+sion physical law. Applying the attribution procedure of Section 2.4 selects the KDR (VEGFR2) axis as the
+top-ranked pathway, and the received signal strength correlates with measured MKI67 in receiver endothe-
+lial cells (Figure 3c; PCC 0.23, P = 3.3×10−83, n = 7,064). Repeating the selection five times returns the
+same top-ranked axis each time. VEGFR-related signaling pathway is the canonical driver of endothelial
+proliferation and the target of anti-angiogenic therapy (Ferrara et al., 2003; Al-Sanea et al., 2021), so the
+model recovers a well-established mechanism in a tumor type absent from its training corpus.
+4
+Conclusion
+We present GITIII-scale, an interpretable graph foundation model for cell state–niche correlation analysis in
+spatial transcriptomics. GITIII-scale uses transformers to model the interaction between two single cells at
+a given spatial distance and a graph transformer to model the cellular neighborhood features. Trained on our
+assembled pan-cancer, specimen-level matched scRNA-seq and IST database with 4,254,069 cells, GITIII-
+scale overcomes previous databases’ drawback of losing either single-cell resolution or full transcriptomics
+measurement, and can produce TME embeddings that capture cell state–niche correlation better than pre-
+vious foundation models. Its unique interpretable architecture also enables the single-cell-level analysis of
+how each gene of each receiver cell is influenced by each of its neighboring sender cell, and further statis-
+tical analysis of which pathway is highly correlated with the target gene expression in a given receiver cell
+type, enabling an interpretable modelling of intercellular interaction, the TME, and drug target discovery
+studies.
+However, our study suffers from the following limitations, which are our future working directions. 1.
+Specimen-level matched publicly available scRNA-seq and IST data are rare, so we will keep collecting
+data to further scale the model. And due to limited computational resources, the imputation of full tran-
+scriptomics using IST and scRNA-seq is only performed on the SpaIM model 2. It is hard to systematically
+evaluate the analysis accuracy of our LR attribution since there is no ground truth, and our analysis can only
+tell correlation instead of causality; further biological validation will be performed to better evaluate and
+10
+
+
+train our model. 3. To acquire biological interpretation, our model requires inputs imputed from specimen-
+level paired IST and scRNA-seq data, which may limit the usage of our model to more datasets. Also, it
+is important to note that the benchmarked spatial transcriptomics foundation models were not specifically
+designed to capture cell state–niche relationships, and their original input formulation may not involve pre-
+dicting masked gene expression from the surrounding niche. Therefore, providing invaluable contribution
+to the field, they may underperform GITIII-scale in encoding cell state–niche correlations. The comparison
+only reflects differences in model objectives and design.
+Ethics Statement
+All datasets used in this study are publicly available and were obtained from previously published works
+with appropriate citations. These datasets were originally collected under IRB approval or equivalent eth-
+ical review, with informed consent obtained as documented in the source publications. We only use fully
+anonymized data and did not conduct any new data collection or direct interactions with human subjects.
+No personally identifiable information or sensitive patient data is included. Our methods are designed to
+advance scientific understanding of spatial transcriptomics and biological modeling and do not pose fore-
+seeable risks related to privacy, misuse, or social harm.
+Declaration of Large Language Models Usage in This Work
+Large Language Models (LLMs) were used as a writing aid to enhance clarity and readability during the
+preparation of this manuscript. The use of these tools was strictly limited to grammatical correction and
+stylistic refinements. LLMs (Claude and ChatGPT) were additionally used to create or modify the scientific
+figures and images in this manuscript. All intellectual content, analyses, and arguments in the paper did not
+rely on the use of LLMs in any way.
+Reproducibility Statement
+All datasets used are public; their platforms, panel sizes, and cell counts are listed in Table S5 of the sup-
+plementary material. The original data of the pretraining data used in this paper can be found in their cor-
+responding papers. The imputed pretraining data, codes and the model checkpoint to reproduce the results
+are available at https://github.com/lugia-xiao/GITIII_scale.
+Acknowledgements
+This study is personally funded by Meiyi Mao.
+11
+
+
+References
+Mohammad M. Al-Sanea, Garri Chilingaryan, Narek Abelyan, Arsen Sargsyan, Sargis Hovhannisyan, Hayk
+Gasparyan, Smbat Gevorgyan, Sarah Albogami, Mohammed M. Ghoneim, Ahmed K. Farag, Ahmed
+A. B. Mohamed, and Ashraf K. El-Damasy. Identification of novel potential VEGFR-2 inhibitors using
+a combination of computational methods for drug discovery. Life, 11(10):1070, 2021. doi: 10.3390/
+life11101070.
+Sebastian Birk, Mohammad Vali Sanian, Amirhossein Vahidi, Samuel Ogden, Daniyal J. Jafree, Mostafa
+Bakhti, and Mohammad Lotfollahi. Multi-scale modeling of human tissues from spatial transcriptomics
+with TERRA. bioRxiv, 2026.
+Quentin Blampey et al. Novae: a graph-based foundation model for spatial transcriptomics data. Nature
+Methods, 2025. doi: 10.1038/s41592-025-02899-6.
+Robin Browaeys, Wouter Saelens, and Yvan Saeys. NicheNet: modeling intercellular communication by
+linking ligands to target genes. Nature Methods, 17(2):159–162, 2019. doi: 10.1038/s41592-019-0667-5.
+Zixuan Cang et al. Screening cell–cell communication in spatial transcriptomics via collective optimal
+transport. Nature Methods, 2023. doi: 10.1038/s41592-022-01728-4.
+Kok Hao Chen, Alistair N. Boettiger, Jeffrey R. Moffitt, Siyuan Wang, and Xiaowei Zhuang. Spatially
+resolved, highly multiplexed RNA profiling in single cells. Science, 2015. doi: 10.1126/science.aaa6090.
+Matthew G. Davey, Sean O. Hynes, Michael J. Kerin, Nicola Miller, and Aoife J. Lowery. Ki-67 as a prog-
+nostic biomarker in invasive breast cancer. Cancers, 13(17):4455, 2021. doi: 10.3390/cancers13174455.
+Karin E. de Visser and Johanna A. Joyce. The evolving tumor microenvironment: From cancer initiation to
+metastatic outgrowth. Cancer Cell, 41(3):374–403, 2023. doi: 10.1016/j.ccell.2023.02.016.
+Daniel Dimitrov, Philipp Sven Lars Schäfer, Elias Farr, Pablo Rodriguez-Mier, Sebastian Lobentanzer, Pau
+Badia-i Mompel, Aurelien Dugourd, Jovan Tanevski, Ricardo Omar Ramirez Flores, and Julio Saez-
+Rodriguez. LIANA+ provides an all-in-one framework for cell–cell communication inference. Nature
+Cell Biology, 26(9):1613–1622, 2024. doi: 10.1038/s41556-024-01469-w.
+Mirjana Efremova, Miquel Vento-Tormo, Sarah A. Teichmann, and Roser Vento-Tormo. CellPhoneDB: in-
+ferring cell–cell communication from combined expression of multi-subunit ligand–receptor complexes.
+Nature Protocols, 2020. doi: 10.1038/s41596-020-0292-x.
+Napoleone Ferrara, Hans-Peter Gerber, and Jennifer LeCouter. The biology of VEGF and its receptors.
+Nature Medicine, 9(6):669–676, 2003. doi: 10.1038/nm0603-669.
+Napoleone Ferrara, Kenneth J. Hillan, Hans-Peter Gerber, and William Novotny. Discovery and develop-
+ment of bevacizumab, an anti-VEGF antibody for treating cancer. Nature Reviews Drug Discovery, 3(5):
+391–400, 2004. doi: 10.1038/nrd1381.
+David S. Fischer, Anna C. Schaar, and Fabian J. Theis.
+Modeling intercellular communication in tis-
+sues using spatial graphs of cells.
+Nature Biotechnology, 41(3):332–336, 2022.
+doi:
+10.1038/
+s41587-022-01467-z.
+Douglas Hanahan. Hallmarks of cancer: New dimensions. Cancer Discovery, 12(1):31–46, 2022. doi:
+10.1158/2159-8290.CD-21-1059.
+12
+
+
+Jian Hu et al.
+SpaGCN: Integrating gene expression, spatial location and histology to identify spatial
+domains and spatially variable genes by graph convolutional network.
+Nature Methods, 2021.
+doi:
+10.1038/s41592-021-01255-8.
+Andrew Jaegle, Felix Gimeno, Andy Brock, Andrew Zisserman, Oriol Vinyals, and João Carreira. Perceiver:
+General perception with iterative attention. In International Conference on Machine Learning (ICML),
+pages 4651–4664, 2021.
+Amanda Janesick et al. High resolution mapping of the tumor microenvironment using integrated single-
+cell, spatial and in situ analysis. Nature Communications, 2023. doi: 10.1038/s41467-023-43458-x.
+Suoqin Jin et al. Inference and analysis of cell-cell communication using CellChat. Nature Communications,
+2021. doi: 10.1038/s41467-021-21246-9.
+Bo Li, Ziyang Tang, Aishwarya Budhkar, Xiang Liu, Tonglin Zhang, Baijian Yang, Jing Su, and Qianqian
+Song. SpaIM: single-cell spatial transcriptomics imputation via style transfer. Nature Communications,
+16(1):7861, 2025. doi: 10.1038/s41467-025-63185-9.
+Haochen Li, Tianxing Ma, Minsheng Hao, Wenbo Guo, Jin Gu, Xuegong Zhang, and Lei Wei. Decod-
+ing functional cell–cell communication events by multi-view graph learning on spatial transcriptomics.
+Briefings in Bioinformatics, 24(6):bbad359, 2023a. doi: 10.1093/bib/bbad359.
+Zhuoxuan Li, Tianjie Wang, Pentao Liu, and Yuanhua Huang. SpatialDM for rapid identification of spatially
+co-expressed ligand–receptor and revealing cell–cell communication patterns. Nature Communications,
+14(1):3995, 2023b. doi: 10.1038/s41467-023-39608-w.
+Meng Liu, Maria O. Hernandez, Darko Castven, Hsin-Pei Lee, Wenqi Wu, Limin Wang, Marshonna
+Forgues, Jonathan M. Hernandez, Jens U. Marquardt, and Lichun Ma. Tumor cell villages define the
+co-dependency of tumor and microenvironment in liver cancer. Nature Communications, 17(1):1986,
+2026. doi: 10.1038/s41467-026-69797-z.
+Yahui Long, Kok Siong Ang, Mengwei Li, Kian Long Kelvin Chong, Raman Sethi, Chengwei Zhong, Hang
+Xu, Zhiwei Ong, Karishma Sachaphibulkij, Ao Chen, et al. Spatially informed clustering, integration,
+and deconvolution of spatial transcriptomics with GraphST. Nature Communications, 2023. doi: 10.
+1038/s41467-023-36796-3.
+Hiren Madhu et al. HEIST: A graph foundation model for spatial transcriptomics and proteomics data.
+arXiv preprint arXiv:2506.11152, 2025.
+Giovanni Palla et al. Squidpy: a scalable framework for spatial omics analysis. Nature Methods, 2022. doi:
+10.1038/s41592-021-01358-2.
+Pengfei Ren, Rui Zhang, Yunfeng Wang, Peng Zhang, Ce Luo, Suyan Wang, Xiaohong Li, Zongxu
+Zhang, Yanping Zhao, Yufeng He, et al. Systematic benchmarking of high-throughput subcellular spa-
+tial transcriptomics platforms across human tumors. Nature Communications, 16(1):9232, 2025. doi:
+10.1038/s41467-025-64292-3.
+Alejandro Tejada-Lapuerta, Anna C. Schaar, Robert Gutgesell, Giovanni Palla, Lennard Halle, Mariia Mi-
+naeva, et al. Nicheformer: a foundation model for single-cell and spatial omics. Nature Methods, 2025.
+doi: 10.1038/s41592-025-02814-z.
+13
+
+
+Kevin Troulé, Robert Petryszak, Batuhan Cakir, James Cranley, Alicia Harasty, Martin Prete, Zewen Kelvin
+Tuong, Sarah A. Teichmann, Luz Garcia-Alonso, and Roser Vento-Tormo. CellPhoneDB v5: inferring
+cell–cell communication from single-cell multiomics data. Nature Protocols, 20(12):3412–3440, 2025.
+doi: 10.1038/s41596-024-01137-1.
+Petar Veliˇckovi´c, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua Bengio.
+Graph attention networks. In International Conference on Learning Representations (ICLR), 2018.
+Chloe Xueqi Wang, Haotian Cui, Andrew Hanzhuo Zhang, Ronald Xie, Hani Goodarzi, and Bo Wang.
+scGPT-spatial: Continual pretraining of single-cell foundation model for spatial transcriptomics. bioRxiv,
+2025. doi: 10.1101/2025.02.05.636714.
+Jun Wang, Yuanhua Huang, and Ole Winther. SpatialFormer: universal spatial representation learning from
+subcellular molecular to multicellular landscapes. Nature Computational Science, 2026. doi: 10.1038/
+s43588-026-01016-7.
+Xiao Xiao, Le Zhang, Hongyu Zhao, and Zuoheng Wang. Inferring spatial single-cell-level interactions
+through interpreting cell state and niche correlations learned by self-supervised graph transformer. Nature
+Machine Intelligence, 2025. doi: 10.1038/s42256-025-01161-0.
+Wubing Zhang, Erin L. Brown, Abul Usmani, Noah Earland, Minji Kang, Aaron M. Newman, and Aadel A.
+Chaudhuri. Non-invasive profiling of the tumour microenvironment with spatial ecotypes. Nature, 2026.
+doi: 10.1038/s41586-026-10452-4.
+Wei Zhao, Kevin G. Johnston, Honglei Ren, Xiangmin Xu, and Qing Nie. Inferring neuron-neuron com-
+munications from single-cell transcriptomics through NeuronChat. Nature Communications, 14(1):1128,
+2023. doi: 10.1038/s41467-023-36800-w.
+14
+
+
+Supplementary Material
+S1
+Benchmark results in numeric form
+Table S1 reports the values plotted in Figure 2 of the main text, so that exact numbers and dispersions
+are available without reading them off bars. Table S2 reports the corresponding values for the repeated
+experiment with a 256-unit probe hidden layer. Every entry uses the masking convention, data split, and
+training recipe of Section S6; the two tables differ only in the width of the probe’s hidden layer.
+Table S1: Cell-state prediction across the three held-out samples with a 1024-unit probe hidden layer; these
+are the values plotted in Figure 2 of the main text. R2 is variance explained and PCC is the gene-averaged
+Pearson correlation, both on the test split; entries are mean ± s.d. across replicates. Measured genes restricts
+the target set to genes on each platform’s panel; All genes uses every nonzero-variance gene after imputation.
+Best value per column in bold.
+Xenium Breast
+MERFISH CRC
+MERFISH Melanoma
+Method
+R2
+PCC
+R2
+PCC
+R2
+PCC
+Measured genes
+GITIII-scale (ours) 0.168 ±0.003 0.398 ±0.004 0.059 ±0.000 0.243 ±0.003 0.112 ±0.002 0.328 ±0.004
+TERRA
+0.146 ±0.001 0.370 ±0.002 0.035 ±0.002 0.198 ±0.004 0.070 ±0.002 0.268 ±0.005
+HEIST
+0.124 ±0.002 0.344 ±0.003 0.041 ±0.004 0.203 ±0.005 0.072 ±0.003 0.270 ±0.009
+Novae
+0.111 ±0.001 0.324 ±0.001 0.031 ±0.001 0.173 ±0.006 0.047 ±0.002 0.214 ±0.006
+SpatialFormer
+0.062 ±0.002 0.233 ±0.005 0.012 ±0.007 0.120 ±0.006 0.009 ±0.007 0.109 ±0.018
+NCEM-GCN
+0.126 ±0.003 0.351 ±0.006 0.024 ±0.001 0.159 ±0.001 0.056 ±0.003 0.240 ±0.012
+GAT
+0.111 ±0.004 0.324 ±0.002 0.016 ±0.000 0.132 ±0.004 0.026 ±0.012 0.173 ±0.017
+k-NN prop. (k=49)
+0.081 ±0.000 0.271 ±0.001 0.026 ±0.002 0.151 ±0.004 0.059 ±0.000 0.232 ±0.003
+k-NN prop. (k=25)
+0.082 ±0.001 0.272 ±0.001 0.023 ±0.001 0.140 ±0.002 0.056 ±0.001 0.224 ±0.001
+k-NN prop. (k=10)
+0.084 ±0.001 0.275 ±0.001 0.018 ±0.000 0.127 ±0.004 0.044 ±0.000 0.202 ±0.001
+All genes
+GITIII-scale (ours) 0.193 ±0.003 0.433 ±0.003 0.067 ±0.000 0.261 ±0.001 0.120 ±0.002 0.340 ±0.004
+TERRA
+0.154 ±0.001 0.387 ±0.001 0.036 ±0.002 0.201 ±0.007 0.074 ±0.002 0.274 ±0.010
+HEIST
+0.127 ±0.006 0.353 ±0.009 0.041 ±0.002 0.208 ±0.005 0.071 ±0.002 0.265 ±0.001
+Novae
+0.119 ±0.000 0.341 ±0.000 0.033 ±0.002 0.183 ±0.004 0.049 ±0.001 0.220 ±0.002
+SpatialFormer
+0.051 ±0.000 0.214 ±0.000 0.017 ±0.003 0.080 ±0.017 0.010 ±0.002 0.115 ±0.007
+NCEM-GCN
+0.130 ±0.002 0.358 ±0.001 0.028 ±0.000 0.171 ±0.001 0.056 ±0.004 0.236 ±0.001
+GAT
+0.111 ±0.001 0.327 ±0.000 0.016 ±0.002 0.128 ±0.000 0.043 ±0.003 0.201 ±0.006
+k-NN prop. (k=49)
+0.076 ±0.004 0.268 ±0.007 0.026 ±0.002 0.159 ±0.007 0.065 ±0.002 0.250 ±0.002
+k-NN prop. (k=25)
+0.074 ±0.003 0.264 ±0.005 0.023 ±0.001 0.151 ±0.002 0.061 ±0.000 0.241 ±0.000
+k-NN prop. (k=10)
+0.072 ±0.001 0.258 ±0.002 0.019 ±0.000 0.137 ±0.001 0.049 ±0.002 0.217 ±0.003
+S2
+Related work
+Foundation models for spatial transcriptomics.
+Individual spatial transcriptomics slides are small,
+noisy, and measured on incompatible gene panels, so models fit to one slide neither generalize nor pool
+information across studies. Spatial foundation models are designed to overcome this. Such a model is
+pretrained once on many slides with a self-supervised objective, and then exposes a frozen per-cell or per-
+niche embedding. Downstream users probe that embedding with a light task head instead of training a new
+model for each dataset. scGPT-spatial (Wang et al., 2025) continually pretrains a gene-token transformer
+15
+
+
+Table S2: The same comparison with a 256-unit probe hidden layer, all else identical to Table S1. The
+ranking is unchanged, so the margin of GITIII-scale is not an artifact of probe capacity.
+Xenium Breast
+MERFISH CRC
+MERFISH Melanoma
+Method
+R2
+PCC
+R2
+PCC
+R2
+PCC
+Measured genes
+GITIII-scale (ours) 0.170 ±0.004 0.400 ±0.005 0.064 ±0.003 0.251 ±0.006 0.106 ±0.006 0.320 ±0.010
+TERRA
+0.145 ±0.001 0.369 ±0.002 0.036 ±0.002 0.194 ±0.004 0.076 ±0.005 0.275 ±0.009
+HEIST
+0.121 ±0.000 0.340 ±0.001 0.043 ±0.001 0.207 ±0.002 0.077 ±0.002 0.275 ±0.003
+Novae
+0.111 ±0.002 0.324 ±0.003 0.029 ±0.001 0.168 ±0.002 0.044 ±0.001 0.206 ±0.003
+SpatialFormer
+0.057 ±0.010 0.223 ±0.020 0.012 ±0.003 0.121 ±0.002 0.014 ±0.005 0.106 ±0.016
+NCEM-GCN
+0.128 ±0.006 0.352 ±0.005 0.021 ±0.007 0.149 ±0.018 0.052 ±0.003 0.227 ±0.009
+GAT
+0.102 ±0.006 0.311 ±0.006 0.015 ±0.002 0.132 ±0.002 0.032 ±0.003 0.185 ±0.012
+k-NN prop. (k=49)
+0.080 ±0.002 0.269 ±0.004 0.028 ±0.001 0.159 ±0.001 0.061 ±0.005 0.237 ±0.009
+k-NN prop. (k=25)
+0.081 ±0.002 0.269 ±0.004 0.021 ±0.001 0.135 ±0.004 0.053 ±0.001 0.220 ±0.003
+k-NN prop. (k=10)
+0.081 ±0.001 0.269 ±0.001 0.018 ±0.001 0.123 ±0.003 0.045 ±0.000 0.203 ±0.001
+All genes
+GITIII-scale (ours) 0.193 ±0.001 0.433 ±0.001 0.069 ±0.002 0.262 ±0.005 0.119 ±0.002 0.337 ±0.005
+TERRA
+0.154 ±0.002 0.386 ±0.002 0.034 ±0.003 0.193 ±0.001 0.075 ±0.003 0.267 ±0.006
+HEIST
+0.124 ±0.003 0.348 ±0.004 0.041 ±0.002 0.204 ±0.006 0.072 ±0.001 0.268 ±0.002
+Novae
+0.117 ±0.002 0.337 ±0.003 0.031 ±0.001 0.175 ±0.003 0.050 ±0.002 0.220 ±0.003
+SpatialFormer
+0.047 ±0.000 0.202 ±0.001 0.017 ±0.002 0.078 ±0.009 0.019 ±0.001 0.130 ±0.003
+NCEM-GCN
+0.123 ±0.005 0.347 ±0.008 0.026 ±0.004 0.167 ±0.003 0.053 ±0.008 0.225 ±0.018
+GAT
+0.103 ±0.015 0.318 ±0.020 0.015 ±0.004 0.122 ±0.019 0.040 ±0.001 0.196 ±0.004
+k-NN prop. (k=49)
+0.072 ±0.001 0.260 ±0.002 0.022 ±0.010 0.141 ±0.037 0.064 ±0.000 0.245 ±0.001
+k-NN prop. (k=25)
+0.074 ±0.000 0.264 ±0.000 0.015 ±0.003 0.120 ±0.010 0.063 ±0.003 0.246 ±0.007
+k-NN prop. (k=10)
+0.074 ±0.002 0.261 ±0.003 0.018 ±0.000 0.129 ±0.003 0.050 ±0.001 0.220 ±0.002
+from spot- and cell-resolution slides. Its objective masks a subset of a cell’s gene tokens and regresses their
+binned expression values, with a neighborhood term that asks the same decoder to reconstruct a spot from
+the embeddings of its spatially adjacent spots. It outputs contextual cell and gene embeddings, and is applied
+to cell-type deconvolution of spots and to imputation of unmeasured genes. Nicheformer (Tejada-Lapuerta
+et al., 2025) tokenizes each cell as a gene sequence ordered by expression rank and trains a transformer
+encoder with a masked-language-model objective, predicting the identity of randomly masked gene tokens
+by cross-entropy over the gene vocabulary. It outputs a per-cell embedding, which is linearly probed or
+fine-tuned to predict spatial context labels such as niche and region for dissociated cells. Because that em-
+bedding represents the cell itself rather than its surrounding niche — the model consumes one cell’s gene
+sequence and never a neighborhood — Nicheformer produces no niche-level representation to supply to
+our probe, and we therefore exclude it from the benchmark. Novae (Blampey et al., 2025) encodes a cell’s
+neighborhood subgraph with a graph attention network. Rather than reconstructing expression, it clusters
+neighborhoods into a set of learned prototypes and trains the encoder so that two randomly perturbed ver-
+sions of the same neighborhood are assigned to the same prototype. It outputs a per-cell niche embedding
+and a discrete niche assignment used for spatial domain annotation. HEIST (Madhu et al., 2025) models
+a tissue as a hierarchical graph, a spatial cell graph whose nodes each carry a gene co-expression network,
+and pretrains a hierarchical graph transformer on IST datasets. It outputs gene-level embeddings and niche
+embeddings that are used for cell typing, gene imputation, and clinical outcome prediction. SpatialFormer
+(Wang et al., 2026) combines convolutional and transformer blocks over rank-ordered gene tokens and is
+pretrained on cell pairs with masked-token, subcellular transcript-adjacency, and pairwise-proximity ob-
+jectives. It outputs cell embeddings applied to batch correction, cell-type annotation, and co-localization
+16
+
+
+detection. TERRA (Birk et al., 2026) tokenizes an index cell together with its neighborhood as one gene-
+token sequence and pretrains a joint-embedding predictive architecture that predicts masked molecular and
+spatial context in latent space. It outputs gene, cell, and neighborhood embeddings from one backbone,
+used zero-shot for niche and cell-type identification and for in silico gene perturbation. These models are
+designed for representing cells and their spatial context, and are not intended for cell state–niche correlation
+analysis.
+Models and tools for cell–cell interaction analysis.
+Most previous CCI methods focus on estimating
+which interaction events occur between which two cell types and through which LR pair. The candidate
+LR pairs are supplied by established databases, and each candidate is scored by a statistical test on co-
+expression: permutation of cell-type labels in CellPhoneDB (Efremova et al., 2020; Troulé et al., 2025), a
+mass-action score with cofactor terms in CellChat (Jin et al., 2021), and consensus scoring across resources
+in LIANA+ (Dimitrov et al., 2024). Later tools for spatial transcriptomics incorporate spatial information
+into this scoring, either with graph neural networks over the cell graph or by distance-based thresholding
+and weighting of candidate interactions (Cang et al., 2023; Li et al., 2023b; Palla et al., 2022). Only a few
+methods instead estimate the downstream effect of a CCI on the receiver cell: NicheNet (Browaeys et al.,
+2019) propagates ligands through a prior signaling and gene-regulatory network to a ligand–target regulatory
+potential matrix. It inherits the coverage of the prior they are built on, so signaling and target genes that
+are not yet curated fall outside the hypothesis space regardless of the evidence a dataset contains. NCEM
+(Fischer et al., 2022) regresses a cell’s expression on its neighborhood composition with graph convolutional
+models, and GITIII (Xiao et al., 2025) together with graph-attention models such as HoloNet (Li et al.,
+2023a) learns dataset specific cell state-niche correlation and attribution that correlation to certain cells or
+pathways. The data-driven models estimate the relationship from the data instead, but are typically fitted to
+one dataset at a time, so what they learn in one tissue is not carried over to the next. Estimating neighbor-
+attributable state changes in a way that is both data-driven and transferable across samples therefore remains
+open.
+S3
+Differences from GITIII
+GITIII-scale shares its motivating question with GITIII (Xiao et al., 2025) — decomposing a receiver cell’s
+state into contributions from individual neighboring senders — but differs from it in three respects that
+together are what make a pretrained, transferable model possible.
+Architecture.
+GITIII models a neighborhood in a single pass over the sender set. In GITIII-scale the
+sender–receiver relationship is instead built in two levels. A pairwise transformer first encodes each (sender,
+receiver, distance, contact) tuple independently. The sending and receiving roles have separate encoders,
+and intercellular distance is carried as its own token rather than as a scalar weight. Cross-attention pooling
+then compresses each pair to a fixed-width vector. The two prediction heads then act on these pair vectors.
+The first is a single-layer graph transformer with no feed-forward block; its per-gene attention is normalized
+across senders, so its prediction is an exact sum of per-sender, per-gene influences. That property is what the
+interpretability analysis depends on. The second head is a deeper stack, which trades exact decomposability
+for accuracy and supplies the cellular-neighborhood embedding used as the TME representation. Because
+one model yields both an exactly decomposable influence tensor and a niche-level embedding, GITIII-scale
+serves as a foundation model and an attribution tool simultaneously rather than as one or the other.
+Pan-cancer pretraining rather than per-dataset fitting.
+GITIII is fitted to a single dataset at a time, so
+nothing it learns in one tissue transfers to the next, and each new sample requires training from scratch.
+17
+
+
+GITIII-scale is pretrained once across a pan-cancer corpus of 4,254,069 cells spanning several tumor con-
+texts and two imaging platforms, and is then applied frozen to held-out cancer types and platforms. Sec-
+tion S8 quantifies the benefit. Dataset-specific GITIII training loses variance explained on all three evalua-
+tion samples relative to the pretrained model, and GITIII-scale trained from scratch on a single evaluation
+dataset does not converge at all.
+Spatial single-cell data with full-transcriptome coverage.
+GITIII operates on the measured panel of an
+imaging-based platform, a few hundred to a few thousand genes, so the influence it estimates is defined only
+over that panel. Every sample in the GITIII-scale corpus is instead paired with scRNA-seq from the same
+specimen, which allows the measured panel to be imputed onto a shared 20,000-gene vocabulary. Three
+consequences follow. The influence tensor is defined over a transcriptome-scale gene set rather than a panel.
+A single vocabulary is shared across platforms whose panels are otherwise incompatible, without which one
+pretrained model could not span them. And ligand–receptor attribution can reach axes whose genes appear
+on no single platform’s panel.
+S4
+Hyperparameters and architecture specification
+Table S3 lists every architecture and optimization hyperparameter of the GITIII-scale run reported in the
+main text. At this configuration the model has 2,296,747,232 parameters (∼2.3B). All corpus-size ablation
+runs of Section 3.4 of the main text use exactly this configuration and differ only in which datasets enter the
+training list, so that the corpus-size comparison is not confounded by an architecture change. At inference,
+embedding all 103,209 cells of the breast evaluation sample takes 229 s on one B200 GPU.
+Cell-type-aware input construction.
+A sender cell’s input vector is its own measured cell state expression
+added to its cell-type mean profile, except where the sender shares the receiver’s cell type, in which case
+only the cell-type mean is supplied. This is the same-type masking of Section 2.2 of the main text, applied at
+the input rather than as a separate preprocessing pass, and it removes the receiver’s own state and the states
+of same-type neighbors from every training example.
+Pooling.
+Both levels pool with a multi-head cross-attention block (MCAB) in which learned latent queries,
+initialized as N(0, 0.022), attend to the token set and return a fixed-size output independent of the number
+of input tokens. The pair vector and the TME embedding are therefore permutation-invariant with respect
+to sender ordering.
+S5
+Distance featurization
+The Euclidean separation dij between receiver i and sender j, in microns, is expanded into five scalar
+features before being mapped to the distance token,
+ϕ(d) =
+
+10
+d + 1,
+10
+√
+d + 1
+,
+100
+d3 + 1,
+10
+d + 1e−d/0.76,
+10
+d + 1e−d/190.67
+
+.
+(1)
+The five terms span the decay regimes that intercellular signaling is expected to occupy. Two are slow
+algebraic decays and one is a steep cubic decay that acts as a contact-range indicator. The remaining two are
+exponentially damped, with length constants of 0.76 µm and 190.67 µm that bracket juxtacrine and diffusive
+transport. Separate linear maps embed ϕ(dij) for the sender stage and for the interaction stage, so the two
+18
+
+
+Table S3: GITIII-scale architecture and optimization hyperparameters.
+Group
+Hyperparameter
+Value
+Input
+Gene vocabulary G
+20,000
+Neighborhood size k (senders per receiver)
+49
+Cells per training example (1 receiver + k senders)
+50
+Input tensor shape (batch, cells, genes)
+(344, 50, 20,000)
+Tokenization
+Tokens per cell T
+32
+Token width / embedding dimension d
+256
+Attention heads
+16
+MLP expansion ratio
+4.0
+Distance features per sender–receiver pair
+5
+Contact token each
+1
+Pair encoder
+Sender self-attention blocks (SAB)
+3
+Interaction self-attention blocks (SAB)
+3
+Pair-vector dimension out_edge_dim
+256
+MCAB latent queries, pair encoder
+4
+Head 1 (additive) Per-gene attention normalization
+across senders
+Output
+influence tensor Ii ∈Rk×G
+Head 2 (niche)
+Transformer blocks num_layers_deeper
+4
+MCAB latent queries L
+4
+TME embedding dimension L · d
+1024
+Regularization
+Dropout
+0.0
+Attention dropout
+0.0
+Objective
+Per-gene loss
+1 −PCC across cells
+Gene weighting w(g)
+∝stdi(z(g)
+i
+), mean-norm.
+Magnitude term weight λ
+0.05
+Numerical guard ϵ
+10−8
+Stratification
+receiver cell type, macro-avg.
+Heads optimized
+both, losses summed
+Optimization
+Optimizer
+AdamW
+Learning rate
+10−4 (constant)
+Batch size
+344
+Epochs
+2
+Dataset order
+reshuffled each epoch
+Checkpoint selection
+best validation PCC
+Hardware
+GPU
+1× NVIDIA B200
+Pretraining wall-clock
+23 h
+stages can weight the regimes differently. The model is given no distance prior beyond Equation 1; the
+effective interaction range reported in the case study of the main text is fit from data.
+A binary contact token, taken from whether i and j share an edge in the Delaunay triangulation, is
+embedded alongside the distance token.
+19
+
+
+S6
+Per-model embedding-extraction protocol
+Every method is evaluated under the identical masking convention, data split, downstream probe, and train-
+ing recipe described in Section 3.2 of the main text; the only variable is the representation handed to the
+probe. Methods divide into two groups. The four pretrained spatial foundation models (Novae, HEIST,
+TERRA, SpatialFormer) are used as frozen encoders. Each is run through its own authors’ released prepro-
+cessing and inference path rather than a reimplementation, so that the pretrained weights receive the input
+distribution and graph topology they were trained on. The resulting per-cell embedding is computed once
+per dataset and reused unchanged across every probe configuration and replicate. The remaining baselines
+(NCEM-GCN, GAT, and the k-NN cell-type-proportion probe) have no pretrained component and are re-
+trained end to end for every configuration and replicate. Table S4 summarizes the resulting representations.
+Table S4: Representations supplied to the shared probe. All methods see the same masked neighborhoods
+of the same cells and the same 0.7/0.15/0.15 split. D is the dimensionality of the per-cell representation
+reaching the probe.
+Method
+Representation
+D
+GITIII-scale
+TME embedding hi (head 2)
+1024
+Novae
+niche representation z
+64
+HEIST
+cell ⊕mean-pooled gene-network
+256
+TERRA
+mean-pooled context tokens
+384
+SpatialFormer
+mean CLS state over center–neighbor pairs
+512
+NCEM-GCN
+center node after 2 GCNConv layers
+256
+GAT
+center node after 2 GATConv layers
+256
+k-NN proportion niche cell-type composition
+nt
+GITIII-scale.
+The TME embedding is the pooled output of the second-level head, hi ∈R1024, read from
+the checkpoint selected on validation correlation. No fine-tuning is performed on any held-out sample.
+S6.1
+Pretrained foundation models: checkpoints and inference API
+For these four methods we record only the checkpoint identifier and the exact library calls used, since all
+preprocessing, graph construction, and tokenization are the authors’ own and are invoked unmodified.
+Novae.
+Checkpoint
+prism-oncology/novae-human-0
+(https://huggingface.co/
+prism-oncology/novae-human-0), loaded with novae.Novae.from_pretrained(...)
+followed by .eval().
+The spatial graph is built by novae.spatial_neighbors(adata,
+radius=100) and each center cell’s local subgraph uses the n_hops_local value stored
+in the checkpoint rather than an override.
+Novae’s internal model._prepare_adatas per-
+forms gene selection against the model’s own vocabulary and ZScoreTorch standardizes the
+selected matrix.
+Per batch,
+subgraphs are packed as torch_geometric.data.Data ob-
+jects,
+collated with Batch.from_data_list,
+and embedded under torch.no_grad() as
+model.encoder(model.cell_embedder(batch)).
+The embedding is that encoder output,
+D = model.hparams.output_size = 64.
+HEIST.
+Checkpoint
+HirenMadhu/HEIST
+(https://huggingface.co/HirenMadhu/
+HEIST),
+with
+the
+GraphEncoder
+class
+taken
+from
+the
+authors’
+repository
+(https:
+20
+
+
+//github.com/Graph-and-Geometric-Learning/HEIST)
+and
+loaded
+via
+GraphEncoder.from_pretrained(...) at the released configuration (pe_dim = hidden_dim
+= output_dim = 128, 10 layers, 8 heads, cross-message-passing and positional encoding enabled), then
+.eval(). Inference uses a custom batched encode rather than the library’s stock model.encode().
+The stock path lets multi-head attention attend across all cells in a batch, whereas attention must be scoped
+to each cell’s own 50-node neighborhood. The custom path reshapes flat (B ·L, D) tensors to (B, L, D)
+for the attention call only, running the GIN convolutions, TransformerConv cross-message-passing,
+and LayerNorm on flattened block-diagonal tensors, which is numerically equivalent for those submod-
+ules. The embedding concatenates the center node’s 128-dimensional cell-level representation with the
+128-dimensional mean-pooled representation of its gene co-expression network, D = 256.
+TERRA.
+Checkpoint
+Lotfollahi-lab/TERRA-96M
+(https://huggingface.co/
+Lotfollahi-lab/TERRA-96M).
+The model is constructed by the library’s init_model(...)
+from the checkpoint’s own model_config.yaml (enc_emb_dim=
+384, enc_depth=
+12,
+num_heads= 6), and weights are loaded into the target-encoder branch — the JEPA context-representation
+branch used for embeddings, not the online encoder or predictor — via load_checkpoint(...,
+target_encoder=..., is_training=False), then .eval(). The spatial graph is TERRA’s
+own construct_neighbor_graph with n_neighs=10, matching its pretraining configuration.
+Inference
+calls
+target_encoder.backbone.return_layer_emb(layers=[12], ...,
+ignore_spc_tokens=True) under torch.inference_mode() with bfloat16 autocast,
+attending only to non-pad tokens; the per-token outputs are mean-pooled over all non-pad positions of all
+11 segments, D = 384.
+SpatialFormer.
+Checkpoint ckp_pair_13tissues_71.ckpt, the variant recommended by the
+authors, obtained from the Figshare asset linked in their repository (https://figshare.com/
+articles/dataset/pair_input_checkpoint_5k/31146247; code at https://github.
+com/TerminatorJ/Spatialformer) and checksum-verified against the published file.
+The
+model is built by the repository’s manual_train_fm(config=..., use_flash_attn=False)
+from its large paired training config with the packaged gene-embedding table, weights loaded with
+model.load_state_dict(...), then model.eval() and model.input_type = "pair".
+Batches are collated with the library’s own collate_fn to preserve its ALiBi-compatible padding
+layout,
+and
+embeddings
+are
+read
+from
+model.get_embeddings(batch, layers=[-1],
+pair_prediction=True) under bfloat16 autocast, taking the CLS-position hidden state. Each
+center cell is paired with each of its 10 nearest neighbors and the 10 CLS states are averaged, D = 512
+(dim_model).
+Same cell type expression masking.
+The masking rule is identical for every method, but the representa-
+tion it acts on differs by necessity, since it must be applied at whichever stage each pretrained model accepts
+input. For Novae this is after its per-slide z-scoring; for HEIST, on its denoised gene panel; and for TERRA
+and SpatialFormer, at the token level, where a type-mean tokenization is substituted for a cell’s own. The
+latter two require one further departure. Their public tokenizers cache one tokenization per cell and reuse it
+wherever that cell appears as another cell’s neighbor, which masking cannot accommodate when the substi-
+tution depends on the query cell’s type. For those two methods we therefore reimplement the ranking and
+truncation logic at the script level, verified to reproduce the library tokenizer exactly on unmasked input.
+21
+
+
+S6.2
+Baselines trained end to end
+Shared graph for NCEM-GCN and GAT.
+Both use a Delaunay triangulation truncated to edges of at
+most 100 µm, from which an induced ego-subgraph (center, its direct neighbors, and the edges among them)
+is extracted per center cell and cached. Both trunks apply two message-passing layers over this subgraph,
+so information reaches the center cell over paths of up to two hops. The same cached topology is used by
+both architectures, so the comparison between them is not confounded by graph construction. Node features
+are the reconstructed full expression over nonzero-variance genes, z-scored with train-split statistics and
+held fixed across configurations so that the input information budget does not vary with the target gene set.
+Masking replaces the z-scored feature row of the center cell and of every same-type node in its ego-subgraph
+with the type-mean vector, z-scored under the same train-split statistics.
+NCEM-GCN.
+A linear input projection to 256 units with ReLU, two GCNConv layers at width 256, and
+the center node’s output concatenated with a 128-dimensional learned cell-type embedding before the head.
+The graph trunk width is fixed across configurations; only the head width and output gene count vary.
+GAT.
+Identical in every respect to NCEM-GCN except the trunk: ELU activations in place of ReLU, and
+two GATConv layers with 4 attention heads (the first concatenating heads to 256 dimensions, the second
+averaging them).
+k-NN cell-type proportion.
+This baseline consumes no expression at all. A cKDTree over spatial co-
+ordinates retrieves each cell’s k nearest other cells, and the feature vector is the cell-type composition of
+those neighbors: a length-nt vector whose entries are the fractions of the k neighbors belonging to each cell
+type, summing to one. It is concatenated with the same 128-dimensional learned cell-type embedding and
+passed to a head of the shared shape. Neither a normalization layer nor input standardization is needed here,
+since a composition vector is already bounded in [0, 1] and does not exhibit the collapse described above.
+Changing k ∈{10, 25, 49} changes only which precomputed composition array is loaded; architecture and
+hyperparameters are identical across the three variants. The same-type masking convention does not apply
+here and is not invoked, since there is no expression feature to replace; the prediction target is the unmasked
+cell-state residual, exactly as for every other method.
+S6.3
+Shared probe and training recipe
+Every method’s representation is consumed by a probe of the same shape, Linear(D+128, h) →ReLU →
+Linear(h, ngenes), where the 128-dimensional cell-type embedding is learned jointly with the probe and
+never part of a frozen upstream model. Training uses Adam at learning rate 10−3, mean squared error loss,
+early stopping on validation loss with patience 10 against a maximum of 200 epochs, and restoration of the
+best-validation checkpoint before test evaluation. Batch size is 1024 for the frozen-embedding methods and
+the composition baseline, and 512 for the two graph baselines, whose batch elements are variable-size ego-
+subgraphs rather than fixed-length vectors. For the frozen-embedding methods only the probe is retrained
+per configuration; for the end-to-end baselines the whole model is retrained, since the head width and target
+gene set enter the joint objective.
+Masking.
+For every method that consumes expression, both the receiver cell and all same-type neighbors
+have their expression replaced by the cell-type mean µt(i) before encoding. The substitution is always
+applied to reconstructed full expression, never to the cell-state residual, because the residual is the prediction
+target and must not enter the input. Masking the receiver as well as its same-type neighbors is what renders
+the probe leakage-safe. Cell state is spatially autocorrelated within a type, so an encoder with access to
+22
+
+
+unmasked same-type neighbors can score well simply by interpolating between them. Such a score measures
+how faithfully the encoder preserves local expression, not what it captures about cell–cell interaction.
+S7
+Dataset accessions
+Table S5 gives the provenance of every sample in the corpus. Cell counts are as loaded by the pipeline; gene
+counts are the measured imaging panel size before imputation onto the shared 20,000-gene vocabulary.
+Every imaging-based sample is paired with an scRNA-seq reference, which is what permits the imputation
+described in Section 2.5 of the main text; that pairing is at the specimen level for all samples except the two
+MERFISH evaluation samples, as noted below the table. Where the two platform arms of one specimen
+share a single scRNA-seq reference, that reference is listed on every row it serves.
+Table S5: Pan-cancer corpus: per-sample accessions and download sources. Panel is the measured imaging
+gene panel size before imputation onto the shared 20,000-gene vocabulary, and # types is the number of
+annotated cell types in the imaging sample. The three samples in the first block are held out from pretraining
+and used only for out-of-distribution evaluation; the ten below constitute the pretraining corpus.
+Sample
+Tumor type
+Platform
+Panel
+IST cells sc cells # types Source
+Held out from pretraining (evaluation samples)
+breast_xenium_ffpe
+Breast
+Xenium
+312
+103,209 30,365
+18 10x Genomics portala
+ecotypes__CRC2
+Colorectal (met.)
+MERFISH
+500
+38,080 48,426
+9 SpatialEcoTyper portald
+ecotypes__Melanoma1
+Melanoma (met.)
+MERFISH
+500
+27,907 48,426
+9 SpatialEcoTyper portald
+Pretraining corpus
+liver_villages_cosmx__1 Liver (HCC/iCCA) CosMx
+1,000
+835,033 33,495
+6 Zenodo 13773977c
+liver_villages_cosmx__2 Liver (HCC/iCCA) CosMx
+1,000
+433,303 29,811
+6 Zenodo 13773977c
+liver_villages_cosmx__3 Liver (HCC/iCCA) CosMx
+1,000
+867,430 30,762
+6 Zenodo 13773977c
+liver_villages_cosmx__4 Liver (HCC/iCCA) CosMx
+1,000
+211,823 18,438
+6 Zenodo 13773977c
+spatch_coad_cosmx
+Colon adeno.
+CosMx
+6,175
+292,371
+8,288
+16 SPATCH portalb
+spatch_coad_xenium
+Colon adeno.
+Xenium
+5,001
+405,927
+8,288
+16 SPATCH portalb
+spatch_hcc_cosmx
+Hepatocellular
+CosMx
+6,175
+237,030 12,226
+17 SPATCH portalb
+spatch_hcc_xenium
+Hepatocellular
+Xenium
+5,001
+271,687 12,226
+17 SPATCH portalb
+spatch_ov_cosmx
+Ovarian
+CosMx
+6,175
+289,272
+9,229
+13 SPATCH portalb
+spatch_ov_xenium
+Ovarian
+Xenium
+5,001
+410,193
+9,229
+13 SPATCH portalb
+Total (pretraining)
+2 platforms
+4,254,069
+a Janesick et al. (2023); 10x Genomics Xenium human breast dataset explorer (manual download; no stable
+direct URL). b Ren et al. (2025); SPATCH portal, http://spatch.pku-genomics.org/. c Liu
+et al. (2026); Zenodo record 13773977 (imaging) and GEO accession GSE189903 (scRNA-seq). d Zhang
+et al. (2026); SpatialEcoTyper vignette portal, https://spatialecotyper.stanford.edu/,
+imaging; GEO accession GSE320042, scRNA-seq. The two MERFISH samples share a single pan-tumor
+scRNA-seq reference whose specimen identifiers do not overlap with the imaging specimens, so for these
+two samples the reference is matched at the tumor-type rather than the specimen level.
+Paired imputation.
+Each imaging sample and its matched scRNA-seq reference are integrated with
+SpaIM (Li et al., 2025), which learns a per-dataset mapping from measured-panel expression to the full
+scRNA-seq gene space conditioned on Leiden clusters of the reference, and applies it to every spatial cell.
+Integration over the full corpus takes five days on two GPUs.
+23
+
+
+S8
+Dataset-specific training comparison
+Table S6 compares GITIII-scale against GITIII (Xiao et al., 2025) trained separately on each evaluation
+dataset with the same cross-validation protocol. Both columns report variance explained on the measured
+gene panel, mean ± s.d. over five seeds. GITIII-scale was also trained from scratch on each of the three
+evaluation datasets alone; those runs did not converge, so no single-dataset GITIII-scale numbers are
+reported.
+Table S6: Dataset-specific training versus pan-cancer pretraining. Variance explained on the measured
+panel, mean ± s.d. over five seeds. GITIII is trained on each evaluation dataset separately with cross-
+validation; GITIII-scale is pretrained pan-cancer with all three samples held out.
+Dataset
+GITIII (dataset-specific)
+GITIII-scale (pretrained)
+Relative change
+Xenium Breast
+0.1530 ± 0.0032
+0.1684 ± 0.0029
+−9.1%
+MERFISH CRC
+0.0565 ± 0.0049
+0.0591 ± 0.0001
+−4.4%
+MERFISH Melanoma
+0.1050 ± 0.0037
+0.1115 ± 0.0018
+−5.8%
+24

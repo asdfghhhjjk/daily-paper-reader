@@ -1,0 +1,331 @@
+Title: SlideMix: Enhancing Whole Slide Image Analysis via Multimodal Shuffling
+
+URL Source: https://arxiv.org/pdf/2609.00396v1
+
+Published Time: Wed, 02 Sep 2026 00:28:28 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# SlideMix: Enhancing Whole Slide Image Analysis via Multimodal Shu ffl ing 
+
+## Chad Wong 1 Sicheng Chen 1 Tianyi Zhang 2 Enhui Chai 3 Yueming Jin 2
+
+## Zeyu Liu 3 Fei Xia 11Nhu Department of Electrical Engineering and Computer Science, University of California, Irvine 
+
+> 2
+
+## Department of Electrical & Computer Engineering, National University of Singapore 
+
+> 3
+
+## PuzzleLogic Pte Ltd, Singapore 229594, Singapore 
+
+Corresponding author: Fei Xia <fei.xia@uci.edu> 
+
+## Abstract 
+
+Histopathological whole slide images (WSIs) are central to cancer diagnosis, but their gigapixel scale and complex tissue heterogeneity make manual assessment time-consuming and prone to inconsistent interpretation. Deep learning has shown strong potential for WSI analysis, where multiple instance learning (MIL) has become a widely adopted framework for aggregating tile-level features into slide-level predictions; however, robust generalization remains challenging because slide-level labels provide weak supervision, diagnostically relevant regions are sparse, tissue composition varies across slides, and diagnostic evidence spans multiple magnifications. Rather than relying on architecture-specific redesign, pathology-aware augmentation o ff ers a scalable way to improve the WSI training distribution itself, yet existing strategies often perturb tissue regions without preserving diagnostic relevance, slide-level context, or cross-scale structure. Here, we propose SlideMix, a model-agnostic multimodal augmentation framework for MIL-based WSI analysis. SlideMix uses a retrieval-augmented vision-language model (VLM)-based Visual-Language Adaptive Region selector to identify diagnostically relevant regions and reduce weak-label noise, followed by In-place Tile Shu ffl ing to mix feature embeddings within diagnostically meaningful tissue regions, while preserving slide-level context. A VLM-based soft-labeling module assigns supervision to the mixed samples, and a multi-factor, loss-driven, online Curriculum-Learning Feedback scheme adaptively controls shu ffl e granularity, feature similarity, and shu ffl e ratio to promote cross-scale representation learning. Across 11 WSI datasets comprising 20,523 slides, 8 diagnostic tasks, and 10 WSI backbones, SlideMix improves accuracy and generalization in most settings and compares favorably with established augmentation baselines, demonstrating a simple, plug-and-play route toward more robust and scalable digital pathology models. The source code is available at https: // github.com /Xia-Research-Lab /SlideMix. 
+
+Keywords Whole slide image analysis · multimodal augmentation · curriculum learning · multi-scale representation learning 
+
+## 1 Introduction 
+
+Pathology diagnosis serves as the gold standard for cancer diagnosis, relying on microscopic image interpretation to ensure accurate disease identification and treatment planning [1]. In modern digital pathology, tissue biopsies are routinely digitized into gigapixel-scale Whole Slide Images (WSIs), which preserve rich spatial details and multi-scale tissue features. However, their massive size makes manual review both labor-intensive and dependent on highly specialized expertise, often leading to inconsistencies and variability in diagnostic outcomes [2]. Deep learning techniques have been increasingly adopted to assist in WSI analysis by automatically identifying and cat-egorizing critical histological patterns [3]. Recent methods employ Multiple Instance Learning (MIL), a two-stage frame-work designed to overcome GPU memory limits imposed by gigapixel-scale slides. Specifically, in the first stage of MIL, WSIs are divided into smaller tiles (e.g., 224 × 224 pixels from a 100 , 000 × 80 , 000-pixel WSI) and encoded into feature em-beddings using a tile-level foundation model (e.g., UNI [4]). In the second stage, the tile embeddings are aggregated into bags to produce slide-level predictions with a slide-level model (e.g., TransMIL [5]) [6]. Although practical, the inherent com-
+
+Figure 1: Visualization of an augmented example. Compared to other mixing-based methods, SlideMix accurately identifies tile and instance boundaries. It further distinguishes e ff ectively between negative and positive samples. plexity and multi-scale nature of WSIs continue to challenge existing models, particularly in their ability to e ff ectively inte-arXiv:2609.00396v1 [cs.CV] 31 Aug 2026 Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 2
+
+Figure 2: Overview of the MIL pipeline integrated with SlideMix. (a) Two WSIs from the same dataset are selected, tiled, and embedded into feature vectors for e ffi cient computation. (b) The corresponding low-resolution WSIs are input into a fine-tuned VLM, which identifies label-relevant regions for mixing. (c) Coordinates of the selected candidate regions are passed to the data augmentation module, where the embedded tiles from stage one of MIL are shu ffl ed in place according to three adjustable parameters N, TPCA , and P provided by the CLF, creating a new mixed sample. (d) The mixed sample is then processed by another separate VLM to generate a soft mixed label. (e) This new sample–label pair is fed into the tile sampler and subsequent training module. (f) Finally, the training loss is used to update the three aforementioned CLF parameters, enabling the ITS to automatically adjust the di ffi culty of the mixed samples throughout training. grate cross-scale information [3]. Three core challenges can thus be identified: 
+
+1) Weak supervision from scarce fine-grained annotations .Unlike natural images, only a small fraction of regions within a WSI (often < 1%) are label-relevant. This extreme imbal-ance between informative and non-informative regions greatly complicates the learning of discriminative features, as irrelevant tiles dominate the training process and weaken label-feature alignment. 
+
+2) Spatial modeling impaired by local homogeneity and global heterogeneity [6]. Pathological structures exhibit strong local continuity but global diversity. This dual characteristic complicates spatial reasoning, as models must simultaneously preserve fine-grained local consistency while capturing long-range dependencies across the entire slide, a challenge that becomes increasingly pronounced with larger WSI dimensions. 
+
+3) Limited multi-scale feature fusion capability [7]. WSIs contain features spanning multiple scales, from cellular to organ-level structures, and di ff erent diagnostic tasks emphasize distinct scales. For instance, tumor purity regression depends on global contextual understanding, while Epidermal Growth Factor Re-ceptor (EGFR) mutation prediction demands precise modeling of cellular morphology. To address these challenges, prior studies have focused on improving model architectures [8, 7] and developing data augmentation strategies [9, 10]. Architectural innovations can improve feature aggregation and spatial modeling, but they are often model-specific and do not directly address the weakly su-pervised and highly imbalanced training data presented to the model. In contrast, data augmentation can improve the train-ing distribution itself and can be applied across di ff erent MIL architectures. However, existing augmentation methods often overlook key properties of pathological images (Fig. 1), includ-ing their multi-scale nature and severe label imbalance caused by large proportions of irrelevant regions. Moreover, most aug-mentation techniques remain static, limiting adaptability across diverse WSIs and tasks. To this end, we propose SlideMix, a novel multimodal data augmentation framework for MIL-based WSI analysis (Fig. 2). SlideMix integrates a Visual-Language Model (VLM)-guided region selector, an in-place tile shu ffl ing mechanism, and an adaptive curriculum feedback loop. Together, these components address the aforementioned challenges through three key inno-vations: 1) We propose a VLM-based Adaptive Region (VAR) selector 
+
+that employs Retrieval-Augmented Generation (RAG) to retrieve domain-relevant knowledge and identify diagnostically signifi-cant ROIs at the lowest WSI scale, mitigating weak supervision eff ects. 2) We design an e ffi cient In-place Tile Shu ffl ing (ITS) module 
+
+that mixes tile embeddings between WSIs using ROI coordinates from the VAR selector, balancing local homogeneity and global heterogeneity. A separate VLM generates soft labels from the mixed WSIs to create new training data. 3) We introduce a multi-factor Curriculum Learning Feed-back (CLF) module that adaptively adjusts the shu ffl e ratio, Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 3PCA similarity threshold, and shu ffl e granularity in the ITS mod-ule based on loss evaluation, enabling progressive cross-scale feature learning. Experimental results across eight pathology tasks, ten state-of-the-art WSI models, and eleven WSI datasets comprising 20,523 WSIs demonstrate the robustness and adaptability of SlideMix. By providing new insights into multimodal feature regrouping, SlideMix improves model generalization and diag-nostic accuracy in digital pathology applications. 
+
+## 2 Related Works 
+
+2.1 Data Augmentation 
+
+Data augmentation is a fundamental technique in deep learning, designed to enhance model generalization and robust-ness by generating modified or synthetic samples while preserv-ing the information relevant to the learning task. For natural images, common methods include simple geometric and color transformations, such as flipping, rotating, and color jittering. However, these generic augmentations often fail to capture the unique and complex characteristics of pathological images. Con-sequently, domain-specific augmentation techniques have been developed. Early pathology-specific methods operated at the tile-level, including stain normalization [10] and the generation of synthetic artifacts using GANs or latent-space models. Although more relevant to pathology, these methods overlook the broader spatial context and multi-scale features inherent in a WSI. More recent methods have shifted toward feature-level augmentation in the second stage of MIL to better model spatial relationships. For instance, Z-order sampling [9] processes tiles in Z-order to preserve the smallest spatial distance between the tiles, en-couraging the model to learn spatial dependencies. However, such methods remain label-agnostic, applying uniformly across the entire WSI and inadvertently mixing large label-irrelevant regions with the few diagnostically critical ones. This intro-duces substantial noise and impairs the model’s capacity to learn meaningful discriminative features. 
+
+2.2 Visual Language Models 
+
+Visual-Language Models (VLMs) have demonstrated re-markable capabilities in bridging vision and natural language, enabling complex reasoning that requires multimodal under-standing [11]. These models are often pre-trained on large datasets of image-text pairs and excel at zero-shot generaliza-tion for tasks such as image classification, object detection, and visual question answering. In the medical domain, VLMs are increasingly applied to interpret complex medical imagery by leveraging associated textual information, such as clinical notes or pathology reports [12]. Their ability to ground textual con-cepts within visual data makes them particularly promising for localizing ROIs in WSIs. However, most pathology applications of VLMs have focused on direct diagnosis or report generation. In contrast, our approach leverages the semantic recognition and reasoning capabilities of a VLM, not as a direct diagnostic tool, but as an intelligent guidance mechanism for identifying diagnostically relevant regions and directing pathology-aware data augmentation. 
+
+2.3 Curriculum Learning 
+
+Curriculum learning is a training strategy inspired by hu-man cognition, in which models are presented with training examples in a structured order [13]. The model first learns sim-pler concepts and then progressively tackles more di ffi cult ones, which facilitates faster convergence and improved performance. This principle is particularly suitable for WSI augmentation, because overly complex mixing early in training may obscure diagnostic patterns, whereas gradually increasing augmentation di ffi culty allows the model to first learn reliable pathological features before handling more challenging mixed samples. How-ever, due to the complex and heterogeneous nature of WSIs, defining an e ff ective curriculum in computational pathology is challenging. Previous WSI data augmentation methods ap-plied fixed augmentation rules throughout training [9], failing to adapt to the model’s evolving learning state or to the varying complexity of di ff erent WSIs and diagnostic tasks. 
+
+## 3 Methods 
+
+3.1 Data Pre-processing and Tile Embedding 
+
+A WSI S is first normalized to a unified resolution of 0.5 
+
+μm/px, ensuring invariance to raw scanner magnification and guaranteeing consistency across slides acquired from di ff erent scanners and institutions. The WSI is then partitioned into a non-overlapping grid of tiles {Ti,j } of a corresponding size Tsize 
+
+(Fig. 2a). A two-stage filtering protocol is employed to ensure the quality of the selected regions. It first discards tiles with tissue coverage below a predefined threshold (e.g., < 50% of the tile area), then removes tiles where the pixel variance falls below a quantitative cuto ff (e.g., Var (I) < 0.01, where I represents the pixel intensity normalized to the [0 , 1] range). These filter-ing steps exclude background-dominated and nearly uniform tiles that contain limited histological information, ensuring that downstream feature extraction and analysis focus on tissue-rich, visually informative regions. Following pre-processing, each filtered tile is embedded into a dense, semantic feature vector (Fig. 2a) using a pathological foundation model (e.g., GigaPath [14]). This embedding process boosts both training e ffi ciency and performance of the slide-level model (e.g., ABMIL [8]). 
+
+3.2 VLM-based Adaptive Region Selector 3.2.1 Justification 
+
+While a standalone VLM could serve as a region selec-tor, its direct application to specialized medical domains risks generating hallucinated region proposals, as general-purpose VLMs are not inherently grounded in domain-specific clinical knowledge [15]. To mitigate this, we augment the VLM with a Retrieval-Augmented Generation (RAG) system that queries PubMed in real-time, grounding each region proposal in estab-lished medical literature. RAG has been shown to consistently outperform standalone medical MLLMs on clinical reasoning tasks, with improvements extending to both frequent and rare pathological entities that are underrepresented in model training data [15]. By coupling spatial reasoning from the VLM with retrieved biomedical evidence, VAR selector produces region proposals that are both visually informed and clinically contex-tualized, a property empirically validated in our ablation study (Tab. 3). Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 4
+
+Figure 3: The proposed VAR selector: a) The task label L and a visual-language model (VLM) region prompt P are sent to a retrieval-augmented generation (RAG) system R to retrieve the top-K relevant medical data sources D from PubMed D. b) The WSI S at lowest magnification is processed by the visual encoder Gv of the RAG-augmented Gemini model Gem f to extract visual features F, which are partitioned into large regions. c) F, L, and D are fused via the multimodal connector Gm within Gem f . d) Gemini 3.1 Pro iterates and predicts outcomes for each region, while the coordinate generator Gp proposes a set of tile coordinates C demarcating diagnostically relevant regions of interest (ROIs). 
+
+3.2.2 Algorithm 
+
+To dynamically identify label-related regions in WSIs, we propose the VLM-based Adaptive Region (VAR) Selector (Fig. 3). Unlike conventional static selectors, the VAR Selector dynamically analyzes WSIs and proposes tile-level masks over diagnostically relevant regions, ensuring that the downstream ITS module shu ffl es only meaningful tissue rather than label-irrelevant background. This targeted shu ffl ing reduces label noise and produces mixed samples that remain pathologically meaningful. The VAR selector integrates Gemini [16] with the RAG system described above. In a single augmentation process, two VAR selector in-stances handle two WSIs from the same dataset simultaneously (Fig. 2b). Each WSI S is loaded at the lowest magnification level (highest mpp) for e ffi ciency and passed into the visual en-coder Gv of the RAG-augmented Gemini model Gem f to extract visual features F:
+
+F = Gv(S ) (1) Concurrently, the task context label L (organ, staining method, etc.) and a VLM prompt P (e.g., “Identify key pathological regions in this WSI.”) are forwarded to R. The encoder ϕ,implemented as BiomedCLIP [17] pretrained on 15 million biomedical image-text pairs from PubMed Central, tokenizes and encodes the concatenation of L and P into a dense query embedding eq = ϕ([ L ; P]) ∈ R512 . Since all PubMed docu-ments di ∈ D are pre-encoded o ffl ine into the same embedding space and indexed via FAISS [18], the query eq can be e ffi ciently matched against the entire database at augmentation time via approximate nearest-neighbor search, returning the top-K most relevant literature sources D:
+
+D = RD(L, P) = top-K
+
+> di∈D
+
+ϕ([ L ; P]) · ϕ(di)
+
+∥ϕ([ L ; P]) ∥ ∥ ϕ(di)∥
+
+!
+
+(2) 
+
+Figure 4: The proposed CLF module dynamically adjusts three schedulers based on training loss l and threshold Tloss . a) Shu ffl eGranularity ( N) controls shu ffl ing region scale. b) PCA simi-larity threshold ( TPCA ) governs feature similarity between tiles selected for shu ffl ing. c) Shu ffl e Ratio ( P) sets the proportion of shu ffl ed tiles. These updated parameters are then passed to the ITS module to configure the next augmentation. For example, given a survival prediction task with L =
+
+“Lymph Node, H&E Staining”, R retrieves literature on prognos-tic histological markers relevant to that tissue type, grounding region proposals in established clinical evidence. The multi-modal connector Gm of Gem f then concatenates F, L, and D
+
+into a unified representation, from which the predictor Gp gener-ates a natural language description T of diagnostically relevant regions (e.g., “dense cellular clusters in the upper left and glan-dular structures in the lower center”): 
+
+T = Gp
+
+ Gm(F, L, D) (3) Since VLMs do not reliably produce precise numerical coordi-nates, we convert T into tile-level coordinates via a grounding step. The VLM then iterates through the tiles and the similarity between each tile embedding ei j and the textual description T is computed using ϕ:
+
+si j = ϕ(T ) · ei j 
+
+∥ϕ(T )∥ ∥ ei j ∥ (4) Tiles whose similarity score exceeds a threshold τ are retained to form the final coordinate set C:
+
+C = {(i, j) | si j > τ } (5) The coordinates C serve a dual purpose in the downstream pipeline: they constrain the ITS module to shu ffl e tiles exclu-sively within diagnostically relevant regions, while acting as a binary mask that excludes label-irrelevant background tiles from the mixing process entirely. This targeted selection ensures that augmented WSIs contain only meaningful tissue combina-tions, preventing background noise from diluting the supervision signal during training. 
+
+3.3 Curriculum Learning Feedback Module 
+
+To enable gradual cross-scale feature learning, we imple-ment the Curriculum Learning Feedback (CLF) module (Fig. 4). It dynamically adjusts the di ffi culty of the data augmentation in Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 5the downstream ITS module based on the model’s performance. In CLF, the curriculum starts with simple augmentations and progressively increases the di ffi culty by three schedulers con-trolling shu ffl e granularity, PCA similarity threshold, and shu ffl eratio. The di ffi culty is set by comparing the model’s current training loss l against a performance threshold Tloss .
+
+Shu ffl e Granularity ( N): This scheduler determines the feature scale the model learns to recognize. It first groups tile embed-dings into di ff erent sizes, denoted as N × N. The curriculum starts with large N (e.g., 16 × 16), a relatively easy task that lets the model learn the coarse-grained features (e.g., the boundaries between di ff erent tissues). It then gradually decreases N in the sequence of [ N0, N1, ..., Nn], where Ni+1 < Ni. In the end, the model will learn from the most fine-grained patterns (e.g., the features inside a cell). 
+
+PCA Similarity Threshold ( TPCA ): This scheduler determines the feature similarity the model learns to recognize. We use proximity in PCA space as a proxy for feature similarity. We de-fine the distance PCA ∆(ei, e j) between the principal components of two tiles ei and e j as: 
+
+PCA ∆(ei, e j) = |PCA( ei) − PCA( e j)|2 (6) To ensure a consistent di ffi culty scale, we min-max normalize this distance to [0 , 1] using the statistics ( PCA min , PCA max ) from the entire training set D:
+
+PCA ′ 
+
+> ∆
+
+= PCA ∆ − PCA min 
+
+PCA max − PCA min 
+
+(7) A threshold TPCA ∈ [0 , 1] constrains the shu ffl ing: a tile pair can be shu ffl ed only if PCA ′
+
+> ∆
+
+(ei, e j) < TPCA . The curriculum starts with a relatively high TPCA (allowing dissimilar tiles to be shu ffl ed), then gradually decreases the PCA similarity threshold, [TPCA ,0, ..., TPCA ,n], where TPCA ,i+1 < TPCA ,i. At the end, the model is forced to learn fine-grained di ff erences, as only the most similar tiles are permitted to be shu ffl ed. 
+
+Shu ffl e Ratio ( P): This scheduler determines the feature in-tegrity the model learns to recognize. It controls the shu ffl eratio, denoted as P ∈ [0 , 1]. The curriculum starts with a low P,a relatively easy task that lets the model learn from relatively intact features (e.g., 90% integrity). It then gradually increases 
+
+P in the sequence of [ P0, P1, ..., Pn], where Pi+1 > Pi. In the end, the model will learn from the highly fragmented features. The parameters of all three schedulers are updated at the end of each training epoch. We implement the loss-hold strategy as the update rule. Let Θi = (Pi, Ni, TPCA ,i) represent the curricu-lum parameters at epoch i. The parameters for the subsequent epoch Θi+1 are: 
+
+Θi+1 =
+
+((Pi+1, Ni+1, TPCA ,i+1) if l < Tloss 
+
+Θi otherwise (8) This ensures di ffi culty only escalates after the model masters the current di ffi culty level. 
+
+Figure 5: The ITS module operates as follows: a) a pair of embedded WSIs are provided and assigned as ‘reference’ and ‘moving’; b) each WSI is segmented into biological objects approximated by convex hulls; c) the reference WSI is enclosed within its minimal bounding box, and the moving WSI aligns to maximize overlap; d) overlapping regions are shu ffl ed based on ITS configuration and CLF parameters; and e) soft labels for the mixed image are generated using a VLM, forming a new training sample. 
+
+3.4 In-place Tile Shu ffl ing Module 3.4.1 Justification 
+
+Unlike natural image mixing, which is purely synthetic, SlideMix combines tissue regions from di ff erent WSIs in a man-ner that carries an inherent degree of biological plausibility. Tu-mor heterogeneity and diverse co-occurring tissue morphologies are intrinsic properties of real pathological slides [19], mean-ing that the mixed samples produced by SlideMix reflect tissue configurations that plausibly occur in real diagnostic settings. Within a single WSI, regions of varying malignancy grade, stro-mal infiltration, and necrosis commonly co-exist in close spatial proximity [19], and by recombining tissue regions across slides from the same diagnostic task, SlideMix simulates this natural heterogeneity in a principled way. This biological grounding is further strengthened by a key property of MIL aggregators that is often overlooked: while most aggregators are invariant to tile order, they are not invariant to tile composition. ITS exploits this distinction by fundamen-tally altering the set of tiles within a bag, exposing the model to novel feature combinations it would never encounter through reordering alone. This forces the attention mechanism to learn diagnostic representations that are robust to varying tissue con-texts, rather than overfitting to the specific tile compositions present in the training data. 
+
+3.4.2 Algorithm 
+
+The ITS module receives as input the tile embeddings from two WSIs, along with the coordinate sets Cr and Cm produced by their respective VAR selector instances for the reference WSI S r and moving WSI S m. Only tile embeddings ei j whose coordinates fall within Cr or Cm are considered for shu ffl ing; all remaining tiles are held fixed and carried through to the augmented WSI unchanged. This restriction ensures that the feature-level mixing performed by ITS operates exclusively over Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 6diagnostically relevant tissue, preserving the spatial context of label-irrelevant background regions. The process starts with a pair of raw WSIs, designated as the static reference WSI ( S r) and the moving WSI ( S m). To maximize overlap for meaningful WSI augmentation, we align the biological structures of S m to S r before shu ffl ing. The spatial layout of a WSI S is represented as a set of tile coordinates T ⊂ Z2. T is partitioned into disjoint, connected components {z1, z2, ..., zn}, where each zi corresponds to a dis-tinct biological structure (e.g., a contiguous tissue section): 
+
+T =
+
+> n
+
+[
+
+> i=1
+
+zi, where zi ∩ z j = ∅ for i , j (9) Each component zi is treated as an independently movable object. We seek an optimal set of 2D translation vectors Θ = {θ1, ..., θn}
+
+for S m’s components ( zm,i) to maximize the spatial overlap with 
+
+S r’s coordinates Tr:
+
+Θ∗ = arg max 
+
+> Θ
+
+
+
+> n
+
+[
+
+> i=1
+
+(zm,i + θi)
+
+ ∩ Tr (10) Directly optimizing this objective on millions of tiles is compu-tationally prohibitive. To create a tractable problem, we approx-imate each tissue component zi with its convex hull Conv( zi). A standard optimizer then solves for the translations Θ∗ that align the convex hulls. Once found, these optimal o ff sets are applied to the original tile coordinates of S m to produce an aligned WSI 
+
+S a.The shu ffl ing process occurs within the aligned, overlap-ping region Tr ∩ Tm in S a. The coordinates of tile embeddings from S m and S r are randomly shu ffl ed according to the configu-rations ( P, N, TPCA ) from ITS. This shu ffl ed WSI S s contains a semantically coherent fusion of tissue structures from both S r
+
+and S m.We then integrate CONCH [20], a pathological VLM, with our RAG system as a soft-labeler to generate the corresponding soft labels Ls. Similar to Gemini in the VAR selector, CONCH sends the labels and prompts to the PubMed database and re-trieves medical knowledge for assistance. The CONCH VLM uses a di ff erent embedding system, so the mixed image is re-encoded with CONCH embeddings only for soft labeling. 
+
+3.5 Slide-level Feature Modeling 
+
+The augmented WSI S s and label Ls are passed to the slide-level backbone (e.g., TransMIL [5]) to generate the final slide-level predictions for di ff erent downstream tasks, following the conventional MIL pipeline. At the end of the epoch, the validation loss is sent back to CLF to adjust the parameters for the next augmentation. 
+
+Figure 6: Summary of implemented datasets and tasks. 
+
+## 4 Experiment 
+
+4.1 Datasets and Downstream Tasks 
+
+To demonstrate its e ff ectiveness and generalizability, we evaluated SlideMix on 11 datasets across 8 downstream tasks covering diverse diagnostic scenarios (Fig. 6). The PANDA [21] dataset with the Gleason Score task assesses prostate cancer aggressiveness, while CAMELYON16 [22] with the Breast Metastasis task classifies lymph nodes as normal or tumorous. 
+
+IMP-CRS-2024 [23] with the CRS-Tumor task identifies tu-mor tissues in colorectal images. The TCGA [24] datasets cover multiple cancer types and tasks: TCGA-Lung performs Cancer Subtyping , distinguishing lung cancer variants; TCGA-BLCA 
+
+performs Cancer Staging , assessing bladder cancer progression; 
+
+TCGA-UCEC and TCGA-CESC perform Cancer Grading 
+
+on uterine and cervical tissues, respectively, determining tumor di ff erentiation levels; TCGA-UCS and TCGA-UVM perform 
+
+Histological Diagnosis , classifying uterine and uveal tissue subtypes based on morphology; and TCGA-BRCA and TCGA-GBM perform the OS-Months task, predicting patient survival time in months from breast and brain tissue morphology, respec-tively. 
+
+4.2 Implementation Details 
+
+The comparison in Tab. 1 uses ABMIL [8] as the slide-level backbone, while all backbones in Tab. 2 are initialized from scratch without pretraining. Models were trained for 100 epochs (20 for warmup and 80 for main training) using the Adam optimizer with an initial learning rate of 1 × 10 −4 and a cosine decay schedule annealing to 1 × 10 −6 (1% of the initial value). The UnPuzzle [2] framework was used for pre-processing, with each WSI divided into 224 × 224 tiles represented by GigaP-ath [14] feature embeddings for prediction, and into 512 × 512 tiles for soft-labeling using CONCH [20]. To minimize sam-pling variance, particularly for small datasets, five independent test inferences with di ff erent random tile samplings were per-formed per scenario, and predictions were aggregated. A batch size of 4 was maintained for all experiments, conducted on an NVIDIA H100 GPU using Python 3.10.16, PyTorch 2.4.0, and CUDA 12.4. Across Tabs. 1–5, only boldface is used to empha-size numeric results; underlining and color highlighting are not Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 7Table 1: Benchmarking SlideMix against SOTA augmentation methods with ABMIL as the baseline model. Results are reported as mean ± standard deviation over five runs. Within numeric result cells, bold denotes the highest mean in each dataset column; all ties at the reported precision are bolded.                                                                                                   
+
+> Method PANDA CAMELYON16 IMP-CRS-2024 TCGA-Lung TCGA-BLCA TCGA-UCEC TCGA-CESC TCGA-UCS TCGA-UVM TCGA-BRCA TCGA-GBM Acc. [%] Acc. [%] Acc. [%] Acc. [%] Acc. [%] Acc. [%] Acc. [%] Acc. [%] Acc. [%] Corr. Corr. Baseline 75.9 ±1.1 93.7 ±0.9 95.2 ±0.6 71.6 ±1.6 48.4 ±2.1 67.5 ±1.5 54.4 ±1.9 58.3 ±3.8 62.5 ±3.5 0.449 ±0.032 0.614 ±0.026
+> MixUp 76.3 ±1.0 94.1 ±0.8 95.4 ±0.5 72.1 ±1.5 49.2 ±2.0 68.1 ±1.4 54.8 ±1.8 59.1 ±3.6 63.2 ±3.3 0.461 ±0.030 0.625 ±0.025
+> CutMix 76.8 ±1.0 94.5 ±0.8 95.6 ±0.5 72.5 ±1.5 49.7 ±2.0 68.6 ±1.4 55.2 ±1.8 59.8 ±3.5 63.8 ±3.2 0.472 ±0.029 0.628 ±0.025
+> CutOut 75.2 ±1.2 93.1 ±1.0 94.8 ±0.7 71.2 ±1.7 47.8 ±2.2 66.9 ±1.6 53.9 ±2.0 57.5 ±3.9 61.8 ±3.6 0.438 ±0.033 0.608 ±0.027
+> ResizeMix 77.1 ±0.9 94.8 ±0.7 95.8 ±0.5 72.9 ±1.4 50.1 ±1.9 69.1 ±1.3 55.6 ±1.7 60.3 ±3.4 64.2 ±3.1 0.478 ±0.028 0.632 ±0.024
+> PuzzleMix 76.6 ±1.0 94.3 ±0.8 95.5 ±0.5 72.3 ±1.5 49.5 ±2.0 68.4 ±1.4 55.0 ±1.8 59.5 ±3.5 63.5 ±3.2 0.467 ±0.029 0.627 ±0.025
+> SlideMix 77.2 ±0.8 94.9 ±0.6 95.8 ±0.4 73.8 ±1.2 51.6 ±1.7 69.8 ±1.1 55.3 ±1.5 66.7 ±3.0 68.8 ±2.7 0.521 ±0.024 0.637 ±0.021
+
+Table 2: Impact of SlideMix on SOTA MIL backbone performance. Results are reported as mean ± standard deviation over five runs. Within each Base /Ours pair, bold denotes the higher mean; when the means are equal at the reported precision, both values are bolded. 
+
+Method PANDA CAMELYON16 IMP-CRS-2024 TCGA-Lung TCGA-BLCA TCGA-UCEC Acc. [%] Acc. [%] Acc. [%] Acc. [%] Acc. [%] Acc. [%] 
+
+Base Ours Base Ours Base Ours Base Ours Base Ours Base Ours 
+
+SlideAve 66.7 ±1.8 68.1 ±1.5 69.6 ±1.9 71.2 ±1.6 92.3 ±0.9 93.2 ±0.7 75.1 ±1.3 74.6 ±1.3 51.1 ±2.1 52.2 ±1.8 68.3 ±1.6 69.6 ±1.3 SlideMax 62.5 ±1.9 64.2 ±1.6 95.3 ±0.7 94.6 ±0.7 93.1 ±0.9 94.1 ±0.7 75.7 ±1.3 75.1 ±1.3 53.8 ±1.9 54.9 ±1.6 69.2 ±1.5 70.4 ±1.3 ABMIL 75.9 ±1.1 77.2 ±0.8 93.7 ±0.9 94.9 ±0.6 95.2 ±0.6 95.8 ±0.4 71.6 ±1.6 73.8 ±1.2 48.4 ±2.1 51.6 ±1.7 67.5 ±1.5 69.8 ±1.1 CLAM 76.0 ±1.1 76.8 ±0.9 73.4 ±1.8 74.7 ±1.5 92.9 ±0.9 93.7 ±0.7 72.2 ±1.5 73.2 ±1.2 50.0 ±2.0 49.5 ±1.8 64.2 ±1.8 65.8 ±1.5 DSMIL 78.5 ±0.8 78.1 ±0.8 86.1 ±1.4 87.3 ±1.1 94.6 ±0.7 95.4 ±0.5 73.4 ±1.3 74.3 ±1.1 56.8 ±1.8 55.9 ±1.7 71.7 ±1.3 70.8 ±1.2 
+
+TransMIL 76.2 ±0.9 75.8 ±0.9 93.7 ±0.8 94.3 ±0.7 95.2 ±0.6 95.9 ±0.4 73.4 ±1.3 74.1 ±1.1 46.6 ±2.3 48.4 ±1.9 69.2 ±1.4 68.3 ±1.4 
+
+SETMIL 78.2 ±0.8 78.0 ±0.8 94.1 ±0.7 93.8 ±0.7 95.6 ±0.5 95.5 ±0.5 75.8 ±1.2 76.0 ±1.0 57.3 ±1.7 57.1 ±1.6 70.5 ±1.3 70.6 ±1.2 DTFD-MIL 78.9 ±0.8 78.7 ±0.8 94.8 ±0.6 94.5 ±0.7 95.9 ±0.4 96.0 ±0.4 85.2 ±0.9 85.0 ±0.9 58.1 ±1.6 58.3 ±1.5 71.2 ±1.3 71.0 ±1.3 
+
+GigaPath 77.9 ±0.9 78.5 ±0.8 84.5 ±1.4 85.8 ±1.2 94.9 ±0.6 95.1 ±0.5 75.1 ±1.3 75.7 ±1.1 52.2 ±1.9 53.8 ±1.7 68.3 ±1.5 69.2 ±1.3 MambaMIL 78.6 ±0.8 78.4 ±0.8 94.5 ±0.7 94.7 ±0.6 95.7 ±0.5 95.6 ±0.5 76.3 ±1.1 76.5 ±1.0 58.9 ±1.6 58.7 ±1.5 70.8 ±1.3 71.0 ±1.2 Method TCGA-CESC TCGA-UCS TCGA-UVM TCGA-BRCA TCGA-GBM Acc. [%] Acc. [%] Acc. [%] Corr. Corr. 
+
+Base Ours Base Ours Base Ours Base Ours Base Ours 
+
+SlideAve 52.6 ±2.3 52.6 ±2.0 58.3 ±3.8 62.5 ±3.2 75.0 ±2.9 71.9 ±2.7 0.53 ±0.03 0.54 ±0.03 0.54 ±0.03 0.56 ±0.03 SlideMax 47.4 ±2.5 49.1 ±2.2 41.7 ±4.2 45.8 ±3.7 31.2 ±4.6 37.5 ±4.0 0.52 ±0.03 0.51 ±0.03 0.46 ±0.03 0.49 ±0.03 ABMIL 54.4 ±1.9 55.3 ±1.5 58.3 ±3.8 66.7 ±3.0 62.5 ±3.5 68.8 ±2.7 0.45 ±0.03 0.52 ±0.02 0.61 ±0.03 0.64 ±0.02 CLAM 54.4 ±1.9 52.6 ±1.8 58.3 ±3.8 58.3 ±3.4 68.8 ±3.2 71.9 ±2.7 0.54 ±0.03 0.55 ±0.02 0.29 ±0.04 0.31 ±0.03 DSMIL 50.9 ±2.1 52.6 ±1.8 58.3 ±3.7 63.3 ±3.1 62.5 ±3.5 65.6 ±2.9 0.53 ±0.03 0.55 ±0.02 0.51 ±0.03 0.53 ±0.03 TransMIL 50.9 ±2.1 52.6 ±1.8 66.7 ±3.1 70.8 ±2.6 56.2 ±3.5 59.4 ±3.0 0.50 ±0.03 0.52 ±0.03 0.65 ±0.02 0.64 ±0.02 
+
+SETMIL 55.1 ±1.8 55.2 ±1.6 68.9 ±2.9 69.1 ±2.7 71.8 ±2.7 72.0 ±2.5 0.56 ±0.02 0.56 ±0.02 0.63 ±0.02 0.63 ±0.02 DTFD-MIL 55.8 ±1.7 55.5 ±1.6 70.3 ±2.6 70.1 ±2.5 72.5 ±2.6 72.6 ±2.4 0.57 ±0.02 0.57 ±0.02 0.64 ±0.02 0.64 ±0.02 GigaPath 50.9 ±2.1 52.6 ±1.9 50.0 ±4.0 54.2 ±3.4 56.2 ±3.6 59.4 ±3.0 0.64 ±0.02 0.63 ±0.02 0.62 ±0.02 0.63 ±0.02 MambaMIL 54.7 ±1.8 54.5 ±1.7 69.5 ±2.8 69.8 ±2.6 73.1 ±2.6 73.3 ±2.4 0.57 ±0.02 0.57 ±0.02 0.63 ±0.02 0.63 ±0.02 Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 8used. Unless a caption states a metric-specific direction, bold denotes the best mean within the relevant comparison group, and all ties at the reported precision are bolded. 
+
+4.3 Comparison with SOTA Methods 
+
+We benchmarked SlideMix against five augmentation strategies, including CutMix [25], CutOut [26], MixUp [27], 
+
+ResizeMix [28], and PuzzleMix [29]. However, these methods operate on raw tiles or leverage saliency maps, making them directly incompatible with the MIL framework. To enable a fair comparison, we applied each augmentation at the raw im-age level and then computed tile embeddings from the resulting augmented images. For faithful implementation, we used the available original code repositories for each baseline method. The baseline model was trained without any data augmentation. Tab. 1 shows that SlideMix performs strongly across the evaluated datasets. SlideMix has the highest mean in nine of the 11 dataset columns and ties ResizeMix on IMP-CRS-2024 (95.8%), placing first or tied first in 10 of 11 columns; on TCGA-CESC, ResizeMix is slightly higher than SlideMix (55.6% vs. 55.3%). On CAMELYON16, SlideMix reaches 94.9%, which is 1.2 percentage points above the baseline and 0.4 points above CutMix. SlideMix also exceeds the next-best method on PANDA by 0.1 points and on TCGA-Lung by 0.9 points. Thus, the direct comparison demonstrates a consistent overall advantage across diverse pathology tasks. To evaluate the generalizability of SlideMix, we compared two pooling baselines, SlideAve and SlideMax , and eight MIL backbones: ABMIL [8], DSMIL [30], CLAM [31], Trans-MIL [5], SETMIL [32], DTFD-MIL [33], GigaPath [14], and 
+
+MambaMIL [34]. Across the 110 Base /Ours comparisons in Tab. 2, SlideMix improves 74, ties 8, and decreases 28 at the reported precision. ABMIL improves on all 11 datasets and GigaPath improves on ten, demonstrating strong compatibil-ity across distinct backbones. The largest decreases occur for SlideAve on TCGA-UVM and CLAM on TCGA-CESC, iden-tifying clear targets for backbone-specific calibration. Overall, these results demonstrate broad transfer across architectures without requiring backbone redesign. 
+
+## 5 Discussion 
+
+5.1 Visualization Analysis 
+
+To examine how augmentation changes model attention, we visualize Class Activation Maps using Grad-CAM [35]. All attention values were normalized on the same scale. In the repre-sentative PANDA and IMP-CRS-2024 examples, the SlideMix maps appear more spatially concentrated or boundary-aligned than several baselines. On CAMELYON16, SlideMix also sup-presses di ff use activation relative to CutMix and yields a more spatially focused response. Because these examples do not in-clude pixel-level ground-truth lesion annotations, the CAMs provide qualitative evidence that complements the quantitative results. We therefore refer readers to Tab. 1, where ABMIL reaches 94.9% with SlideMix, 94.5% with CutMix, and 93.7% without augmentation on CAMELYON16, and to Tab. 2 for the broader backbone comparison. Table 3: Comparison between di ff erent soft-labeling methods. VLM /u represents the untuned VLM. Bold denotes the highest mean accuracy in each dataset column; ties at the reported preci-sion are all bolded.                                                                    
+
+> Method PANDA CAMELYON16 IMP-CRS-2024 TCGA-Lung Acc. [%] Acc. [%] Acc. [%] Acc. [%] Baseline 75 .9±1.193 .7±0.995 .2±0.671 .6±1.6
+> Random 60 .9±1.381 .5±0.979 .2±1.257 .0±1.5
+> Linear 72 .7±0.989 .0±0.792 .0±0.670 .4±1.0
+> VLM /u75 .3±0.892 .1±0.694 .5±0.573 .3±0.9
+> VLM 77 .2±0.894 .9±0.695 .8±0.473 .8±1.2
+
+5.2 Soft Labeling Approach Analysis 
+
+We compared the performance of the baseline with four di ff erent labeling strategies on SlideMix: Random chooses a label from one of the two source WSIs. Linear calculates the label ls as a weighted average of the original labels lr, lm, and the weight f corresponds to the content ratio of the two WSIs 
+
+S r, S m in the shu ffl ed WSI S s.
+
+ls = f l r + (1 − f )lm lr, lm, ls ∈ RC (11) where C is the number of classes. VLM /u directly applies untuned CONCH as the soft labeler, whereas our VLM uses CONCH with RAG support. Tab. 3 shows that: 1) Random averages 14.5 percentage points below the baseline across the four datasets. 2) Linear averages 3.1 percentage points below the baseline. 3) VLM /u averages 0.3 percentage points below the baseline: it is lower on PANDA ( −0.6), CAMELYON16 (−1.6), and IMP-CRS-2024 ( −0.7), but higher on TCGA-Lung (+1.7). 4) VLM improves on all four datasets and averages 1.3 percentage points above the baseline. These results highlight the importance of RAG support: it converts the dataset-dependent behavior of the untuned VLM into consistent gains across all four datasets. Table 4: Performance comparison between shu ffl ing stages and sampling methods. E ff . (e ffi ciency) is processing time per WSI. Bold denotes the lowest processing time in the e ffi ciency block and the highest mean accuracy in the accuracy block; ties at the reported precision are all bolded.                                                                                   
+
+> Method PANDA CAMELYON16 IMP-CRS-2024 TCGA-Lung Eff . [s] Eff . [s] Eff . [s] Eff . [s] Raw Image 23 .1±9.4512 .4±87 .2357 .7±64 .3411 .4±103 .7
+> Embedding 0.31 ±0.09 8.2±2.15.3±1.47.2±2.8Acc. [%] Acc. [%] Acc. [%] Acc. [%] Sequential 75 .4±0.993 .1±0.693 .9±0.572 .8±1.0
+> Local-box 74 .9±1.092 .5±0.794 .1±0.572 .3±1.1
+> Z-order 76 .4±0.894 .1±0.594 .7±0.473 .3±0.9
+> Random 77 .2±0.894 .9±0.695 .8±0.473 .8±1.2
+
+5.3 Shu ffl ing & Sampling Approach Analysis 
+
+We first compared the stage at which shu ffl ing is applied. 
+
+Raw image takes the raw WSIs, pre-processes them, shu ffl es the WSIs, then uses GigaPath to generate the shu ffl ed tile em-beddings on the shu ffl ed WSI. Embedding takes both raw WSIs and embedded tiles, generates the shu ffl ed coordinates based on raw WSIs, then organizes the embedded tiles based on the coor-dinates. Tab. 4 shows that operating directly on tile embeddings Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 9
+
+Figure 7: Grad-CAM visualization for ABMIL trained with di ff erent augmentation methods; the baseline uses no augmentation. All images are normalized on the same scale. Warmer colors indicate stronger activation. In the CAMELYON16 example, SlideMix shows more spatially concentrated activation than CutMix. The corresponding ABMIL accuracies are 94.9% for SlideMix, 94.5% for CutMix, and 93.7% for the baseline (Tab. 1). skips the redundant tile-embedding process, significantly reduc-ing the processing time per WSI during augmentation (65.4 ×
+
+average speedup). We then compared four sampling strategies. In MIL, only a fixed-size subset of tiles in a WSI is sent into the slide-level back-bone for training e ffi ciency, and the sampling strategy controls which tiles are in the subset. The baseline, Sequential , directly samples the tiles row by row; Z-order samples tiles in Z-order to preserve the inter-tile spatial information [9]; Local-box se-lects several central points, then samples tiles within a given radius of these points; Random randomly samples tiles over the whole WSI. Tab. 4 shows that: 1) Local-box averages 0.4 percentage points below Sequential; it is lower on three datasets but 0.2 points higher on IMP-CRS-2024. 2) Z-order averages 0.8 percentage points above Sequential across the four datasets. 3) Random averages 1.6 percentage points above Sequential. These comparisons support random sampling as the strongest strategy in this ablation. 
+
+5.4 Curriculum Learning Analysis 
+
+We first compared the performance of three loss-driven strategies. Fixed maintains constant di ffi culty parameters throughout the entire training process. Loss-back reduces the di ffi culty parameters when the validation loss l is lower than the performance threshold Tloss . Loss-hold maintains the current di ffi culty parameters when l < Tloss . Tab. 5 shows that: 1) Loss-back averages 0.4 percentage points above Fixed and matches Fixed on CAMELYON16. 2) Loss-hold averages 1.1 percent-age points above Fixed. The result demonstrates the value of loss-driven scheduling across all four datasets. We evaluated each scheduler’s contribution, where All ac-tivates all schedulers and Set 1, 2, 3 disable the shu ffl e ratio, PCA similarity, and shu ffl e granularity schedulers, respectively. Relative to All, Set 3 decreases mean accuracy by 2.5 percentage points on average, Set 1 by 1.9 points, and Set 2 by 0.6 points. Within this ablation, shu ffl e granularity has the largest measured contribution, followed by shu ffl e ratio, while the Set 2 change indicates a complementary, dataset-dependent contribution from PCA-similarity scheduling. Table 5: Comparison of loss-driven strategies and scheduler ab-lations. Sets 1, 2, and 3 disable the shu ffl e-ratio, PCA-similarity-threshold, and shu ffl e-granularity schedulers, respectively. Bold denotes the highest mean accuracy within each comparison block and dataset column; ties at the reported precision are all bolded.                                                                                            
+
+> Method PANDA CAMELYON16 IMP-CRS-2024 TCGA-Lung Acc. [%] Acc. [%] Acc. [%] Acc. [%] Fixed 75 .9±0.993 .7±0.694 .6±0.573 .1±1.0
+> Loss-back 76 .4±0.893 .7±0.695 .2±0.473 .6±0.9
+> Loss-hold 77 .2±0.894 .9±0.695 .8±0.473 .8±1.2Set 1 75 .0±1.092 .7±0.794 .1±0.572 .3±1.1
+> Set 2 76 .6±0.894 .2±0.595 .4±0.473 .3±0.9
+> Set 3 74 .3±1.191 .9±0.893 .6±0.671 .8±1.2
+> All 77 .2±0.894 .9±0.695 .8±0.473 .8±1.2
+
+5.5 Limitations of SlideMix 5.5.1 Data Diversity, SlideMix as a Complement, and Soft-Label Accuracy 
+
+SlideMix complements large-scale, high-quality annotated WSI collections by maximizing feature diversity within them. On very small datasets, the limited training samples constrain the diversity of meaningful tile combinations ITS can generate, and the CLF module struggles to establish a reliable curricu-lum due to unstable loss dynamics. Its strengths are therefore most evident when enriching su ffi ciently sized datasets, while Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 10 adaptation to severe data scarcity remains future work. While VLM-generated soft labels consistently outperform linear mix-ing strategies (Tab. 3), their reliability may vary across tissue combinations, particularly for rare cancer subtypes underrepre-sented in the VLM’s training data. RAG retrieval from PubMed mitigates this issue by grounding label generation in established medical literature, and further improving soft-label accuracy remains a promising direction. 
+
+5.5.2 Architectural and Dataset Di ff erences 
+
+Model-agnostic in this work refers to compatibility with dif-ferent MIL backbones, as demonstrated by 82 improved-or-tied comparisons out of 110. Tab. 2 also identifies 28 backbone– dataset combinations that can benefit from further calibration. The largest calibration opportunities occur for SlideAve on TCGA-UVM and CLAM on TCGA-CESC. Models such as TransMIL rely on positional encodings to capture spatial rela-tionships between tiles, and the compositional shu ffl ing intro-duced by ITS can disrupt this structure enough to o ff set the benefits of augmentation. Permutation-sensitive architectures may therefore be more susceptible to degradation when tile compositions are substantially altered, particularly on small or complex datasets. These cases suggest that backbone- and dataset-specific tuning can further improve consistency. 
+
+5.5.3 Multimodal Extension 
+
+SlideMix currently focuses on WSI data, leaving comple-mentary clinical modalities such as genomics and radiology as a natural extension. Extending SlideMix to these settings is a natural direction for future work, as cross-modal supervision signals could enable richer label generation. 
+
+## 6 Conclusion 
+
+We introduce SlideMix, a multimodal dynamic data aug-mentation framework that enhances WSI analysis. SlideMix employs the VAR selector to adaptively select label-relevant regions for the in-place tile shu ffl ing in ITS. This process is guided by CLF, which promotes progressive, multi-scale feature learning. Tabs. 1–5 and Fig. 1 show that SlideMix mitigates three key challenges in WSI analysis: weak supervision, spatial heterogeneity, and cross-scale feature fusion. Across 11 bench-mark datasets and eight pathology tasks, SlideMix ranks first or ties for first in 10 of 11 direct augmentation comparisons and im-proves or ties in 82 of 110 backbone–dataset comparisons. These results establish SlideMix as a broadly applicable augmentation framework, with opportunities for backbone-specific calibration. By coupling multimodal reasoning with adaptive feature-level mixing, SlideMix provides a scalable and architecture-agnostic data augmentation paradigm for computational pathology. Fu-ture work will focus on integrating generative priors to enhance sample realism and extending the SlideMix framework to multi-modal clinical datasets that include genomics and radiology. 
+
+## References 
+
+[1] Matthew G Hanna, Anil Parwani, and Sahussapont Joseph Sirintrapun. Whole slide imaging: technology and appli-cations. Advances in Anatomic Pathology , 27(4):251–259, 2020. [2] Dankai Liao, Sicheng Chen, Nuwa Xi, Qiaochu Xue, Jieyu Li, Lingxuan Hou, Zeyu Liu, Chang Han Low, Yufeng Wu, Yiling Liu, Yanqin Jiang, Dandan Li, and Shangqing Lyu. Unpuzzle: A unified framework for pathology image analysis, 2025. URL https://arxiv.org/abs/2503. 03152 .[3] Nan Ying, Yanli Lei, Tianyi Zhang, Shangqing Lyu, Chun-hui Li, Sicheng Chen, Zeyu Liu, Yu Zhao, and Guanglei Zhang. Cpia dataset: A comprehensive pathological image analysis dataset for self-supervised learning pre-training. 
+
+arXiv preprint arXiv:2310.17902 , 2023. [4] Richard J Chen, Tong Ding, Ming Y Lu, Drew FK Williamson, Guillaume Jaume, Bowen Chen, Andrew Zhang, Daniel Shao, Andrew H Song, Muhammad Shaban, et al. Towards a general-purpose foundation model for computational pathology. Nature Medicine , 2024. [5] Zhuchen Shao, Hao Bian, Yang Chen, Yifeng Wang, Jian Zhang, Xiangyang Ji, et al. Transmil: Transformer based correlated multiple instance learning for whole slide image classification. Advances in neural information processing systems , 34:2136–2147, 2021. [6] Tianyi Zhang, Zhiling Yan, Chunhui Li, Nan Ying, Yanli Lei, Yunlu Feng, Yu Zhao, and Guanglei Zhang. Cellmix: A general instance relationship based method for data aug-mentation towards pathology image classification. arXiv preprint arXiv:2301.11513 , 2023. [7] Sicheng Chen, Tianyi Zhang, Dankai Liao, Dandan Li, Low Chang Han, Yanqin Jiang, Yueming Jin, and Shangqing Lyu. Pathrwkv: Enabling whole slide prediction with recurrent-transformer. arXiv preprint arXiv:2503.03199 , 2025. [8] Maximilian Ilse, Jakub Tomczak, and Max Welling. Attention-based deep multiple instance learning. In In-ternational conference on machine learning , pages 2127– 2136. PMLR, 2018. [9] Jie Peng, Jingxia Jiang, Yueliang Ying, Sukwon Yun, Qi Long, Yanyong Zhang, and Tianlong Chen. One leaf knows autumn: A piece of data-model facilitates e ffi cient cancer prognosis with histological and genomic modalities. In Workshop on Large Language Models and Generative AI for Health at AAAI 2025 , 2025. [10] Cong Cong, Sidong Liu, Antonio Di Ieva, Maurice Pag-nucco, Shlomo Berkovsky, and Yang Song. Colour adaptive generative networks for stain normalisation of histopathology images. Medical Image Analysis , 82: 102580, 2022. [11] Jingyi Zhang, Jiaxing Huang, Sheng Jin, and Shijian Lu. Vision-language models for vision tasks: A survey. IEEE transactions on pattern analysis and machine intelligence ,46(8):5625–5644, 2024. [12] Haoneng Lin, Cheng Xu, and Jing Qin. Taming vision-language models for medical image analysis: A compre-hensive review. arXiv preprint arXiv:2506.18378 , 2025. [13] Yoshua Bengio, Jérôme Louradour, Ronan Collobert, and Jason Weston. Curriculum learning. In Proceedings of the 26th annual international conference on machine learning ,pages 41–48, 2009. Preprint – S lide Mix : E nhancing Whole Slide Image Analysis via Multimodal Shuffling 11 [14] Hanwen Xu, Naoto Usuyama, Jaspreet Bagga, Sheng Zhang, Rajesh Rao, Tristan Naumann, Cli ff Wong, Ze-lalem Gero, Javier González, Yu Gu, et al. A whole-slide foundation model for digital pathology from real-world data. Nature , pages 1–8, 2024. [15] Guangzhi Xiong, Qiao Jin, Zhiyong Lu, and Aidong Zhang. Benchmarking retrieval-augmented generation for medicine. arXiv preprint arXiv:2402.13178 , 2024. [16] Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut, Johan Schalk-wyk, Andrew M Dai, Anja Hauth, Katie Millican, et al. Gemini: a family of highly capable multimodal models. 
+
+arXiv preprint arXiv:2312.11805 , 2023. [17] Sheng Zhang, Yanbo Xu, Naoto Usuyama, Hanwen Xu, Jaspreet Bagga, Rajesh Rao, Tristan Naumann, Hoifung Poon, Javier Gonzalez-Hernandez, and Jianfeng Peng. Biomedclip: a multimodal biomedical foundation model pretrained from fifteen million scientific image-text pairs. 
+
+arXiv preprint arXiv:2303.00915 , 2023. [18] Je ff Johnson, Matthijs Douze, and Hervé Jégou. Billion-scale similarity search with GPUs. IEEE Transactions on Big Data , 7(3):535–547, 2021. [19] Andriy Marusyk, Vanessa Almendro, and Kornelia Polyak. Intratumor heterogeneity: the rosetta stone of therapy re-sistance. Cancer cell , 22(4):423–438, 2012. [20] Ming Y Lu, Bowen Chen, Drew FK Williamson, Richard J Chen, Ivy Liang, Tong Ding, Guillaume Jaume, Igor Odintsov, Long Phi Le, Georg Gerber, et al. A visual-language foundation model for computational pathology. 
+
+Nature medicine , 30(3):863–874, 2024. [21] Wouter Bulten, Kimmo Kartasalo, Po-Hsuan Cameron Chen, Peter Ström, Hans Pinckaers, Kunal Nagpal, Yuan-nan Cai, David F Steiner, Hester Van Boven, Robert Vink, et al. Artificial intelligence for diagnosis and gleason grading of prostate cancer: the panda challenge. Nature medicine , 28(1):154–163, 2022. [22] Babak Ehteshami Bejnordi, Mitko Veta, Paul Johannes Van Diest, Bram Van Ginneken, Nico Karssemeijer, Geert Litjens, Jeroen AWM Van Der Laak, Meyke Hermsen, Quirine F Manson, Maschenka Balkenhol, et al. Diagnostic assessment of deep learning algorithms for detection of lymph node metastases in women with breast cancer. Jama ,318(22):2199–2210, 2017. [23] Sara P Oliveira, Pedro C Neto, João Fraga, Diana Mon-tezuma, Ana Monteiro, João Monteiro, Liliana Ribeiro, Sofia Gonçalves, Isabel M Pinto, and Jaime S Cardoso. Cad systems for colorectal cancer from wsi are still not ready for clinical acceptance. Scientific Reports , 11(1): 14358, 2021. [24] Antonio Colaprico, Tiago C Silva, Catharina Olsen, Lu-ciano Garofano, Claudia Cava, Davide Garolini, Thais S Sabedot, Tathiane M Malta, Stefano M Pagnotta, Isabella Castiglioni, et al. Tcgabiolinks: an r /bioconductor package for integrative analysis of tcga data. Nucleic acids research ,44(8):e71–e71, 2016. [25] Sangdoo Yun, Dongyoon Han, Seong Joon Oh, Sanghyuk Chun, Junsuk Choe, and Youngjoon Yoo. Cutmix: Regular-ization strategy to train strong classifiers with localizable features. In ICCV , pages 6023–6032, 2019. [26] Terrance DeVries and Graham W Taylor. Improved reg-ularization of convolutional neural networks with cutout. 
+
+arXiv preprint arXiv:1708.04552 , 2017. [27] Hongyi Zhang, Moustapha Cisse, Yann N Dauphin, and David Lopez-Paz. mixup: Beyond empirical risk mini-mization. In ICLR , 2018. [28] Jie Qin, Jiemin Fang, Qian Zhang, Wenyu Liu, Xingang Wang, and Xinggang Wang. Resizemix: Mixing data with preserved object information and true labels. arXiv preprint arXiv:2012.11101 , 2020. [29] Jang-Hyun Kim, Wonho Choo, and Hyun Oh Song. Puzzle mix: Exploiting saliency and local statistics for optimal mixup. In International Conference on Machine Learning ,pages 5275–5285, 2020. [30] Bin Li, Yin Li, and Kevin W Eliceiri. Dual-stream multiple instance learning network for whole slide image classifica-tion with self-supervised contrastive learning. In Proceed-ings of the IEEE /CVF conference on computer vision and pattern recognition , pages 14318–14328, 2021. [31] Ming Y Lu, Drew FK Williamson, Ti ff any Y Chen, Richard J Chen, Matteo Barbieri, and Faisal Mahmood. Data-e ffi cient and weakly supervised computational pathol-ogy on whole-slide images. Nature Biomedical Engineer-ing , 5(6):555–570, 2021. [32] Yu Zhao, Zhenyu Lin, Kai Sun, Yidan Zhang, Junzhou Huang, Liansheng Wang, and Jianhua Yao. Setmil: spa-tial encoding transformer-based multiple instance learning for pathological image analysis. In International Confer-ence on Medical Image Computing and Computer-Assisted Intervention , pages 66–76. Springer, 2022. [33] Hongrun Zhang, Yanda Meng, Yitian Zhao, Yihong Qiao, Xiaoyun Yang, Sarah E Coupland, and Yalin Zheng. Dtfd-mil: Double-tier feature distillation multiple instance learn-ing for histopathology whole slide image classification. In 
+
+Proceedings of the IEEE /CVF conference on computer vision and pattern recognition , pages 18802–18812, 2022. [34] Shu Yang, Yihui Wang, and Hao Chen. Mambamil: En-hancing long sequence modeling with sequence reordering in computational pathology. In International conference on medical image computing and computer-assisted inter-vention , pages 296–306. Springer, 2024. [35] Ramprasath R Selvaraju, Michael Codrescu, Abhishek Das, Ramakrishna Vedantam, Devi Parikh, and Dhruv Ba-tra. Grad-CAM: Visual explanations from deep networks via gradient-based localization. In ICCV , pages 618–626, 2017.

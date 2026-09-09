@@ -1,0 +1,801 @@
+Conserved Immune Topology Improves Pathology
+Foundation Model Generalization for
+Cross-Cancer MSI-H Prediction⋆
+Dasari Naga Raju
+Independent Researcher, Andhra Pradesh, India
+Corresponding Author: raajuuu1998@gmail.com
+Abstract. Pathology foundation models integrated with multiple in-
+stance learning achieve competitive accuracy within single-cancer co-
+horts, yet cross-cancer generalization remains unresolved due to organ-
+specific histological and architectural differences. In this paper, we pro-
+pose Conserved Immune Topology (CIT), a lightweight spatial repre-
+sentation for cross-cancer MSI-H prediction that augments foundation-
+model embeddings with biologically motivated immune descriptors. CIT
+uses unsupervised clustering to identify immune-associated tiles, then en-
+codes tertiary lymphoid structures, peritumoral immune reactions, multi-
+scale tumor-infiltrating lymphocyte density, and immune–tumor mixing
+from frozen foundation-model embeddings and tile coordinates with-
+out requiring annotations or target-domain data. The proposed method
+was evaluated under cross-site and cross-cancer settings using CPTAC-
+COAD and TCGA-STAD cohorts, which introduce scanner variability,
+distribution shifts, and organ-specific architectural variations. Zero-shot
+cross-cancer transfer with CIT increased TransMIL AUC from 0.6627
+to 0.7161, an absolute gain of 0.0534 (p = 0.003), with consistent im-
+provements across all three MIL aggregators. These results suggest that
+spatial immune topology provides potentially an organ-invariant repre-
+sentation for MSI-H prediction, supporting cross-cancer generalization
+of pathology foundation models.
+Keywords: Microsatellite Instability · Computational Pathology · Foun-
+dation Models · Cross-Cancer Generalization · Biomarker Prediction
+1
+Introduction
+Microsatellite instability-high (MSI-H) is an important biomarker for progno-
+sis, treatment selection, and immunotherapy decisions across multiple cancer
+types [1, 2]. MSI-H status is conventionally determined using molecular assays
+and immunohistochemistry-based evaluation of mismatch repair proteins. These
+approaches require additional laboratory tests, motivating the development of
+⋆Accepted at the ECCV 2026 Workshop on Medical Foundation Models
+and Benchmarks (MedFM-Bench).
+arXiv:2609.05182v1  [cs.CV]  4 Sep 2026
+
+
+2
+Dasari Naga Raju
+computational methods that infer the status of MSI-H directly from whole-slide
+images. Recent studies in computational pathology have applied multiple in-
+stance learning (MIL) and pathology foundation models to MSI-H predictions.
+Foundation models have demonstrated strong performance in diagnostic and
+prognostic tasks and, when combined with MIL, achieve competitive perfor-
+mance in MSI-H prediction within individual types of cancer.
+However, cross-cancer transfer introduces domain gaps due to organ-specific
+histological differences. Most existing methods have been developed and eval-
+uated within a single cancer cohort, where training and testing samples share
+similar tissue characteristics. Applying models across cancer types introduces
+distribution shifts arising from organ-specific histological and architectural differ-
+ences. Consequently, representations learned from one cancer type often transfer
+poorly to another. In contrast, MSI-associated immune phenomena are conserved
+across organs. MSI-H tumors are characterized by mismatch repair deficiency
+and demonstrate common immune-related patterns including tertiary lymphoid
+structures, peritumoral lymphocytic reactions, increased tumor-infiltrating lym-
+phocyte (TIL) density, and immune–tumor mixing, observed across colorectal,
+gastric, and other cancer types [3–5]. These observations motivate the hypothesis
+that spatial immune organization encodes organ-invariant correlates of MSI-H
+status.
+Motivated by this observation, we propose Conserved Immune Topology
+(CIT), a lightweight spatial representation for cross-cancer MSI-H prediction.
+CIT augments foundation-model embeddings with biologically motivated spa-
+tial descriptors characterizing immune organization. The resulting representa-
+tion integrates into existing MIL pipelines without requiring annotations, target-
+domain adaptation, or modifications to the underlying foundation model, demon-
+strating improved generalization and robustness under distribution shift.
+2
+Related Work
+2.1
+MSI Prediction in Computational Pathology
+Whole-slide image (WSI) analysis for MSI-H detection combines morphological
+pattern recognition with foundation-model embeddings and multiple-instance
+aggregation. Early work by Kather et al. [6] demonstrated that mismatch repair
+deficiency leaves morphological signatures detectable directly from histopatho-
+logical images. Further studies confirmed these findings across larger multicen-
+ter cohorts and reported improved performance through MIL and attention-
+based aggregation methodologies [7,8]. Subsequent work introduced weakly su-
+pervised and self-supervised methods to reduce annotation burden while main-
+taining performance, including iterative tile-sampling approaches for molecular
+pathways and mutation prediction [9]. Contrastive self-supervised pretraining
+with heterogeneity-aware aggregation has also been applied to mismatch repair-
+related biomarkers across colorectal and breast cancer cohorts [10]. Recent ap-
+proaches adopted pathology foundation models as feature extractors, achieving
+competitive performance for MSI-H prediction within single cancer cohorts [11].
+
+
+CIT for Cross-Cancer MSI Prediction
+3
+However, within-cohort validation typically reports AUCs ≥0.85 [6, 12], while
+cross-cancer transfer studies remain sparse, with reported performance degrad-
+ing 0.15–0.25 AUC units [13].
+Recent pathology foundation models enable extraction of transferable rep-
+resentations from large collections of histopathological images. The pathology
+foundation models such as UNI [14], UNI2-h [15], CONCH [16], and Virchow2 [17]
+achieve > 0.90 AUC on downstream diagnostic tasks including tumor grade, mu-
+tational status, and survival prediction [14]. These representations serve as frozen
+feature extractors within MIL pipelines, reducing the need for task-specific fea-
+ture engineering. Despite effectiveness within cohorts, foundation-model repre-
+sentations remain sensitive to domain-specific appearance and acquisition char-
+acteristics when applied across datasets or cancer types [13].
+MIL has become the standard framework for slide-level prediction from whole-
+slide histopathological images. Attention-based MIL (ABMIL) [18] introduced
+learnable attention mechanisms to aggregate tile features into slide-level repre-
+sentations. CLAM [19] extended this formulation through instance-level cluster-
+ing, whereas TransMIL [20] incorporated transformer-based interactions between
+image tiles. These methods differ primarily in their aggregation mechanisms
+on frozen pathology foundation-model embeddings. Comparative benchmarking
+studies have systematically evaluated weakly supervised MIL pipelines, high-
+lighting the impact of feature extraction and aggregation strategies on slide-level
+performance [21].
+2.2
+Generalization and Spatial Immune Representations
+Generalization across datasets and institutions remains an important challenge
+in computational pathology. Existing approaches evaluate stain normalization,
+data augmentation, domain adaptation, and domain generalization techniques
+to reduce site-specific variations [22, 23]. In biomarker prediction, multi-centric
+studies have reported that models trained for MSI-H prediction frequently trans-
+fer poorly to independent external cohorts [24]. Domain adaptation methods re-
+quire target-domain data during training; conversely, domain generalization tech-
+niques learn invariant representations without target-domain supervision [13].
+While these methods primarily address acquisition and staining differences, cross-
+cancer transfer introduces additional challenges from organ-specific histology and
+architecture. These limitations motivate transferable spatial representations for
+MSI-H prediction across cancer types.
+Recent studies characterize the spatial organization of the tumor immune mi-
+croenvironment beyond tissue appearance. Deep learning has been used to map
+TILs and relate their spatial distribution to molecular and clinical correlates [5].
+Handcrafted spatial descriptors quantifying TIL arrangement and colocaliza-
+tion have been shown to be prognostic of recurrence [25], and dedicated models
+have been proposed for automated detection of tertiary lymphoid structures [26].
+These spatial immune patterns are particularly relevant to MSI-H tumors, which
+exhibit similar immune organization across multiple cancer types. CIT infers im-
+
+
+4
+Dasari Naga Raju
+mune organization directly from frozen foundation-model embeddings and tile
+coordinates without relying on supervised cell- or structure-level annotations.
+3
+Method
+The CIT framework constructs spatial immune descriptors from frozen pathology
+foundation-model embeddings and tile coordinates. CIT characterizes immune-
+associated regions through unsupervised clustering and computes four distinct
+groups of spatial descriptors encoding tertiary lymphoid structures, peritumoral
+immune reactions, multi-scale tumor-infiltrating lymphocyte density, and immune–
+tumor mixing. The ten-dimensional descriptor vector is concatenated with the
+corresponding foundation-model embedding to form an augmented tile represen-
+tation that an MIL model aggregates for slide-level MSI-H prediction.
+3.1
+Preliminaries and Notation
+A WSI is partitioned into N image tiles, each represented by a frozen pathology
+foundation model ϕ that extracts tile embeddings
+  \mat hbf { F } =\{ \ mathbf {f}_1,\mathbf {f}_2,\ldots ,\mathbf {f}_N\}\in \mathbb {R}^{N\times d}, 
+where d = 1536 for UNI2-h and d = 512 for CONCH. Each tile i is associated
+with spatial coordinate ci = (xi, yi) within a slide of width W and height H.
+Spatial coordinates are normalized by slide dimensions to enable transfer across
+images with varying resolutions and fields of view:
+ \ t
+i ld
+e {\
+m
+a
+thbf {c}}_i=\left (\frac {x_i}{W},\frac {y_i}{H}\right ). 
+Each embedding is ℓ2-normalized, denoted ˆfi. Spatial neighborhoods are defined
+using Euclidean distance between normalized tile coordinates. We denote by
+Nk(i) the set of k nearest spatial neighbors of tile i, where k ∈{10, 20, 30, 100}
+depends on the specific spatial descriptor. For each tile, CIT computes a ten-
+dimensional descriptor vector ui ∈R10, subsequently concatenated with the cor-
+responding foundation-model embedding to form the augmented representation
+used for slide-level prediction within an MIL framework (Sec. 3.4).
+3.2
+Unsupervised Immune-Tile Identification
+CIT infers immune-associated regions from frozen foundation-model embeddings
+using unsupervised clustering without manual annotations or prior knowledge
+of immune cell morphology. Instead of detecting individual immune cells, the
+framework infers immune-associated regions by grouping tiles with similar fea-
+ture representations, which subsequently form the basis for computing spatial
+descriptors.
+
+
+CIT for Cross-Cancer MSI Prediction
+5
+Fig. 1: Overview of the proposed framework. WSI patches are encoded via UNI2-h
+and concatenated with a CIT descriptor.
+K-means clustering (K = 50, determined via elbow curve on training cohort)
+was applied to up to 500 random tiles per slide from the training cohort, bal-
+ancing computational cost and cluster stability. Because lymphocyte-rich regions
+exhibit lower morphological heterogeneity, K-means assigns them to tighter clus-
+ters in foundation-model space, enabling unsupervised immune enrichment. The
+cluster tightness score for cluster c is defined as
+  \
+t
+a
+u _
+c
+= \
+left ( \f r a
+c {
+1}{|c|} \sum _{i\in c} \|\hat {\mathbf {f}}_i-\boldsymbol {\mu }_c\|_2 +\epsilon \right )^{-1}, \label {eq:tightness} 
+(1)
+where µc denotes the cluster centroid, |c| is the number of tiles in cluster c, ˆfi
+is the ℓ2-normalized embedding of tile i, and ϵ is a small constant for numer-
+ical stability. The tightness score assigns higher values to clusters with lower
+intracluster variation.
+Clusters were ranked by τc, and the top 30% (κ = 15 of 50 clusters) by tight-
+ness score were designated immune-enriched, a threshold selected using down-
+stream validation performance on held-out TCGA-COAD folds. The identified
+regions were interpreted as computational proxies for immune-associated tissue
+rather than explicit cell-type annotations.
+Each tile is assigned a binary immune indicator mi ∈{0, 1} (cluster mem-
+bership) and continuous immune enrichment score si, which integrates cluster
+tightness and membership:
+  s
+_i= \
+frac {\ta
+u _ {c(i)}}{\max _j\tau _{c(j)}}(1+m_i), \label {eq:immunescore} 
+(2)
+
+
+6
+Dasari Naga Raju
+where c(i) denotes the cluster assigned to tile i, τc(i) denotes the corresponding
+cluster tightness score, and mi denotes the binary immune indicator. The clus-
+tering model and all associated hyperparameters were determined exclusively
+from the training cohort and remained fixed for all subsequent cross-site and
+cross-cancer evaluations.
+3.3
+Conserved Immune Topology Descriptors
+CIT computes four groups of spatial descriptors encoding conserved immune
+topology: tertiary lymphoid structures, peritumoral immune reactions, multi-
+scale immune density, and immune–tumor mixing. Together, these descriptors
+define a ten-dimensional vector ui. The overall architecture of CIT is shown in
+Fig. 1.
+Tertiary Lymphoid Structures (TLS) Tertiary lymphoid structures (TLS)
+are organized lymphoid aggregates associated with effective antitumor immune
+responses in MSI-H tumors [4]. TLS were detected as compact immune-enriched
+clusters using DBSCAN (ε = 0.02, minimum 5 points; determined via grid search
+on TCGA-COAD training folds) applied to normalized coordinates of immune-
+associated tiles (mi = 1). Each detected cluster t is represented by its centroid
+gt and cluster size nt. Three TLS descriptors per tile are computed: (1) bi-
+nary membership to detected TLS clusters, (2) normalized distance to nearest
+TLS centroid (Eq. (3)), and (3) relative size of nearest cluster. These capture
+membership, spatial proximity, and TLS size.
+The normalized distance from tile to its nearest TLS centroid is:
+  \d
+e
+l
+ta _ i^{\ m athr
+m {T LS}} = \f r ac {
+\min _t\|\tilde {\mathbf {c}}_i-\mathbf {g}_t\|_2} {\max _j\min _t\|\tilde {\mathbf {c}}_j-\mathbf {g}_t\|_2}, \label {eq:tlsdist} 
+(3)
+where ˜ci denotes the normalized coordinate of tile i, and gt is the centroid of
+TLS cluster t.
+Peritumoral Margin Reaction Crohn’s-like lymphocytic reaction at the inva-
+sive tumor margin is a characteristic histological feature of MSI-H tumors [3,27].
+CIT estimates the relative spatial position of each tile from local spatial density
+without explicit tissue annotations. Because interior regions have denser spatial
+neighborhoods, local density inversely correlates with margin distance, enabling
+boundary detection without tissue segmentation. The local spatial density is
+estimated from the average distance to the 20 nearest spatial neighbors:
+  \
+r
+h o
+ _
+i
+= \left 
+( \f r ac {1 } {
+2
+0
+} 
+\
+sum _
+{
+j \ i
+n 
+\mat hc
+al {N}_{20}(i)} \|\tilde {\mathbf {c}}_i-\tilde {\mathbf {c}}_j\|_2 +\epsilon \right )^{-1}, \quad \delta _i^{\mathrm {marg}} = 1- \frac {\rho _i}{\max _j\rho _j}, \label {eq:margin} 
+(4)
+where ρi denotes the local spatial density of tile i, N20(i) represents its 20 nearest
+spatial neighbors, δmarg
+i
+is the normalized margin distance, and ϵ is a small
+constant.
+
+
+CIT for Cross-Cancer MSI Prediction
+7
+The peritumoral immune band descriptor combines normalized margin dis-
+tance with the immune score:
+  b
+_i = \fr
+a
+c {s _i \,\de
+l
+ta _i^{\mathrm {marg}}}{\max _j s_j\,\delta _j^{\mathrm {marg}}}, \label {eq:band} 
+(5)
+where si denotes the immune score of tile i. Higher values of bi indicate immune-
+associated regions near the tissue margins.
+Multi-scale Immune Density MSI-H tumors are characterized by high densi-
+ties of TILs, reflecting active antitumor immune response [5]. CIT quantifies the
+local density of immune-associated tiles across multiple spatial neighborhoods.
+For each tile, immune density is computed as the fraction of immune-associated
+tiles within its k-nearest-neighbor neighborhood:
+  \p
+i
+ _
+i
+^
+{(k)} =
+ \frac {1}{k} \sum _{j\in \mathcal {N}_k(i)} m_j, \label {eq:til} 
+(6)
+where π(k)
+i
+denotes the immune density around tile i, Nk(i) represents its k
+nearest spatial neighbors, mj ∈{0, 1} is the immune indicator of neighboring tile
+j, and k ∈{10, 30, 100}. The three neighborhood sizes capture complementary
+spatial scales from local to regional immune density.
+Immune–Tumor Mixing The spatial arrangement of immune-associated and
+non-immune regions provides complementary information regarding local im-
+mune density. Spatial intermixing of immune and tumor regions is characteristic
+of effective antitumor immune responses, whereas spatial separation is charac-
+teristic of immune exclusion. CIT computes two descriptors quantifying neigh-
+borhood heterogeneity and immune-associated tile abundance. Local immune–
+tumor mixing is quantified by binary entropy of the immune fraction within the
+20-nearest-neighbor neighborhood:
+  p _
+i=
+ 
+\frac {1
+}{20} \sum _{j\in \mathcal {N}_{20}(i)} m_j, \label {eq:pi} 
+(7)
+where pi is the local fraction of immune-associated tiles. The corresponding
+mixing entropy is:
+  e _i = -p _i \ lo g _2 p_i - ( 1-p_i)\log _2(1-p_i), \label {eq:entropy} 
+(8)
+with the convention 0 log2 0 = 0. Higher entropy indicates greater immune–
+tumor mixing, whereas lower values correspond to spatially homogeneous neigh-
+borhoods. CIT further computes an immune–tumor ratio over the 30-nearest-
+neighbor neighborhood:
+  r
+_i= 
+\
+fr a c {n
+_
+i ^{
+\mat
+h
+r
+m
+ {imm}}}
+{30-n_i^{\mathrm {imm}}+1}, \qquad n_i^{\mathrm {imm}} = \sum _{j\in \mathcal {N}_{30}(i)} m_j, \label {eq:ratio} 
+(9)
+
+
+8
+Dasari Naga Raju
+where nimm
+i
+denotes the number of immune-associated neighboring tiles, and ri is
+further normalized across the slide. Entropy measures the degree of local spatial
+mixing, while the immune–tumor ratio summarizes the relative prevalence of
+immune-associated tissue within the surrounding neighborhood.
+3.4
+Integration with Multiple Instance Learning
+For each tile, the descriptor vector ui is concatenated with the corresponding
+frozen foundation-model embedding to obtain the augmented representation:
+  
+\ m ath b f { f }_i' = [\mathbf {f}_i \,\Vert \, \mathbf {u}_i] \in \mathbb {R}^{d+10}, \label {eq:concat_final} 
+(10)
+which serves as input to the MIL aggregator. Concatenation was chosen over
+multimodal fusion because (1) it preserves the frozen foundation model inde-
+pendently, (2) it requires no additional trainable parameters for integration, and
+(3) the modest 10-dimensional augmentation avoids significant computational
+overhead. Because CIT operates on frozen tile-level feature representations, it is
+independent of the aggregation method and integrates into existing MIL frame-
+works without modifying the feature extractor or aggregation architecture. We
+evaluated CIT using three representative MIL aggregators: ABMIL, CLAM-SB,
+and TransMIL.
+4
+Experimental Setup
+Datasets and protocol. We evaluated CIT on three publicly available cohorts with
+molecularly determined MSI labels obtained from cBioPortal [28, 29]. TCGA-
+COAD (N=301, 17.9% MSI-H) was used for training and internal five-fold strat-
+ified cross-validation. CPTAC-COAD [30] (N=105, 22.9% MSI-H, different insti-
+tution and scanner) assessed cross-site robustness while preserving the colorec-
+tal cancer prediction task. TCGA-STAD (N=308, 17.5% MSI-H, gastric cancer)
+evaluated zero-shot cross-cancer transfer without retraining or domain adapta-
+tion. Class distribution is summarized in Tab. 1.
+Feature extraction. We extracted 224 × 224 image tiles at 20× magnification
+(0.5 µm/pixel) from tissue regions identified using Otsu thresholding. Tile co-
+ordinates were retained for subsequent spatial descriptor computation. UNI2-
+h [15] was used as the primary pathology foundation model, with tile features
+extracted using the frozen model yielding 1536-dimensional embeddings. Inter-
+nal evaluation included CONCH [16] (512-dimensional embeddings) to compare
+the framework across pathology foundation models prior to cross-site and cross-
+cancer experiments.
+Aggregators and configurations. We evaluated ABMIL [18], CLAM-SB [19], and
+TransMIL [20] in two configurations: baseline using foundation-model embed-
+dings and CIT variant using augmented tile representations. Architecture and
+hyperparameters were kept identical across configurations. Internal validation
+included experiments with both UNI2-h and CONCH, whereas all cross-site and
+cross-cancer experiments used UNI2-h.
+
+
+CIT for Cross-Cancer MSI Prediction
+9
+Table 1: Patient counts and MSI-H/MSS class distribution for study cohorts.
+Dataset
+Patients MSI-H MSS MSI-H (%)
+TCGA-COAD
+301
+54
+247
+17.9
+TCGA-STAD
+308
+54
+254
+17.5
+CPTAC-COAD
+105
+24
+81
+22.9
+Training and statistics. Proposed and baseline models were trained for 40 epochs
+using the Adam optimizer [31] with learning rate 10−4, weight decay 10−5, and
+hidden dimension 256. For each fold, the checkpoint with the highest validation
+AUC was retained for evaluation. The clustering model from Sec. 3.2 was learned
+from training data and applied without modification during cross-site and cross-
+cancer evaluations. For external evaluation, predictions were averaged across
+the five cross-validation folds. Statistical significance between baseline and CIT
+models was assessed using the paired DeLong test for correlated AUCs [32].
+For the primary cross-cancer transfer comparison, we report Bonferroni-adjusted
+98.33% DeLong confidence intervals (α = 0.0167 for three comparisons).
+5
+Results
+5.1
+Within-Cancer Validation: Internal and Cross-Site Performance
+Table 2 presents internal TCGA-COAD performance for both foundation models
+across all three MIL aggregators. UNI2-h consistently outperformed CONCH
+across all aggregators (mean ∆AUC +0.02–0.03), with lower fold-wise variance
+(±0.02 vs. ±0.05), and was selected for subsequent evaluation. Internal validation
+(TCGA-COAD) showed minimal CIT benefit: ABMIL +0.001 AUC, CLAM-
+SB −0.002 AUC, TransMIL +0.017 AUC, consistent with a ceiling effect on
+within-cohort tasks. These changes fall within fold-wise variation (SD ±0.01–
+0.06), confirming CIT augmentation maintains within-cohort accuracy.
+After validating CIT’s within-cohort performance, we next evaluated cross-
+site generalization under distribution shift. We evaluated models trained on
+TCGA-COAD using the independent CPTAC-COAD cohort to assess cross-
+site generalization. CPTAC-COAD comprises colorectal WSIs collected from a
+different institution using different whole-slide scanners, introducing variations
+in patient population, acquisition protocols, and imaging characteristics while
+preserving the colorectal cancer prediction task. Table 3 summarizes cross-site
+evaluation results. CIT increased CLAM-SB from 0.7989 to 0.8344 AUC and
+TransMIL from 0.7870 to 0.8277 AUC on independent CPTAC-COAD. ABMIL
+showed comparable performance with and without CIT (0.8089 vs. 0.8086 AUC).
+Cross-site gains ranged from −0.0003 (ABMIL) to +0.0407 (TransMIL) AUC,
+with CLAM-SB and TransMIL improving under distribution shift, whereas AB-
+MIL was unchanged.
+
+
+10
+Dasari Naga Raju
+Table 2: Internal TCGA-COAD performance (301 patients, 54 MSI-H / 247 MSS;
+MSI-H AUC, mean ± SD over five folds).
+Model
+MSI-H AUC
+CONCH + ABMIL
+0.9145 ± 0.0499
+CONCH + CLAM-SB
+0.9181 ± 0.0563
+CONCH + TransMIL
+0.9198 ± 0.0615
+UNI2-h + ABMIL
+0.9337 ± 0.0166
+UNI2-h + ABMIL + CIT
+0.9348 ± 0.0197
+UNI2-h + CLAM-SB
+0.9469 ± 0.0233
+UNI2-h + CLAM-SB + CIT 0.9447 ± 0.0205
+UNI2-h + TransMIL
+0.9398 ± 0.0274
+UNI2-h + TransMIL + CIT 0.9567 ± 0.0112
+Table 3: Cross-site generalization on the independent CPTAC-COAD cohort. CIT
+improves CLAM-SB and TransMIL despite institution and scanner shift, while ABMIL
+is unchanged.
+Model
+Baseline
+CIT
+ABMIL
+0.8089
+0.8086
+CLAM-SB
+0.7989
+0.8344
+TransMIL
+0.7870
+0.8277
+5.2
+Zero-Shot Cross-Cancer Generalization
+We evaluated the proposed CIT framework under zero-shot cross-cancer transfer,
+the primary focus of this study. Table 4 summarizes performance of baseline and
+CIT-augmented models on independent TCGA-STAD cohort across all three
+MIL aggregators.
+CIT increased AUC across all three MIL aggregators, with gains of 0.0632,
+0.0172, and 0.0534 for ABMIL, CLAM-SB, and TransMIL, respectively. After
+Bonferroni correction for multiple comparisons (α = 0.0167), the performance
+improvements achieved by ABMIL (p < 0.001) and TransMIL (p = 0.003)
+remained statistically significant. In contrast, the improvement observed for
+CLAM-SB was not statistically significant (p = 0.037), as reflected by its 98.33%
+confidence interval spanning zero. TransMIL improved from 0.6627 to 0.7161
+AUC (Fig. 2), achieving an absolute gain of 0.0534 under zero-shot cross-cancer
+transfer. For reference, within-cohort MSI prediction on gastric cohorts achieves
+≈0.80 AUC [6,12]; zero-shot cross-cancer transfer without spatial features de-
+grades to 0.6627 AUC, whereas CIT recovers 0.7161, narrowing the gap toward
+within-cohort performance. Across all architectures, the baseline models exhib-
+ited limited cross-cancer transfer performance, with AUCs ranging from 0.5681
+to 0.6627 on TCGA-STAD. Incorporating CIT shifted the performance range to
+0.6313 to 0.7161 AUC, with improvements observed consistently for every MIL
+aggregator.
+
+
+CIT for Cross-Cancer MSI Prediction
+11
+Table 4: Zero-shot cross-cancer evaluation on TCGA-STAD (308 patients; 54 MSI-
+H / 254 MSS), models trained on TCGA-COAD. ∆AUC with 98.33% DeLong CIs
+(Bonferroni-adjusted, α = 0.0167).
+Model
+Baseline
+CIT
+∆AUC (98.33% CI)
+DeLong p
+ABMIL
+0.5681
+0.6313
++0.0632 (+0.0280 to +0.0984)
+< 0.001
+CLAM-SB
+0.6242
+0.6414
++0.0172 (−0.0025 to +0.0369)
+0.037
+TransMIL
+0.6627
+0.7161
++0.0534 (+0.0111 to +0.0957)
+0.003
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+False Positive Rate
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+True Positive Rate
+Baseline (AUC = 0.663)
+CIT (AUC = 0.716)
+Fig. 2: ROC curves for TransMIL with and without CIT on TCGA-STAD. CIT im-
+proves the true positive rate across most operating points.
+5.3
+Bidirectional Cross-Cancer Consistency and Ablation Study
+We evaluated CIT effectiveness in reverse-direction transfer (TCGA-STAD to
+TCGA-COAD) to assess generalization and robustness. Models trained on gas-
+tric tissue were evaluated zero-shot on colorectal cancer using the protocol in
+Sec. 5.2. CIT improved MSI-H AUC for all three aggregators in reverse transfer
+as well (Tab. 5). TransMIL showed +0.041 AUC, with smaller gains for ABMIL
+(+0.016) and CLAM-SB (+0.006). Improvements in both directions (COAD to
+STAD: +0.0534; STAD to COAD: +0.0408) suggest spatial immune topology
+is not cancer-type-specific and remains relatively stable under the distribution
+shifts tested.
+Leave-one-group-out ablation (Tab. 6) shows all descriptor groups contribute
+to cross-cancer transfer. Removal of immune–tumor mixing (G4) produced the
+largest decrease (−0.0111), followed by peritumoral margin (G2, −0.0076), TLS
+(G1, −0.0046), and multi-scale immune density (G3, −0.0027). Removing the
+two interface-oriented descriptors (G2 margin and G4 mixing) produced the
+two largest single-group drops (0.0187 AUC combined), indicating immune–
+tumor boundary interactions are important for cross-cancer transfer. Ablations
+
+
+12
+Dasari Naga Raju
+Table 5: Reverse-direction zero-shot transfer, models trained on TCGA-STAD and
+tested on TCGA-COAD (301 patients; 54 MSI-H / 247 MSS). CIT improves MSI-H
+AUC across all aggregators, with the largest gain for TransMIL (+0.041).
+Model
+Baseline
+CIT
+∆
+ABMIL
+0.7066
+0.7228
++0.016
+CLAM-SB
+0.7490
+0.7547
++0.006
+TransMIL
+0.7470
+0.7878
++0.041
+Table 6: Leave-one-group-out ablation (UNI2-h + TransMIL). Internal TCGA-COAD
+AUC (mean ± SD) and zero-shot TCGA-STAD AUC with ∆STAD relative to full CIT.
+Configuration
+COAD AUC
+STAD AUC
+∆STAD
+Baseline (no CIT)
+0.9398 ± 0.0274
+0.6627
+—
+−G1 (TLS)
+0.9559 ± 0.0115
+0.7115
+−0.0046
+−G2 (margin)
+0.9554 ± 0.0117
+0.7085
+−0.0076
+−G3 (TIL density)
+0.9562 ± 0.0114
+0.7134
+−0.0027
+−G4 (mixing)
+0.9547 ± 0.0119
+0.7050
+−0.0111
+Full CIT (all 4 groups)
+0.9567 ± 0.0112
+0.7161
+—
+had negligible internal effect (∆≤0.0020 AUC), confirming CIT operates or-
+thogonally to within-cohort discrimination; full representation is required for
+cross-cancer robustness. Removing any single descriptor group reduced zero-
+shot TCGA-STAD performance (Tab. 6), indicating all four groups contribute
+to the total 0.0534 gain.
+6
+Discussion
+Foundation-model embeddings and CIT encode complementary signal: embed-
+dings capture within-cohort appearance, while CIT captures cross-cohort im-
+mune organization. Foundation-model features degraded by 0.2771 AUC under
+cross-cancer transfer, whereas CIT-augmented features degraded by 0.2406 AUC,
+reducing the cross-cancer degradation by 0.0365 AUC. This pattern was consis-
+tent across all three MIL aggregators and both transfer directions. TransMIL
+showed asymmetric CIT gains: +0.0169 AUC internally (0.9398 to 0.9567, con-
+sistent with a ceiling effect) versus +0.0534 AUC cross-cancer (0.6627 to 0.7161,
+p = 0.003), suggesting that CIT benefit is specific to conditions of distribution
+shift rather than uniform across settings. Although informative within a cohort,
+foundation-model embeddings tend to encode stain, scanner, and institution-
+specific variation rather than organ-invariant signal. CIT summarizes spatial
+immune organization motivated by MSI-associated immunobiology: TLS, peritu-
+moral immune reactions, lymphocyte density, and immune–tumor mixing. These
+spatial descriptors appear less sensitive to scanner, institution, and tissue-type
+
+
+CIT for Cross-Cancer MSI Prediction
+13
+variation, which may explain the larger mean CIT gain under cross-cancer vs.
+cross-site transfer (0.0446 vs. 0.0253 AUC).
+Ablation analysis demonstrates improvement does not depend on a single
+descriptor family. Removing any group reduced zero-shot TCGA-STAD perfor-
+mance; no individual group accounted for the full gain with complete representa-
+tion. Unlike domain adaptation methods that require target-domain data [13,33],
+CIT operates on frozen embeddings. In contrast to generic positional encodings
+that describe slide location, CIT couples spatial location to immune enrichment,
+encoding tissue organization without annotations [25]. This augmentation in-
+creased zero-shot transfer AUC by 0.0534 using only ten additional descriptor
+dimensions per tile. Improvements across both transfer directions (STAD to
+COAD: +0.0408; COAD to STAD: +0.0534) suggest spatial immune topology
+may encode organ-invariant signal and remains relatively stable across the dis-
+tribution shifts tested, indicating the effect is not specific to a single transfer
+direction.
+Limitations While CIT demonstrates promising generalization, the current
+study has two main limitations. First, our unsupervised immune clustering lacks
+explicit histological validation, necessitating future verification via pathologist
+annotations or cell-level segmentation. Second, because our evaluation is re-
+stricted to gastrointestinal cohorts (COAD and STAD), establishing broader
+pan-cancer generalizability requires further testing on non-gastrointestinal MSI-
+H datasets, such as TCGA-UCEC.
+7
+Conclusion
+We present CIT, a lightweight spatial descriptor that captures conserved im-
+mune organization from frozen foundation-model embeddings without requiring
+dense annotations. By encoding key spatial immune patterns, CIT integrates
+seamlessly with existing MIL architectures. The proposed approach improved
+zero-shot cross-cancer MSI-H prediction across all aggregators while maintain-
+ing within-cohort accuracy, effectively mitigating the transfer degradation seen
+when using appearance-based features alone. These results suggest that spatial
+immune organization may serve as a fundamental, potentially organ-invariant
+biomarker. Future work will evaluate CIT on non-gastrointestinal datasets, such
+as endometrial and ovarian cancers, to establish its broader generalizability
+across diverse histopathological contexts.
+Code Availability
+The implementation of CIT, pre-computed spatial descriptors, and evaluation
+scripts for the Conserved Immune Topology (CIT) framework are publicly avail-
+able on GitHub at https://github.com/raajuuu1998/cit_msih.
+
+
+14
+Dasari Naga Raju
+References
+1. Boland, C.R., Goel, A.: Microsatellite Instability in Colorectal Cancer. Gastroen-
+terology 138(6), 2073–2087 (2010) 1
+2. Le, D.T., et al.: Mismatch Repair Deficiency Predicts Response of Solid Tumors
+to PD-1 Blockade. Science 357(6349), 409–413 (2017) 1
+3. Smyrk, T.C., Watson, P., Kaul, K., Lynch, H.T.: Tumor-Infiltrating Lymphocytes
+Are a Marker for Microsatellite Instability in Colorectal Carcinoma. Cancer 91(12),
+2417–2422 (2001) 2, 6
+4. Mlecnik, B., et al.: Integrative Analyses of Colorectal Cancer Show Immunoscore Is
+a Stronger Predictor of Patient Survival Than Microsatellite Instability. Immunity
+44(3), 698–711 (2016) 2, 6
+5. Saltz, J., et al.: Spatial Organization and Molecular Correlation of Tumor-
+Infiltrating Lymphocytes Using Deep Learning on Pathology Images. Cell Rep.
+23(1), 181–193 (2018) 2, 3, 7
+6. Kather, J.N., et al.: Deep Learning Can Predict Microsatellite Instability Directly
+from Histology in Gastrointestinal Cancer. Nature Medicine 25, 1054–1056 (2019)
+2, 3, 10
+7. Echle, A., et al.: Clinical-Grade Detection of Microsatellite Instability in Colorectal
+Tumors by Deep Learning. Gastroenterology 159(4), 1406–1416 (2020) 2
+8. Yamashita, R., et al.: Deep Learning Model for the Prediction of Microsatellite
+Instability in Colorectal Cancer: A Diagnostic Study. Lancet Oncol. 22(1), 132–
+141 (2021) 2
+9. Bilal, M., et al.: Development and Validation of a Weakly Supervised Deep Learn-
+ing Framework to Predict the Status of Molecular Pathways and Key Mutations in
+Colorectal Cancer from Routine Histology Images: A Retrospective Study. Lancet
+Digit. Health 3(12), e763–e772 (2021) 2
+10. Schirris, Y., Gavves, E., Nederlof, I., Horlings, H.M., Teuwen, J.: DeepSMILE:
+Contrastive Self-Supervised Pre-Training Benefits MSI and HRD Classification
+Directly from H&E Whole-Slide Images in Colorectal and Breast Cancer. Med.
+Image Anal. 79, 102464 (2022) 2
+11. Wagner, S.J., et al.: Transformer-Based Biomarker Prediction from Colorectal Can-
+cer Histology: A Large-Scale Multicentric Study. Cancer Cell 41(9), 1650–1661
+(2023) 2
+12. Echle, A., et al.: Deep Learning in Cancer Pathology: A New Generation of Clinical
+Biomarkers. Br. J. Cancer 124(4), 686–696 (2021) 3, 10
+13. Cheung, J., et al.: Transfer Learning from One Cancer to Another via Deep Learn-
+ing Domain Adaptation. arXiv:2601.14678 (2026) 3, 13
+14. Chen, R.J., et al.: Towards a General-Purpose Foundation Model for Computa-
+tional Pathology. Nature Medicine 30, 850–862 (2024) 3
+15. Mahmood Lab: UNI2-h. Hugging Face (2025). https://huggingface.co/
+MahmoodLab/UNI2-h 3, 8
+16. Lu, M.Y., et al.: A Visual-Language Foundation Model for Computational Pathol-
+ogy. Nature Medicine 30, 863–874 (2024) 3, 8
+17. Zimmermann, E., et al.: Virchow2: Scaling Self-Supervised Mixed Magnification
+Models in Pathology. arXiv:2408.00738 (2024) 3
+18. Ilse, M., Tomczak, J.M., Welling, M.: Attention-Based Deep Multiple Instance
+Learning. In: Proceedings of ICML, pp. 2132–2141 (2018) 3, 8
+19. Lu, M.Y., et al.: Data-Efficient and Weakly Supervised Computational Pathology
+on Whole-Slide Images. Nat. Biomed. Eng. 5(6), 555–570 (2021) 3, 8
+
+
+CIT for Cross-Cancer MSI Prediction
+15
+20. Shao, Z., et al.: TransMIL: Transformer Based Correlated Multiple Instance Learn-
+ing for Whole Slide Image Classification. In: NeurIPS, vol. 34, pp. 2136–2147 (2021)
+3, 8
+21. Ghaffari Laleh, N., et al.: Benchmarking Weakly-Supervised Deep Learning
+Pipelines for Whole Slide Classification in Computational Pathology. Med. Image
+Anal. 79, 102474 (2022) 3
+22. Tellez, D., et al.: Quantifying the Effects of Data Augmentation and Stain Color
+Normalization in CNNs for Computational Pathology. Med. Image Anal. 58,
+101544 (2019) 3
+23. Macenko, M., et al.: A Method for Normalizing Histology Slides for Quantitative
+Analysis. In: 2009 IEEE International Symposium on Biomedical Imaging: From
+Nano to Macro (ISBI), pp. 1107–1110 (2009) 3
+24. Niehues, J.M., et al.: Generalizable Biomarker Prediction from Cancer Pathology
+Slides with Self-Supervised Deep Learning: A Retrospective Multi-Centric Study.
+Cell Rep. Med. 4(4), 100980 (2023) 3
+25. Corredor, G., et al.: Spatial Architecture and Arrangement of Tumor-Infiltrating
+Lymphocytes for Predicting Likelihood of Recurrence in Early-Stage Non–Small
+Cell Lung Cancer. Clin. Cancer Res. 25(5), 1526–1534 (2019) 3, 13
+26. van Rijthoven, M., et al.: Multi-Resolution Deep Learning Characterizes Tertiary
+Lymphoid Structures and Their Prognostic Relevance in Solid Tumors. Commun.
+Med. 4(1), 5 (2024) 3
+27. Jass, J.R.: Classification of Colorectal Cancer Based on Correlation of Clinical,
+Morphological and Molecular Features. Histopathology 50(1), 113–130 (2007) 6
+28. Cerami, E., Gao, J., Dogrusoz, U., Gross, B.E., Sumer, S.O., Aksoy, B.A., et al.:
+The cBio Cancer Genomics Portal: An Open Platform for Exploring Multidimen-
+sional Cancer Genomics Data. Cancer Discov. 2(5), 401–404 (2012) 8
+29. Gao, J., Aksoy, B.A., Dogrusoz, U., Dresdner, G., Gross, B., Sumer, S.O., et al.:
+Integrative Analysis of Complex Cancer Genomics and Clinical Profiles Using the
+cBioPortal. Sci. Signal. 6(269), pl1 (2013) 8
+30. Vasaikar, S., Huang, C., Wang, X., Petyuk, V.A., Savage, S.R., Wen, B., et al.:
+Proteogenomic Analysis of Human Colon Cancer Reveals New Therapeutic Op-
+portunities. Cell 177(4), 1035–1049 (2019) 8
+31. Kingma, D.P., Ba, J.: Adam: A Method for Stochastic Optimization. In: Proceed-
+ings of ICLR (2015) 9
+32. DeLong, E.R., DeLong, D.M., Clarke-Pearson, D.L.: Comparing the Areas Under
+Two or More Correlated Receiver Operating Characteristic Curves: A Nonpara-
+metric Approach. Biometrics 44(3), 837–845 (1988) 9
+33. Asadi-Aghbolaghi, M., et al.: Learning Generalizable AI Models for Multi-Center
+Histopathology Image Classification. npj Precis. Oncol. 8, 151 (2024) 13
