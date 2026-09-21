@@ -1,0 +1,313 @@
+Title: MIST: Multimodal Survival Prediction with Genomic-Guided Histology Attention
+
+URL Source: https://arxiv.org/pdf/2609.21811v1
+
+Published Time: Mon, 21 Sep 2026 01:02:25 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# MIST: Multimodal Survival Prediction with Genomic-Guided Histology Attention 
+
+Muhammet Sami Yavuz 1,2, Sabri Mustafa Kahya 3, Richard R. Chen 4, Jana Lipkova 5*, and Benedikt Wiestler 1,2* 
+
+> 1
+
+AI for Image-Guided Diagnosis and Therapy, School of Medicine and Health, Technical University of Munich (TUM), Munich, Germany  
+
+> 2
+
+Munich Center for Machine Learning (MCML), Munich, Germany  
+
+> 3
+
+Technical University of Munich (TUM), Munich, Germany  
+
+> 4
+
+University of California, Irvine, Irvine, CA, USA  
+
+> 5
+
+Department of Pathology, School of Medicine, and Department of Biomedical Engineering, School of Engineering, University of California, Irvine, Irvine, CA, USA 
+
+sami.yavuz@tum.de 
+
+> *
+
+Shared senior authorship 
+
+Abstract. Multimodal survival models can combine complementary prog-nostic information from whole-slide images and genomic profiles, but effective fusion remains challenging amid external cohort shift and com-putational complexity. To address these challenges, we propose MIST ,
+
+mult imodal survival predic tion with genomic-guided histology attention. MIST represents genomic features as tokens and allows them to query compact foundation-model-derived histology context tokens before sur-vival prediction. This design enriches molecular information with histol-ogy context rather than merging separately encoded modalities only at the final stage. Training combines discrete-time survival prediction with genomic feature masking, WSI dropout, and paired WSI–genomics con-trastive alignment. Across four external evaluations in colon, renal, lung, and glioblastoma cohorts, MIST improves external C-index over stan-dard fusion baselines in the primary comparisons. These results support genomic-guided histology attention as a compact and effective strategy for multimodal oncology outcome prediction. Our code is available at 
+
+https://github.com/samiyavuuz/MIST .
+
+Keywords: Survival prediction · Multimodal fusion · Whole slide im-ages · Genomics · Cross-Attention 
+
+1 Introduction 
+
+Survival prediction from multimodal cancer data combines complementary prog-nostic information from whole-slide histopathology images (WSIs) and molec-ular profiles that may not be visible from either modality alone [2,3]. Early histology–genomics models were limited by the cost of relating patch-level im-age features to high-dimensional molecular measurements, but pathology foun-dation models such as TITAN, GIGAPATH, and TANGLE [4,14,7] now provide arXiv:2609.21811v1 [cs.AI] 18 Sep 2026 2 M. S. Yavuz et al. 
+
+compact slide-level representations that make WSI/genomics fusion practical across cohorts. External outcome prediction remains challenging, however, be-cause models trained on TCGA-like cohorts must generalize to independent in-stitutions with different patient populations, tissue preparation, slide availability, and molecular assay designs. Existing multimodal survival methods demonstrate the value of histology– genomics fusion but usually define interactions over modality-level embeddings, coarse omic groups, or predefined pathways. PathOmic [1] uses Kronecker-product fusion of histology graph and genomic features; MCAT [2] introduces co-attention between genomic categories and WSI patch tokens; PORPOISE [3] scales pan-cancer histology–genomics fusion; and SurvPath [8] models dense pathway– histology interactions. These designs can limit how individually observed ge-nomic features modulate histology integration for a given patient. This matters clinically because the prognostic relevance of morphology may depend on molec-ular context, and the available genomic evidence can vary across cohorts. We present MIST , a genomic-guided multimodal survival architecture for joint WSI/genomics outcome prediction. Unlike late-fusion and symmetric co-attention baselines, MIST uses observed genomic feature tokens as queries over compact histology context tokens derived from the TITAN foundation model. Thus, histology contributes through molecularly conditioned interactions be-fore patient-level survival prediction. Variable-rate genomic masking and WSI dropout regularize training, and paired WSI–genomics InfoNCE alignment en-courages matched molecular and histology representations to agree. We evaluate MIST across four distinct cancer types with varying molecular assays: colon adenocarcinoma, kidney renal clear cell carcinoma, lung squamous cell carcinoma, and glioblastoma. Our contributions are: 1. A genomic-guided histology attention module that integrates WSI context into the genomic token sequence through feature-level cross-attention. 2. A multimodal survival training framework combining discrete-time survival prediction with paired WSI–genomics InfoNCE alignment. 3. An external evaluation showing that MIST improves survival prediction over standard fusion baselines in various oncology cohorts. 
+
+2 Method 
+
+MIST is a multimodal survival model for fusing molecular data with WSI rep-resentations. It builds on a missingness-aware genomics-only transformer [15], with histology-enriched genomic features as a core element (Fig. 1). Let x ∈ Rd denote the genomic feature vector for a patient. Each genomic fea-ture is embedded independently as a D-dimensional token using a self-normalizing network (SNN) [10], implemented as a linear layer followed by SELU activation and AlphaDropout. We set D = 128 in all experiments, yielding E ∈ Rd×D as the resulting genomic token sequence. Let S = {sℓ}Lℓ=1 denote the set of available WSIs for a patient. To incorporate histology information, we use a WSI encoder ϕWSI to map each slide sℓ to a slide-level representation hℓ = ϕWSI (sℓ) ∈ R768 . In this work, ϕWSI is instantiated Title Suppressed Due to Excessive Length 3
+
+with TITAN [4]. When multiple WSIs are available for a patient, we average their embeddings to obtain a patient-level WSI representation h = 1
+
+> L
+
+PLℓ=1 hℓ.Since TITAN, a slide-level foundation model, is trained to emphasize tumor and tumor-adjacent morphology, each hℓ already concentrates tumor-relevant content, and averaging across slides reinforces this shared signal while damping slide-specific noise. We use lightweight projection layers to map h into Nctx = 4 compact his-tology context tokens C ∈ RNctx ×D and a global WSI summary token w ∈ RD .Both the context-token projection and the summary token w are obtained using a single linear layer. Using multiple tokens provides a small learned dictionary of histology components over which different genomic features can place differ-ent attention weights. We set Nctx = 4 as a compact bottleneck that permits feature-specific interactions while keeping the number of fusion parameters and the computational cost small. This choice also matches the attention head count inherited from the SHIFT genomics-only backbone [15], keeping the histology context consistent in scale with the rest of the architecture rather than intro-ducing an independently tuned hyperparameter. MIST uses genome-guided cross-attention to enrich the genomic token se-quence prior to the transformer encoder. Specifically, genomic tokens serve as queries, while the histology context tokens serve as keys and values: 
+
+Ehist = MultiHeadAttn( E, C, C). (1) This yields histology-enriched genomic tokens Ehist ∈ Rd×D , allowing each ge-nomic feature token to attend to and be enriched by compact slide-level context. For patient i, the full transformer input is formed as Zi = [ CLS , wi, Ehist  
+
+> i
+
+]. The 
+
+[CLS] token aggregates the final patient representation, wi provides a global WSI summary, and Ehist  
+
+> i
+
+carries feature-level genomic evidence enriched by histology context. This sequence is processed by a two-layer transformer encoder with four attention heads. Let gi = T (Zi)0 denote the final [CLS] output, which is passed through a SELU-activated linear projection with dropout ( D→256 ) to obtain 
+
+˜gi. The survival head produces ˆyi = Wo ˜gi + bo, which is converted into discrete survival hazard probabilities over K = 4 time intervals using the discrete-time negative log-likelihood (NLL, see Sec. 2.2) loss [16]. 
+
+2.1 Training-Time Regularization 
+
+MIST uses two training-time regularization mechanisms to improve robustness to incomplete inputs. First , we apply variable-rate masking (VRM) to regularize genomic encoding and reduce overfitting to dominant genomic features. Natural genomic missingness is represented by the original availability mask, while VRM introduces an additional stochastic training-time mask over observed features. For each patient and epoch, exact-k VRM samples ki ∼ Uniform {0, . . . , ⌊f · d⌋} 
+
+observed genomic feature positions and masks them in addition to naturally missing features (we set f = 0 .5). 
+
+Second , we apply WSI dropout to regularize histology enrichment and re-duce overfitting to dominant WSIs. With probability pwsi = 0 .3, input WSI 4 M. S. Yavuz et al. 
+
+representations, i.e., TITAN embeddings, are omitted during training. Dropped WSIs bypass histology enrichment, and their corresponding WSI summary to-kens are masked in the transformer input. Thus, VRM targets feature-level ge-nomic missingness, while WSI dropout acts as a slide-level regularizer. Missing inputs are handled through binary availability masks throughout the architec-ture. Naturally absent genomic features and VRM-selected features are excluded from transformer self-attention. Similarly, when no WSI is available for a patient, or when a WSI representation is omitted by WSI dropout, genome-guided histol-ogy attention is skipped, the WSI summary token is masked in the transformer input, and the model proceeds using the remaining available tokens. 
+
+2.2 Survival Objective and Alignment Loss 
+
+We model survival in discrete time, following the same formulation as in [15]. For each training fold, continuous survival times are partitioned into K = 4 intervals using quartiles of uncensored event times. For each interval j ∈ { 0, . . . , K − 1},the network outputs a logit ˆyj , which is converted into a hazard probability 
+
+ˆhj = σ(ˆ yj ). The predicted survival probability through interval j is 
+
+Sj =
+
+> j
+
+Y
+
+> m=0
+
+(1 − ˆhm), S−1 = 1 . (2) The discrete-time survival loss is formulated using one censored term and two event terms to capture the negative log-likelihood of the observed data. For C-index computation, we use the scalar risk score r = − PK−1 
+
+> j=0
+
+Sj .MIST also uses a symmetric InfoNCE alignment loss [11] to align the survival representation with the paired WSI representation. Let gi denote the final sur-vival [CLS] representation for patient i, and let hi denote the corresponding TI-TAN WSI embedding. Two MLP projection heads, qg and qw, each implemented as Linear–GELU–Linear, map these vectors into a shared D-dimensional con-trastive space and produce normalized embeddings zgi = qg (gi)/∥qg (gi)∥2 and 
+
+zwi = qw(hi)/∥qw(hi)∥2. For a minibatch subset of N patients with paired ge-nomic and WSI inputs, we compute the temperature-scaled similarity matrix 
+
+Aij = (( zgi )⊤zwj )/τ , where i, j ∈ 1, . . . , N , and τ is the InfoNCE temperature. The diagonal entries correspond to matched WSI-genomics pairs from the same patient, while off-diagonal entries are in-batch negatives: 
+
+LInfoNCE = 12
+
+"
+
+1
+
+N
+
+> N
+
+X
+
+> i=1
+
+− log exp( Aii )
+
+PNj=1 exp( Aij ) + 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+− log exp( Aii )
+
+PNj=1 exp( Aji )
+
+#
+
+.
+
+(3) This loss is computed only when at least two minibatch samples have both genomic and WSI inputs. The final training objective is 
+
+L = LNLL + LInfoNCE , τ = 0 .07 . (4) Title Suppressed Due to Excessive Length 5EGFR (CNV) TP53 (CNV) IDH1 (MUT) variable-rate masking (VRM)  
+
+> ki ∼Uniform{0, . . . , ⌊ f · d ⌋} TITAN Image Encoder
+> h
+> WSI
+> WSI dropout
+> p = 0.3
+> Linear Linear SNN Tokenization Linear GELU Linear Linear GELU Linear
+
+WSI summary token 
+
+w ℝD∈
+
+Survival Prediction 
+
+cls token 
+
+> Genomics
+
+Histology tokens 
+
+C ℝNctx x D ∈
+
+Genomic tokens 
+
+E ℝd x D ∈
+
++
+
+> InfoNCE Loss NLL Loss
+
+Genomic-Guided Histology Attention MultiHeadAttn( E,C,C)Histology-enriched tokens 
+
+Ehist ℝd x D ∈
+
+cls token WSI summary token 
+
+w ℝD∈
+
+Histology-enriched tokens 
+
+Ehist ℝd x D ∈
+
+positional mask 
+
+F F F FT
+
+> Transformer Encoder
+> &
+
+SNN zw
+
+zgf = 0.5 
+
+231
+
+Fig. 1: Overview of MIST. (1 - Top) Genomic features and WSI are separately embedded, and genomic tokens are cross-attention-enriched into Ehist . (3 - Bottom) From a multimodal input sequence, a CLS token is generated through a Transformer encoder, and used for survival prediction. 
+
+(2 - Middle) Training-only: contrastive alignment of the CLS token and histology embedding. Solid arrows: training/inference forward path. Dashed modules: training-only operations. 
+
+3 Experiments 
+
+3.1 Datasets 
+
+We evaluate MIST across four histomorphologically distinct cancer types with various molecular assays: colon adenocarcinoma (COAD), kidney renal clear cell carcinoma (KIRC), lung squamous cell carcinoma (LUSC), and glioblastoma (GBM). TCGA cohorts are used for model development, while CPTAC [5] and independent institutional cases serve as held-out external tests. TITAN slide-level features are precomputed for all WSIs. We preserve cancer-specific ge-nomic feature spaces from LinkedOmics multi-omics[13] rather than imposing a pan-cancer intersection. The available molecular data span mutations and copy number variation (CNV) profiles. Across cohorts, TCGA and external cases are aligned by gene symbol and case identifier, and unmeasured values remain NaNs rather than being imputed, so all models learn from observed genomic evidence and patient-level TITAN WSI embeddings. Full dataset statistics, modality avail-ability, and genomic feature spaces are summarized in Table 1. 6 M. S. Yavuz et al. 
+
+Genomic feature curation: For COAD, we use 143 recurrently mutated genes, selected as those mutated in at least 10% of COAD-TCGA samples, together with the 500 genes with the highest variance in GISTIC2 thresholded CNV calls across COAD-TCGA samples. All features are restricted to genes shared be-tween the TCGA and CPTAC cohorts. Among COAD-TCGA patients, 5 are mutation-only, and 81 are CNV-only, whereas all COAD-CPTAC patients have both. Notably, COAD-CPTAC has a high censoring rate of 93.1%, corresponding to approximately seven observed events; results on this cohort should therefore be interpreted with caution. KIRC has 920 matched KIRC-TCGA and KIRC-CPTAC gene-level copy-number log 2 ratio features. CNVs are selected using a 10% CNV-frequency threshold, restricted to genes shared between TCGA and CPTAC. GBM-TCGA and GBM-GERMAN include IDH1 mutation status and 35 clinically relevant CNV features, including 1p/19q codeletion. These genes were selected based on genes predefined in the conumee R package [6] and en-riched with additional CNV alterations described in [12]. LUSC-TCGA has 197 recurrently mutated genes, whereas LUSC-US contains only 22, with the remain-ing genes missing. For all cancers, we apply z-score normalization to all genomic features, using the mean and standard deviation computed from the training data. 
+
+3.2 Baselines and Evaluation Protocol 
+
+All fusion baselines use the same missingness-aware genomic backbone, TITAN embeddings, discrete survival loss, VRM setting, and WSI dropout probability as MIST; they differ only in the fusion operator. Missing genomic features remain NaNs and are excluded by the shared backbone mask, while missing WSI is represented by a zero TITAN vector. InfoNCE alignment is used only by MIST. 
+
+Concat [3] projects the TITAN embedding to the CLS dimension with a linear-ReLU layer, concatenates it with the genomic [CLS] token, and uses a two-layer MLP survival head ( 512 →256 →K, dropout 0.25). Bilinear adapts PORPOISE gated outer-product fusion [3]: each modality is sigmoid-gated us-ing both embeddings, and the outer product of the gated vectors is compressed to 256 dimensions before survival prediction. Co-Attn implements MCAT-style bidirectional co-attention [2], with the genomic [CLS] token attending to the projected TITAN embedding and the TITAN embedding attending to the ge-nomic [CLS] token; the two enriched outputs are concatenated before a two-layer MLP survival head. Mask-aware variants distinguish true modality absence from zero-valued embeddings. Mask-aware concat appends binary genomics- and WSI-presence indicators to the fused representation; mask-aware bilinear uses bi-linear fusion only when both modalities are present and unimodal/default heads otherwise; mask-aware co-attention appends the same indicators and skips co-attention when either modality is absent. In addition to the fusion baselines, we include unimodal baselines. Genomics-only and WSI-only analyze only one modality at a time with no fusion oper-ator to isolate the advantage of modality fusion. To this end, we chose configu-rations similar to fusion baselines: Genomics-only passes the genomic [CLS] Title Suppressed Due to Excessive Length 7
+
+token through a two-layer survival head of the same shape as Concat ’s ge-nomic branch ( 256 →256 →K, dropout 0.25). It uses the same missingness-aware genomic backbone and VRM feature masking. WSI-only projects the TITAN embedding through the same Linear–ReLU layer and survival-head shape as 
+
+Concat ’s WSI branch. All models are trained on TCGA with stratified 5-fold cross-validation and evaluated on external cohorts. We use Adam [9] with learning rate 5 × 10 −4,weight decay 10 −5, batch size 16, up to 200 epochs, and early stopping based on validation loss (survival NLL plus ℓ1 weight regularization). Table 1: TCGA development and external test cohorts for multimodal survival evaluation. Slides 
+
+counts WSIs, allowing multiple slides per patient; Paired , WSI-only , and Gen-only denote modal-ity availability; Cens. % is the censored fraction. The final row is the paired GBM control restricted to paired multimodal cases.                                                                           
+
+> Cancer Genomic Type #Feat Training (TCGA, train + val) External Test Cohort Patients Slides Paired WSI-only Gen-only Cens. % Cohort Patients Slides Paired WSI-only Gen-only Cens. % COAD 143 Mut + 500 CNV 643 423 429 423 0078.0% CPTAC 101 214 101 0093.1% GBM 1 Mut + 35 CNV 36 532 858 276 112 144 20.1% German 132 132 132 0068.9% KIRC 920 CNV 920 488 493 488 0065.8% CPTAC 94 319 94 0077.7% LUSC 197 Mut 197 465 499 465 0057.6% US 102 102 102 0046.1%
+> Matched-cohort control (WSI+genomics required for all patients)
+> GBM (paired) 1 Mut + 35 CNV 36 276 643 276 0014.1% German 132 132 132 0068.9%
+
+4 Results 
+
+4.1 MIST Outperforms Established Baselines Across Cancer Types and Molecular Arrays 
+
+Table 2 compares MIST with standard fusion operators under identical training and feature settings. In the four primary external evaluations, MIST achieves the highest C-index and tAUC across all cohorts. The strongest gains appear in cohorts where external generalization and molecular heterogeneity are most challenging. On COAD-CPTAC, MIST improves C-index by 9.3% relative to the best non-MIST comparator and improves tAUC by 9.6%. In LUSC-US, where the external mutation panel is compositionally sparser than the TCGA source panel, MIST improves C-index by 7.1% over the best baseline and tAUC by 8.6%. These results suggest that conditioning histology integration on observed genomic features improves external risk ranking beyond late fusion, bilinear fu-sion, and symmetric co-attention. Importantly, the unimodal baselines highlight the value of modality fusion in MIST: across all four primary external evalua-tions, MIST outperforms both the Genomics-only and WSI-only models. This advantage is particularly pronounced over Genomics-only, which hovers near chance level (C-index and tAUC ≈ 0.50 ) in every cohort, suggesting that fusing histology context into the genomic tokens is what allows the model to learn a transferable risk representation. The paired GBM-German control in Table 2 corresponds to the final row of Table 1. For this control, all preprocessing steps, including survival-bin con-struction, are recomputed using only patients with both WSI and genomic mea-surements; MIST and all fusion baselines are then retrained with the primary 8 M. S. Yavuz et al. 
+
+optimization settings Crucially, restricting the cohort to fully paired cases not only reduces the available training data from 532 to 276 patients but also elim-inates the modality-level heterogeneity that MIST’s genomic-guided histology attention, VRM, and WSI dropout were specifically designed to leverage. Rather than indicating a fundamental limitation, MIST’s performance relative to sym-metric co-attention on this subset underscores its specialized design paradigm: MIST trades marginal performance gains on small, artificially complete datasets for robust, superior generalization on inherently incomplete, real-world cohorts. Table 2: Held-out external test performance for MIST and fusion/unimodal baselines. Each cell reports C-index | tAUC as mean ±std across five folds. Both metrics are higher-is-better. “-M” denotes the mask-aware version of the corresponding fusion baseline. 
+
+Method COAD-CPTAC GBM-German KIRC-CPTAC LUSC-US GBM-German paired Concat 0.581 ±0.06 |0.653 ±0.06 0.473 ±0.04 |0.451 ±0.05 0.565 ±0.05 |0.559 ±0.06 0.529 ±0.04 |0.517 ±0.06 0.489 ±0.04 |0.499 ±0.07 
+
+Bilinear 0.538 ±0.08 |0.608 ±0.11 0.483 ±0.03 |0.470 ±0.04 0.577 ±0.04 |0.578 ±0.05 0.510 ±0.02 |0.513 ±0.03 0.533 ±0.05 |0.550 ±0.08 
+
+Co-Attn 0.541 ±0.12 |0.616 ±0.15 0.483 ±0.05 |0.485 ±0.06 0.562 ±0.04 |0.568 ±0.04 0.524 ±0.03 |0.518 ±0.06 0.555 ±0.04 |0.580 ±0.05 
+
+Concat-M 0.558 ±0.10 |0.617 ±0.16 0.473 ±0.03 |0.455 ±0.04 0.575 ±0.05 |0.559 ±0.07 0.522 ±0.05 |0.504 ±0.07 0.512 ±0.03 |0.535 ±0.05 
+
+Bilinear-M 0.479 ±0.08 |0.536 ±0.06 0.568 ±0.05 |0.589 ±0.08 0.602 ±0.04 |0.598 ±0.06 0.533 ±0.03 |0.558 ±0.06 0.514 ±0.05 |0.537 ±0.07 
+
+Co-Attn-M 0.612 ±0.07 |0.711 ±0.09 0.492 ±0.01 |0.508 ±0.04 0.571 ±0.04 |0.564 ±0.06 0.497 ±0.05 |0.477 ±0.08 0.521 ±0.04 |0.549 ±0.07 
+
+Genomics-only 0.510 ±0.03 |0.490 ±0.02 0.502 ±0.01 |0.503 ±0.02 0.500 ±0.00 |0.500 ±0.00 0.489 ±0.02 |0.478 ±0.05 0.503 ±0.02 |0.523 ±0.03 
+
+WSI-only 0.546 ±0.04 |0.685 ±0.03 0.445 ±0.03 |0.417 ±0.04 0.627 ±0.03 |0.630 ±0.03 0.545 ±0.01 |0.549 ±0.03 0.541 ±0.04 |0.558 ±0.06 
+
+MIST 0.669 ±0.07 |0.779 ±0.09 0.584 ±0.05 |0.607 ±0.06 0.646 ±0.02 |0.651 ±0.02 0.571 ±0.03 |0.606 ±0.05 0.491 ±0.08 |0.493 ±0.11 
+
+4.2 MIST Produces Prognostically Relevant Risk Separation 
+
+We next assessed whether ensemble-averaged MIST risk scores separate exter-nal patients into prognostic groups. Table 3 reports patient-level C-index, boot-strap confidence intervals, and Kaplan–Meier log-rank tests. The clearest risk-stratification signal is observed in KIRC-CPTAC, where median-risk groups sep-arate significantly by log-rank test (Fig. 2, left). LUSC-US shows a trend toward separation (Fig. 2, right), consistent with the main external ranking result in the most structurally incomplete molecular setting. Several cohorts have moder-ate patient-level C-indices but non-significant log-rank tests, particularly where event counts are small, underscoring that risk-separation tests are more sensi-tive to cohort size and censoring than fold-wise ranking metrics. These analyses support the prognostic relevance of MIST scores but are complementary to the fold-wise C-index comparisons rather than definitive clinical stratification. Table 3: MIST risk stratification on external cohorts. Fold-averaged risk scores yield a patient-level C-index (bootstrap 95% CI) and a median-split log-rank test, distinct from the fold-wise comparison in Table 2. Cancer Cohort N C-index (95% CI) Log-rank p
+
+COAD CPTAC 101 0.699 (0.503 –0.895 ) 0.4478 
+
+GBM German 132 0.586 (0.488 –0.680 ) 0.1594 
+
+KIRC CPTAC 94 0.651 (0.524 –0.784 ) 0.0098 
+
+LUSC US 102 0.595 (0.513 –0.671 ) 0.0636 Title Suppressed Due to Excessive Length 90 10 20 30 40 50 60 Survival time (months) 0.6 0.7 0.8 0.9 1.0 Survival probability 
+
+> log-rank p=0.00982 Low risk (n=47) High risk (n=47)
+
+(a) 0 20 40 60 80 100 120 140 Survival time (months) 0.0 0.2 0.4 0.6 0.8 1.0 Survival probability  
+
+> log-rank p=0.0636 Low risk (n=51) High risk (n=51)
+
+(b) 
+
+Fig. 2: Kaplan–Meier curves from MIST risk stratification. Patients are dichotomized at the median averaged risk across the five-fold-trained models. (a) KIRC-CPTAC shows significant separation (p = 0 .0098 ), while (b) LUSC-US shows trend-level separation ( p = 0 .0636 ) in the cohort with the strongest structural genomic feature mismatch. 
+
+4.3 Ablations Support Genomic-Guided Histology Attention and Alignment 
+
+Finally, we ablated key components of MIST on KIRC-CPTAC and LUSC-US, two cohorts with clear external signal in the main evaluation (see Table 4). Each ablation removes one component while keeping the same training and evalua-tion protocol: genomic-guided histology attention, the InfoNCE alignment term, variable-rate genomic masking (VRM), or WSI dropout. The ablations identify the genomic-guided histology path and InfoNCE align-ment as the most important contributors. Removing histology attention de-creases C-index by 15.3% on KIRC-CPTAC and 7.2% on LUSC-US, while remov-ing InfoNCE decreases C-index by 10.5% and 13.5%, respectively. WSI dropout has a smaller effect: it modestly improves KIRC-CPTAC robustness, but has little impact on LUSC-US. VRM is similarly cohort-dependent, with minimal effect on KIRC-CPTAC and a slight decrease relative to the no-VRM variant on LUSC-US. Overall, these results support MIST’s central design: observed genomic features should guide histology integration, and paired WSI–genomics alignment helps stabilize the learned multimodal representation. Table 4: Component ablations on selected external cohorts, reported as C-index with standard deviation as a subscript across five folds. Higher is better. Cohort Full MIST No Hist. Attn No InfoNCE No VRM No WSI Dropout KIRC-CPTAC 0.646 ±0.02 0.546 ±0.04 0.578 ±0.04 0.642 ±0.01 0.610 ±0.07 
+
+LUSC-US 0.571 ±0.03 0.530 ±0.06 0.494 ±0.02 0.577 ±0.05 0.569 ±0.05 
+
+5 Discussion and Conclusion 
+
+In summary, MIST provides a compact strategy for WSI/genomics survival pre-diction in which observed genomic evidence guides the integration of histology context. Across multiple external oncology cohorts, this genomic-guided atten-tion mechanism improves C-index and tAUC over standard fusion baselines. It 10 M. S. Yavuz et al. 
+
+also demonstrates clear gains in shifted or in the most systematically incomplete settings, such as COAD-CPTAC, GBM-German, KIRC-CPTAC, and LUSC-US. The ablation results suggest that MIST’s performance arises from complemen-tary mechanisms that promote biologically meaningful fusion and robustness under cohort shift. First, the histology-enriched genomic tokens allow each ob-served genomic feature to retrieve the morphological context most relevant to it, rather than compressing both modalities independently and combining them only at the patient level. Second, the InfoNCE objective explicitly encourages the learned survival representation to remain consistent with the matched WSI while distinguishing it from other patients’ histology. We speculate that this patient-level alignment discourages modality-specific shortcuts and stabilizes the shared representation across assay and institutional differences, consistent with the pronounced performance loss when InfoNCE was removed (Table 4). Fi-nally, VRM exposes the model to varying subsets of genomic observations during training [15]. This discourages reliance on a small number of dominant features and encourages the model to distribute evidence across the available genomic and histological inputs, which may be particularly valuable when external co-horts use incomplete or compositionally different molecular panels. Collectively, these findings suggest that MIST benefits not from fusion alone, but from com-bining feature-specific histology conditioning, cross-modal representation align-ment, and robustness to variable genomic availability. While these performance gains highlight MIST’s strengths, the current study is limited by modest exter-nal cohort sizes and the exclusion of standard clinical covariates. Future research will address these constraints by integrating explicit patient metadata into the model and incorporating imputation-based baselines. Overall, MIST provides a compact and effective approach for using genomic evidence to guide histology integration in multimodal cancer survival prediction. 
+
+References      
+
+> 1. Chen, R.J., Lu, M.Y., Wang, J., Williamson, D.F.K., Rodig, S.J., Lindeman, N.I., Mahmood, F.: Pathomic fusion: An integrated framework for fusing histopathol-ogy and genomic features for cancer diagnosis and prognosis. IEEE Transactions on Medical Imaging 41 (4), 757–770 (2022). https://doi.org/10.1109/TMI.2020. 3021387
+> 2. Chen, R.J., Lu, M.Y., Weng, W.H., Chen, T.Y., Williamson, D.F.K., Manz, T., Shady, M., Mahmood, F.: Multimodal co-attention transformer for survival pre-diction in gigapixel whole slide images. In: Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision. pp. 4015–4025 (2021). https://doi.org/ 10.1109/ICCV48922.2021.00398
+> 3. Chen, R.J., Lu, M.Y., Williamson, D.F.K., Chen, T.Y., Lipkova, J., Noor, Z., Sha-ban, M., Shady, M., Williams, M., Joo, B., Mahmood, F.: Pan-cancer integrative histology-genomic analysis via multimodal deep learning. Cancer Cell 40 (8), 865– 878.e6 (2022). https://doi.org/10.1016/j.ccell.2022.07.004
+> 4. Ding, T., Wagner, S.J., Song, A.H., Chen, R.J., Lu, M.Y., Zhang, A., Vaidya, A.J., Jaume, G., Shaban, M., Kim, A., Williamson, D.F.K., et al.: A multimodal whole-
+
+Title Suppressed Due to Excessive Length 11 slide foundation model for pathology. Nature Medicine 31 (11), 3749–3761 (2025). 
+
+https://doi.org/10.1038/s41591-025-03982-3 
+
+5. Edwards, N.J., Oberti, M., Thangudu, R.R., Cai, S., McGarvey, P.B., Jacob, S., Madhavan, S., Ketchum, K.A.: The CPTAC data portal: a resource for can-cer proteomics research. Journal of Proteome Research 14 (6), 2707–2713 (2015). 
+
+https://doi.org/10.1021/pr501254j 
+
+6. Hovestadt, V., Zapatka, M.: conumee: Enhanced copy-number variation analysis using Illumina DNA methylation arrays. Division of Molecular Genetics, German Cancer Research Center (DKFZ), Heidelberg, Germany, https://bioconductor. org/packages/conumee/ , r package version 1.9.0 7. Jaume, G., Oldenburg, L., Vaidya, A., Chen, R.J., Williamson, D.F., Peeters, T., Song, A.H., Mahmood, F.: Transcriptomics-guided slide representation learning in computational pathology. In: Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition. pp. 9632–9644 (2024) 8. Jaume, G., Vaidya, A., Chen, R.J., Williamson, D.F., Liang, P., Mahmood, F.: Modeling dense multimodal interactions between biological pathways and histology for survival prediction. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (2024). https://doi.org/10.1109/CVPR52733. 2024.01100 
+
+9. Kingma, D.P., Ba, J.: Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 (2014) 10. Klambauer, G., Unterthiner, T., Mayr, A., Hochreiter, S.: Self-normalizing neural networks. In: Advances in Neural Information Processing Systems. vol. 30 (2017) 11. van den Oord, A., Li, Y., Vinyals, O.: Representation learning with contrastive predictive coding. arXiv preprint arXiv:1807.03748 (2018) 12. Touat, M., Idbaih, A., Sanson, M., Ligon, K.: Glioblastoma targeted therapy: up-dated approaches from recent biological insights. Annals of Oncology 28 (7), 1457– 1472 (2017) 13. Vasaikar, S.V., Straub, P., Wang, J., Zhang, B.: LinkedOmics: analyzing multi-omics data within and across 32 cancer types. Nucleic Acids Research 46 (D1), D956–D963 (2018). https://doi.org/10.1093/nar/gkx1090 
+
+14. Xu, H., Usuyama, N., Bagga, J., Zhang, S., Rao, R., Naumann, T., Wong, C., Gero, Z., González, J., Gu, Y., Xu, Y., Wei, M., Wang, W., Ma, S., Wei, F., Yang, J., Li, C., Gao, J., Rosemon, J., Bower, T., Lee, S., Weerasinghe, R., Wright, B.J., Robicsek, A., Piening, B., Bifulco, C., Wang, S., Poon, H.: A whole-slide foundation model for digital pathology from real-world data. Nature (2024) 15. Yavuz, M.S., Erdur, A.C., Kahya, S.M., Wiestler, B., Lipkova, J.: Shift: Sur-vival prediction from incomplete and heterogeneous genomic data (2026), https: //arxiv.org/abs/2607.07725 
+
+16. Zadeh, S.G., Schmid, M.: Bias in cross-entropy-based training of deep survival networks. IEEE Transactions on Pattern Analysis and Machine Intelligence 43 (9), 3126–3137 (2021). https://doi.org/10.1109/TPAMI.2020.2979450
